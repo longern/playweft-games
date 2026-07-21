@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>四子棋玩法</title>
+    <link rel="stylesheet" href="../src/help.css" />
+  </head>
+  <body>
+    <main class="help-page">
+      <header class="help-heading">
+        <img src="/connect-four.svg" alt="" />
+        <div>
+          <h1>四子棋玩法</h1>
+          <p>在 7 × 6 棋盘上率先连成四子</p>
+        </div>
+      </header>
+
+      <section class="help-section">
+        <h2>游戏目标</h2>
+        <p>
+          两位玩家分别使用<span class="piece-key piece-red"></span><strong>红棋</strong>和
+          <span class="piece-key piece-yellow"></span><strong>黄棋</strong>，率先把四枚自己的棋子连成一线。
+        </p>
+      </section>
+
+      <section class="help-section">
+        <h2>如何落子</h2>
+        <ol>
+          <li>红方先手，两位玩家轮流行动。</li>
+          <li>在自己的回合选择棋盘上的任意一列。</li>
+          <li>棋子会落到该列最低的空位；已经填满的列不能再落子。</li>
+        </ol>
+      </section>
+
+      <section class="help-section">
+        <h2>获胜方式</h2>
+        <p>以下任意方向连续出现四枚同色棋子，即刻获胜。</p>
+        <div class="rule-strip" aria-label="四种连线方向">
+          <div class="rule-item"><strong>横向</strong><span>同一行连续四枚</span></div>
+          <div class="rule-item"><strong>纵向</strong><span>同一列连续四枚</span></div>
+          <div class="rule-item"><strong>斜向</strong><span>任一对角线连续四枚</span></div>
+        </div>
+      </section>
+
+      <section class="help-section">
+        <h2>平局与离开</h2>
+        <p>棋盘全部填满且无人连成四子时，本局为平局。玩家在对局中离开时，另一位玩家获胜。</p>
+      </section>
+    </main>
+  </body>
+</html>

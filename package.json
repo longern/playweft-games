@@ -1,0 +1,19 @@
+{
+  "name": "playweft-games",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5174",
+    "build": "vite build",
+    "check": "vite build --emptyOutDir && node --test tests/*.test.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "lucide": "1.25.0"
+  },
+  "devDependencies": {
+    "vite": "8.1.5",
+    "wasmoon": "1.16.0"
+  }
+}

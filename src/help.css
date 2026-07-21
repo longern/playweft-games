@@ -1,0 +1,151 @@
+:root {
+  color: #202229;
+  background: #f7f8f4;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 280px;
+  margin: 0;
+}
+
+.help-page {
+  width: min(620px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 38px 0 48px;
+}
+
+.help-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #dfe1da;
+}
+
+.help-heading img {
+  width: 50px;
+  height: 50px;
+}
+
+.help-heading h1,
+.help-heading p,
+.help-section h2,
+.help-section p {
+  margin: 0;
+}
+
+.help-heading h1 {
+  font-size: 1.4rem;
+  line-height: 1.25;
+}
+
+.help-heading p {
+  margin-top: 4px;
+  color: #6d706b;
+  font-size: 0.85rem;
+}
+
+.help-section {
+  padding: 23px 0;
+  border-bottom: 1px solid #e2e4de;
+}
+
+.help-section:last-child {
+  border-bottom: 0;
+}
+
+.help-section h2 {
+  margin-bottom: 12px;
+  font-size: 0.92rem;
+}
+
+.help-section p,
+.help-section li {
+  color: #50534e;
+  font-size: 0.9rem;
+  line-height: 1.75;
+}
+
+.help-section ol,
+.help-section ul {
+  margin: 0;
+  padding-left: 1.35rem;
+}
+
+.help-section li + li {
+  margin-top: 7px;
+}
+
+.help-section strong {
+  color: #202229;
+}
+
+.rule-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.rule-item {
+  min-width: 0;
+  padding: 13px 10px;
+  border: 1px solid #dfe1da;
+  border-radius: 6px;
+  background: #fff;
+  text-align: center;
+}
+
+.rule-item strong,
+.rule-item span {
+  display: block;
+}
+
+.rule-item strong {
+  font-size: 1.05rem;
+}
+
+.rule-item span {
+  margin-top: 3px;
+  color: #72756f;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.piece-key {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border: 1px solid rgba(32, 34, 41, 0.18);
+  border-radius: 50%;
+  vertical-align: -1px;
+}
+
+.piece-red {
+  background: #ed4b45;
+}
+
+.piece-yellow {
+  background: #f6c945;
+}
+
+@media (max-width: 440px) {
+  .help-page {
+    width: calc(100% - 28px);
+    padding-top: 24px;
+  }
+
+  .rule-strip {
+    grid-template-columns: 1fr;
+  }
+}

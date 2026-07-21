@@ -1,0 +1,274 @@
+body {
+  background:
+    linear-gradient(#e5e7e0 1px, transparent 1px),
+    #f4f5f1;
+  background-size: 100% 96px;
+}
+
+.pig-layout {
+  display: grid;
+  width: min(1060px, calc(100% - 48px));
+  min-height: calc(100vh - 68px);
+  margin: 0 auto;
+  grid-template-columns: 280px minmax(0, 1fr);
+  align-items: center;
+  gap: 72px;
+  padding: 48px 0 64px;
+}
+
+.scoreboard {
+  overflow: hidden;
+  border: 1px solid #d9dbd4;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 18px 50px rgba(32, 34, 41, 0.08);
+}
+
+.score-title,
+.player-score,
+.score-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.score-title {
+  padding: 18px 20px;
+  border-bottom: 1px solid #e6e7e2;
+  color: #6f726c;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.score-title strong {
+  color: #202229;
+  font-size: 1rem;
+}
+
+.player-score {
+  min-height: 104px;
+  padding: 18px 20px;
+  border-left: 4px solid transparent;
+}
+
+.player-score + .player-score {
+  border-top: 1px solid #ecece8;
+}
+
+.player-score.is-current {
+  border-left-color: #2463eb;
+  background: #f1f5ff;
+}
+
+.player-score.is-winner {
+  border-left-color: #1d9a66;
+  background: #eaf7f1;
+}
+
+.player-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #5f625d;
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.player-marker {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.marker-one {
+  background: #ef5b4c;
+}
+
+.marker-two {
+  background: #f1bc35;
+}
+
+.player-score > strong {
+  font-size: 2.4rem;
+  line-height: 1;
+}
+
+.score-note {
+  padding: 15px 20px;
+  background: #202229;
+  color: #fff;
+  font-size: 0.8rem;
+}
+
+.score-note strong {
+  color: #f7cc54;
+  font-size: 1.5rem;
+}
+
+.dice-stage {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-direction: column;
+  text-align: center;
+}
+
+.turn-copy {
+  min-height: 124px;
+}
+
+.turn-copy p,
+.turn-copy h2 {
+  margin: 0;
+}
+
+#turn-kicker {
+  color: #2463eb;
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.turn-copy h2 {
+  max-width: 620px;
+  margin-top: 8px;
+  font-size: 2.15rem;
+  line-height: 1.15;
+}
+
+#activity {
+  min-height: 22px;
+  margin-top: 12px;
+  color: #73766f;
+  font-size: 0.9rem;
+}
+
+.die {
+  display: grid;
+  width: 188px;
+  height: 188px;
+  margin: 24px 0 42px;
+  padding: 31px;
+  border: 1px solid #ddd8ce;
+  border-radius: 28px;
+  background: #fffdf7;
+  box-shadow:
+    0 12px 0 #ded9cf,
+    0 26px 55px rgba(43, 40, 35, 0.16);
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+}
+
+.die span {
+  width: 22px;
+  height: 22px;
+  align-self: center;
+  justify-self: center;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.die span.is-visible {
+  background: #202229;
+}
+
+.pig-actions {
+  display: grid;
+  width: min(100%, 460px);
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.pig-actions button {
+  min-height: 54px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 800;
+  transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+}
+
+.pig-actions button:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.primary-action {
+  border: 1px solid #202229;
+  background: #202229;
+  color: #fff;
+  box-shadow: 0 5px 0 #050506;
+}
+
+.secondary-action {
+  border: 1px solid #c9cbc4;
+  background: #fff;
+  color: #202229;
+  box-shadow: 0 5px 0 #d9dbd4;
+}
+
+.pig-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+  box-shadow: none;
+}
+
+@media (max-width: 760px) {
+  .pig-layout {
+    width: min(620px, calc(100% - 32px));
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: 36px;
+    padding: 28px 0 48px;
+  }
+
+  .scoreboard {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .score-title,
+  .score-note {
+    grid-column: 1 / -1;
+  }
+
+  .player-score {
+    min-height: 82px;
+  }
+
+  .player-score + .player-score {
+    border-top: 0;
+    border-left: 1px solid #ecece8;
+  }
+
+  .player-score.is-current,
+  .player-score.is-winner {
+    border-bottom: 4px solid #2463eb;
+  }
+
+  .player-score.is-winner {
+    border-bottom-color: #1d9a66;
+  }
+}
+
+@media (max-width: 480px) {
+  .turn-copy h2 {
+    font-size: 1.6rem;
+  }
+
+  .die {
+    width: 154px;
+    height: 154px;
+    margin: 12px 0 32px;
+    padding: 25px;
+    border-radius: 22px;
+  }
+
+  .die span {
+    width: 18px;
+    height: 18px;
+  }
+
+  .pig-actions {
+    grid-template-columns: 1fr;
+  }
+}

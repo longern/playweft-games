@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f5f1" />
+    <title>贪心骰子 | Playweft</title>
+    <script type="module" src="./main.js"></script>
+  </head>
+  <body>
+    <header class="game-header">
+      <div class="game-brand">
+        <img src="/pig-dice.svg" alt="" />
+        <div>
+          <h1>贪心骰子</h1>
+          <p>先到 50 分</p>
+        </div>
+      </div>
+      <div id="connection" class="connection-status" data-mode="waiting">
+        <span>连接平台中</span>
+      </div>
+    </header>
+
+    <main class="pig-layout">
+      <aside class="scoreboard" aria-label="对局比分">
+        <div class="score-title">
+          <span>比分</span>
+          <strong>50</strong>
+        </div>
+        <section id="player-one" class="player-score is-current">
+          <div class="player-label">
+            <span class="player-marker marker-one"></span>
+            <span data-player-name>玩家 1</span>
+          </div>
+          <strong data-score>0</strong>
+        </section>
+        <section id="player-two" class="player-score">
+          <div class="player-label">
+            <span class="player-marker marker-two"></span>
+            <span data-player-name>玩家 2</span>
+          </div>
+          <strong data-score>0</strong>
+        </section>
+        <div class="score-note">
+          <span>本回合暂存</span>
+          <strong id="turn-total">0</strong>
+        </div>
+      </aside>
+
+      <section class="dice-stage" aria-labelledby="turn-heading">
+        <div class="turn-copy">
+          <p id="turn-kicker">等待房主开始</p>
+          <h2 id="turn-heading">准备掷骰</h2>
+          <p id="activity">进入 Playweft 房间后开始对局</p>
+        </div>
+
+        <div id="dice" class="die" data-value="5" aria-label="骰子点数 5">
+          <span></span><span></span><span></span>
+          <span></span><span></span><span></span>
+          <span></span><span></span><span></span>
+        </div>
+
+        <div class="pig-actions">
+          <button id="roll-button" class="primary-action" type="button" disabled>
+            <span class="icon-button-content"><i data-lucide="dices"></i>掷骰</span>
+          </button>
+          <button id="bank-button" class="secondary-action" type="button" disabled>
+            <span class="icon-button-content"><i data-lucide="landmark"></i>收下分数</span>
+          </button>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
