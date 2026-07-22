@@ -8,6 +8,7 @@ export function createPlayweftClient({
   maxPlayers,
   onReady,
   onState,
+  onActionResult,
   onError,
 }) {
   let port;
@@ -32,8 +33,15 @@ export function createPlayweftClient({
       onReady?.({ playerId, phase: message.phase });
       return;
     }
+    if (message?.type === "action-result") {
+      onActionResult?.({
+        requestId: message.requestId,
+        version: message.version,
+      });
+      return;
+    }
     if (message?.type === "error") {
-      onError?.(message.error, message.code);
+      onError?.(message.error, message.code, message.requestId);
       return;
     }
     if (message?.type !== "state") return;
@@ -85,9 +93,10 @@ export function createPlayweftClient({
 
   return {
     sendAction(action) {
-      if (!port) return false;
-      port.postMessage({ type: "action", action });
-      return true;
+      if (!port) return undefined;
+      const requestId = crypto.randomUUID();
+      port.postMessage({ type: "action", requestId, action });
+      return requestId;
     },
     destroy() {
       destroyed = true;

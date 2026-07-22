@@ -1,10 +1,10 @@
-import { createIcons, Dices, Landmark } from "lucide";
+import { createIcons, Dices, Landmark, RotateCcw } from "lucide";
 import gameScript from "./game.lua?raw";
 import { createPlayweftClient } from "../src/playweft-client.js";
 import "../src/base.css";
 import "./styles.css";
 
-createIcons({ icons: { Dices, Landmark } });
+createIcons({ icons: { Dices, Landmark, RotateCcw } });
 
 const TARGET_SCORE = 50;
 const elements = {
@@ -20,11 +20,12 @@ const elements = {
   ],
   roll: document.querySelector("#roll-button"),
   bank: document.querySelector("#bank-button"),
+  rematch: document.querySelector("#rematch-button"),
 };
 
 let playerId;
 let state;
-let pending = false;
+let pendingActionId;
 
 const preview = {
   players: ["preview-one", "preview-two"],
@@ -54,12 +55,16 @@ const client = createPlayweftClient({
   onState(message) {
     playerId = message.playerId;
     state = message.state;
-    pending = false;
     setConnection("live", "实时对局");
     render(state);
   },
-  onError(error) {
-    pending = false;
+  onActionResult(result) {
+    if (result.requestId !== pendingActionId) return;
+    pendingActionId = undefined;
+    render(state ?? preview);
+  },
+  onError(error, _code, requestId) {
+    if (requestId === pendingActionId) pendingActionId = undefined;
     setConnection("error", "连接异常");
     elements.activity.textContent = error;
     render(state ?? preview);
@@ -68,16 +73,18 @@ const client = createPlayweftClient({
 
 elements.roll.addEventListener("click", () => send({ type: "roll" }));
 elements.bank.addEventListener("click", () => send({ type: "bank" }));
+elements.rematch.addEventListener("click", () => send({ type: "rematch" }));
 window.addEventListener("pagehide", () => client.destroy());
 
 render(preview);
 
 function send(action) {
-  if (pending || !state) return;
-  pending = true;
-  if (!client.sendAction(action)) {
-    pending = false;
+  if (pendingActionId || !state) return;
+  const requestId = client.sendAction(action);
+  if (!requestId) {
     elements.activity.textContent = "尚未连接 Playweft 平台";
+  } else {
+    pendingActionId = requestId;
   }
   render(state);
 }
@@ -105,12 +112,15 @@ function render(nextState) {
   const isLive = Boolean(state);
   const isOwnTurn = ownIndex >= 0 && ownIndex === currentIndex;
   const hasWinner = Boolean(nextState.winner);
-  elements.roll.disabled = !isLive || !isOwnTurn || hasWinner || pending;
+  elements.rematch.hidden = !isLive || !hasWinner || ownIndex < 0;
+  elements.rematch.disabled = Boolean(pendingActionId);
+  elements.roll.disabled =
+    !isLive || !isOwnTurn || hasWinner || Boolean(pendingActionId);
   elements.bank.disabled =
     !isLive ||
     !isOwnTurn ||
     hasWinner ||
-    pending ||
+    Boolean(pendingActionId) ||
     Number(nextState.turnTotal) <= 0;
 
   if (!isLive) return;

@@ -70,6 +70,27 @@ test("Pig Dice banks a winning score and rejects out-of-turn actions", async () 
   assert.equal(result.events[0].type, "won");
 });
 
+test("Pig Dice starts a fresh rematch with the other player going first", async () => {
+  const result = await runLua(
+    "pig-dice/game.lua",
+    `
+      state = setup({ players = { "a", "b" }, randomSeed = 123 })
+      state.scores.a = 52
+      state.scores.b = 31
+      state.winner = "a"
+      state.seed = 456
+      result = on_action(state, { type = "rematch" }, { playerId = "b", version = 9 })
+    `,
+  );
+
+  assert.deepEqual(result.state.scores, { a: 0, b: 0 });
+  assert.equal(result.state.winner, "");
+  assert.equal(result.state.turnIndex, 2);
+  assert.equal(result.state.round, 2);
+  assert.equal(result.state.seed, 456);
+  assert.equal(result.events[0].type, "rematched");
+});
+
 test("Connect Four applies gravity and alternates turns", async () => {
   const result = await runLua(
     "connect-four/game.lua",
@@ -146,4 +167,25 @@ test("Connect Four detects vertical, horizontal, and diagonal wins", async () =>
     assert.equal(state.winnerIndex, 1);
     assert.ok(state.winningCells.length >= 4);
   }
+});
+
+test("Connect Four clears the board and rotates the starter for a rematch", async () => {
+  const result = await runLua(
+    "connect-four/game.lua",
+    `
+      state = setup({ players = { "red", "yellow" }, randomSeed = 1 })
+      state.board[6][1] = 1
+      state.moves = 1
+      state.winner = "red"
+      state.winnerIndex = 1
+      result = on_action(state, { type = "rematch" }, { playerId = "yellow", version = 8 })
+    `,
+  );
+
+  assert.equal(result.state.board[5][0], 0);
+  assert.equal(result.state.moves, 0);
+  assert.equal(result.state.winner, "");
+  assert.equal(result.state.current, 2);
+  assert.equal(result.state.round, 2);
+  assert.equal(result.events[0].type, "rematched");
 });

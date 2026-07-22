@@ -212,6 +212,14 @@ body {
   box-shadow: none;
 }
 
+.pig-actions .rematch-action {
+  grid-column: 1 / -1;
+  border: 1px solid #202229;
+  background: #202229;
+  color: #fff;
+  box-shadow: 0 5px 0 #050506;
+}
+
 @media (max-width: 760px) {
   .pig-layout {
     width: min(620px, calc(100% - 32px));
@@ -270,5 +278,22 @@ body {
 
   .pig-actions {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) and (max-height: 900px) {
+  .pig-layout {
+    gap: 24px;
+    padding-top: 20px;
+    padding-bottom: 28px;
+  }
+
+  .turn-copy {
+    min-height: 108px;
+  }
+
+  .die {
+    margin-top: 8px;
+    margin-bottom: 26px;
   }
 }

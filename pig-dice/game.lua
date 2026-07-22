@@ -22,25 +22,44 @@ local function advance_turn(state)
   state.turnIndex = (state.turnIndex % #state.players) + 1
 end
 
-function setup(context)
+local function new_round(players, seed, round, starter)
   local scores = {}
-  for _, player_id in ipairs(context.players) do scores[player_id] = 0 end
+  for _, player_id in ipairs(players) do scores[player_id] = 0 end
   return {
-    players = context.players,
+    players = players,
     scores = scores,
-    turnIndex = 1,
+    turnIndex = starter,
     turnTotal = 0,
     lastRoll = 1,
-    lastEvent = { kind = "ready", playerIndex = 1, value = 0 },
+    lastEvent = { kind = "ready", playerIndex = starter, value = 0 },
     winner = "",
-    seed = context.randomSeed,
+    seed = seed,
+    round = round,
+    starter = starter,
   }
+end
+
+function setup(context)
+  return new_round(context.players, context.randomSeed, 1, 1)
 end
 
 function on_action(state, action, context)
   if type(action) ~= "table" then return rejected(state, "invalid_action") end
   local index = player_index(state, context.playerId)
   if not index then return rejected(state, "not_a_player") end
+
+  if action.type == "rematch" then
+    if state.winner == "" then return rejected(state, "game_not_over") end
+    local starter = ((state.starter or 1) % #state.players) + 1
+    local next_state = new_round(
+      state.players,
+      state.seed,
+      (state.round or 1) + 1,
+      starter
+    )
+    return { state = next_state, events = { { type = "rematched", player = context.playerId } } }
+  end
+
   if state.winner ~= "" then return rejected(state, "game_over") end
   if index ~= state.turnIndex then return rejected(state, "not_your_turn") end
 

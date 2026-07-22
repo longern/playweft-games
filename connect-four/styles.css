@@ -86,7 +86,11 @@ body {
 
 .board-wrap {
   position: relative;
-  width: min(100%, 660px);
+  width: min(
+    100%,
+    620px,
+    max(420px, calc((100vh - 430px) * 7 / 6))
+  );
   padding-top: 32px;
 }
 
@@ -222,12 +226,38 @@ body {
   transform: translateY(0);
 }
 
+.board-footer {
+  display: flex;
+  min-height: 92px;
+  align-items: center;
+  flex-direction: column;
+}
+
 .board-message {
   min-height: 21px;
-  margin: 28px 0 0;
+  margin: 28px 0 12px;
   color: #747771;
   font-size: 0.86rem;
   text-align: center;
+}
+
+.rematch-action {
+  min-width: 156px;
+  min-height: 46px;
+  padding: 0 20px;
+  border: 1px solid #202229;
+  border-radius: 6px;
+  background: #202229;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 800;
+  box-shadow: 0 4px 0 #050506;
+}
+
+.rematch-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  box-shadow: none;
 }
 
 @media (max-width: 600px) {
@@ -260,8 +290,31 @@ body {
     gap: 4px;
   }
 
+  .board-wrap {
+    width: 100%;
+  }
+
   .column-guides {
     right: 8px;
     left: 8px;
+  }
+}
+
+@media (max-height: 760px) and (min-width: 601px) {
+  .connect-layout {
+    padding-top: 16px;
+    padding-bottom: 20px;
+  }
+
+  .match-status {
+    min-height: 108px;
+  }
+
+  .board-footer {
+    min-height: 76px;
+  }
+
+  .board-message {
+    margin-top: 18px;
   }
 }

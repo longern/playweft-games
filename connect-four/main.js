@@ -1,4 +1,4 @@
-import { createIcons, ArrowDown } from "lucide";
+import { createIcons, ArrowDown, RotateCcw } from "lucide";
 import gameScript from "./game.lua?raw";
 import { createPlayweftClient } from "../src/playweft-client.js";
 import "../src/base.css";
@@ -13,6 +13,7 @@ const elements = {
   message: document.querySelector("#board-message"),
   board: document.querySelector("#board"),
   guides: document.querySelector("#column-guides"),
+  rematch: document.querySelector("#rematch-button"),
   players: [
     document.querySelector("#player-one"),
     document.querySelector("#player-two"),
@@ -21,12 +22,12 @@ const elements = {
 
 let playerId;
 let state;
-let pending = false;
+let pendingActionId;
 const columns = [];
 const cells = [];
 
 buildBoard();
-createIcons({ icons: { ArrowDown } });
+createIcons({ icons: { ArrowDown, RotateCcw } });
 
 const preview = {
   players: ["preview-one", "preview-two"],
@@ -58,12 +59,16 @@ const client = createPlayweftClient({
   onState(message) {
     playerId = message.playerId;
     state = message.state;
-    pending = false;
     setConnection("live", "实时对局");
     render(state);
   },
-  onError(error) {
-    pending = false;
+  onActionResult(result) {
+    if (result.requestId !== pendingActionId) return;
+    pendingActionId = undefined;
+    render(state ?? preview);
+  },
+  onError(error, _code, requestId) {
+    if (requestId === pendingActionId) pendingActionId = undefined;
     setConnection("error", "连接异常");
     elements.message.textContent = error;
     render(state ?? preview);
@@ -71,6 +76,7 @@ const client = createPlayweftClient({
 });
 
 window.addEventListener("pagehide", () => client.destroy());
+elements.rematch.addEventListener("click", () => sendRematch());
 render(preview);
 
 function buildBoard() {
@@ -102,11 +108,23 @@ function buildBoard() {
 }
 
 function drop(column) {
-  if (pending || !state) return;
-  pending = true;
-  if (!client.sendAction({ type: "drop", column })) {
-    pending = false;
+  if (pendingActionId || !state) return;
+  const requestId = client.sendAction({ type: "drop", column });
+  if (!requestId) {
     elements.message.textContent = "尚未连接 Playweft 平台";
+  } else {
+    pendingActionId = requestId;
+  }
+  render(state);
+}
+
+function sendRematch() {
+  if (pendingActionId || !state) return;
+  const requestId = client.sendAction({ type: "rematch" });
+  if (!requestId) {
+    elements.message.textContent = "尚未连接 Playweft 平台";
+  } else {
+    pendingActionId = requestId;
   }
   render(state);
 }
@@ -121,6 +139,9 @@ function render(nextState) {
       ? nextState.winningCells.map((cell) => `${cell.row}:${cell.column}`)
       : [],
   );
+
+  elements.rematch.hidden = !state || !ended || ownIndex < 0;
+  elements.rematch.disabled = Boolean(pendingActionId);
 
   players.slice(0, 2).forEach((id, index) => {
     const panel = elements.players[index];
@@ -142,7 +163,7 @@ function render(nextState) {
       Boolean(state) &&
       ownIndex === currentIndex &&
       !ended &&
-      !pending &&
+      !pendingActionId &&
       targetRow >= 0;
     columns[column].disabled = !canDrop;
     columns[column].dataset.piece = String(currentIndex + 1);

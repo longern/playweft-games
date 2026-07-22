@@ -39,31 +39,46 @@ local function winning_line(board, row, column, piece)
   return nil
 end
 
-function setup(context)
+local function new_round(players, round, starter)
   local board = {}
   for row = 1, ROWS do
     board[row] = {}
     for column = 1, COLUMNS do board[row][column] = 0 end
   end
   return {
-    players = context.players,
+    players = players,
     board = board,
-    current = 1,
+    current = starter,
     moves = 0,
     winner = "",
     winnerIndex = 0,
     draw = false,
     lastMove = { row = 0, column = 0 },
     winningCells = {},
+    round = round,
+    starter = starter,
   }
 end
 
+function setup(context)
+  return new_round(context.players, 1, 1)
+end
+
 function on_action(state, action, context)
-  if type(action) ~= "table" or action.type ~= "drop" then
-    return rejected(state, "invalid_action")
-  end
+  if type(action) ~= "table" then return rejected(state, "invalid_action") end
   local index = player_index(state, context.playerId)
   if not index then return rejected(state, "not_a_player") end
+
+  if action.type == "rematch" then
+    if state.winner == "" and not state.draw then
+      return rejected(state, "game_not_over")
+    end
+    local starter = ((state.starter or 1) % #state.players) + 1
+    local next_state = new_round(state.players, (state.round or 1) + 1, starter)
+    return { state = next_state, events = { { type = "rematched", player = context.playerId } } }
+  end
+
+  if action.type ~= "drop" then return rejected(state, "invalid_action") end
   if state.winner ~= "" or state.draw then return rejected(state, "game_over") end
   if index ~= state.current then return rejected(state, "not_your_turn") end
   if type(action.column) ~= "number" or action.column % 1 ~= 0
