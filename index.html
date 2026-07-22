@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f5f1" />
+    <meta
+      name="description"
+      content="Playweft 多人游戏合集，选择一款游戏后在 Playweft 创建房间。"
+    />
+    <title>Playweft Games</title>
+    <script type="module" src="/src/home.js"></script>
+  </head>
+  <body>
+    <header class="home-header">
+      <a class="home-brand" href="./" aria-label="Playweft Games 首页">
+        <span class="brand-mark" aria-hidden="true"><i data-lucide="gamepad-2"></i></span>
+        <span>Playweft Games</span>
+      </a>
+      <span class="game-total">6 款游戏</span>
+    </header>
+
+    <main class="home-main">
+      <section class="game-intro" aria-labelledby="page-title">
+        <p>多人游戏合集</p>
+        <h1 id="page-title">选一款，开一局</h1>
+        <span>在 Playweft 中创建房间，和朋友一起玩。</span>
+      </section>
+
+      <section class="game-list" aria-label="游戏列表">
+        <a class="game-card game-card-pig" href="./pig-dice/">
+          <img src="/pig-dice.svg" alt="" />
+          <div class="game-card-content">
+            <span class="game-card-meta">2 人 · 约 5 分钟</span>
+            <h2>贪心骰子</h2>
+            <p>掷骰累积分数，见好就收，先到 50 分获胜。</p>
+          </div>
+          <span class="game-card-action" aria-label="进入贪心骰子"><i data-lucide="arrow-up-right"></i></span>
+        </a>
+
+        <a class="game-card game-card-connect" href="./connect-four/">
+          <img src="/connect-four.svg" alt="" />
+          <div class="game-card-content">
+            <span class="game-card-meta">2 人 · 约 10 分钟</span>
+            <h2>四子棋</h2>
+            <p>横、竖或斜线连成四子，抢在对手之前占据棋盘。</p>
+          </div>
+          <span class="game-card-action" aria-label="进入四子棋"><i data-lucide="arrow-up-right"></i></span>
+        </a>
+
+        <a class="game-card game-card-holdem" href="./texas-holdem/">
+          <img src="/texas-holdem.svg" alt="" />
+          <div class="game-card-content">
+            <span class="game-card-meta">2 至 6 人 · 约 20 分钟</span>
+            <h2>德州扑克</h2>
+            <p>下注、加注与诈唬，用两张底牌争夺最后的底池。</p>
+          </div>
+          <span class="game-card-action" aria-label="进入德州扑克"><i data-lucide="arrow-up-right"></i></span>
+        </a>
+
+        <a class="game-card game-card-landlord" href="./dou-dizhu/">
+          <img src="/dou-dizhu.svg" alt="" />
+          <div class="game-card-content">
+            <span class="game-card-meta">3 人 · 约 15 分钟</span>
+            <h2>斗地主</h2>
+            <p>叫分定地主，灵活配合出牌，率先出完手牌获胜。</p>
+          </div>
+          <span class="game-card-action" aria-label="进入斗地主"><i data-lucide="arrow-up-right"></i></span>
+        </a>
+
+        <a class="game-card game-card-werewolf" href="./werewolf-dealer/">
+          <img src="/werewolf-dealer.svg" alt="" />
+          <div class="game-card-content">
+            <span class="game-card-meta">6 至 12 人 · 约 30 分钟</span>
+            <h2>狼人杀发牌器</h2>
+            <p>分配角色、轮流投票和翻牌，组织一局线上的狼人杀。</p>
+          </div>
+          <span class="game-card-action" aria-label="进入狼人杀发牌器"><i data-lucide="arrow-up-right"></i></span>
+        </a>
+
+        <a class="game-card game-card-uno" href="./uno/">
+          <img src="/uno.svg" alt="" />
+          <div class="game-card-content">
+            <span class="game-card-meta">2 至 4 人 · 约 15 分钟</span>
+            <h2>UNO</h2>
+            <p>匹配颜色或数字，善用功能牌，抢先打完所有手牌。</p>
+          </div>
+          <span class="game-card-action" aria-label="进入 UNO"><i data-lucide="arrow-up-right"></i></span>
+        </a>
+      </section>
+    </main>
+  </body>
+</html>

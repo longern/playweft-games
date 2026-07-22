@@ -1,0 +1,309 @@
+body {
+  background: #f4f5f1;
+}
+
+.dealer-layout {
+  width: min(1120px, calc(100% - 48px));
+  min-height: calc(100vh - 68px);
+  margin: 0 auto;
+  padding: 42px 0 64px;
+}
+
+.dealer-status {
+  max-width: 640px;
+  margin-bottom: 30px;
+}
+
+.dealer-status p,
+.dealer-status h2,
+.section-heading p,
+.section-heading h3,
+.field-heading p,
+.field-heading h3 {
+  margin: 0;
+}
+
+#round-kicker,
+.section-heading > p,
+.field-heading p {
+  color: #a7423e;
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.dealer-status h2 {
+  margin-top: 7px;
+  font-size: 2.2rem;
+  line-height: 1.12;
+}
+
+#round-message {
+  min-height: 22px;
+  margin-top: 12px;
+  color: #6d706b;
+  font-size: 0.92rem;
+}
+
+.table-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.72fr) minmax(0, 1.6fr);
+  gap: 22px;
+  align-items: stretch;
+}
+
+.role-panel,
+.field-panel {
+  border: 1px solid #d9dbd4;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 16px 40px rgba(32, 34, 41, 0.07);
+}
+
+.role-panel {
+  display: flex;
+  min-height: 432px;
+  padding: 22px;
+  flex-direction: column;
+}
+
+.section-heading h3,
+.field-heading h3 {
+  margin-top: 4px;
+  font-size: 1.16rem;
+  line-height: 1.25;
+}
+
+.role-card {
+  display: flex;
+  min-height: 220px;
+  margin-top: 20px;
+  padding: 24px 20px;
+  border: 1px solid #dad8d1;
+  border-radius: 8px;
+  background: #f7f6f1;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+
+.role-card[data-role="werewolf"] { background: #312927; border-color: #312927; color: #fff; }
+.role-card[data-role="villager"] { background: #e7eee5; border-color: #bfcfba; }
+.role-card[data-role="seer"] { background: #e6edfb; border-color: #aebfe4; }
+.role-card[data-role="witch"] { background: #f4e6ee; border-color: #dcb4c7; }
+.role-card[data-role="hunter"] { background: #f6e9d8; border-color: #e0bd91; }
+.role-card[data-role="white_god"] { background: #eff0ed; border-color: #b6bbb3; }
+
+.role-emblem {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 14px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  align-items: center;
+  font-size: 1.55rem;
+  font-weight: 900;
+  justify-content: center;
+}
+
+.role-card strong { font-size: 1.25rem; }
+.role-card p { margin: 8px 0 0; font-size: 0.84rem; line-height: 1.55; }
+
+.reveal-action,
+.redeal-action,
+.vote-action {
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.reveal-action {
+  min-height: 48px;
+  margin-top: 16px;
+  border: 1px solid #202229;
+  background: #202229;
+  color: #fff;
+  box-shadow: 0 4px 0 #050506;
+}
+
+.role-hint {
+  margin: 16px 0 0;
+  color: #777a73;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.field-panel { padding: 22px; }
+
+.field-heading {
+  display: flex;
+  min-height: 42px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.active-count {
+  display: inline-flex;
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid #cfd5c9;
+  border-radius: 999px;
+  align-items: center;
+  color: #4e6351;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.player-field {
+  display: grid;
+  margin-top: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.player-seat {
+  display: grid;
+  min-height: 74px;
+  padding: 10px;
+  border: 1px solid #e0e2dc;
+  border-radius: 6px;
+  background: #fbfcf9;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+}
+
+.player-seat.is-self { border-color: #aebfe4; background: #f2f6ff; }
+.player-seat.is-selected { border-color: #d79c4b; background: #fff8ed; }
+
+.seat-number {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e6e8e2;
+  align-items: center;
+  color: #3e4140;
+  font-size: 0.83rem;
+  font-weight: 850;
+  justify-content: center;
+}
+
+.seat-copy { min-width: 0; }
+.seat-copy strong,
+.seat-copy span { display: block; }
+.seat-copy strong { font-size: 0.86rem; }
+.seat-copy span { margin-top: 3px; color: #777a73; font-size: 0.72rem; }
+
+.vote-action {
+  display: inline-flex;
+  min-width: 58px;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid #c7cbc2;
+  background: #fff;
+  align-items: center;
+  color: #30322f;
+  font-size: 0.72rem;
+  gap: 5px;
+  justify-content: center;
+}
+
+.vote-action svg { width: 15px; height: 15px; }
+.vote-action:not(:disabled):hover { border-color: #a7423e; color: #8b302c; }
+
+.field-footer {
+  display: flex;
+  min-height: 59px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #ecece8;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+#vote-progress { margin: 0; color: #73766f; font-size: 0.78rem; line-height: 1.45; }
+
+.redeal-action {
+  display: inline-flex;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid #c8cbc4;
+  background: #fff;
+  align-items: center;
+  color: #30322f;
+  font-size: 0.78rem;
+  gap: 7px;
+  justify-content: center;
+}
+
+.reveal-action:disabled,
+.redeal-action:disabled,
+.vote-action:disabled { cursor: not-allowed; opacity: 0.42; }
+
+.flip-section {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid #d9dbd4;
+}
+
+.flip-log {
+  display: flex;
+  min-height: 58px;
+  margin-top: 14px;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.flip-entry {
+  display: flex;
+  min-width: 220px;
+  max-width: 320px;
+  padding: 11px 12px;
+  border: 1px solid #d9dbd4;
+  border-radius: 6px;
+  background: #fff;
+  align-items: center;
+  gap: 10px;
+}
+
+.flip-mark {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #202229;
+  align-items: center;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 850;
+  justify-content: center;
+}
+
+.flip-entry[data-role="white_god"] { border-color: #aeb4ab; background: #f8f9f6; }
+.flip-entry strong { display: block; font-size: 0.8rem; }
+.flip-entry p { margin: 3px 0 0; color: #73766f; font-size: 0.72rem; line-height: 1.4; }
+.empty-flips { margin: 0; color: #747771; font-size: 0.84rem; }
+
+@media (max-width: 760px) {
+  .dealer-layout { width: min(620px, calc(100% - 32px)); padding-top: 28px; }
+  .dealer-status h2 { font-size: 1.75rem; }
+  .table-layout { grid-template-columns: 1fr; }
+  .role-panel { min-height: 0; }
+  .role-card { min-height: 170px; }
+}
+
+@media (max-width: 480px) {
+  .dealer-layout { width: calc(100% - 24px); }
+  .player-field { grid-template-columns: 1fr; }
+  .field-panel, .role-panel { padding: 16px; }
+  .field-footer { align-items: flex-start; flex-direction: column; }
+  .redeal-action { width: 100%; }
+  .flip-entry { min-width: 100%; }
+}

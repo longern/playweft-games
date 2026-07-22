@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f5f1" />
+    <title>狼人杀发牌器 | Playweft</title>
+    <script type="module" src="./main.js"></script>
+  </head>
+  <body>
+    <header class="game-header">
+      <div class="game-brand">
+        <img src="/werewolf-dealer.svg" alt="" />
+        <div>
+          <h1>狼人杀发牌器</h1>
+          <p>角色分配与投票翻牌</p>
+        </div>
+      </div>
+      <div id="connection" class="connection-status" data-mode="waiting">
+        <span>连接平台中</span>
+      </div>
+    </header>
+
+    <main class="dealer-layout">
+      <section class="dealer-status" aria-live="polite">
+        <p id="round-kicker">等待房主开始</p>
+        <h2 id="round-heading">准备发牌</h2>
+        <p id="round-message">进入 Playweft 房间后开始游戏</p>
+      </section>
+
+      <section class="table-layout" aria-label="狼人杀发牌桌">
+        <aside class="role-panel" aria-labelledby="role-panel-heading">
+          <div class="section-heading">
+            <p>你的身份</p>
+            <h3 id="role-panel-heading">牌面朝下</h3>
+          </div>
+          <div id="role-card" class="role-card" data-role="hidden">
+            <span id="role-emblem" class="role-emblem">?</span>
+            <strong id="role-name">等待发牌</strong>
+            <p id="role-copy">开局后由你自己翻开身份牌</p>
+          </div>
+          <button id="role-reveal" class="reveal-action" type="button" disabled>
+            <span class="icon-button-content"><i data-lucide="eye"></i><span>查看身份</span></span>
+          </button>
+          <p class="role-hint">身份牌只在本机界面翻开</p>
+        </aside>
+
+        <section class="field-panel" aria-labelledby="field-heading">
+          <div class="field-heading">
+            <div>
+              <p>投票轮次 <strong id="vote-round">1</strong></p>
+              <h3 id="field-heading">场上玩家</h3>
+            </div>
+            <span id="active-count" class="active-count">0 在场</span>
+          </div>
+          <div id="player-field" class="player-field"></div>
+          <div class="field-footer">
+            <p id="vote-progress">所有在场玩家投票后自动翻牌</p>
+            <button id="redeal-button" class="redeal-action" type="button" disabled>
+              <span class="icon-button-content"><i data-lucide="rotate-ccw"></i><span>重新发牌</span></span>
+            </button>
+          </div>
+        </section>
+      </section>
+
+      <section class="flip-section" aria-labelledby="flip-heading">
+        <div class="section-heading">
+          <p>翻牌记录</p>
+          <h3 id="flip-heading">尚无人出局</h3>
+        </div>
+        <div id="flip-log" class="flip-log"></div>
+      </section>
+    </main>
+  </body>
+</html>

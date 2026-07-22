@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f5f1" />
+    <title>UNO | Playweft</title>
+    <script type="module" src="./main.js"></script>
+  </head>
+  <body>
+    <header class="game-header">
+      <div class="game-brand">
+        <img src="/uno.svg" alt="" />
+        <div>
+          <h1>UNO</h1>
+          <p>先打完手牌获胜</p>
+        </div>
+      </div>
+      <div id="connection" class="connection-status" data-mode="waiting">
+        <span>连接平台中</span>
+      </div>
+    </header>
+
+    <main class="uno-layout">
+      <section class="uno-status" aria-live="polite">
+        <p id="turn-kicker">等待房主开始</p>
+        <h2 id="turn-heading">牌桌已就绪</h2>
+        <div id="players" class="player-strip" aria-label="对局玩家"></div>
+      </section>
+
+      <section class="uno-table" aria-label="UNO 牌桌">
+        <div class="opponent-area">
+          <p id="opponent-label">其他玩家手牌</p>
+          <div id="opponent-hand" class="opponent-hand" aria-hidden="true"></div>
+        </div>
+
+        <div class="table-center">
+          <button id="draw-pile" class="draw-pile" type="button" disabled aria-label="从牌堆摸一张牌">
+            <span class="card-back"><b>UNO</b></span>
+            <span>摸牌</span>
+          </button>
+          <div class="discard-area">
+            <span class="pile-label">当前牌</span>
+            <div id="discard-pile" class="discard-pile"></div>
+          </div>
+          <div class="active-color" aria-label="当前颜色">
+            <span>当前颜色</span>
+            <i id="active-color-swatch" data-color="red"></i>
+          </div>
+        </div>
+
+        <div id="color-picker" class="color-picker" hidden aria-label="为万能牌选择颜色">
+          <span>选择颜色</span>
+          <div>
+            <button type="button" data-color-choice="red" aria-label="选择红色"></button>
+            <button type="button" data-color-choice="yellow" aria-label="选择黄色"></button>
+            <button type="button" data-color-choice="green" aria-label="选择绿色"></button>
+            <button type="button" data-color-choice="blue" aria-label="选择蓝色"></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="hand-area" aria-labelledby="hand-heading">
+        <div class="hand-heading">
+          <p id="hand-heading">你的手牌</p>
+          <span id="hand-count">7 张</span>
+        </div>
+        <div id="own-hand" class="own-hand" role="list"></div>
+      </section>
+
+      <footer class="uno-footer">
+        <p id="activity" aria-live="polite">进入 Playweft 房间后开始对局</p>
+        <button id="rematch-button" class="rematch-action" type="button" hidden>
+          <span class="icon-button-content"><i data-lucide="rotate-ccw"></i>再来一局</span>
+        </button>
+      </footer>
+    </main>
+  </body>
+</html>

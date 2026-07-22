@@ -1,0 +1,242 @@
+@import "./base.css";
+
+body {
+  background:
+    linear-gradient(#f4f5f1 1px, transparent 1px),
+    linear-gradient(90deg, #f4f5f1 1px, transparent 1px),
+    #eceee9;
+  background-size: 24px 24px;
+}
+
+.home-header {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px max(24px, calc((100% - 1160px) / 2));
+  border-bottom: 1px solid #d9dcd5;
+  background: rgba(244, 245, 241, 0.9);
+}
+
+.home-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #202229;
+  font-size: 0.95rem;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.brand-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 8px;
+  background: #202229;
+  color: #f9faf6;
+}
+
+.brand-mark svg {
+  width: 19px;
+  height: 19px;
+  stroke-width: 2.4;
+}
+
+.game-total {
+  color: #666a63;
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.home-main {
+  width: min(1160px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 56px 0 72px;
+}
+
+.game-intro {
+  max-width: 580px;
+  margin-bottom: 34px;
+}
+
+.game-intro p,
+.game-intro h1,
+.game-intro span,
+.game-card h2,
+.game-card p {
+  margin: 0;
+}
+
+.game-intro p,
+.game-card-meta {
+  color: #5d786c;
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.game-intro h1 {
+  margin-top: 8px;
+  color: #202229;
+  font-size: 3.1rem;
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.game-intro span {
+  display: block;
+  margin-top: 12px;
+  color: #656962;
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.game-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid #d5d8d1;
+  border-left: 1px solid #d5d8d1;
+}
+
+.game-card {
+  position: relative;
+  display: grid;
+  min-height: 198px;
+  grid-template-columns: 78px minmax(0, 1fr) 32px;
+  align-items: start;
+  gap: 20px;
+  padding: 28px;
+  border-right: 1px solid #d5d8d1;
+  border-bottom: 1px solid #d5d8d1;
+  background: rgba(251, 252, 249, 0.9);
+  color: #202229;
+  text-decoration: none;
+  transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.game-card:hover {
+  z-index: 1;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(32, 34, 41, 0.1);
+  transform: translateY(-3px);
+}
+
+.game-card img {
+  width: 78px;
+  height: 78px;
+}
+
+.game-card-content {
+  min-width: 0;
+}
+
+.game-card-meta {
+  display: block;
+  color: #737870;
+  line-height: 1.25;
+}
+
+.game-card h2 {
+  margin-top: 7px;
+  font-size: 1.2rem;
+  line-height: 1.25;
+}
+
+.game-card p {
+  margin-top: 8px;
+  color: #666a63;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.game-card-action {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid #d5d8d1;
+  border-radius: 50%;
+  color: #4a4f48;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.game-card-action svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.5;
+}
+
+.game-card:hover .game-card-action {
+  border-color: transparent;
+  background: #202229;
+  color: #ffffff;
+}
+
+.game-card-pig .game-card-meta { color: #bd453b; }
+.game-card-connect .game-card-meta { color: #275cc0; }
+.game-card-holdem .game-card-meta { color: #167151; }
+.game-card-landlord .game-card-meta { color: #247154; }
+.game-card-werewolf .game-card-meta { color: #8d5b1a; }
+.game-card-uno .game-card-meta { color: #bb3d38; }
+
+@media (max-width: 720px) {
+  .home-main {
+    width: min(100% - 32px, 560px);
+    padding: 40px 0 48px;
+  }
+
+  .game-list {
+    grid-template-columns: 1fr;
+  }
+
+  .game-card {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 440px) {
+  .home-header {
+    min-height: 62px;
+    padding: 10px 16px;
+  }
+
+  .home-main {
+    width: min(100% - 28px, 560px);
+    padding-top: 34px;
+  }
+
+  .game-intro {
+    margin-bottom: 26px;
+  }
+
+  .game-intro h1 {
+    font-size: 2rem;
+  }
+
+  .game-card {
+    grid-template-columns: 60px minmax(0, 1fr) 28px;
+    gap: 14px;
+    padding: 20px;
+  }
+
+  .game-card img {
+    width: 60px;
+    height: 60px;
+  }
+
+  .game-card h2 {
+    font-size: 1.06rem;
+  }
+
+  .game-card p {
+    font-size: 0.8rem;
+  }
+
+  .game-card-action {
+    width: 28px;
+    height: 28px;
+  }
+}

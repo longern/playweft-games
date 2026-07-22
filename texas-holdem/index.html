@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#edf2ed" />
+    <title>德州扑克 | Playweft</title>
+    <script type="module" src="./main.js"></script>
+  </head>
+  <body>
+    <header class="game-header">
+      <div class="game-brand">
+        <img src="/texas-holdem.svg" alt="" />
+        <div>
+          <h1>德州扑克</h1>
+          <p>2 至 6 人 · 盲注 1 / 2</p>
+        </div>
+      </div>
+      <div id="connection" class="connection-status" data-mode="waiting">
+        <span>连接平台中</span>
+      </div>
+    </header>
+
+    <main class="holdem-layout">
+      <section class="table-area" aria-labelledby="turn-heading">
+        <header class="table-status" aria-live="polite">
+          <p id="turn-kicker">等待房主开始</p>
+          <h2 id="turn-heading">牌桌已就绪</h2>
+          <p id="activity">进入 Playweft 房间后开始对局</p>
+        </header>
+
+        <section class="table-felt" aria-label="德州扑克牌桌">
+          <div class="table-center">
+            <div class="pot-label">底池 <strong id="pot-value">0</strong></div>
+            <div id="community-cards" class="community-cards" aria-label="公共牌"></div>
+            <p id="street-label" class="street-label">翻牌前</p>
+          </div>
+          <div id="table-seats" class="table-seats" aria-label="牌桌玩家"></div>
+        </section>
+      </section>
+
+      <aside class="action-panel" aria-label="行动控制">
+        <div class="turn-details">
+          <span>本轮最高下注</span>
+          <strong id="bet-value">0</strong>
+        </div>
+        <div class="action-grid">
+          <button id="fold-button" class="quiet-action" type="button" disabled>
+            <span class="icon-button-content"><i data-lucide="shield-question"></i>弃牌</span>
+          </button>
+          <button id="check-button" class="quiet-action" type="button" disabled>
+            <span class="icon-button-content"><i data-lucide="eye"></i>过牌</span>
+          </button>
+          <button id="call-button" class="primary-action" type="button" disabled>
+            <span class="icon-button-content"><i data-lucide="hand-coins"></i><span>跟注</span></span>
+          </button>
+          <button id="raise-button" class="accent-action" type="button" disabled>
+            <span class="icon-button-content"><i data-lucide="circle-dollar-sign"></i>加注 +2</span>
+          </button>
+          <button id="all-in-button" class="all-in-action" type="button" disabled>
+            <span class="icon-button-content"><i data-lucide="chevrons-right"></i>全下</span>
+          </button>
+        </div>
+        <p class="action-note">每轮最多加注 3 次；全下将按投入自动分配边池。</p>
+        <button id="next-hand-button" class="next-hand-action" type="button" hidden>
+          <span class="icon-button-content"><i data-lucide="chevrons-right"></i>下一手牌</span>
+        </button>
+        <button id="rematch-button" class="rematch-action" type="button" hidden>
+          <span class="icon-button-content"><i data-lucide="rotate-ccw"></i>重新开局</span>
+        </button>
+      </aside>
+    </main>
+  </body>
+</html>
