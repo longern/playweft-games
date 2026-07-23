@@ -1,6 +1,6 @@
 # Playweft Games
 
-Six lightweight multiplayer games for the sibling
+Six lightweight multiplayer games and one standalone game for the sibling
 [`playweft`](../playweft) platform. They share one Vite build and expose
 independent HTML entry points and Playweft descriptors.
 
@@ -12,6 +12,7 @@ independent HTML entry points and Playweft descriptors.
 | 斗地主 | 3 | `http://localhost:5174/dou-dizhu/` | `dist/dou-dizhu/index.html` |
 | Werewolf dealer | 6-12 | `http://localhost:5174/werewolf-dealer/` | `dist/werewolf-dealer/index.html` |
 | UNO | 2–4 | `http://localhost:5174/uno/` | `dist/uno/index.html` |
+| Sudoku | 1 | `http://localhost:5174/sudoku/` | `dist/sudoku/index.html` |
 
 ## Run locally
 
@@ -28,8 +29,9 @@ game development server from this repository:
 npm run dev
 ```
 
-Open `http://localhost:5174/` to browse the game list, then paste the matching
-local entry URL into Playweft to create a room. The games
+Open `http://localhost:5174/` to browse the game list. Sudoku opens directly as
+a standalone game; paste a multiplayer game's matching local entry URL into
+Playweft to create a room. The multiplayer games
 use the platform-owned lobby; Texas Hold'em supports two to six seated players,
 斗地主 requires exactly three, the Werewolf dealer supports six to twelve, and
 UNO supports two to four.
@@ -41,4 +43,4 @@ npm run check
 npm run build
 ```
 
-The generated `dist` directory is one static deployment with six game URLs.
+The generated `dist` directory is one static deployment with seven game URLs.

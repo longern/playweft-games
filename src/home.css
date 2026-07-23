@@ -181,6 +181,7 @@ body {
 .game-card-landlord .game-card-meta { color: #247154; }
 .game-card-werewolf .game-card-meta { color: #8d5b1a; }
 .game-card-uno .game-card-meta { color: #bb3d38; }
+.game-card-sudoku .game-card-meta { color: #21705d; }
 
 @media (max-width: 720px) {
   .home-main {

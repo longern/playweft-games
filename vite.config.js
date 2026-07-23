@@ -42,6 +42,7 @@ export default defineConfig({
         ),
         uno: resolve(import.meta.dirname, "uno/index.html"),
         "uno-help": resolve(import.meta.dirname, "uno/help.html"),
+        sudoku: resolve(import.meta.dirname, "sudoku/index.html"),
       },
     },
   },

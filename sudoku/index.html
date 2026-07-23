@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5f5f0" />
+  <meta name="description" content="Playweft 单人极难数独。" />
+  <title>数独 | Playweft</title>
+  <script type="module" src="./main.js"></script>
+</head>
+
+<body>
+  <button id="pause-button" class="pause-button" type="button" aria-label="暂停" title="暂停">
+    <i data-lucide="pause"></i>
+  </button>
+  <div id="generating-overlay" class="generating-overlay" aria-hidden="true">
+    <span class="generating-spinner" role="status" aria-label="正在生成新题"></span>
+  </div>
+  <div id="paused-overlay" class="paused-overlay" aria-hidden="true">
+    <div class="pause-menu">
+      <button id="resume-button" class="pause-menu-button" type="button">
+        <span class="icon-button-content"><i data-lucide="play"></i>继续</span>
+      </button>
+      <button id="reset-button" class="pause-menu-button" type="button">
+        <span class="icon-button-content"><i data-lucide="rotate-ccw"></i>重置本题</span>
+      </button>
+      <button id="new-game-button" class="pause-menu-button" type="button">
+        <span class="icon-button-content"><i data-lucide="sparkles"></i>新题</span>
+      </button>
+    </div>
+  </div>
+  <main class="sudoku-layout">
+    <section class="sudoku-stage" aria-label="数独">
+      <div class="sudoku-status">
+        <span id="timer">00:00</span>
+        <div id="completion" class="completion" hidden aria-live="polite">
+          <strong>完成</strong>
+          <button id="next-game-button" type="button">
+            <span class="icon-button-content"><i data-lucide="sparkles"></i>下一题</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="sudoku-board" class="sudoku-board" role="grid" aria-label="数独棋盘"></div>
+    </section>
+
+    <aside class="sudoku-controls" aria-label="数独操作">
+      <div id="digit-pad" class="digit-pad" aria-label="数字输入"></div>
+      <div class="tool-row" aria-label="编辑工具">
+        <button id="auto-notes-button" class="tool-button" type="button" aria-label="自动笔记" title="自动笔记">
+          <i data-lucide="list-plus"></i>
+        </button>
+        <button id="note-toggle" class="tool-button" type="button" aria-label="候选数字" aria-pressed="false" title="候选数字">
+          <i data-lucide="pencil"></i>
+        </button>
+        <button id="undo-button" class="tool-button" type="button" aria-label="撤销" title="撤销">
+          <i data-lucide="undo-2"></i>
+        </button>
+        <button id="erase-button" class="tool-button" type="button" aria-label="清除" title="清除">
+          <i data-lucide="eraser"></i>
+        </button>
+        <button id="hint-button" class="tool-button" type="button" aria-label="提示" title="提示">
+          <i data-lucide="lightbulb"></i>
+        </button>
+      </div>
+    </aside>
+  </main>
+</body>
+
+</html>

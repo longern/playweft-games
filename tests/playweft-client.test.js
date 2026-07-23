@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { createPlayweftClient } from "../src/playweft-client.js";
+import { createPlayweftSoloClient } from "../src/playweft-solo-client.js";
 
 test("Playweft client correlates action results and errors with request IDs", () => {
   const windowListeners = new Map();
@@ -94,9 +95,7 @@ test("Playweft client correlates action results and errors with request IDs", ()
       },
     });
 
-    assert.deepEqual(results, [
-      { requestId: "request-123", version: 8 },
-    ]);
+    assert.deepEqual(results, [{ requestId: "request-123", version: 8 }]);
     assert.deepEqual(errors, [
       {
         error: "Move rejected",
@@ -136,6 +135,91 @@ test("Playweft client does not create an action request before connecting", () =
       maxPlayers: 2,
     });
     assert.equal(client.sendAction({ type: "move" }), undefined);
+    client.destroy();
+  } finally {
+    globalThis.window = originalWindow;
+  }
+});
+
+test("Solo client announces metadata without initializing a room", () => {
+  const windowListeners = new Map();
+  const parentMessages = [];
+  const portMessages = [];
+  const fakePort = {
+    close() {},
+    start() {},
+    postMessage(message) {
+      portMessages.push(message);
+    },
+  };
+  const fakeWindow = {
+    parent: {
+      postMessage(message, target) {
+        parentMessages.push({ message, target });
+      },
+    },
+    setInterval() {
+      return 1;
+    },
+    clearInterval() {},
+    addEventListener(type, listener) {
+      windowListeners.set(type, listener);
+    },
+    removeEventListener(type) {
+      windowListeners.delete(type);
+    },
+  };
+  const originalWindow = globalThis.window;
+  globalThis.window = fakeWindow;
+
+  try {
+    const client = createPlayweftSoloClient({
+      descriptor: { name: "Sudoku", modes: ["solo"] },
+    });
+    assert.deepEqual(parentMessages, [
+      {
+        message: { type: "playweft:bridge-ready", version: 1 },
+        target: "*",
+      },
+    ]);
+
+    windowListeners.get("message")({
+      source: fakeWindow.parent,
+      data: { type: "playweft:bridge", version: 1 },
+      ports: [fakePort],
+    });
+    assert.deepEqual(portMessages, [
+      {
+        type: "descriptor",
+        descriptor: { name: "Sudoku", modes: ["solo"] },
+      },
+    ]);
+    client.destroy();
+  } finally {
+    globalThis.window = originalWindow;
+  }
+});
+
+test("Solo client is inert when the game opens directly", () => {
+  const sent = [];
+  const fakeWindow = {
+    postMessage(message) {
+      sent.push(message);
+    },
+    setInterval() {
+      throw new Error("standalone games must not wait for a bridge");
+    },
+    addEventListener() {
+      throw new Error("standalone games must not register bridge listeners");
+    },
+  };
+  fakeWindow.parent = fakeWindow;
+  const originalWindow = globalThis.window;
+  globalThis.window = fakeWindow;
+
+  try {
+    const client = createPlayweftSoloClient({ descriptor: { name: "Sudoku" } });
+    assert.deepEqual(sent, []);
     client.destroy();
   } finally {
     globalThis.window = originalWindow;

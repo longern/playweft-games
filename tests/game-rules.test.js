@@ -2,6 +2,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { LuaFactory } from "wasmoon";
+import {
+  SIZE,
+  cloneGrid,
+  countSolutions,
+  generateVeryHardPuzzle,
+  isValidGrid,
+} from "../sudoku/sudoku.js";
 
 async function runLua(gamePath, scenario, resultName = "result") {
   const source = await readFile(gamePath, "utf8");
@@ -12,6 +19,35 @@ async function runLua(gamePath, scenario, resultName = "result") {
   } finally {
     lua.global.close();
   }
+}
+
+test("Sudoku generator creates a valid unique very-hard puzzle", () => {
+  const random = seededRandom(20260723);
+  const { puzzle, solution, clues, difficulty } = generateVeryHardPuzzle({
+    random,
+    targetClues: 23,
+    maxAttempts: 8,
+  });
+
+  assert.equal(solution.length, SIZE);
+  assert.ok(solution.every((row) => row.length === SIZE));
+  assert.ok(isValidGrid(cloneGrid(solution)));
+  assert.equal(countSolutions(cloneGrid(solution)), 1);
+  assert.equal(countSolutions(cloneGrid(puzzle)), 1);
+  assert.ok(clues <= 27, `expected a sparse puzzle, got ${clues} clues`);
+  assert.equal(
+    difficulty.requiresAdvancedTechniques,
+    true,
+    "expected a puzzle that cannot be completed with intermediate techniques alone",
+  );
+});
+
+function seededRandom(seed) {
+  let value = seed >>> 0;
+  return () => {
+    value = (value * 1664525 + 1013904223) >>> 0;
+    return value / 2 ** 32;
+  };
 }
 
 test("Pig Dice produces a deterministic server-side roll", async () => {
