@@ -43,7 +43,10 @@ const preview = {
 
 const client = createPlayweftClient({
   descriptor: {
-    name: "四子棋",
+    name: "Connect Four",
+    translations: {
+      "zh-CN": { name: "四子棋" },
+    },
     icon: "/connect-four.svg",
     helpUrl: "./help.html",
   },
@@ -148,7 +151,10 @@ function render(nextState) {
     panel.querySelector("[data-player-name]").textContent =
       index === ownIndex ? `玩家 ${index + 1} · 你` : `玩家 ${index + 1}`;
     panel.classList.toggle("is-current", !ended && index === currentIndex);
-    panel.classList.toggle("is-winner", Number(nextState.winnerIndex) === index + 1);
+    panel.classList.toggle(
+      "is-winner",
+      Number(nextState.winnerIndex) === index + 1,
+    );
   });
 
   for (let column = 0; column < COLUMNS; column += 1) {
@@ -177,7 +183,10 @@ function render(nextState) {
         Number(nextState.lastMove?.row) === row + 1 &&
           Number(nextState.lastMove?.column) === column + 1,
       );
-      cell.classList.toggle("is-winning", winning.has(`${row + 1}:${column + 1}`));
+      cell.classList.toggle(
+        "is-winning",
+        winning.has(`${row + 1}:${column + 1}`),
+      );
       cell.classList.toggle("is-target", canDrop && row === targetRow);
     }
   }

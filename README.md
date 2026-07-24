@@ -4,6 +4,11 @@ Six lightweight multiplayer games and one standalone game for the sibling
 [`playweft`](../playweft) platform. They share one Vite build and expose
 independent HTML entry points and Playweft descriptors.
 
+Each descriptor uses an English default name and a Simplified Chinese
+translation (`translations["zh-CN"].name`). Playweft displays the translation
+when it matches the player's language and falls back to the English name for
+all other locales.
+
 | Game | Players | Local entry | Production build |
 | --- | --- | --- | --- |
 | Pig Dice | 2 | `http://localhost:5174/pig-dice/` | `dist/pig-dice/index.html` |

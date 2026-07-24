@@ -51,7 +51,10 @@ let selected = new Set();
 
 const client = createPlayweftClient({
   descriptor: {
-    name: "斗地主",
+    name: "Dou Dizhu",
+    translations: {
+      "zh-CN": { name: "斗地主" },
+    },
     icon: "/dou-dizhu.svg",
     helpUrl: "./help.html",
   },
@@ -85,9 +88,13 @@ const client = createPlayweftClient({
 });
 
 elements.bidButtons.forEach((button) => {
-  button.addEventListener("click", () => send({ type: "bid", score: Number(button.dataset.bid) }));
+  button.addEventListener("click", () =>
+    send({ type: "bid", score: Number(button.dataset.bid) }),
+  );
 });
-elements.play.addEventListener("click", () => send({ type: "play", cards: [...selected] }));
+elements.play.addEventListener("click", () =>
+  send({ type: "play", cards: [...selected] }),
+);
 elements.pass.addEventListener("click", () => send({ type: "pass" }));
 elements.rematch.addEventListener("click", () => send({ type: "rematch" }));
 window.addEventListener("pagehide", () => client.destroy());
@@ -109,7 +116,9 @@ function render(nextState) {
   const players = Array.isArray(nextState.players) ? nextState.players : [];
   const ownIndex = players.indexOf(playerId);
   const currentIndex = Number(nextState.turnIndex) - 1;
-  const ownHand = Array.isArray(nextState.hands?.[playerId]) ? nextState.hands[playerId] : [];
+  const ownHand = Array.isArray(nextState.hands?.[playerId])
+    ? nextState.hands[playerId]
+    : [];
   selected = new Set([...selected].filter((card) => ownHand.includes(card)));
   const live = Boolean(state);
   const isOwnTurn = ownIndex >= 0 && ownIndex === currentIndex;
@@ -117,9 +126,21 @@ function render(nextState) {
 
   elements.multiplier.textContent = String(nextState.multiplier ?? 1);
   elements.bottomCount.textContent = String(nextState.bottomCards?.length ?? 3);
-  players.slice(0, 3).forEach((id, index) => renderPlayer(nextState, id, index, ownIndex, currentIndex, ended));
-  renderCards(elements.lastPlay, nextState.lastPlay?.cards ?? [], "table-card", false);
-  renderHand(ownHand, live && !ended && nextState.phase === "playing" && isOwnTurn);
+  players
+    .slice(0, 3)
+    .forEach((id, index) =>
+      renderPlayer(nextState, id, index, ownIndex, currentIndex, ended),
+    );
+  renderCards(
+    elements.lastPlay,
+    nextState.lastPlay?.cards ?? [],
+    "table-card",
+    false,
+  );
+  renderHand(
+    ownHand,
+    live && !ended && nextState.phase === "playing" && isOwnTurn,
+  );
 
   const bidding = live && !ended && nextState.phase === "bidding";
   elements.bidActions.hidden = !bidding;
@@ -128,9 +149,13 @@ function render(nextState) {
   elements.rematch.disabled = Boolean(pendingAction);
   elements.bidButtons.forEach((button) => {
     const bid = Number(button.dataset.bid);
-    button.disabled = !isOwnTurn || Boolean(pendingAction) || (bid > 0 && bid <= Number(nextState.highestBid));
+    button.disabled =
+      !isOwnTurn ||
+      Boolean(pendingAction) ||
+      (bid > 0 && bid <= Number(nextState.highestBid));
   });
-  elements.play.disabled = !isOwnTurn || Boolean(pendingAction) || selected.size === 0;
+  elements.play.disabled =
+    !isOwnTurn || Boolean(pendingAction) || selected.size === 0;
   elements.pass.disabled =
     !isOwnTurn ||
     Boolean(pendingAction) ||
@@ -170,7 +195,9 @@ function renderHand(cards, enabled) {
 
 function renderCards(container, cards, className, interactive) {
   container.replaceChildren();
-  cards.forEach((card) => container.append(cardElement(card, className, interactive)));
+  cards.forEach((card) =>
+    container.append(cardElement(card, className, interactive)),
+  );
 }
 
 function cardElement(card, className, interactive) {
@@ -186,7 +213,21 @@ function cardElement(card, className, interactive) {
 function cardFace(card) {
   if (card === 53) return { rank: "小王", suit: "J", red: false, joker: true };
   if (card === 54) return { rank: "大王", suit: "J", red: true, joker: true };
-  const ranks = ["3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "2"];
+  const ranks = [
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "J",
+    "Q",
+    "K",
+    "A",
+    "2",
+  ];
   const suits = ["♣", "♦", "♥", "♠"];
   const suitIndex = (card - 1) % 4;
   return {
@@ -204,7 +245,8 @@ function setCopy(nextState, ownIndex, currentIndex) {
     const won = nextState.winner === playerId;
     elements.kicker.textContent = `本局倍数 ${nextState.multiplier ?? 1}`;
     elements.heading.textContent = won ? "你赢了" : "本局结束";
-    elements.message.textContent = nextState.winnerTeam === "landlord" ? "地主获胜" : "农民获胜";
+    elements.message.textContent =
+      nextState.winnerTeam === "landlord" ? "地主获胜" : "农民获胜";
     return;
   }
   if (nextState.phase === "bidding") {
@@ -218,7 +260,10 @@ function setCopy(nextState, ownIndex, currentIndex) {
       elements.kicker.textContent = "叫分阶段";
       elements.heading.textContent = "等待其他玩家叫分";
     }
-    elements.message.textContent = nextState.highestBid > 0 ? `当前最高 ${nextState.highestBid} 分` : "尚未有人叫分";
+    elements.message.textContent =
+      nextState.highestBid > 0
+        ? `当前最高 ${nextState.highestBid} 分`
+        : "尚未有人叫分";
     return;
   }
   const landlordIndex = players.indexOf(nextState.landlord);
@@ -227,13 +272,18 @@ function setCopy(nextState, ownIndex, currentIndex) {
     elements.heading.textContent = `玩家 ${currentIndex + 1} 的回合`;
   } else if (ownIndex === currentIndex) {
     elements.kicker.textContent = "轮到你出牌";
-    elements.heading.textContent = nextState.lastPlay ? "选择能压过桌面的牌" : "请先出牌";
+    elements.heading.textContent = nextState.lastPlay
+      ? "选择能压过桌面的牌"
+      : "请先出牌";
   } else {
     elements.kicker.textContent = "等待对手";
     elements.heading.textContent = `玩家 ${currentIndex + 1} 正在出牌`;
   }
   if (nextState.lastPlay) {
-    const actor = nextState.lastPlay.playerIndex === ownIndex + 1 ? "你" : `玩家 ${nextState.lastPlay.playerIndex}`;
+    const actor =
+      nextState.lastPlay.playerIndex === ownIndex + 1
+        ? "你"
+        : `玩家 ${nextState.lastPlay.playerIndex}`;
     elements.message.textContent = `${actor}出了${comboLabel(nextState.lastPlay.type)}`;
   } else if (landlordIndex >= 0) {
     elements.message.textContent = `玩家 ${landlordIndex + 1} 是地主，先出牌`;
@@ -241,22 +291,24 @@ function setCopy(nextState, ownIndex, currentIndex) {
 }
 
 function comboLabel(type) {
-  return {
-    single: "单张",
-    pair: "对子",
-    triple: "三张",
-    triple_single: "三带一",
-    triple_pair: "三带二",
-    straight: "顺子",
-    pair_straight: "连对",
-    airplane: "飞机",
-    airplane_single: "飞机带单",
-    airplane_pair: "飞机带对",
-    four_two_single: "四带二",
-    four_two_pair: "四带两对",
-    bomb: "炸弹",
-    rocket: "王炸",
-  }[type] ?? "牌";
+  return (
+    {
+      single: "单张",
+      pair: "对子",
+      triple: "三张",
+      triple_single: "三带一",
+      triple_pair: "三带二",
+      straight: "顺子",
+      pair_straight: "连对",
+      airplane: "飞机",
+      airplane_single: "飞机带单",
+      airplane_pair: "飞机带对",
+      four_two_single: "四带二",
+      four_two_pair: "四带两对",
+      bomb: "炸弹",
+      rocket: "王炸",
+    }[type] ?? "牌"
+  );
 }
 
 function setConnection(mode, label) {

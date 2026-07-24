@@ -39,7 +39,10 @@ const preview = {
 
 const client = createPlayweftClient({
   descriptor: {
-    name: "贪心骰子",
+    name: "Pig Dice",
+    translations: {
+      "zh-CN": { name: "贪心骰子" },
+    },
     icon: "/pig-dice.svg",
     helpUrl: "./help.html",
   },
@@ -102,7 +105,10 @@ function render(nextState) {
     panel.querySelector("[data-score]").textContent = String(
       nextState.scores?.[id] ?? 0,
     );
-    panel.classList.toggle("is-current", !nextState.winner && index === currentIndex);
+    panel.classList.toggle(
+      "is-current",
+      !nextState.winner && index === currentIndex,
+    );
     panel.classList.toggle("is-winner", index === winnerIndex);
   });
 
@@ -126,7 +132,8 @@ function render(nextState) {
   if (!isLive) return;
   if (hasWinner) {
     elements.kicker.textContent = `最终比分 · 目标 ${TARGET_SCORE}`;
-    elements.heading.textContent = winnerIndex === ownIndex ? "你赢了" : "对手获胜";
+    elements.heading.textContent =
+      winnerIndex === ownIndex ? "你赢了" : "对手获胜";
     elements.activity.textContent = "本局已经结束";
     return;
   }
@@ -135,7 +142,8 @@ function render(nextState) {
     elements.heading.textContent = `玩家 ${currentIndex + 1} 的回合`;
   } else if (isOwnTurn) {
     elements.kicker.textContent = "轮到你了";
-    elements.heading.textContent = nextState.turnTotal > 0 ? "继续冒险，还是收分？" : "掷出你的第一颗骰子";
+    elements.heading.textContent =
+      nextState.turnTotal > 0 ? "继续冒险，还是收分？" : "掷出你的第一颗骰子";
   } else {
     elements.kicker.textContent = "对手回合";
     elements.heading.textContent = "等待对手行动";
@@ -146,7 +154,10 @@ function render(nextState) {
 function activityText(nextState, ownIndex) {
   const event = nextState.lastEvent;
   if (!event || event.kind === "ready") return "掷到 1 会失去本回合全部暂存分";
-  const actor = Number(event.playerIndex) - 1 === ownIndex ? "你" : `玩家 ${event.playerIndex}`;
+  const actor =
+    Number(event.playerIndex) - 1 === ownIndex
+      ? "你"
+      : `玩家 ${event.playerIndex}`;
   if (event.kind === "rolled") return `${actor}掷出了 ${event.value} 点`;
   if (event.kind === "bust") return `${actor}掷到 1，本回合暂存归零`;
   if (event.kind === "banked") return `${actor}收下了 ${event.value} 分`;

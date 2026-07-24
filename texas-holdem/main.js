@@ -36,7 +36,10 @@ let playerId;
 let state;
 let pendingActionId;
 
-const previewPlayers = Array.from({ length: 6 }, (_, index) => `preview-${index + 1}`);
+const previewPlayers = Array.from(
+  { length: 6 },
+  (_, index) => `preview-${index + 1}`,
+);
 const preview = {
   players: previewPlayers,
   chips: Object.fromEntries(previewPlayers.map((id) => [id, STARTING_STACK])),
@@ -80,7 +83,10 @@ createIcons({
 
 const client = createPlayweftClient({
   descriptor: {
-    name: "德州扑克",
+    name: "Texas Hold'em",
+    translations: {
+      "zh-CN": { name: "德州扑克" },
+    },
     icon: "/texas-holdem.svg",
     helpUrl: "./help.html",
   },
@@ -149,19 +155,21 @@ function render(nextState) {
   const isOwnTurn = isLive && ownIndex === currentIndex && !nextState.ended;
   const canAct = isOwnTurn && !pendingActionId;
 
-  elements.pot.textContent = String(nextState.ended ? nextState.lastPot || 0 : nextState.pot || 0);
+  elements.pot.textContent = String(
+    nextState.ended ? nextState.lastPot || 0 : nextState.pot || 0,
+  );
   elements.bet.textContent = String(nextState.currentBet || 0);
   elements.street.textContent = streetName(nextState.street, nextState.ended);
-  elements.call.querySelector("span span").textContent = callAmount > 0 ? `跟注 ${callAmount}` : "跟注";
+  elements.call.querySelector("span span").textContent =
+    callAmount > 0 ? `跟注 ${callAmount}` : "跟注";
   elements.fold.disabled = !canAct;
   elements.check.disabled = !canAct || callAmount !== 0;
   elements.call.disabled = !canAct || callAmount <= 0 || ownChips < callAmount;
   elements.raise.disabled =
-    !canAct ||
-    Number(nextState.raises) >= 3 ||
-    ownChips < callAmount + 2;
+    !canAct || Number(nextState.raises) >= 3 || ownChips < callAmount + 2;
   elements.allIn.disabled = !canAct || ownChips <= 0;
-  elements.nextHand.hidden = !isLive || !nextState.ended || Boolean(nextState.matchWinner);
+  elements.nextHand.hidden =
+    !isLive || !nextState.ended || Boolean(nextState.matchWinner);
   elements.nextHand.disabled = Boolean(pendingActionId);
   elements.rematch.hidden = !isLive || !nextState.matchWinner;
   elements.rematch.disabled = Boolean(pendingActionId);
@@ -174,7 +182,9 @@ function render(nextState) {
 function renderCommunity(nextState) {
   const revealed = Math.max(0, Math.min(5, Number(nextState.revealed) || 0));
   elements.community.replaceChildren(
-    ...Array.from({ length: 5 }, (_, index) => cardElement(nextState.board?.[index], index < revealed)),
+    ...Array.from({ length: 5 }, (_, index) =>
+      cardElement(nextState.board?.[index], index < revealed),
+    ),
   );
 }
 
@@ -201,12 +211,16 @@ function renderSeats(nextState, ownIndex) {
     const isOwn = index === visualOwnIndex;
     const folded = Boolean(nextState.folded?.[id]);
     const inHand = Boolean(nextState.inHand?.[id]);
-    const isWinner = Array.isArray(nextState.winners) && nextState.winners.includes(id);
+    const isWinner =
+      Array.isArray(nextState.winners) && nextState.winners.includes(id);
     const position = positions[visualIndex];
     seat.className = "table-seat";
     seat.dataset.position = position;
     seat.dataset.hasCards = String(!isOwn);
-    seat.classList.toggle("is-current", !nextState.ended && index === Number(nextState.current) - 1);
+    seat.classList.toggle(
+      "is-current",
+      !nextState.ended && index === Number(nextState.current) - 1,
+    );
     seat.classList.toggle("is-own", isOwn);
     seat.classList.toggle("is-folded", folded || !inHand);
     seat.classList.toggle("is-winner", isWinner);
@@ -244,20 +258,26 @@ function renderSeats(nextState, ownIndex) {
     }
     return seat;
   });
-  elements.seats.replaceChildren(
-    ...opponentCards,
-    ...seats,
-  );
+  elements.seats.replaceChildren(...opponentCards, ...seats);
 }
 
 function seatPositions(count) {
-  return {
-    2: ["top", "bottom"],
-    3: ["upper-right", "bottom", "upper-left"],
-    4: ["top", "right", "bottom", "left"],
-    5: ["top", "upper-right", "lower-right", "bottom", "left"],
-    6: ["top", "upper-right", "lower-right", "bottom", "lower-left", "upper-left"],
-  }[count] ?? ["top", "bottom"];
+  return (
+    {
+      2: ["top", "bottom"],
+      3: ["upper-right", "bottom", "upper-left"],
+      4: ["top", "right", "bottom", "left"],
+      5: ["top", "upper-right", "lower-right", "bottom", "left"],
+      6: [
+        "top",
+        "upper-right",
+        "lower-right",
+        "bottom",
+        "lower-left",
+        "upper-left",
+      ],
+    }[count] ?? ["top", "bottom"]
+  );
 }
 
 function renderStatus(nextState, ownIndex, currentIndex) {
@@ -265,13 +285,17 @@ function renderStatus(nextState, ownIndex, currentIndex) {
   if (nextState.matchWinner) {
     const won = nextState.players.indexOf(nextState.matchWinner) === ownIndex;
     elements.kicker.textContent = "筹码赛结束";
-    elements.heading.textContent = won ? "你赢下整桌" : `玩家 ${nextState.players.indexOf(nextState.matchWinner) + 1} 获胜`;
+    elements.heading.textContent = won
+      ? "你赢下整桌"
+      : `玩家 ${nextState.players.indexOf(nextState.matchWinner) + 1} 获胜`;
     elements.activity.textContent = "所有筹码已归一位玩家";
     return;
   }
   if (nextState.ended) {
-    const won = Array.isArray(nextState.winners) && nextState.winners.includes(playerId);
-    elements.kicker.textContent = nextState.lastEvent?.kind === "fold" ? "本手结束" : "摊牌";
+    const won =
+      Array.isArray(nextState.winners) && nextState.winners.includes(playerId);
+    elements.kicker.textContent =
+      nextState.lastEvent?.kind === "fold" ? "本手结束" : "摊牌";
     elements.heading.textContent = won ? "你赢得底池" : "等待下一手";
     elements.activity.textContent = resultText(nextState, ownIndex);
     return;
@@ -290,14 +314,21 @@ function renderStatus(nextState, ownIndex, currentIndex) {
 }
 
 function actionPrompt(nextState, id) {
-  const amount = Math.max(0, Number(nextState.currentBet) - (Number(nextState.streetBets?.[id]) || 0));
+  const amount = Math.max(
+    0,
+    Number(nextState.currentBet) - (Number(nextState.streetBets?.[id]) || 0),
+  );
   return amount > 0 ? `需要跟注 ${amount}，或选择加注` : "可以过牌，或主动下注";
 }
 
 function eventText(nextState, ownIndex) {
   const event = nextState.lastEvent;
-  if (!event || event.kind === "dealt") return "庄家按钮每手顺时针移动，盲注为 1 / 2";
-  const actor = Number(event.playerIndex) - 1 === ownIndex ? "你" : `玩家 ${event.playerIndex}`;
+  if (!event || event.kind === "dealt")
+    return "庄家按钮每手顺时针移动，盲注为 1 / 2";
+  const actor =
+    Number(event.playerIndex) - 1 === ownIndex
+      ? "你"
+      : `玩家 ${event.playerIndex}`;
   const text = {
     checked: "过牌",
     called: `跟注 ${event.value}`,
@@ -313,7 +344,9 @@ function resultText(nextState, ownIndex) {
   const winners = Array.isArray(nextState.winners) ? nextState.winners : [];
   if (nextState.lastEvent?.kind === "fold") {
     const winnerIndex = nextState.players.indexOf(winners[0]);
-    return winnerIndex === ownIndex ? `对手弃牌，你收下 ${nextState.lastPot}` : `玩家 ${winnerIndex + 1} 收下 ${nextState.lastPot}`;
+    return winnerIndex === ownIndex
+      ? `对手弃牌，你收下 ${nextState.lastPot}`
+      : `玩家 ${winnerIndex + 1} 收下 ${nextState.lastPot}`;
   }
   const ownRank = handLabel(nextState.showdownRanks?.[playerId]);
   if (ownRank) return `你的牌型：${ownRank}`;
@@ -328,7 +361,21 @@ function cardElement(card, faceUp) {
     element.setAttribute("aria-label", "未亮出的牌");
     return element;
   }
-  const rank = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"][card % 13];
+  const rank = [
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "J",
+    "Q",
+    "K",
+    "A",
+  ][card % 13];
   const suit = ["♠", "♥", "♦", "♣"][Math.floor(card / 13)];
   const red = suit === "♥" || suit === "♦";
   element.dataset.red = String(red);
@@ -343,17 +390,19 @@ function streetName(street, ended) {
 }
 
 function handLabel(name) {
-  return {
-    high_card: "高牌",
-    one_pair: "一对",
-    two_pair: "两对",
-    three_of_a_kind: "三条",
-    straight: "顺子",
-    flush: "同花",
-    full_house: "葫芦",
-    four_of_a_kind: "四条",
-    straight_flush: "同花顺",
-  }[name] ?? "";
+  return (
+    {
+      high_card: "高牌",
+      one_pair: "一对",
+      two_pair: "两对",
+      three_of_a_kind: "三条",
+      straight: "顺子",
+      flush: "同花",
+      full_house: "葫芦",
+      four_of_a_kind: "四条",
+      straight_flush: "同花顺",
+    }[name] ?? ""
+  );
 }
 
 function setConnection(mode, label) {

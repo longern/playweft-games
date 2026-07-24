@@ -56,6 +56,9 @@ createIcons({ icons: { RotateCcw } });
 const client = createPlayweftClient({
   descriptor: {
     name: "UNO",
+    translations: {
+      "zh-CN": { name: "UNO" },
+    },
     icon: "/uno.svg",
     helpUrl: "./help.html",
   },
@@ -92,7 +95,9 @@ const client = createPlayweftClient({
 
 window.addEventListener("pagehide", () => client.destroy());
 elements.drawPile.addEventListener("click", () => sendAction({ type: "draw" }));
-elements.rematch.addEventListener("click", () => sendAction({ type: "rematch" }));
+elements.rematch.addEventListener("click", () =>
+  sendAction({ type: "rematch" }),
+);
 elements.colorPicker.addEventListener("click", (event) => {
   const color = event.target.closest("button")?.dataset.colorChoice;
   if (!color || !selectedWildCard) return;
@@ -133,10 +138,15 @@ function render(nextState) {
   const currentIndex = Number(nextState.current) - 1;
   const hasWinner = Boolean(nextState.winner);
   const ownId = players[displayIndex];
-  const hand = Array.isArray(nextState.hands?.[ownId]) ? nextState.hands[ownId] : [];
+  const hand = Array.isArray(nextState.hands?.[ownId])
+    ? nextState.hands[ownId]
+    : [];
   const opponentCards = players.reduce((total, id, index) => {
     if (index === displayIndex) return total;
-    return total + (Array.isArray(nextState.hands?.[id]) ? nextState.hands[id].length : 0);
+    return (
+      total +
+      (Array.isArray(nextState.hands?.[id]) ? nextState.hands[id].length : 0)
+    );
   }, 0);
   const topCard = nextState.discard?.at(-1);
   const ownTurn = Boolean(state) && ownIndex === currentIndex && !hasWinner;
@@ -144,16 +154,22 @@ function render(nextState) {
   renderPlayers(players, nextState, ownIndex, currentIndex, hasWinner);
 
   elements.handCount.textContent = `${hand.length} 张`;
-  elements.opponentLabel.textContent = ownIndex < 0 ? "玩家手牌" : `其他玩家手牌 · ${opponentCards} 张`;
+  elements.opponentLabel.textContent =
+    ownIndex < 0 ? "玩家手牌" : `其他玩家手牌 · ${opponentCards} 张`;
   renderCardBacks(opponentCards || 1);
   renderHand(hand, ownTurn, nextState);
-  elements.discard.replaceChildren(topCard ? buildCard(topCard, false) : document.createElement("span"));
+  elements.discard.replaceChildren(
+    topCard ? buildCard(topCard, false) : document.createElement("span"),
+  );
   elements.activeColor.dataset.color = COLORS.includes(nextState.activeColor)
     ? nextState.activeColor
     : "red";
 
   elements.drawPile.disabled = !ownTurn || Boolean(pendingActionId);
-  elements.drawPile.setAttribute("aria-label", ownTurn ? "从牌堆摸一张牌并结束回合" : "等待你的回合");
+  elements.drawPile.setAttribute(
+    "aria-label",
+    ownTurn ? "从牌堆摸一张牌并结束回合" : "等待你的回合",
+  );
   elements.colorPicker.hidden = !selectedWildCard || Boolean(pendingActionId);
   elements.rematch.hidden = !state || !hasWinner || ownIndex < 0;
   elements.rematch.disabled = Boolean(pendingActionId);
@@ -170,9 +186,14 @@ function renderPlayers(players, nextState, ownIndex, currentIndex, hasWinner) {
   elements.players.replaceChildren(
     ...players.map((id, index) => {
       const panel = document.createElement("div");
-      const count = Array.isArray(nextState.hands?.[id]) ? nextState.hands[id].length : 0;
+      const count = Array.isArray(nextState.hands?.[id])
+        ? nextState.hands[id].length
+        : 0;
       panel.className = "player-chip";
-      panel.classList.toggle("is-current", !hasWinner && index === currentIndex);
+      panel.classList.toggle(
+        "is-current",
+        !hasWinner && index === currentIndex,
+      );
       panel.classList.toggle("is-winner", nextState.winner === id);
       panel.innerHTML = `
         <span class="player-dot player-dot-${index % 4}"></span>
@@ -203,7 +224,10 @@ function renderHand(hand, ownTurn, nextState) {
       const playable = isPlayable(nextCard, hand, nextState);
       const button = buildCard(nextCard, true);
       button.classList.toggle("is-playable", ownTurn && playable);
-      button.classList.toggle("is-selected", selectedWildCard?.id === nextCard.id);
+      button.classList.toggle(
+        "is-selected",
+        selectedWildCard?.id === nextCard.id,
+      );
       button.disabled = !ownTurn || !playable || Boolean(pendingActionId);
       button.addEventListener("click", () => selectCard(nextCard));
       return button;
@@ -238,10 +262,21 @@ function cardSymbol(value) {
 }
 
 function cardLabel(nextCard) {
-  const color = { red: "红色", yellow: "黄色", green: "绿色", blue: "蓝色", wild: "万能" }[nextCard.color];
-  const value = { skip: "跳过", reverse: "反转", draw2: "加二", wild: "变色", wild4: "加四" }[
-    nextCard.value
-  ] ?? nextCard.value;
+  const color = {
+    red: "红色",
+    yellow: "黄色",
+    green: "绿色",
+    blue: "蓝色",
+    wild: "万能",
+  }[nextCard.color];
+  const value =
+    {
+      skip: "跳过",
+      reverse: "反转",
+      draw2: "加二",
+      wild: "变色",
+      wild4: "加四",
+    }[nextCard.value] ?? nextCard.value;
   return `${color}${value}`;
 }
 
@@ -249,7 +284,11 @@ function isPlayable(nextCard, hand, nextState) {
   if (nextCard.color === "wild") {
     return (
       nextCard.value !== "wild4" ||
-      !hand.some((cardInHand) => cardInHand.id !== nextCard.id && cardInHand.color === nextState.activeColor)
+      !hand.some(
+        (cardInHand) =>
+          cardInHand.id !== nextCard.id &&
+          cardInHand.color === nextState.activeColor,
+      )
     );
   }
   return (
@@ -260,13 +299,19 @@ function isPlayable(nextCard, hand, nextState) {
 
 function canAct() {
   const ownIndex = state?.players?.indexOf(playerId) ?? -1;
-  return ownIndex >= 0 && ownIndex === Number(state.current) - 1 && !state.winner && !pendingActionId;
+  return (
+    ownIndex >= 0 &&
+    ownIndex === Number(state.current) - 1 &&
+    !state.winner &&
+    !pendingActionId
+  );
 }
 
 function renderCopy(nextState, ownIndex, currentIndex) {
   if (nextState.winner) {
     elements.kicker.textContent = "本局结束";
-    elements.heading.textContent = nextState.winner === playerId ? "你赢了" : "对手获胜";
+    elements.heading.textContent =
+      nextState.winner === playerId ? "你赢了" : "对手获胜";
     elements.activity.textContent = eventText(nextState.lastEvent, ownIndex);
     return;
   }
@@ -285,10 +330,15 @@ function renderCopy(nextState, ownIndex, currentIndex) {
 
 function eventText(event, ownIndex) {
   if (!event || event.kind === "ready") return "首张牌决定本局的起始颜色";
-  const actor = Number(event.playerIndex) - 1 === ownIndex ? "你" : `玩家 ${event.playerIndex}`;
+  const actor =
+    Number(event.playerIndex) - 1 === ownIndex
+      ? "你"
+      : `玩家 ${event.playerIndex}`;
   if (event.kind === "draw") return `${actor}摸了一张牌并结束回合`;
-  if (event.kind === "penalty") return `${actor}打出${cardLabel(event.card)}，玩家 ${event.targetIndex} 摸了 ${event.count} 张`;
-  if (event.kind === "skip") return `${actor}打出${cardLabel(event.card)}，下一位玩家被跳过`;
+  if (event.kind === "penalty")
+    return `${actor}打出${cardLabel(event.card)}，玩家 ${event.targetIndex} 摸了 ${event.count} 张`;
+  if (event.kind === "skip")
+    return `${actor}打出${cardLabel(event.card)}，下一位玩家被跳过`;
   if (event.kind === "reverse") return `${actor}打出反转牌，出牌方向已改变`;
   if (event.kind === "play") return `${actor}打出${cardLabel(event.card)}`;
   if (event.kind === "won") return `${actor}打完了最后一张牌`;

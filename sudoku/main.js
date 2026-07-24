@@ -64,7 +64,10 @@ const cells = [];
 const pendingGenerations = new Map();
 const platform = createPlayweftSoloClient({
   descriptor: {
-    name: "数独",
+    name: "Sudoku",
+    translations: {
+      "zh-CN": { name: "数独" },
+    },
     icon: "/sudoku.svg",
     modes: ["solo"],
   },

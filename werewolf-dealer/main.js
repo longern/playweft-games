@@ -39,7 +39,14 @@ let roleVisible = false;
 let visibleRound;
 
 const preview = {
-  players: ["preview-one", "preview-two", "preview-three", "preview-four", "preview-five", "preview-six"],
+  players: [
+    "preview-one",
+    "preview-two",
+    "preview-three",
+    "preview-four",
+    "preview-five",
+    "preview-six",
+  ],
   roles: {
     "preview-one": "seer",
     "preview-two": "witch",
@@ -65,7 +72,10 @@ const preview = {
 
 const client = createPlayweftClient({
   descriptor: {
-    name: "狼人杀发牌器",
+    name: "Werewolf Dealer",
+    translations: {
+      "zh-CN": { name: "狼人杀发牌器" },
+    },
     icon: "/werewolf-dealer.svg",
     helpUrl: "./help.html",
   },
@@ -161,7 +171,8 @@ function renderOwnRole(role, live) {
   const detail = roleVisible && role ? ROLE_DETAILS[role] : undefined;
   elements.roleCard.dataset.role = detail ? role : "hidden";
   elements.roleEmblem.textContent = detail?.mark ?? "?";
-  elements.roleName.textContent = detail?.name ?? (live ? "身份未翻开" : "等待发牌");
+  elements.roleName.textContent =
+    detail?.name ?? (live ? "身份未翻开" : "等待发牌");
   elements.roleCopy.textContent = detail?.copy ?? "开局后由你自己翻开身份牌";
   elements.roleReveal.disabled = !live || !role || Boolean(pendingActionId);
   elements.roleReveal.innerHTML = roleVisible
@@ -191,18 +202,25 @@ function renderPlayers(nextState, players, ownIndex, ownAlive, votedFor, live) {
     })
     .join("");
   elements.playerField.querySelectorAll("[data-target]").forEach((button) => {
-    button.addEventListener("click", () => send({ type: "vote", target: button.dataset.target }));
+    button.addEventListener("click", () =>
+      send({ type: "vote", target: button.dataset.target }),
+    );
   });
   createIcons({ icons: { Eye, EyeOff, RotateCcw, Vote } });
 }
 
 function renderFlips(nextState, players) {
   const flips = Array.isArray(nextState.flips) ? nextState.flips : [];
-  elements.flipHeading.textContent = flips.length ? `已翻 ${flips.length} 张身份牌` : "尚无人出局";
+  elements.flipHeading.textContent = flips.length
+    ? `已翻 ${flips.length} 张身份牌`
+    : "尚无人出局";
   elements.flipLog.innerHTML = flips.length
     ? flips
         .map((flip) => {
-          const detail = ROLE_DETAILS[flip.role] ?? { name: "未知身份", mark: "?" };
+          const detail = ROLE_DETAILS[flip.role] ?? {
+            name: "未知身份",
+            mark: "?",
+          };
           return `<article class="flip-entry" data-role="${flip.role}">
             <span class="flip-mark">${detail.mark}</span>
             <div><strong>${playerLabel(players, flip.player)} · ${detail.name}</strong><p>${flip.whiteGod ? "白神已翻牌并离场，不保留在场上。" : "已翻牌并离场。"}</p></div>
@@ -255,18 +273,23 @@ function renderStatus(nextState, players, ownIndex, activeCount, votedFor) {
     return;
   }
   elements.kicker.textContent = `第 ${nextState.round} 局 · 投票中`;
-  elements.heading.textContent = votedFor ? "你的票已提交" : "请选择本轮投票目标";
-  elements.message.textContent = event.kind === "vote_cast"
-    ? `${player} 已投票，等待其他玩家。`
-    : "全部在场玩家投票后，系统自动结算并翻牌。";
+  elements.heading.textContent = votedFor
+    ? "你的票已提交"
+    : "请选择本轮投票目标";
+  elements.message.textContent =
+    event.kind === "vote_cast"
+      ? `${player} 已投票，等待其他玩家。`
+      : "全部在场玩家投票后，系统自动结算并翻牌。";
 }
 
 function rejectionText(reason) {
-  return {
-    not_alive: "离场玩家不能投票。",
-    target_not_alive: "该玩家已经离场。",
-    invalid_target: "请选择一位仍在场的玩家。",
-  }[reason] ?? "该操作目前不能执行。";
+  return (
+    {
+      not_alive: "离场玩家不能投票。",
+      target_not_alive: "该玩家已经离场。",
+      invalid_target: "请选择一位仍在场的玩家。",
+    }[reason] ?? "该操作目前不能执行。"
+  );
 }
 
 function setConnection(mode, label) {
