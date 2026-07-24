@@ -77,6 +77,10 @@ body {
   .generating-spinner {
     animation: none;
   }
+
+  .completion {
+    transition: none;
+  }
 }
 
 .paused-overlay {
@@ -143,7 +147,7 @@ body {
   display: flex;
   min-height: 28px;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   margin-bottom: 8px;
   color: #6a6e67;
   font-size: 0.76rem;
@@ -257,18 +261,21 @@ body {
 }
 
 .completion {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  color: #197354;
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: rgb(245 245 240 / 86%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease;
 }
 
-.completion[hidden] {
-  display: none;
-}
-
-.completion strong {
-  font-size: 0.88rem;
+.completion.is-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .completion button {
@@ -288,6 +295,7 @@ body {
 }
 
 .sudoku-controls {
+  position: relative;
   width: 100%;
   padding-left: 34px;
 }

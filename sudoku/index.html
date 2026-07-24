@@ -34,12 +34,6 @@
     <section class="sudoku-stage" aria-label="数独">
       <div class="sudoku-status">
         <span id="timer">00:00</span>
-        <div id="completion" class="completion" hidden aria-live="polite">
-          <strong>完成</strong>
-          <button id="next-game-button" type="button">
-            <span class="icon-button-content"><i data-lucide="sparkles"></i>下一题</span>
-          </button>
-        </div>
       </div>
 
       <div id="sudoku-board" class="sudoku-board" role="grid" aria-label="数独棋盘"></div>
@@ -62,6 +56,11 @@
         </button>
         <button id="hint-button" class="tool-button" type="button" aria-label="提示" title="提示">
           <i data-lucide="lightbulb"></i>
+        </button>
+      </div>
+      <div id="completion" class="completion" aria-hidden="true">
+        <button id="next-game-button" type="button" disabled>
+          <span class="icon-button-content"><i data-lucide="sparkles"></i>下一题</span>
         </button>
       </div>
     </aside>

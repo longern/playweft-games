@@ -459,9 +459,10 @@ function render() {
       paused ||
       isDigitComplete(Number(button.dataset.digit));
   }
-  elements.complete.hidden = !complete;
-  elements.complete.querySelector("strong").textContent =
-    `完成，用时 ${formatTime(elapsedSeconds())}`;
+  const showCompletion = complete && !isGenerating;
+  elements.complete.classList.toggle("is-visible", showCompletion);
+  elements.complete.setAttribute("aria-hidden", String(!showCompletion));
+  elements.nextGame.disabled = !showCompletion;
   updateTimer();
   saveProgress();
 }
