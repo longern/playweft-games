@@ -9,13 +9,74 @@ import {
   generatePuzzleForDifficulty,
   generateVeryHardPuzzle,
   isValidGrid,
-} from "../sudoku/sudoku.js";
+} from "../games/sudoku/sudoku.js";
+
+const LEGACY_SCENARIO_ADAPTER = `
+local __protocol_setup = setup
+setup = function(context)
+  if context.match == nil then
+    local players = {}
+    for seat, id in ipairs(context.players) do
+      players[seat] = { id = id, seat = seat }
+    end
+    context = {
+      protocolVersion = 1,
+      players = players,
+      match = {
+        id = "match_test",
+        ownerId = context.hostId or context.ownerId or context.players[1],
+        startedAt = 0,
+        randomSeed = context.randomSeed or 1,
+      },
+    }
+  end
+  return __protocol_setup(context)
+end
+
+local __protocol_action = on_action
+on_action = function(state, action, context)
+  if context.actor == nil then
+    context = {
+      protocolVersion = 1,
+      matchId = "match_test",
+      actionId = "action_test",
+      actionAt = 0,
+      version = context.version or 0,
+      actor = {
+        id = context.playerId,
+        role = "player",
+        isOwner = context.playerId == state.hostId,
+      },
+    }
+  end
+  return __protocol_action(state, action, context)
+end
+
+local __protocol_view = view
+view = function(state, events, context)
+  if context == nil then
+    context = {
+      protocolVersion = 1,
+      matchId = "match_test",
+      version = events.version or 0,
+      serverTime = 0,
+      viewer = {
+        id = events.playerId,
+        role = "player",
+        isOwner = events.playerId == state.hostId,
+      },
+    }
+    events = {}
+  end
+  return __protocol_view(state, events, context)
+end
+`;
 
 async function runLua(gamePath, scenario, resultName = "result") {
   const source = await readFile(gamePath, "utf8");
   const lua = await new LuaFactory().createEngine();
   try {
-    await lua.doString(`${source}\n${scenario}`);
+    await lua.doString(`${source}\n${LEGACY_SCENARIO_ADAPTER}\n${scenario}`);
     return lua.global.get(resultName);
   } finally {
     lua.global.close();
@@ -79,15 +140,92 @@ function seededRandom(seed) {
   };
 }
 
+test("All room games implement the current Playweft protocol contract", async () => {
+  const games = new Map([
+    ["games/pig-dice/game.lua", 2],
+    ["games/connect-four/game.lua", 2],
+    ["games/texas-holdem/game.lua", 2],
+    ["games/dou-dizhu/game.lua", 3],
+    ["games/werewolf-dealer/game.lua", 6],
+    ["games/uno/game.lua", 2],
+    ["games/go/game.lua", 2],
+  ]);
+
+  for (const [gamePath, playerCount] of games) {
+    const source = await readFile(gamePath, "utf8");
+    const players = Array.from(
+      { length: playerCount },
+      (_, index) => `{ id = "p${index + 1}", seat = ${index + 1} }`,
+    ).join(", ");
+    const lua = await new LuaFactory().createEngine();
+    try {
+      await lua.doString(`
+        ${source}
+        state = setup({
+          protocolVersion = 1,
+          players = { ${players} },
+          match = {
+            id = "match_contract",
+            ownerId = "p1",
+            startedAt = 100,
+            randomSeed = 123,
+          },
+        })
+        rejection = on_action(state, {}, {
+          protocolVersion = 1,
+          matchId = "match_contract",
+          actionId = "action_contract",
+          actionAt = 200,
+          version = 0,
+          actor = {
+            id = "p1",
+            role = "player",
+            seat = 1,
+            isOwner = true,
+          },
+        })
+        projection = view(state, { { type = "contract_probe" } }, {
+          protocolVersion = 1,
+          matchId = "match_contract",
+          version = 0,
+          serverTime = 200,
+          viewer = {
+            id = "p1",
+            role = "player",
+            seat = 1,
+            isOwner = true,
+          },
+        })
+        result = {
+          players = state.players,
+          rejection = rejection,
+          projection = projection,
+        }
+      `);
+      const result = lua.global.get("result");
+
+      assert.equal(result.players[0], "p1", `${gamePath} should normalize players`);
+      assert.equal(result.rejection.accepted, false, `${gamePath} should reject explicitly`);
+      assert.match(result.rejection.error.code, /^[A-Z][A-Z0-9_]{0,63}$/);
+      assert.ok(result.rejection.error.message.length > 0);
+      assert.ok(result.projection.state, `${gamePath} view should return state`);
+      assert.equal(result.projection.events[0].type, "contract_probe");
+    } finally {
+      lua.global.close();
+    }
+  }
+});
+
 test("Pig Dice produces a deterministic server-side roll", async () => {
   const result = await runLua(
-    "pig-dice/game.lua",
+    "games/pig-dice/game.lua",
     `
       state = setup({ players = { "a", "b" }, randomSeed = 123 })
       result = on_action(state, { type = "roll" }, { playerId = "a", version = 0 })
     `,
   );
 
+  assert.equal(result.accepted, true);
   assert.equal(result.state.lastRoll, 4);
   assert.equal(result.state.turnTotal, 4);
   assert.equal(result.state.seed, 5937333);
@@ -96,7 +234,7 @@ test("Pig Dice produces a deterministic server-side roll", async () => {
 
 test("Pig Dice clears the turn total on a one and advances the turn", async () => {
   const result = await runLua(
-    "pig-dice/game.lua",
+    "games/pig-dice/game.lua",
     `
       state = setup({ players = { "a", "b" }, randomSeed = 6 })
       state.turnTotal = 18
@@ -112,7 +250,7 @@ test("Pig Dice clears the turn total on a one and advances the turn", async () =
 
 test("Pig Dice banks a winning score and rejects out-of-turn actions", async () => {
   const result = await runLua(
-    "pig-dice/game.lua",
+    "games/pig-dice/game.lua",
     `
       state = setup({ players = { "a", "b" }, randomSeed = 123 })
       rejected = on_action(state, { type = "roll" }, { playerId = "b", version = 0 })
@@ -122,14 +260,14 @@ test("Pig Dice banks a winning score and rejects out-of-turn actions", async () 
     `,
   );
   const rejected = await runLua(
-    "pig-dice/game.lua",
+    "games/pig-dice/game.lua",
     `
       state = setup({ players = { "a", "b" }, randomSeed = 123 })
       result = on_action(state, { type = "roll" }, { playerId = "b", version = 0 })
     `,
   );
 
-  assert.equal(rejected.events[0].reason, "not_your_turn");
+  assert.equal(rejected.error.code, "NOT_YOUR_TURN");
   assert.equal(result.state.scores.a, 52);
   assert.equal(result.state.winner, "a");
   assert.equal(result.events[0].type, "won");
@@ -137,7 +275,7 @@ test("Pig Dice banks a winning score and rejects out-of-turn actions", async () 
 
 test("Pig Dice starts a fresh rematch with the other player going first", async () => {
   const result = await runLua(
-    "pig-dice/game.lua",
+    "games/pig-dice/game.lua",
     `
       state = setup({ players = { "a", "b" }, randomSeed = 123 })
       state.scores.a = 52
@@ -158,13 +296,14 @@ test("Pig Dice starts a fresh rematch with the other player going first", async 
 
 test("Connect Four applies gravity and alternates turns", async () => {
   const result = await runLua(
-    "connect-four/game.lua",
+    "games/connect-four/game.lua",
     `
       state = setup({ players = { "red", "yellow" }, randomSeed = 1 })
       result = on_action(state, { type = "drop", column = 4 }, { playerId = "red", version = 0 })
     `,
   );
 
+  assert.equal(result.accepted, true);
   assert.equal(result.state.board[5][3], 1);
   assert.equal(result.state.lastMove.row, 6);
   assert.equal(result.state.lastMove.column, 4);
@@ -173,27 +312,27 @@ test("Connect Four applies gravity and alternates turns", async () => {
 
 test("Connect Four rejects invalid columns and the wrong player", async () => {
   const invalid = await runLua(
-    "connect-four/game.lua",
+    "games/connect-four/game.lua",
     `
       state = setup({ players = { "red", "yellow" }, randomSeed = 1 })
       result = on_action(state, { type = "drop", column = 8 }, { playerId = "red", version = 0 })
     `,
   );
   const wrongTurn = await runLua(
-    "connect-four/game.lua",
+    "games/connect-four/game.lua",
     `
       state = setup({ players = { "red", "yellow" }, randomSeed = 1 })
       result = on_action(state, { type = "drop", column = 1 }, { playerId = "yellow", version = 0 })
     `,
   );
 
-  assert.equal(invalid.events[0].reason, "invalid_column");
-  assert.equal(wrongTurn.events[0].reason, "not_your_turn");
+  assert.equal(invalid.error.code, "INVALID_COLUMN");
+  assert.equal(wrongTurn.error.code, "NOT_YOUR_TURN");
 });
 
 test("Connect Four detects vertical, horizontal, and diagonal wins", async () => {
   const winners = await runLua(
-    "connect-four/game.lua",
+    "games/connect-four/game.lua",
     `
       vertical = setup({ players = { "red", "yellow" }, randomSeed = 1 })
       vertical.board[6][1] = 1
@@ -236,7 +375,7 @@ test("Connect Four detects vertical, horizontal, and diagonal wins", async () =>
 
 test("Connect Four clears the board and rotates the starter for a rematch", async () => {
   const result = await runLua(
-    "connect-four/game.lua",
+    "games/connect-four/game.lua",
     `
       state = setup({ players = { "red", "yellow" }, randomSeed = 1 })
       state.board[6][1] = 1
@@ -257,7 +396,7 @@ test("Connect Four clears the board and rotates the starter for a rematch", asyn
 
 test("Dou Dizhu deals a complete deck and awards the bottom cards", async () => {
   const result = await runLua(
-    "dou-dizhu/game.lua",
+    "games/dou-dizhu/game.lua",
     `
       state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
       first = on_action(state, { type = "bid", score = 1 }, { playerId = "a", version = 0 })
@@ -266,6 +405,7 @@ test("Dou Dizhu deals a complete deck and awards the bottom cards", async () => 
     `,
   );
 
+  assert.equal(result.accepted, true);
   assert.equal(result.state.phase, "playing");
   assert.equal(result.state.landlord, "c");
   assert.equal(result.state.turnIndex, 3);
@@ -278,7 +418,7 @@ test("Dou Dizhu deals a complete deck and awards the bottom cards", async () => 
 
 test("Dou Dizhu accepts bombs over ordinary hands and rejects lower cards", async () => {
   const result = await runLua(
-    "dou-dizhu/game.lua",
+    "games/dou-dizhu/game.lua",
     `
       state = setup({ players = { "a", "b", "c" }, randomSeed = 1 })
       state.phase = "playing"
@@ -296,7 +436,7 @@ test("Dou Dizhu accepts bombs over ordinary hands and rejects lower cards", asyn
   assert.equal(result.events[0].type, "played");
 
   const rejected = await runLua(
-    "dou-dizhu/game.lua",
+    "games/dou-dizhu/game.lua",
     `
       state = setup({ players = { "a", "b", "c" }, randomSeed = 1 })
       state.phase = "playing"
@@ -308,12 +448,12 @@ test("Dou Dizhu accepts bombs over ordinary hands and rejects lower cards", asyn
       result = on_action(first.state, { type = "play", cards = { 5 } }, { playerId = "b", version = 1 })
     `,
   );
-  assert.equal(rejected.events[0].reason, "does_not_beat");
+  assert.equal(rejected.error.code, "DOES_NOT_BEAT");
 });
 
 test("Dou Dizhu returns the lead after the other two players pass", async () => {
   const result = await runLua(
-    "dou-dizhu/game.lua",
+    "games/dou-dizhu/game.lua",
     `
       state = setup({ players = { "a", "b", "c" }, randomSeed = 1 })
       state.phase = "playing"
@@ -334,7 +474,7 @@ test("Dou Dizhu returns the lead after the other two players pass", async () => 
 
 test("Dou Dizhu starts a fresh deal with the next player after a rematch", async () => {
   const result = await runLua(
-    "dou-dizhu/game.lua",
+    "games/dou-dizhu/game.lua",
     `
       state = setup({ players = { "a", "b", "c" }, randomSeed = 321 })
       state.winner = "a"
@@ -356,7 +496,7 @@ test("Dou Dizhu starts a fresh deal with the next player after a rematch", async
 
 test("Werewolf dealer includes the four supported special roles and deals deterministically", async () => {
   const result = await runLua(
-    "werewolf-dealer/game.lua",
+    "games/werewolf-dealer/game.lua",
     `
       first = setup({ players = { "a", "b", "c", "d", "e", "f" }, randomSeed = 123 })
       second = setup({ players = { "a", "b", "c", "d", "e", "f" }, randomSeed = 123 })
@@ -375,7 +515,7 @@ test("Werewolf dealer includes the four supported special roles and deals determ
 
 test("Werewolf dealer resolves a unanimous vote and removes White God from the field after flipping", async () => {
   const result = await runLua(
-    "werewolf-dealer/game.lua",
+    "games/werewolf-dealer/game.lua",
     `
       state = setup({ players = { "a", "b", "c", "d", "e", "f" }, randomSeed = 123 })
       state.roles.a = "white_god"
@@ -390,6 +530,7 @@ test("Werewolf dealer resolves a unanimous vote and removes White God from the f
   );
 
   assert.equal(result.first.events[0].type, "vote_cast");
+  assert.equal(result.final.accepted, true);
   assert.equal(result.final.events[0].type, "eliminated");
   assert.equal(result.final.state.status.a, "eliminated");
   assert.equal(result.final.state.flips[0].role, "white_god");
@@ -399,7 +540,7 @@ test("Werewolf dealer resolves a unanimous vote and removes White God from the f
 
 test("Werewolf dealer clears votes after a tie and starts the next vote round", async () => {
   const result = await runLua(
-    "werewolf-dealer/game.lua",
+    "games/werewolf-dealer/game.lua",
     `
       state = setup({ players = { "a", "b", "c", "d", "e", "f" }, randomSeed = 123 })
       on_action(state, { type = "vote", target = "a" }, { playerId = "a", version = 0 })
@@ -421,7 +562,7 @@ test("Werewolf dealer clears votes after a tie and starts the next vote round", 
 
 test("Texas Hold'em deals two unique cards to every seated player and posts blinds", async () => {
   const result = await runLua(
-    "texas-holdem/game.lua",
+    "games/texas-holdem/game.lua",
     `
       state = setup({ players = { "a", "b", "c", "d", "e", "f" }, randomSeed = 123 })
       result = state
@@ -441,7 +582,7 @@ test("Texas Hold'em deals two unique cards to every seated player and posts blin
 
 test("Texas Hold'em closes each multi-player betting street only after every player acts", async () => {
   const result = await runLua(
-    "texas-holdem/game.lua",
+    "games/texas-holdem/game.lua",
     `
       state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
       first = on_action(state, { type = "call" }, { playerId = "a", version = 0 })
@@ -453,6 +594,7 @@ test("Texas Hold'em closes each multi-player betting street only after every pla
     `,
   );
 
+  assert.equal(result.accepted, true);
   assert.equal(result.state.street, 2);
   assert.equal(result.state.revealed, 4);
   assert.equal(result.state.current, 2);
@@ -464,7 +606,7 @@ test("Texas Hold'em closes each multi-player betting street only after every pla
 
 test("Texas Hold'em settles main and side pots after multiple all-ins", async () => {
   const result = await runLua(
-    "texas-holdem/game.lua",
+    "games/texas-holdem/game.lua",
     `
       state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
       state.chips.a, state.chips.b, state.chips.c = 3, 8, 8
@@ -493,7 +635,7 @@ test("Texas Hold'em settles main and side pots after multiple all-ins", async ()
 
 test("UNO deals seven cards to each player and uses a coloured opening card", async () => {
   const state = await runLua(
-    "uno/game.lua",
+    "games/uno/game.lua",
     `
       result = setup({ players = { "a", "b", "c", "d" }, randomSeed = 123 })
     `,
@@ -511,7 +653,7 @@ test("UNO deals seven cards to each player and uses a coloured opening card", as
 
 test("UNO advances through four players and skips the next player", async () => {
   const result = await runLua(
-    "uno/game.lua",
+    "games/uno/game.lua",
     `
       state = setup({ players = { "a", "b", "c", "d" }, randomSeed = 123 })
       state.hands.a = { { id = "red-five", color = "red", value = "5" }, { id = "red-two", color = "red", value = "2" } }
@@ -531,7 +673,7 @@ test("UNO advances through four players and skips the next player", async () => 
 
 test("UNO reverse changes direction in multiplayer and acts as a skip with two players", async () => {
   const multiplayer = await runLua(
-    "uno/game.lua",
+    "games/uno/game.lua",
     `
       state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
       state.hands.b = { { id = "red-reverse", color = "red", value = "reverse" }, { id = "red-two", color = "red", value = "2" } }
@@ -542,7 +684,7 @@ test("UNO reverse changes direction in multiplayer and acts as a skip with two p
     `,
   );
   const twoPlayer = await runLua(
-    "uno/game.lua",
+    "games/uno/game.lua",
     `
       state = setup({ players = { "a", "b" }, randomSeed = 123 })
       state.hands.a = { { id = "red-reverse", color = "red", value = "reverse" }, { id = "red-two", color = "red", value = "2" } }
@@ -560,7 +702,7 @@ test("UNO reverse changes direction in multiplayer and acts as a skip with two p
 
 test("UNO applies draw penalties and rejects an illegal wild draw four", async () => {
   const penalty = await runLua(
-    "uno/game.lua",
+    "games/uno/game.lua",
     `
       state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
       state.hands.a = { { id = "red-draw2", color = "red", value = "draw2" }, { id = "red-two", color = "red", value = "2" } }
@@ -571,7 +713,7 @@ test("UNO applies draw penalties and rejects an illegal wild draw four", async (
     `,
   );
   const illegalWild = await runLua(
-    "uno/game.lua",
+    "games/uno/game.lua",
     `
       state = setup({ players = { "a", "b" }, randomSeed = 123 })
       state.hands.a = {
@@ -584,15 +726,16 @@ test("UNO applies draw penalties and rejects an illegal wild draw four", async (
     `,
   );
 
+  assert.equal(penalty.accepted, true);
   assert.equal(penalty.state.hands.b.length, 2);
   assert.equal(penalty.state.current, 3);
   assert.equal(penalty.state.lastEvent.kind, "penalty");
-  assert.equal(illegalWild.events[0].reason, "card_not_playable");
+  assert.equal(illegalWild.error.code, "CARD_NOT_PLAYABLE");
 });
 
 test("UNO accepts a wild colour choice and rotates the rematch starter", async () => {
   const wild = await runLua(
-    "uno/game.lua",
+    "games/uno/game.lua",
     `
       state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
       state.hands.a = {
@@ -605,7 +748,7 @@ test("UNO accepts a wild colour choice and rotates the rematch starter", async (
     `,
   );
   const rematch = await runLua(
-    "uno/game.lua",
+    "games/uno/game.lua",
     `
       state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
       state.winner = "a"
@@ -623,10 +766,10 @@ test("UNO accepts a wild colour choice and rotates the rematch starter", async (
 
 test("UNO view exposes only the recipient's cards and public table state", async () => {
   const result = await runLua(
-    "uno/game.lua",
+    "games/uno/game.lua",
     `
       state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
-      result = view(state, { playerId = "a", version = 0 })
+      result = view(state, { playerId = "a", version = 0 }).state
     `,
   );
 
@@ -642,18 +785,18 @@ test("UNO view exposes only the recipient's cards and public table state", async
 
 test("Dou Dizhu view hides other hands and unrevealed bottom cards", async () => {
   const bidding = await runLua(
-    "dou-dizhu/game.lua",
+    "games/dou-dizhu/game.lua",
     `
       state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
-      result = view(state, { playerId = "a", version = 0 })
+      result = view(state, { playerId = "a", version = 0 }).state
     `,
   );
   const playing = await runLua(
-    "dou-dizhu/game.lua",
+    "games/dou-dizhu/game.lua",
     `
       state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
       state.phase = "playing"
-      result = view(state, { playerId = "a", version = 1 })
+      result = view(state, { playerId = "a", version = 1 }).state
     `,
   );
 
@@ -667,21 +810,21 @@ test("Dou Dizhu view hides other hands and unrevealed bottom cards", async () =>
 
 test("Texas Hold'em view hides hole cards and unrevealed community cards", async () => {
   const playing = await runLua(
-    "texas-holdem/game.lua",
+    "games/texas-holdem/game.lua",
     `
       state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
-      result = view(state, { playerId = "a", version = 0 })
+      result = view(state, { playerId = "a", version = 0 }).state
     `,
   );
   const showdown = await runLua(
-    "texas-holdem/game.lua",
+    "games/texas-holdem/game.lua",
     `
       state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
       state.ended = true
       state.revealed = 5
       state.folded.c = true
       state.lastEvent = { kind = "showdown" }
-      result = view(state, { playerId = "a", version = 1 })
+      result = view(state, { playerId = "a", version = 1 }).state
     `,
   );
 
@@ -697,12 +840,12 @@ test("Texas Hold'em view hides hole cards and unrevealed community cards", async
 
 test("Werewolf dealer view hides roles and other players' vote targets", async () => {
   const result = await runLua(
-    "werewolf-dealer/game.lua",
+    "games/werewolf-dealer/game.lua",
     `
       state = setup({ players = { "a", "b", "c", "d", "e", "f" }, randomSeed = 123 })
       state.votes.a = "b"
       state.votes.b = "c"
-      result = view(state, { playerId = "a", version = 2 })
+      result = view(state, { playerId = "a", version = 2 }).state
     `,
   );
 
@@ -716,10 +859,10 @@ test("Werewolf dealer view hides roles and other players' vote targets", async (
 
 test("Pig Dice view hides the random seed used for future rolls", async () => {
   const result = await runLua(
-    "pig-dice/game.lua",
+    "games/pig-dice/game.lua",
     `
       state = setup({ players = { "a", "b" }, randomSeed = 123 })
-      result = view(state, { playerId = "a", version = 0 })
+      result = view(state, { playerId = "a", version = 0 }).state
     `,
   );
 

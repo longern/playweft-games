@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>贪心骰子玩法</title>
+    <link rel="stylesheet" href="../../src/help.css" />
+  </head>
+  <body>
+    <main class="help-page">
+      <header class="help-heading">
+        <img src="/pig-dice.svg" alt="" />
+        <div>
+          <h1>贪心骰子玩法</h1>
+          <p>二人轮流掷骰，先到 50 分获胜</p>
+        </div>
+      </header>
+
+      <section class="help-section">
+        <h2>游戏目标</h2>
+        <p>把每回合获得的点数收入总分，率先达到或超过 <strong>50 分</strong>。</p>
+      </section>
+
+      <section class="help-section">
+        <h2>你的回合</h2>
+        <ol>
+          <li>选择<strong>掷骰</strong>，掷到 2 至 6 时，点数加入本回合暂存分。</li>
+          <li>你可以继续掷骰累积暂存分，也可以选择<strong>收下分数</strong>。</li>
+          <li>收分后，暂存分计入你的总分，回合交给另一位玩家。</li>
+        </ol>
+        <div class="rule-strip" aria-label="骰子结果说明">
+          <div class="rule-item"><strong>2–6</strong><span>加入暂存分</span></div>
+          <div class="rule-item"><strong>1</strong><span>暂存归零并换人</span></div>
+          <div class="rule-item"><strong>收分</strong><span>保存分数并换人</span></div>
+        </div>
+      </section>
+
+      <section class="help-section">
+        <h2>风险与胜负</h2>
+        <p>
+          掷到 <strong>1</strong> 时，本回合尚未收下的分数会全部清零，并立即结束回合。
+          收分后总分达到 50 分即获胜。玩家在对局中离开时，另一位玩家获胜。
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,40 +1,68 @@
 import { resolve } from "node:path";
+import { rename, rmdir } from "node:fs/promises";
 import { defineConfig } from "vite";
 
+const games = [
+  "pig-dice",
+  "connect-four",
+  "texas-holdem",
+  "dou-dizhu",
+  "werewolf-dealer",
+  "uno",
+  "sudoku",
+  "go",
+];
+
+const input = {
+  index: resolve(import.meta.dirname, "index.html"),
+};
+
+for (const game of games) {
+  input[game] = resolve(import.meta.dirname, `games/${game}/index.html`);
+  input[`${game}-help`] = resolve(
+    import.meta.dirname,
+    `games/${game}/help.html`,
+  );
+}
+
 export default defineConfig({
+  plugins: [preserveGameUrls()],
   build: {
     rollupOptions: {
-      input: {
-        index: resolve(import.meta.dirname, "index.html"),
-        "pig-dice": resolve(import.meta.dirname, "pig-dice/index.html"),
-        "pig-dice-help": resolve(import.meta.dirname, "pig-dice/help.html"),
-        "connect-four": resolve(import.meta.dirname, "connect-four/index.html"),
-        "connect-four-help": resolve(
-          import.meta.dirname,
-          "connect-four/help.html",
-        ),
-        "texas-holdem": resolve(import.meta.dirname, "texas-holdem/index.html"),
-        "texas-holdem-help": resolve(
-          import.meta.dirname,
-          "texas-holdem/help.html",
-        ),
-        "dou-dizhu": resolve(import.meta.dirname, "dou-dizhu/index.html"),
-        "dou-dizhu-help": resolve(import.meta.dirname, "dou-dizhu/help.html"),
-        "werewolf-dealer": resolve(
-          import.meta.dirname,
-          "werewolf-dealer/index.html",
-        ),
-        "werewolf-dealer-help": resolve(
-          import.meta.dirname,
-          "werewolf-dealer/help.html",
-        ),
-        uno: resolve(import.meta.dirname, "uno/index.html"),
-        "uno-help": resolve(import.meta.dirname, "uno/help.html"),
-        sudoku: resolve(import.meta.dirname, "sudoku/index.html"),
-        "sudoku-help": resolve(import.meta.dirname, "sudoku/help.html"),
-        go: resolve(import.meta.dirname, "go/index.html"),
-        "go-help": resolve(import.meta.dirname, "go/help.html"),
-      },
+      input,
     },
   },
 });
+
+/**
+ * Keep public game URLs stable while storing their source under games/.
+ */
+function preserveGameUrls() {
+  const gamePattern = new RegExp(`^/(${games.join("|")})(?=/|$)`);
+  let outDir;
+
+  return {
+    name: "preserve-game-urls",
+    configResolved(config) {
+      outDir = resolve(config.root, config.build.outDir);
+    },
+    configureServer(server) {
+      server.middlewares.use((request, _response, next) => {
+        if (request.url) {
+          request.url = request.url.replace(gamePattern, "/games/$1");
+        }
+        next();
+      });
+    },
+    async closeBundle() {
+      const builtGamesDir = resolve(outDir, "games");
+      for (const game of games) {
+        await rename(
+          resolve(builtGamesDir, game),
+          resolve(outDir, game),
+        );
+      }
+      await rmdir(builtGamesDir);
+    },
+  };
+}

@@ -6,6 +6,7 @@ export function createPlayweftClient({
   script,
   minPlayers,
   maxPlayers,
+  liveRoom = false,
   onReady,
   onState,
   onActionResult,
@@ -13,6 +14,7 @@ export function createPlayweftClient({
 }) {
   let port;
   let playerId;
+  let latestMatchId;
   let latestVersion = -1;
   let destroyed = false;
 
@@ -34,8 +36,18 @@ export function createPlayweftClient({
       return;
     }
     if (message?.type === "action-result") {
+      if (message.accepted === false) {
+        onError?.(
+          message.error?.message ?? "Action rejected",
+          message.error?.code ?? "ACTION_REJECTED",
+          message.requestId,
+        );
+        return;
+      }
       onActionResult?.({
         requestId: message.requestId,
+        accepted: true,
+        matchId: message.matchId,
         version: message.version,
       });
       return;
@@ -45,6 +57,10 @@ export function createPlayweftClient({
       return;
     }
     if (message?.type !== "state") return;
+    if (message.matchId !== latestMatchId) {
+      latestMatchId = message.matchId;
+      latestVersion = -1;
+    }
     if (
       typeof message.version === "number" &&
       message.version <= latestVersion
@@ -55,7 +71,9 @@ export function createPlayweftClient({
     onState?.({
       state: message.state,
       events: Array.isArray(message.events) ? message.events : [],
+      matchId: message.matchId,
       version: message.version,
+      serverTime: message.serverTime,
       playerId,
     });
   }
@@ -76,7 +94,14 @@ export function createPlayweftClient({
     window.clearInterval(probe);
     port.onmessage = receivePlatformMessage;
     port.start();
-    port.postMessage({ type: "descriptor", descriptor });
+    port.postMessage({
+      type: "descriptor",
+      descriptor: {
+        ...descriptor,
+        modes: descriptor.modes ?? ["room"],
+        liveRoom,
+      },
+    });
     port.postMessage({
       type: "initialize",
       initialization: {
@@ -84,6 +109,7 @@ export function createPlayweftClient({
         script,
         minPlayers,
         maxPlayers,
+        liveRoom,
       },
     });
   }

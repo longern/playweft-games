@@ -10,6 +10,7 @@ test("Playweft client correlates action results and errors with request IDs", ()
   const portMessages = [];
   const results = [];
   const errors = [];
+  const states = [];
   const fakePort = {
     onmessage: undefined,
     close() {},
@@ -50,6 +51,7 @@ test("Playweft client correlates action results and errors with request IDs", ()
       minPlayers: 2,
       maxPlayers: 2,
       onActionResult: (result) => results.push(result),
+      onState: (state) => states.push(state),
       onError: (error, code, requestId) =>
         errors.push({ error, code, requestId }),
     });
@@ -63,6 +65,26 @@ test("Playweft client correlates action results and errors with request IDs", ()
       data: { type: "playweft:bridge", version: 1 },
       ports: [fakePort],
     });
+    assert.deepEqual(portMessages, [
+      {
+        type: "descriptor",
+        descriptor: {
+          name: "Test",
+          modes: ["room"],
+          liveRoom: false,
+        },
+      },
+      {
+        type: "initialize",
+        initialization: {
+          runtime: "lua",
+          script: "return true",
+          minPlayers: 2,
+          maxPlayers: 2,
+          liveRoom: false,
+        },
+      },
+    ]);
 
     const requestId = client.sendAction({ type: "move", column: 4 });
     assert.equal(requestId, "request-123");
@@ -76,15 +98,22 @@ test("Playweft client correlates action results and errors with request IDs", ()
       data: {
         type: "action-result",
         requestId: "request-123",
+        accepted: true,
+        matchId: "match-one",
         version: 8,
       },
     });
     fakePort.onmessage({
       data: {
-        type: "error",
-        code: "ACTION_REJECTED",
-        error: "Move rejected",
+        type: "action-result",
         requestId: "request-456",
+        accepted: false,
+        matchId: "match-one",
+        version: 8,
+        error: {
+          code: "NOT_YOUR_TURN",
+          message: "Move rejected",
+        },
       },
     });
     fakePort.onmessage({
@@ -94,12 +123,39 @@ test("Playweft client correlates action results and errors with request IDs", ()
         error: "Connection interrupted",
       },
     });
+    fakePort.onmessage({
+      data: {
+        type: "state",
+        state: { round: 1 },
+        events: [],
+        matchId: "match-one",
+        version: 8,
+        serverTime: 100,
+      },
+    });
+    fakePort.onmessage({
+      data: {
+        type: "state",
+        state: { round: 2 },
+        events: [],
+        matchId: "match-two",
+        version: 0,
+        serverTime: 200,
+      },
+    });
 
-    assert.deepEqual(results, [{ requestId: "request-123", version: 8 }]);
+    assert.deepEqual(results, [
+      {
+        requestId: "request-123",
+        accepted: true,
+        matchId: "match-one",
+        version: 8,
+      },
+    ]);
     assert.deepEqual(errors, [
       {
         error: "Move rejected",
-        code: "ACTION_REJECTED",
+        code: "NOT_YOUR_TURN",
         requestId: "request-456",
       },
       {
@@ -108,6 +164,28 @@ test("Playweft client correlates action results and errors with request IDs", ()
         requestId: undefined,
       },
     ]);
+    assert.deepEqual(
+      states.map(({ state, matchId, version, serverTime }) => ({
+        state,
+        matchId,
+        version,
+        serverTime,
+      })),
+      [
+        {
+          state: { round: 1 },
+          matchId: "match-one",
+          version: 8,
+          serverTime: 100,
+        },
+        {
+          state: { round: 2 },
+          matchId: "match-two",
+          version: 0,
+          serverTime: 200,
+        },
+      ],
+    );
     client.destroy();
   } finally {
     globalThis.window = originalWindow;

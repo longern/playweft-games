@@ -1,6 +1,6 @@
 # Playweft Games
 
-Six lightweight multiplayer games and one standalone game for the sibling
+Seven lightweight multiplayer games and one standalone game for the sibling
 [`playweft`](../playweft) platform. They share one Vite build and expose
 independent HTML entry points and Playweft descriptors.
 
@@ -49,4 +49,4 @@ npm run check
 npm run build
 ```
 
-The generated `dist` directory is one static deployment with seven game URLs.
+The generated `dist` directory is one static deployment with eight game URLs.
