@@ -109,6 +109,21 @@ function setup(context)
   return new_game(context.players, context.randomSeed, 1)
 end
 
+function view(state, context)
+  state.seed = nil
+
+  local own_role = state.roles[context.playerId]
+  state.roles = {}
+  if own_role then state.roles[context.playerId] = own_role end
+
+  local visible_votes = {}
+  for voter, target in pairs(state.votes) do
+    visible_votes[voter] = voter == context.playerId and target or true
+  end
+  state.votes = visible_votes
+  return state
+end
+
 function on_action(state, action, context)
   if type(action) ~= "table" then return rejected(state, "invalid_action") end
   local actor_index = player_index(state, context.playerId)

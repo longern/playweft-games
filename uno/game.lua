@@ -9,6 +9,13 @@ local function player_index(state, player_id)
   return nil
 end
 
+local function hidden_cards(cards)
+  local hidden = {}
+  if not cards then return hidden end
+  for _ = 1, #cards do table.insert(hidden, false) end
+  return hidden
+end
+
 local function rejected(state, reason)
   return { state = state, events = { { type = "rejected", reason = reason } } }
 end
@@ -138,6 +145,17 @@ end
 
 function setup(context)
   return new_round(context.players, context.randomSeed, 1, 1)
+end
+
+function view(state, context)
+  state.seed = nil
+  state.deck = nil
+  for _, player_id in ipairs(state.players) do
+    if player_id ~= context.playerId then
+      state.hands[player_id] = hidden_cards(state.hands[player_id])
+    end
+  end
+  return state
 end
 
 function on_action(state, action, context)

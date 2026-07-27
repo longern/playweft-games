@@ -620,3 +620,110 @@ test("UNO accepts a wild colour choice and rotates the rematch starter", async (
   assert.equal(rematch.state.current, 2);
   assert.equal(rematch.state.round, 2);
 });
+
+test("UNO view exposes only the recipient's cards and public table state", async () => {
+  const result = await runLua(
+    "uno/game.lua",
+    `
+      state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
+      result = view(state, { playerId = "a", version = 0 })
+    `,
+  );
+
+  assert.ok(result.hands.a.every((card) => typeof card.id === "string"));
+  assert.ok(result.hands.b.every((card) => card === false));
+  assert.ok(result.hands.c.every((card) => card === false));
+  assert.equal(result.hands.a.length, 7);
+  assert.equal(result.hands.b.length, 7);
+  assert.equal(result.deck, undefined);
+  assert.equal(result.seed, undefined);
+  assert.equal(typeof result.discard.at(-1).id, "string");
+});
+
+test("Dou Dizhu view hides other hands and unrevealed bottom cards", async () => {
+  const bidding = await runLua(
+    "dou-dizhu/game.lua",
+    `
+      state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
+      result = view(state, { playerId = "a", version = 0 })
+    `,
+  );
+  const playing = await runLua(
+    "dou-dizhu/game.lua",
+    `
+      state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
+      state.phase = "playing"
+      result = view(state, { playerId = "a", version = 1 })
+    `,
+  );
+
+  assert.ok(bidding.hands.a.every((card) => typeof card === "number"));
+  assert.ok(bidding.hands.b.every((card) => card === false));
+  assert.ok(bidding.hands.c.every((card) => card === false));
+  assert.deepEqual(bidding.bottomCards, [false, false, false]);
+  assert.ok(playing.bottomCards.every((card) => typeof card === "number"));
+  assert.equal(bidding.seed, undefined);
+});
+
+test("Texas Hold'em view hides hole cards and unrevealed community cards", async () => {
+  const playing = await runLua(
+    "texas-holdem/game.lua",
+    `
+      state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
+      result = view(state, { playerId = "a", version = 0 })
+    `,
+  );
+  const showdown = await runLua(
+    "texas-holdem/game.lua",
+    `
+      state = setup({ players = { "a", "b", "c" }, randomSeed = 123 })
+      state.ended = true
+      state.revealed = 5
+      state.folded.c = true
+      state.lastEvent = { kind = "showdown" }
+      result = view(state, { playerId = "a", version = 1 })
+    `,
+  );
+
+  assert.ok(playing.hands.a.every((card) => typeof card === "number"));
+  assert.deepEqual(playing.hands.b, [false, false]);
+  assert.deepEqual(playing.hands.c, [false, false]);
+  assert.deepEqual(playing.board, [false, false, false, false, false]);
+  assert.equal(playing.seed, undefined);
+  assert.ok(showdown.hands.b.every((card) => typeof card === "number"));
+  assert.deepEqual(showdown.hands.c, [false, false]);
+  assert.ok(showdown.board.every((card) => typeof card === "number"));
+});
+
+test("Werewolf dealer view hides roles and other players' vote targets", async () => {
+  const result = await runLua(
+    "werewolf-dealer/game.lua",
+    `
+      state = setup({ players = { "a", "b", "c", "d", "e", "f" }, randomSeed = 123 })
+      state.votes.a = "b"
+      state.votes.b = "c"
+      result = view(state, { playerId = "a", version = 2 })
+    `,
+  );
+
+  assert.equal(typeof result.roles.a, "string");
+  assert.equal(result.roles.b, undefined);
+  assert.equal(Object.keys(result.roles).length, 1);
+  assert.equal(result.votes.a, "b");
+  assert.equal(result.votes.b, true);
+  assert.equal(result.seed, undefined);
+});
+
+test("Pig Dice view hides the random seed used for future rolls", async () => {
+  const result = await runLua(
+    "pig-dice/game.lua",
+    `
+      state = setup({ players = { "a", "b" }, randomSeed = 123 })
+      result = view(state, { playerId = "a", version = 0 })
+    `,
+  );
+
+  assert.equal(result.seed, undefined);
+  assert.deepEqual(result.scores, { a: 0, b: 0 });
+  assert.equal(result.turnIndex, 1);
+});

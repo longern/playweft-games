@@ -43,6 +43,11 @@ function setup(context)
   return new_round(context.players, context.randomSeed, 1, 1)
 end
 
+function view(state)
+  state.seed = nil
+  return state
+end
+
 function on_action(state, action, context)
   if type(action) ~= "table" then return rejected(state, "invalid_action") end
   local index = player_index(state, context.playerId)

@@ -17,6 +17,13 @@ local function player_index(state, player_id)
   return nil
 end
 
+local function hidden_cards(cards)
+  local hidden = {}
+  if not cards then return hidden end
+  for _ = 1, #cards do table.insert(hidden, false) end
+  return hidden
+end
+
 local function next_random(seed)
   return (seed * RANDOM_MULTIPLIER) % RANDOM_MODULUS
 end
@@ -423,6 +430,23 @@ end
 
 function setup(context)
   return new_match(context.players, context.randomSeed, 1, 1)
+end
+
+function view(state, context)
+  state.seed = nil
+  local revealed = math.max(0, math.min(#state.board, state.revealed or 0))
+  for index = revealed + 1, #state.board do state.board[index] = false end
+
+  local showdown = state.ended
+    and state.lastEvent
+    and state.lastEvent.kind == "showdown"
+  for _, player_id in ipairs(state.players) do
+    local public_hand = showdown and not state.folded[player_id]
+    if player_id ~= context.playerId and not public_hand then
+      state.hands[player_id] = hidden_cards(state.hands[player_id])
+    end
+  end
+  return state
 end
 
 function on_action(state, action, context)
