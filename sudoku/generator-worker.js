@@ -1,4 +1,4 @@
-import { generateVeryHardPuzzle } from "./sudoku.js";
+import { generatePuzzleForDifficulty } from "./sudoku.js";
 
 self.addEventListener("message", ({ data }) => {
   if (data?.type !== "generate") return;
@@ -7,7 +7,7 @@ self.addEventListener("message", ({ data }) => {
     self.postMessage({
       type: "generated",
       requestId: data.requestId,
-      generated: generateVeryHardPuzzle(),
+      generated: generatePuzzleForDifficulty(data.difficulty),
     });
   } catch (error) {
     self.postMessage({

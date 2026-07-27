@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>数独玩法</title>
+  <link rel="stylesheet" href="../src/help.css" />
+</head>
+
+<body>
+  <main class="help-page">
+    <header class="help-heading">
+        <img src="/sudoku.svg" alt="" />
+        <div>
+          <h1>数独玩法</h1>
+          <p>在九宫格中填入 1 至 9，完成一盘数独</p>
+        </div>
+      </header>
+
+      <section class="help-section">
+        <h2>选择难度</h2>
+        <p>
+          首次进入游戏或从暂停菜单开始新题时，可以选择<strong>中等</strong>、<strong>难</strong>或<strong>极难</strong>。
+          完成题目后选择下一题，会继续使用当前难度。
+        </p>
+      </section>
+
+    <section class="help-section">
+      <h2>游戏目标</h2>
+      <p>
+        填满所有空格，使每一<strong>行</strong>、每一<strong>列</strong>和每个
+        <strong>3 × 3 宫</strong>内都恰好包含数字 1 至 9，且没有重复数字。
+      </p>
+    </section>
+
+    <section class="help-section">
+      <h2>填写数字</h2>
+      <ol>
+        <li>先选择一个空格，再点击数字键填入数字。</li>
+        <li>也可以先选择数字，再连续点击空格填写该数字。</li>
+        <li>出现冲突的数字会以红色提示；填满且全部正确后即完成本题。</li>
+      </ol>
+    </section>
+
+    <section class="help-section">
+      <h2>笔记与工具</h2>
+      <div class="rule-strip" aria-label="数独工具说明">
+        <div class="rule-item"><strong>候选数字</strong><span>切换笔记模式，记录可能的数字</span></div>
+        <div class="rule-item"><strong>撤销 / 清除</strong><span>撤销上一步，或清空当前格</span></div>
+        <div class="rule-item"><strong>提示</strong><span>为一个空格填入正确答案</span></div>
+      </div>
+      <p>暂停菜单中还可以自动生成全部候选笔记、清除全部笔记、重置本题或开始新题。</p>
+    </section>
+
+    <section class="help-section">
+      <h2>键盘操作</h2>
+      <p>
+        使用方向键移动选中格，按 1 至 9 填写数字，按
+        <strong>Backspace、Delete 或 0</strong> 清除内容，按
+        <strong>N</strong> 切换候选数字模式。
+      </p>
+    </section>
+  </main>
+</body>
+
+</html>

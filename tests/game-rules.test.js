@@ -6,6 +6,7 @@ import {
   SIZE,
   cloneGrid,
   countSolutions,
+  generatePuzzleForDifficulty,
   generateVeryHardPuzzle,
   isValidGrid,
 } from "../sudoku/sudoku.js";
@@ -40,6 +41,34 @@ test("Sudoku generator creates a valid unique very-hard puzzle", () => {
     true,
     "expected a puzzle that cannot be completed with intermediate techniques alone",
   );
+});
+
+test("Sudoku generator supports medium and hard difficulty", () => {
+  for (const difficulty of ["medium", "hard"]) {
+    const generated = generatePuzzleForDifficulty(difficulty, {
+      random: seededRandom(1),
+    });
+    const rating = generated.difficulty.analysis.difficulty;
+
+    assert.equal(countSolutions(cloneGrid(generated.puzzle)), 1);
+    assert.equal(generated.difficulty.requiresAdvancedTechniques, false);
+    if (difficulty === "medium") {
+      assert.equal(rating, "medium");
+    } else {
+      assert.ok(rating, "expected hard puzzles to avoid advanced techniques");
+      assert.ok(
+        generated.difficulty.analysis.usedStrategies.every((strategy) =>
+          [
+            "Open Singles Strategy",
+            "Visual Elimination Strategy",
+            "Single Candidate Strategy",
+            "Naked Pair Strategy",
+          ].includes(strategy.title),
+        ),
+        "expected hard puzzles to avoid pointing and hidden-pair techniques",
+      );
+    }
+  }
 });
 
 function seededRandom(seed) {

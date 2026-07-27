@@ -3,6 +3,13 @@ import { analyze as analyzeWithStrategies } from "sudoku-core";
 export const SIZE = 9;
 export const BOX_SIZE = 3;
 export const DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+export const PUZZLE_DIFFICULTIES = ["medium", "hard", "very-hard"];
+const HARD_ALLOWED_STRATEGIES = new Set([
+  "Open Singles Strategy",
+  "Visual Elimination Strategy",
+  "Single Candidate Strategy",
+  "Naked Pair Strategy",
+]);
 
 export function createEmptyGrid() {
   return Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
@@ -112,6 +119,57 @@ export function generateSolvedGrid(random = Math.random) {
   return grid;
 }
 
+export function generatePuzzleForDifficulty(difficulty, options = {}) {
+  if (difficulty === "very-hard") {
+    return generateVeryHardPuzzle(options);
+  }
+
+  const profiles = {
+    medium: {
+      targetClues: 30,
+      maxAttempts: 24,
+      accepts: (generated) =>
+        generated.difficulty.analysis.difficulty === "medium",
+    },
+    hard: {
+      targetClues: 22,
+      maxAttempts: 12,
+      accepts: (generated) =>
+        Boolean(generated.difficulty.analysis.difficulty) &&
+        generated.difficulty.analysis.usedStrategies.every((strategy) =>
+          HARD_ALLOWED_STRATEGIES.has(strategy.title),
+        ),
+      selectsHardest: true,
+    },
+  };
+  const profile = profiles[difficulty];
+  if (!profile) throw new Error(`Unsupported Sudoku difficulty: ${difficulty}`);
+
+  const random = options.random ?? Math.random;
+  const targetClues = options.targetClues ?? profile.targetClues;
+  const maxAttempts = options.maxAttempts ?? profile.maxAttempts;
+  let bestAccepted;
+  let bestFallback;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const generated = generateCandidate(random, targetClues);
+    if (profile.accepts(generated)) {
+      if (!profile.selectsHardest) return generated;
+      if (!bestAccepted || isHarder(generated, bestAccepted)) {
+        bestAccepted = generated;
+      }
+      continue;
+    }
+    if (
+      !bestFallback ||
+      fallbackFitness(generated, difficulty) >
+        fallbackFitness(bestFallback, difficulty)
+    ) {
+      bestFallback = generated;
+    }
+  }
+  return bestAccepted ?? bestFallback;
+}
+
 export function generateVeryHardPuzzle({
   random = Math.random,
   targetClues = 21,
@@ -203,6 +261,52 @@ function shuffled(items, random) {
     [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
   }
   return result;
+}
+
+function generateCandidate(random, targetClues) {
+  const solution = generateSolvedGrid(random);
+  const puzzle = cloneGrid(solution);
+  let clues = SIZE * SIZE;
+  const positions = shuffled(
+    Array.from({ length: SIZE * SIZE }, (_, index) => index),
+    random,
+  );
+
+  for (const position of positions) {
+    if (clues <= targetClues) break;
+    const row = Math.floor(position / SIZE);
+    const column = position % SIZE;
+    const value = puzzle[row][column];
+    puzzle[row][column] = 0;
+    if (countSolutions(puzzle) === 1) {
+      clues -= 1;
+    } else {
+      puzzle[row][column] = value;
+    }
+  }
+
+  return {
+    puzzle,
+    solution,
+    clues,
+    difficulty: analyzePuzzle(puzzle),
+  };
+}
+
+function fallbackFitness(generated, targetDifficulty) {
+  const rank = {
+    easy: 0,
+    medium: 1,
+    hard: 2,
+    expert: 3,
+    master: 4,
+  }[generated.difficulty.analysis.difficulty];
+  if (targetDifficulty === "medium") {
+    return (
+      -(Math.abs((rank ?? 5) - 1) * 1_000_000) + generated.difficulty.score
+    );
+  }
+  return (rank ?? -1) * 1_000_000 + generated.difficulty.score;
 }
 
 function isHarder(candidate, current) {

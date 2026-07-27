@@ -1,15 +1,18 @@
 import {
   DIGITS,
+  PUZZLE_DIFFICULTIES,
   SIZE,
   candidatesFor,
   cloneGrid,
   conflictsFor,
-  generateVeryHardPuzzle,
+  generatePuzzleForDifficulty,
 } from "./sudoku.js";
 import {
   Eraser,
+  HelpCircle,
   Lightbulb,
   ListPlus,
+  ListX,
   Pencil,
   Pause,
   Play,
@@ -24,8 +27,10 @@ import "./styles.css";
 
 const PROGRESS_KEY = "playweft:sudoku:progress:v1";
 const SAVE_INTERVAL_SECONDS = 5;
+const DEFAULT_DIFFICULTY = "very-hard";
 
 const elements = {
+  layout: document.querySelector(".sudoku-layout"),
   board: document.querySelector("#sudoku-board"),
   digitPad: document.querySelector("#digit-pad"),
   timer: document.querySelector("#timer"),
@@ -34,6 +39,7 @@ const elements = {
   undo: document.querySelector("#undo-button"),
   erase: document.querySelector("#erase-button"),
   hint: document.querySelector("#hint-button"),
+  clearNotes: document.querySelector("#clear-notes-button"),
   reset: document.querySelector("#reset-button"),
   newGame: document.querySelector("#new-game-button"),
   complete: document.querySelector("#completion"),
@@ -42,6 +48,9 @@ const elements = {
   generatingOverlay: document.querySelector("#generating-overlay"),
   pausedOverlay: document.querySelector("#paused-overlay"),
   resume: document.querySelector("#resume-button"),
+  difficultyOverlay: document.querySelector("#difficulty-overlay"),
+  difficultyOptions: document.querySelector("#difficulty-options"),
+  difficultyCancel: document.querySelector("#difficulty-cancel-button"),
 };
 
 let initial;
@@ -57,6 +66,8 @@ let elapsedMilliseconds = 0;
 let timerStartedAt;
 let isGenerating = false;
 let paused = false;
+let choosingDifficulty = false;
+let currentDifficulty = DEFAULT_DIFFICULTY;
 let lastSavedSecond = -1;
 let generatorWorker;
 let nextGenerationRequestId = 0;
@@ -70,14 +81,17 @@ const platform = createPlayweftSoloClient({
     },
     icon: "/sudoku.svg",
     modes: ["solo"],
+    helpUrl: "./help.html",
   },
 });
 
 createIcons({
   icons: {
     Eraser,
+    HelpCircle,
     Lightbulb,
     ListPlus,
+    ListX,
     Pause,
     Pencil,
     Play,
@@ -93,7 +107,7 @@ if (restoreProgress()) {
   startTimer();
   render();
 } else {
-  startNewGame();
+  openDifficultyPicker();
 }
 window.setInterval(updateTimer, 1_000);
 window.addEventListener("pagehide", () => {
@@ -170,11 +184,19 @@ function bindEvents() {
   elements.undo.addEventListener("click", undo);
   elements.erase.addEventListener("click", eraseSelected);
   elements.hint.addEventListener("click", revealHint);
+  elements.clearNotes.addEventListener("click", clearAllNotes);
   elements.reset.addEventListener("click", resetPuzzle);
-  elements.newGame.addEventListener("click", startNewGame);
-  elements.nextGame.addEventListener("click", startNewGame);
+  elements.newGame.addEventListener("click", openDifficultyPicker);
+  elements.nextGame.addEventListener("click", () =>
+    startNewGame(currentDifficulty),
+  );
   elements.pause.addEventListener("click", pauseGame);
   elements.resume.addEventListener("click", resumeGame);
+  elements.difficultyOptions.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-difficulty]");
+    if (button) startNewGame(button.dataset.difficulty);
+  });
+  elements.difficultyCancel.addEventListener("click", closeDifficultyPicker);
   window.addEventListener("keydown", (event) => {
     if (!values || isGenerating || paused) return;
     if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -219,8 +241,30 @@ function bindEvents() {
   });
 }
 
-async function startNewGame() {
+function openDifficultyPicker() {
   if (isGenerating) return;
+  stopTimer();
+  choosingDifficulty = true;
+  render();
+  window.requestAnimationFrame(() => {
+    elements.difficultyOptions
+      .querySelector("button[data-difficulty]")
+      ?.focus();
+  });
+}
+
+function closeDifficultyPicker() {
+  if (!values) return;
+  choosingDifficulty = false;
+  render();
+  window.requestAnimationFrame(() => elements.newGame.focus());
+}
+
+async function startNewGame(difficulty = currentDifficulty) {
+  if (isGenerating) return;
+  if (!PUZZLE_DIFFICULTIES.includes(difficulty)) return;
+  currentDifficulty = difficulty;
+  choosingDifficulty = false;
   isGenerating = true;
   stopTimer();
   paused = false;
@@ -228,8 +272,8 @@ async function startNewGame() {
   render();
   let generatedNewPuzzle = false;
   try {
-    const generated = await generatePuzzle().catch(() =>
-      generateVeryHardPuzzle(),
+    const generated = await generatePuzzle(currentDifficulty).catch(() =>
+      generatePuzzleForDifficulty(currentDifficulty),
     );
     initial = generated.puzzle;
     solution = generated.solution;
@@ -277,6 +321,7 @@ function writeDigit(row, column, digit) {
   saveHistory(row, column);
   values[row][column] = digit;
   notes[row][column].clear();
+  selected = undefined;
   if (highlightedDigit === digit && isDigitComplete(digit)) {
     highlightedDigit = undefined;
   }
@@ -315,7 +360,7 @@ function eraseSelected() {
 }
 
 function addAutoNotes() {
-  if (!values || isGenerating || paused || complete) return;
+  if (!values || isGenerating || complete) return;
   for (let row = 0; row < SIZE; row += 1) {
     for (let column = 0; column < SIZE; column += 1) {
       if (values[row][column]) {
@@ -325,6 +370,16 @@ function addAutoNotes() {
       }
     }
   }
+  paused = false;
+  startTimer();
+  render();
+}
+
+function clearAllNotes() {
+  if (!values || isGenerating || complete) return;
+  notes = emptyNotes();
+  paused = false;
+  startTimer();
   render();
 }
 
@@ -350,9 +405,22 @@ function undo() {
   if (!previous) return;
   values[previous.row][previous.column] = previous.value;
   notes[previous.row][previous.column] = new Set(previous.notes);
-  selected = { row: previous.row, column: previous.column };
+  selected = undefined;
   highlightedDigit = undefined;
   render();
+  flashUndoneCell(previous.row, previous.column);
+}
+
+function flashUndoneCell(row, column) {
+  const cell = cells[row][column];
+  cell.classList.remove("is-undo-flash");
+  void cell.offsetWidth;
+  cell.classList.add("is-undo-flash");
+  cell.addEventListener(
+    "animationend",
+    () => cell.classList.remove("is-undo-flash"),
+    { once: true },
+  );
 }
 
 function resetPuzzle() {
@@ -364,6 +432,7 @@ function resetPuzzle() {
   highlightedDigit = undefined;
   history = [];
   complete = false;
+  paused = false;
   elapsedMilliseconds = 0;
   lastSavedSecond = -1;
   startTimer();
@@ -396,7 +465,31 @@ function finishIfComplete() {
 function render() {
   elements.generatingOverlay.classList.toggle("is-visible", isGenerating);
   elements.generatingOverlay.setAttribute("aria-hidden", String(!isGenerating));
-  if (!values) return;
+  const showPauseMenu = paused;
+  const pauseMenuInteractive = showPauseMenu && !choosingDifficulty;
+  elements.pausedOverlay.classList.toggle("is-visible", showPauseMenu);
+  elements.pausedOverlay.setAttribute(
+    "aria-hidden",
+    String(!pauseMenuInteractive),
+  );
+  elements.pausedOverlay.inert = !pauseMenuInteractive;
+  elements.difficultyOverlay.classList.toggle(
+    "is-visible",
+    choosingDifficulty,
+  );
+  elements.difficultyOverlay.setAttribute(
+    "aria-hidden",
+    String(!choosingDifficulty),
+  );
+  elements.difficultyOverlay.inert = !choosingDifficulty;
+  elements.difficultyCancel.hidden = !values;
+  elements.layout.inert = paused || choosingDifficulty || isGenerating;
+  elements.pause.disabled =
+    !values || complete || isGenerating || paused || choosingDifficulty;
+  if (!values) {
+    updateTimer();
+    return;
+  }
   const selectedValue = selected
     ? values[selected.row][selected.column]
     : highlightedDigit;
@@ -442,12 +535,9 @@ function render() {
     isGenerating ||
     paused;
   elements.hint.disabled = complete || isGenerating || paused;
-  elements.autoNotes.disabled = complete || isGenerating || paused;
+  elements.autoNotes.disabled = complete || isGenerating;
   elements.reset.disabled = complete || isGenerating;
   elements.newGame.disabled = isGenerating;
-  elements.pause.disabled = complete || isGenerating || paused;
-  elements.pausedOverlay.classList.toggle("is-visible", paused);
-  elements.pausedOverlay.setAttribute("aria-hidden", String(!paused));
   for (const button of elements.digitPad.querySelectorAll("button")) {
     button.classList.toggle(
       "is-highlighted",
@@ -513,9 +603,11 @@ function formatTime(seconds) {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-function generatePuzzle() {
+function generatePuzzle(difficulty) {
   if (typeof Worker === "undefined") {
-    return Promise.resolve().then(() => generateVeryHardPuzzle());
+    return Promise.resolve().then(() =>
+      generatePuzzleForDifficulty(difficulty),
+    );
   }
   if (!generatorWorker) {
     generatorWorker = new Worker(
@@ -542,7 +634,7 @@ function generatePuzzle() {
   return new Promise((resolve, reject) => {
     const requestId = ++nextGenerationRequestId;
     pendingGenerations.set(requestId, { resolve, reject });
-    generatorWorker.postMessage({ type: "generate", requestId });
+    generatorWorker.postMessage({ type: "generate", requestId, difficulty });
   });
 }
 
@@ -591,6 +683,7 @@ function saveProgress() {
         noteMode,
         complete,
         paused,
+        difficulty: currentDifficulty,
         elapsedMilliseconds,
       }),
     );
@@ -623,6 +716,9 @@ function restoreProgress() {
     noteMode = saved.noteMode === true;
     complete = saved.complete === true;
     paused = saved.paused === true && !complete;
+    currentDifficulty = PUZZLE_DIFFICULTIES.includes(saved.difficulty)
+      ? saved.difficulty
+      : DEFAULT_DIFFICULTY;
     elapsedMilliseconds = Number.isFinite(saved.elapsedMilliseconds)
       ? Math.max(0, saved.elapsedMilliseconds)
       : 0;
