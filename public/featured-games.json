@@ -103,5 +103,20 @@
     "modes": [
       "solo"
     ]
+  },
+  {
+    "name": "Go",
+    "translations": {
+      "zh-CN": {
+        "name": "围棋"
+      }
+    },
+    "url": "./go/",
+    "icon": "./go.svg",
+    "description": "Claim territory and capture stones on a fast 9 by 9 board.",
+    "category": "Strategy",
+    "modes": [
+      "room"
+    ]
   }
 ]

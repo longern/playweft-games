@@ -32,6 +32,8 @@ export default defineConfig({
         "uno-help": resolve(import.meta.dirname, "uno/help.html"),
         sudoku: resolve(import.meta.dirname, "sudoku/index.html"),
         "sudoku-help": resolve(import.meta.dirname, "sudoku/help.html"),
+        go: resolve(import.meta.dirname, "go/index.html"),
+        "go-help": resolve(import.meta.dirname, "go/help.html"),
       },
     },
   },

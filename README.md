@@ -18,6 +18,7 @@ all other locales.
 | Werewolf dealer | 6-12 | `http://localhost:5174/werewolf-dealer/` | `dist/werewolf-dealer/index.html` |
 | UNO | 2–4 | `http://localhost:5174/uno/` | `dist/uno/index.html` |
 | Sudoku | 1 | `http://localhost:5174/sudoku/` | `dist/sudoku/index.html` |
+| 围棋 | 2 | `http://localhost:5174/go/` | `dist/go/index.html` |
 
 ## Run locally
 
