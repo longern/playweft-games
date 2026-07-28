@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Connect Four">
-  <rect width="64" height="64" rx="14" fill="#2463eb"/>
+  <rect width="64" height="64" fill="#2463eb"/>
   <path d="M10 19h44v34H10z" fill="#1749b4"/>
   <g stroke="#f5f6f2" stroke-width="7" stroke-linecap="round">
     <path d="M19 29h.1M32 29h.1M45 29h.1M19 42h.1M32 42h.1M45 42h.1"/>

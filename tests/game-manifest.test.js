@@ -56,6 +56,15 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
       "string",
     );
     assert.equal(manifest.display.help, "./help.html");
+    assert.equal(manifest.display.icon, `../${game}.svg`);
+    const icon = await readFile(`public/${game}.svg`, "utf8");
+    const background = icon.match(/<rect\b[^>]*>/)?.[0];
+    assert.ok(background, `${game} icon should have a full-size background`);
+    assert.doesNotMatch(
+      background,
+      /\brx=/,
+      `${game} icon background should let the platform own corner rounding`,
+    );
 
     if (game === "sudoku") {
       assert.deepEqual(manifest.modes, { solo: {} });
