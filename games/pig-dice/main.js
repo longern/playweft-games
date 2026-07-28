@@ -1,5 +1,4 @@
 import { createIcons, Dices, Landmark, RotateCcw } from "lucide";
-import gameScript from "./game.lua?raw";
 import { createPlayweftClient } from "../../src/playweft-client.js";
 import "../../src/base.css";
 import "./styles.css";
@@ -38,17 +37,6 @@ const preview = {
 };
 
 const client = createPlayweftClient({
-  descriptor: {
-    name: "Pig Dice",
-    translations: {
-      "zh-CN": { name: "贪心骰子" },
-    },
-    icon: "/pig-dice.svg",
-    helpUrl: "./help.html",
-  },
-  script: gameScript,
-  minPlayers: 2,
-  maxPlayers: 2,
   onReady(message) {
     playerId = message.playerId;
     setConnection("waiting", "房间已连接");

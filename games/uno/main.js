@@ -1,5 +1,4 @@
 import { createIcons, RotateCcw } from "lucide";
-import gameScript from "./game.lua?raw";
 import { createPlayweftClient } from "../../src/playweft-client.js";
 import "../../src/base.css";
 import "./styles.css";
@@ -54,17 +53,6 @@ const preview = {
 createIcons({ icons: { RotateCcw } });
 
 const client = createPlayweftClient({
-  descriptor: {
-    name: "UNO",
-    translations: {
-      "zh-CN": { name: "UNO" },
-    },
-    icon: "/uno.svg",
-    helpUrl: "./help.html",
-  },
-  script: gameScript,
-  minPlayers: 2,
-  maxPlayers: 4,
   onReady(message) {
     playerId = message.playerId;
     setConnection("waiting", "房间已连接");

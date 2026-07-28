@@ -1,0 +1,43 @@
+{
+  "$schema": "https://playweft.dev/schemas/game-manifest-v1.json",
+  "manifestVersion": 1,
+  "id": "com.longern.playweft.dou-dizhu",
+  "version": "1.0.0",
+  "protocol": {
+    "min": 1,
+    "max": 1
+  },
+  "client": {
+    "entry": "./"
+  },
+  "display": {
+    "defaultLocale": "en",
+    "locales": {
+      "en": {
+        "name": "Dou Dizhu",
+        "description": "Bid for the landlord and be the first team to play every card.",
+        "category": "Card game"
+      },
+      "zh-CN": {
+        "name": "斗地主",
+        "description": "叫分定地主，灵活配合出牌，率先出完手牌获胜。",
+        "category": "纸牌"
+      }
+    },
+    "icon": "../dou-dizhu.svg",
+    "help": "./help.html"
+  },
+  "modes": {
+    "room": {
+      "players": {
+        "min": 3,
+        "max": 3
+      },
+      "server": {
+        "runtime": "lua",
+        "entry": "./game.lua",
+        "persistence": "durable"
+      }
+    }
+  }
+}

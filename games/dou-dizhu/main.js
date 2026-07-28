@@ -1,5 +1,4 @@
 import { CircleOff, RotateCcw, Send, createIcons } from "lucide";
-import gameScript from "./game.lua?raw";
 import { createPlayweftClient } from "../../src/playweft-client.js";
 import "../../src/base.css";
 import "./styles.css";
@@ -50,17 +49,6 @@ let pendingAction;
 let selected = new Set();
 
 const client = createPlayweftClient({
-  descriptor: {
-    name: "Dou Dizhu",
-    translations: {
-      "zh-CN": { name: "斗地主" },
-    },
-    icon: "/dou-dizhu.svg",
-    helpUrl: "./help.html",
-  },
-  script: gameScript,
-  minPlayers: 3,
-  maxPlayers: 3,
   onReady(message) {
     playerId = message.playerId;
     setConnection("waiting", "房间已连接");

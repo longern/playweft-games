@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { rename, rmdir } from "node:fs/promises";
+import { readFile, rename, rmdir } from "node:fs/promises";
 import { defineConfig } from "vite";
 
 const games = [
@@ -26,13 +26,42 @@ for (const game of games) {
 }
 
 export default defineConfig({
-  plugins: [preserveGameUrls()],
+  plugins: [emitGamePackages(), preserveGameUrls()],
   build: {
     rollupOptions: {
       input,
     },
   },
 });
+
+/**
+ * Publish each Manifest and authoritative Lua entry beside its game client.
+ */
+function emitGamePackages() {
+  return {
+    name: "emit-game-packages",
+    async generateBundle() {
+      for (const game of games) {
+        const packageFiles = [
+          ["playweft.json", `games/${game}/playweft.json`],
+          ...(game === "sudoku"
+            ? []
+            : [["game.lua", `games/${game}/game.lua`]]),
+        ];
+        for (const [fileName, sourcePath] of packageFiles) {
+          this.emitFile({
+            type: "asset",
+            fileName: `games/${game}/${fileName}`,
+            source: await readFile(
+              new URL(`./${sourcePath}`, import.meta.url),
+              "utf8",
+            ),
+          });
+        }
+      }
+    },
+  };
+}
 
 /**
  * Keep public game URLs stable while storing their source under games/.

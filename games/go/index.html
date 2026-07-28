@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#f4f5f1" />
     <meta
       name="description"
-      content="Playweft 围棋：在 9 × 9 棋盘上围地、提子，连续停一手后数子定胜负。"
+      content="Playweft 围棋：在棋盘上围地、提子，连续停一手后数子定胜负。"
     />
     <title>围棋 | Playweft</title>
     <script type="module" src="./main.js"></script>
@@ -17,7 +17,7 @@
         <img src="/go.svg" alt="" />
         <div>
           <h1>围棋</h1>
-          <p>9 × 9 棋盘，围地提子</p>
+          <p>围地提子，双人对弈</p>
         </div>
       </div>
       <div id="connection" class="connection-status" data-mode="waiting">
@@ -26,11 +26,6 @@
     </header>
 
     <main class="go-layout">
-      <section class="match-status" aria-live="polite">
-        <p id="turn-kicker">等待房主开始</p>
-        <h2 id="turn-heading">棋盘已就绪</h2>
-      </section>
-
       <section
         id="setup-panel"
         class="setup-panel"
@@ -50,7 +45,7 @@
             <select id="size-setting" name="size">
               <option value="9">9 × 9 · 快棋</option>
               <option value="13">13 × 13 · 中盘</option>
-              <option value="19">19 × 19 · 标准</option>
+              <option value="19" selected>19 × 19 · 标准</option>
             </select>
           </label>
 
@@ -63,7 +58,7 @@
           </label>
 
           <label class="setting-field">
-            <span>白方贴目</span>
+            <span>贴目</span>
             <span class="number-input">
               <input id="komi-setting" name="komi" type="number" min="0" max="20" step="0.5" value="6.5" />
               <b>目</b>
@@ -110,6 +105,34 @@
         </form>
       </section>
 
+      <section
+        id="history-panel"
+        class="history-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="history-title"
+        hidden
+      >
+        <div id="history-dialog" class="history-dialog" tabindex="-1">
+          <header class="history-heading">
+            <div>
+              <h2 id="history-title">本地棋谱</h2>
+              <p id="history-note">最近 50 局，仅保存在此浏览器</p>
+            </div>
+            <button id="history-close" class="history-close" type="button" aria-label="关闭棋谱">
+              <i data-lucide="x"></i>
+            </button>
+          </header>
+          <div id="history-list" class="history-list"></div>
+          <footer class="history-footer">
+            <button id="history-clear" class="history-clear" type="button">
+              <i data-lucide="trash-2"></i>
+              <span id="history-clear-label">清空全部</span>
+            </button>
+          </footer>
+        </div>
+      </section>
+
       <section id="table-layout" class="table-layout">
         <aside class="players-panel" aria-label="对局玩家">
           <div id="black-player" class="player-card is-current">
@@ -118,6 +141,7 @@
               <strong data-player-name>黑方 · 玩家 1</strong>
               <span data-player-detail>提子 0</span>
             </div>
+            <time data-player-time datetime="PT0S">00:00</time>
           </div>
           <div id="white-player" class="player-card">
             <span class="stone-swatch stone-white" aria-hidden="true"></span>
@@ -125,10 +149,11 @@
               <strong data-player-name>白方 · 玩家 2</strong>
               <span data-player-detail>提子 0 · 贴 6.5 目</span>
             </div>
+            <time data-player-time datetime="PT0S">00:00</time>
           </div>
         </aside>
 
-        <section class="board-shell" aria-label="9 × 9 围棋棋盘">
+        <section class="board-shell" aria-label="19 × 19 围棋棋盘">
           <div id="board" class="go-board" role="grid"></div>
         </section>
 
@@ -137,8 +162,7 @@
             <span>第 <b id="round-number">1</b> 局</span>
             <span id="move-count">已落 0 子</span>
           </div>
-          <p id="settings-summary" class="settings-summary">9 × 9 · 中国规则 · 贴 6.5 目</p>
-          <p id="board-message" class="board-message">进入 Playweft 房间后开始对局</p>
+          <p id="settings-summary" class="settings-summary">19 × 19 · 中国规则 · 贴 6.5 目</p>
           <button id="pass-button" class="pass-action" type="button" disabled>
             <span class="icon-button-content"><i data-lucide="flag"></i>停一手</span>
           </button>
@@ -148,9 +172,14 @@
           <button id="settings-button" class="settings-action" type="button" hidden>
             <span class="icon-button-content"><i data-lucide="settings-2"></i>返回设置</span>
           </button>
-          <a class="rules-link" href="./help.html" target="_blank">
-            <i data-lucide="circle-help"></i>玩法与计分
-          </a>
+          <div class="utility-links">
+            <button id="history-button" class="rules-link" type="button">
+              <i data-lucide="history"></i>本地棋谱
+            </button>
+            <a class="rules-link" href="./help.html" target="_blank">
+              <i data-lucide="circle-help"></i>玩法与计分
+            </a>
+          </div>
         </aside>
       </section>
     </main>

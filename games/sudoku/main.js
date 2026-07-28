@@ -73,17 +73,7 @@ let generatorWorker;
 let nextGenerationRequestId = 0;
 const cells = [];
 const pendingGenerations = new Map();
-const platform = createPlayweftSoloClient({
-  descriptor: {
-    name: "Sudoku",
-    translations: {
-      "zh-CN": { name: "数独" },
-    },
-    icon: "/sudoku.svg",
-    modes: ["solo"],
-    helpUrl: "./help.html",
-  },
-});
+const platform = createPlayweftSoloClient();
 
 createIcons({
   icons: {

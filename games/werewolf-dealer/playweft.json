@@ -1,0 +1,43 @@
+{
+  "$schema": "https://playweft.dev/schemas/game-manifest-v1.json",
+  "manifestVersion": 1,
+  "id": "com.longern.playweft.werewolf-dealer",
+  "version": "1.0.0",
+  "protocol": {
+    "min": 1,
+    "max": 1
+  },
+  "client": {
+    "entry": "./"
+  },
+  "display": {
+    "defaultLocale": "en",
+    "locales": {
+      "en": {
+        "name": "Werewolf Dealer",
+        "description": "Deal secret roles, collect votes, and run a social deduction game.",
+        "category": "Party"
+      },
+      "zh-CN": {
+        "name": "狼人杀发牌器",
+        "description": "分配隐藏角色、收集投票，组织一局线上狼人杀。",
+        "category": "派对"
+      }
+    },
+    "icon": "../werewolf-dealer.svg",
+    "help": "./help.html"
+  },
+  "modes": {
+    "room": {
+      "players": {
+        "min": 6,
+        "max": 12
+      },
+      "server": {
+        "runtime": "lua",
+        "entry": "./game.lua",
+        "persistence": "durable"
+      }
+    }
+  }
+}

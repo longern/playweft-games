@@ -2,12 +2,12 @@
 
 Seven lightweight multiplayer games and one standalone game for the sibling
 [`playweft`](../playweft) platform. They share one Vite build and expose
-independent HTML entry points and Playweft descriptors.
+independent, versioned Playweft game packages.
 
-Each descriptor uses an English default name and a Simplified Chinese
-translation (`translations["zh-CN"].name`). Playweft displays the translation
-when it matches the player's language and falls back to the English name for
-all other locales.
+Each package is described by `/<game>/playweft.json`. Its Manifest contains
+the client entry, localized catalogue metadata, supported modes, room player
+limits, and authoritative Lua entry. Playweft bridge v1 fetches and validates
+the Manifest before opening the game iframe.
 
 | Game | Players | Local entry | Production build |
 | --- | --- | --- | --- |
@@ -36,8 +36,8 @@ npm run dev
 ```
 
 Open `http://localhost:5174/` to browse the game list. Sudoku opens directly as
-a standalone game; paste a multiplayer game's matching local entry URL into
-Playweft to create a room. The multiplayer games
+a standalone game; paste a game's directory URL or its explicit
+`playweft.json` URL into Playweft. The multiplayer games
 use the platform-owned lobby; Texas Hold'em supports two to six seated players,
 斗地主 requires exactly three, the Werewolf dealer supports six to twelve, and
 UNO supports two to four.
@@ -49,4 +49,10 @@ npm run check
 npm run build
 ```
 
-The generated `dist` directory is one static deployment with eight game URLs.
+The generated `dist` directory is one static deployment with eight game
+packages. Each room package contains its `playweft.json`, client, help page and
+`game.lua`; Sudoku contains the same package metadata without a server entry.
+
+`public/_headers` enables CORS only for the featured list and game Manifests,
+which the top-level Playweft page fetches in the browser. Lua entries are
+fetched server-side by the Playweft Worker and do not need CORS.

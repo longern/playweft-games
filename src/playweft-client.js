@@ -1,117 +1,114 @@
-const BRIDGE_VERSION = 1;
+import {
+  PLAYWEFT_BRIDGE_VERSION,
+  PlayweftRpcError,
+  createPlayweftRpcPeer,
+} from "./playweft-rpc.js";
 
 /** Connect a static game entry to its Playweft iframe host. */
 export function createPlayweftClient({
-  descriptor,
-  script,
-  minPlayers,
-  maxPlayers,
-  liveRoom = false,
   onReady,
   onState,
   onActionResult,
   onError,
-}) {
-  let port;
+  onContext,
+} = {}) {
   let playerId;
   let latestMatchId;
   let latestVersion = -1;
   let destroyed = false;
 
+  const reportRpcError = (error, requestId) => {
+    if (destroyed) return;
+    const rpcError =
+      error instanceof PlayweftRpcError
+        ? error
+        : new PlayweftRpcError({ code: -32603, message: String(error) });
+    onError?.(
+      rpcError.message,
+      rpcError.code ?? "RPC_ERROR",
+      requestId,
+    );
+  };
+
+  const rpc = createPlayweftRpcPeer({
+    onNotification(method, params) {
+      if (method === "platform.error") {
+        const error = params?.error;
+        onError?.(
+          error?.message ?? "Platform error",
+          error?.code ?? "PLATFORM_ERROR",
+        );
+        return;
+      }
+      if (method !== "game.state") return;
+
+      const update = params;
+      if (!update || typeof update !== "object") return;
+      if (update.matchId !== latestMatchId) {
+        latestMatchId = update.matchId;
+        latestVersion = -1;
+      }
+      if (
+        typeof update.version === "number" &&
+        update.version <= latestVersion
+      ) {
+        return;
+      }
+      if (typeof update.version === "number") latestVersion = update.version;
+      onState?.({
+        state: update.state,
+        events: Array.isArray(update.events) ? update.events : [],
+        matchId: update.matchId,
+        version: update.version,
+        serverTime: update.serverTime,
+        playerId,
+      });
+    },
+  });
+
   const announceReady = () => {
     if (!destroyed) {
       window.parent.postMessage(
-        { type: "playweft:bridge-ready", version: BRIDGE_VERSION },
+        {
+          type: "playweft:bridge-ready",
+          version: PLAYWEFT_BRIDGE_VERSION,
+        },
         "*",
       );
     }
   };
   const probe = window.setInterval(announceReady, 500);
 
-  function receivePlatformMessage(event) {
-    const message = event.data;
-    if (message?.type === "ready") {
-      playerId = message.playerId;
-      onReady?.({ playerId, phase: message.phase });
-      return;
-    }
-    if (message?.type === "action-result") {
-      if (message.accepted === false) {
-        onError?.(
-          message.error?.message ?? "Action rejected",
-          message.error?.code ?? "ACTION_REJECTED",
-          message.requestId,
-        );
-        return;
-      }
-      onActionResult?.({
-        requestId: message.requestId,
-        accepted: true,
-        matchId: message.matchId,
-        version: message.version,
-      });
-      return;
-    }
-    if (message?.type === "error") {
-      onError?.(message.error, message.code, message.requestId);
-      return;
-    }
-    if (message?.type !== "state") return;
-    if (message.matchId !== latestMatchId) {
-      latestMatchId = message.matchId;
-      latestVersion = -1;
-    }
-    if (
-      typeof message.version === "number" &&
-      message.version <= latestVersion
-    ) {
-      return;
-    }
-    if (typeof message.version === "number") latestVersion = message.version;
-    onState?.({
-      state: message.state,
-      events: Array.isArray(message.events) ? message.events : [],
-      matchId: message.matchId,
-      version: message.version,
-      serverTime: message.serverTime,
-      playerId,
-    });
-  }
-
   function receiveBridge(event) {
     if (
       event.source !== window.parent ||
       event.data?.type !== "playweft:bridge" ||
-      event.data?.version !== BRIDGE_VERSION
+      event.data?.version !== PLAYWEFT_BRIDGE_VERSION
     ) {
       return;
     }
     const [nextPort] = event.ports;
     if (!nextPort) return;
 
-    port?.close();
-    port = nextPort;
     window.clearInterval(probe);
-    port.onmessage = receivePlatformMessage;
-    port.start();
-    port.postMessage({
-      type: "descriptor",
-      descriptor: {
-        ...descriptor,
-        modes: descriptor.modes ?? ["room"],
-        liveRoom,
-      },
-    });
-    port.postMessage({
-      type: "initialize",
-      initialization: {
-        runtime: "lua",
-        script,
-        minPlayers,
-        maxPlayers,
-        liveRoom,
-      },
-    });
+    rpc.connect(nextPort);
+    void rpc
+      .call("game.initialize")
+      .then((context) => {
+        if (destroyed) return;
+        onContext?.(context);
+        playerId = context?.playerId;
+        onReady?.({
+          mode: context?.mode,
+          protocolVersion: context?.protocolVersion,
+          capabilities: Array.isArray(context?.capabilities)
+            ? context.capabilities
+            : [],
+          playerId,
+          phase: context?.phase,
+        });
+      })
+      .catch((error) => reportRpcError(error));
   }
 
   window.addEventListener("message", receiveBridge);
@@ -119,16 +116,46 @@ export function createPlayweftClient({
 
   return {
     sendAction(action) {
-      if (!port) return undefined;
+      if (!rpc.isConnected()) return undefined;
       const requestId = crypto.randomUUID();
-      port.postMessage({ type: "action", requestId, action });
+      void rpc
+        .call("room.action", { action }, requestId)
+        .then((result) => {
+          if (destroyed) return;
+          if (result?.accepted === false) {
+            onError?.(
+              result.error?.message ?? "Action rejected",
+              result.error?.code ?? "ACTION_REJECTED",
+              requestId,
+            );
+            return;
+          }
+          if (result?.accepted !== true) {
+            onError?.(
+              "The platform returned an invalid action result",
+              "INVALID_ACTION_RESULT",
+              requestId,
+            );
+            return;
+          }
+          onActionResult?.({
+            requestId,
+            accepted: true,
+            matchId: result.matchId,
+            version: result.version,
+          });
+        })
+        .catch((error) => reportRpcError(error, requestId));
       return requestId;
+    },
+    readClipboardText() {
+      return rpc.call("clipboard.readText");
     },
     destroy() {
       destroyed = true;
       window.clearInterval(probe);
       window.removeEventListener("message", receiveBridge);
-      port?.close();
+      rpc.destroy();
     },
   };
 }

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://playweft.dev/schemas/game-manifest-v1.json",
+  "manifestVersion": 1,
+  "id": "com.longern.playweft.pig-dice",
+  "version": "1.0.0",
+  "protocol": {
+    "min": 1,
+    "max": 1
+  },
+  "client": {
+    "entry": "./"
+  },
+  "display": {
+    "defaultLocale": "en",
+    "locales": {
+      "en": {
+        "name": "Pig Dice",
+        "description": "Roll, bank, and race to 50 without losing your turn total.",
+        "category": "Quick match"
+      },
+      "zh-CN": {
+        "name": "贪心骰子",
+        "description": "掷骰累积分数，见好就收，率先到达 50 分。",
+        "category": "快速对战"
+      }
+    },
+    "icon": "../pig-dice.svg",
+    "help": "./help.html"
+  },
+  "modes": {
+    "room": {
+      "players": {
+        "min": 2,
+        "max": 2
+      },
+      "server": {
+        "runtime": "lua",
+        "entry": "./game.lua",
+        "persistence": "durable"
+      }
+    }
+  }
+}

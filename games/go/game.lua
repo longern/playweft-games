@@ -1,4 +1,4 @@
-local DEFAULT_SIZE = 9
+local DEFAULT_SIZE = 19
 local DEFAULT_KOMI = 6.5
 local DIRECTIONS = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } }
 
@@ -183,78 +183,91 @@ local function place_handicap(board, count)
   end
 end
 
-local function score_board(state)
-  local board = state.board
-  local black_stones, white_stones = 0, 0
-  local black_territory, white_territory, neutral = 0, 0, 0
-  local visited = {}
-
-  for row = 1, #board do
-    for column = 1, #board do
-      local value = board[row][column]
-      if value == 1 then
-        black_stones = black_stones + 1
-      elseif value == 2 then
-        white_stones = white_stones + 1
-      elseif not visited[point_key(row, column)] then
-        local region, borders = {}, {}
-        local stack = { { row = row, column = column } }
-        visited[point_key(row, column)] = true
-
-        while #stack > 0 do
-          local point = table.remove(stack)
-          region[#region + 1] = point
-          for _, direction in ipairs(DIRECTIONS) do
-            local next_row = point.row + direction[1]
-            local next_column = point.column + direction[2]
-            if inside(board, next_row, next_column) then
-              local neighbor = board[next_row][next_column]
-              local key = point_key(next_row, next_column)
-              if neighbor == 0 and not visited[key] then
-                visited[key] = true
-                stack[#stack + 1] = { row = next_row, column = next_column }
-              elseif neighbor ~= 0 then
-                borders[neighbor] = true
-              end
-            end
-          end
-        end
-
-        if borders[1] and not borders[2] then
-          black_territory = black_territory + #region
-        elseif borders[2] and not borders[1] then
-          white_territory = white_territory + #region
-        else
-          neutral = neutral + #region
-        end
-      end
-    end
-  end
-
-  local black, white
-  if state.settings.rules == "japanese" then
-    local white_index = (state.blackIndex % #state.players) + 1
-    black = black_territory + (state.captures[state.blackIndex] or 0)
-    white = white_territory + (state.captures[white_index] or 0) + state.settings.komi
-  else
-    black = black_stones + black_territory
-    white = white_stones + white_territory + state.settings.komi
-  end
-
-  return {
-    black = black,
-    white = white,
-    blackStones = black_stones,
-    whiteStones = white_stones,
-    blackTerritory = black_territory,
-    whiteTerritory = white_territory,
-    neutral = neutral,
-    komi = state.settings.komi,
-    rules = state.settings.rules,
-  }
+local function action_time(context, fallback)
+  local value = tonumber(context and context.actionAt)
+  if value and value >= 0 then return value end
+  return tonumber(fallback) or 0
 end
 
-local function new_round(players, round, settings, seed, host_id)
+local function record_turn_time(state, index, context)
+  local now = action_time(context, state.turnStartedAt)
+  local started_at = tonumber(state.turnStartedAt) or now
+  state.timeUsed = state.timeUsed or { 0, 0 }
+  state.timeUsed[index] =
+    (tonumber(state.timeUsed[index]) or 0) + math.max(0, now - started_at)
+  state.turnStartedAt = now
+end
+
+local SCORE_COUNT_FIELDS = {
+  "blackStones",
+  "whiteStones",
+  "blackTerritory",
+  "whiteTerritory",
+  "neutral",
+}
+
+local function valid_number(value)
+  return type(value) == "number"
+    and value == value
+    and value ~= math.huge
+    and value ~= -math.huge
+end
+
+local function normalized_score(state, proposal)
+  if type(proposal) ~= "table" then return nil, "invalid_score" end
+  if proposal.rules ~= state.settings.rules
+    or proposal.komi ~= state.settings.komi then
+    return nil, "invalid_score"
+  end
+
+  local score = {
+    rules = proposal.rules,
+    komi = proposal.komi,
+  }
+  local covered = 0
+  for _, field in ipairs(SCORE_COUNT_FIELDS) do
+    local value = proposal[field]
+    if not valid_number(value) or value < 0 or value % 1 ~= 0 then
+      return nil, "invalid_score"
+    end
+    score[field] = value
+    covered = covered + value
+  end
+  if covered ~= state.settings.size * state.settings.size then
+    return nil, "invalid_score"
+  end
+
+  local white_index = (state.blackIndex % #state.players) + 1
+  if state.settings.rules == "japanese" then
+    score.black =
+      score.blackTerritory + (state.captures[state.blackIndex] or 0)
+    score.white =
+      score.whiteTerritory + (state.captures[white_index] or 0) + score.komi
+  else
+    score.black = score.blackStones + score.blackTerritory
+    score.white = score.whiteStones + score.whiteTerritory + score.komi
+  end
+  if proposal.black ~= score.black or proposal.white ~= score.white then
+    return nil, "invalid_score"
+  end
+  return score
+end
+
+local function same_score(left, right)
+  if not left or not right then return false end
+  if left.rules ~= right.rules
+    or left.komi ~= right.komi
+    or left.black ~= right.black
+    or left.white ~= right.white then
+    return false
+  end
+  for _, field in ipairs(SCORE_COUNT_FIELDS) do
+    if left[field] ~= right[field] then return false end
+  end
+  return true
+end
+
+local function new_round(players, round, settings, seed, host_id, started_at)
   local black_index, updated_seed = choose_black(settings, seed)
   local board = empty_board(settings.size)
   place_handicap(board, settings.handicap)
@@ -268,6 +281,11 @@ local function new_round(players, round, settings, seed, host_id)
     current = settings.handicap > 0 and white_index or black_index,
     blackIndex = black_index,
     captures = { 0, 0 },
+    timeUsed = { 0, 0 },
+    turnStartedAt = action_time({ actionAt = started_at }, 0),
+    scoreRound = 0,
+    scoreSubmitted = { false, false },
+    scoreProposals = {},
     consecutivePasses = 0,
     moves = 0,
     ended = false,
@@ -306,6 +324,11 @@ local function setup_state(players, round, settings, seed, host_id)
     current = 0,
     blackIndex = 1,
     captures = { 0, 0 },
+    timeUsed = { 0, 0 },
+    turnStartedAt = 0,
+    scoreRound = 0,
+    scoreSubmitted = { false, false },
+    scoreProposals = {},
     consecutivePasses = 0,
     moves = 0,
     ended = false,
@@ -375,7 +398,8 @@ function on_action(state, action, context)
       state.round or 1,
       settings,
       state.seed,
-      state.hostId
+      state.hostId,
+      context.actionAt
     )
     return {
       accepted = true,
@@ -391,7 +415,8 @@ function on_action(state, action, context)
       (state.round or 1) + 1,
       state.settings,
       state.seed,
-      state.hostId
+      state.hostId,
+      context.actionAt
     )
     return {
       accepted = true,
@@ -416,27 +441,90 @@ function on_action(state, action, context)
     }
   end
 
+  if state.phase == "scoring" then
+    if action.type ~= "score" then return rejected(state, "scoring_required") end
+    if tonumber(action.scoreRound) ~= tonumber(state.scoreRound) then
+      return rejected(state, "stale_score_round")
+    end
+    state.scoreSubmitted = state.scoreSubmitted or { false, false }
+    state.scoreProposals = state.scoreProposals or {}
+    if state.scoreSubmitted[index] then
+      return rejected(state, "score_already_submitted")
+    end
+    local score, reason = normalized_score(state, action.score)
+    if not score then return rejected(state, reason) end
+
+    state.scoreProposals[index] = score
+    state.scoreSubmitted[index] = true
+    if not state.scoreSubmitted[1] or not state.scoreSubmitted[2] then
+      state.lastEvent = {
+        kind = "score_submitted",
+        playerIndex = index,
+        captured = 0,
+      }
+      return {
+        accepted = true,
+        state = state,
+        events = { { type = "score_submitted", player = actor_id } },
+      }
+    end
+
+    if not same_score(state.scoreProposals[1], state.scoreProposals[2]) then
+      state.scoreRound = state.scoreRound + 1
+      state.scoreSubmitted = { false, false }
+      state.scoreProposals = {}
+      state.lastEvent = {
+        kind = "score_disputed",
+        playerIndex = index,
+        captured = 0,
+      }
+      return {
+        accepted = true,
+        state = state,
+        events = { { type = "score_disputed", player = actor_id } },
+      }
+    end
+
+    state.scores = state.scoreProposals[1]
+    state.ended = true
+    state.phase = "ended"
+    if state.scores.black > state.scores.white then
+      state.winnerIndex = state.blackIndex
+    else
+      state.winnerIndex = (state.blackIndex % #state.players) + 1
+    end
+    state.winner = state.players[state.winnerIndex]
+    state.lastEvent = { kind = "scored", playerIndex = index, captured = 0 }
+    return {
+      accepted = true,
+      state = state,
+      events = { { type = "scored", winner = state.winner } },
+    }
+  end
+
   if state.ended then return rejected(state, "game_over") end
   if index ~= state.current then return rejected(state, "not_your_turn") end
 
   if action.type == "pass" then
+    record_turn_time(state, index, context)
     state.consecutivePasses = state.consecutivePasses + 1
     state.lastMove = { row = 0, column = 0 }
     state.lastEvent = { kind = "pass", playerIndex = index, captured = 0 }
     if state.consecutivePasses >= 2 then
-      state.ended = true
-      state.scores = score_board(state)
-      if state.scores.black > state.scores.white then
-        state.winnerIndex = state.blackIndex
-      else
-        state.winnerIndex = (state.blackIndex % #state.players) + 1
-      end
-      state.winner = state.players[state.winnerIndex]
-      state.lastEvent = { kind = "scored", playerIndex = index, captured = 0 }
+      state.phase = "scoring"
+      state.current = 0
+      state.scoreRound = (state.scoreRound or 0) + 1
+      state.scoreSubmitted = { false, false }
+      state.scoreProposals = {}
+      state.lastEvent = {
+        kind = "scoring_started",
+        playerIndex = index,
+        captured = 0,
+      }
       return {
         accepted = true,
         state = state,
-        events = { { type = "scored", winner = state.winner } },
+        events = { { type = "scoring_started", player = actor_id } },
       }
     end
     state.previousBoard = board_signature(state.board)
@@ -488,6 +576,7 @@ function on_action(state, action, context)
     return rejected(state, "ko")
   end
 
+  record_turn_time(state, index, context)
   state.previousBoard = board_signature(state.board)
   state.board = candidate
   state.captures[index] = (state.captures[index] or 0) + captured
@@ -531,7 +620,7 @@ end
 function view(state, events, context)
   local visible = {}
   for key, value in pairs(state) do
-    if key ~= "seed" then visible[key] = value end
+    if key ~= "seed" and key ~= "scoreProposals" then visible[key] = value end
   end
   return { state = visible, events = events }
 end

@@ -1,21 +1,49 @@
-const BRIDGE_VERSION = 1;
+import {
+  PLAYWEFT_BRIDGE_VERSION,
+  createPlayweftRpcPeer,
+} from "./playweft-rpc.js";
 
 /**
- * Announces metadata to a Playweft host without making a room or runtime
- * dependency. A top-level game page stays entirely local.
+ * Initializes a Manifest-backed solo client when hosted by Playweft.
+ * A top-level game page stays entirely local.
  */
-export function createPlayweftSoloClient({ descriptor }) {
-  let port;
+export function createPlayweftSoloClient({
+  onReady,
+  onContext,
+  onError,
+} = {}) {
   let destroyed = false;
 
   if (window.parent === window) {
-    return { destroy() {} };
+    return {
+      readClipboardText() {
+        return Promise.reject(
+          new Error("The game is not running inside Playweft"),
+        );
+      },
+      destroy() {},
+    };
   }
+
+  const rpc = createPlayweftRpcPeer({
+    onNotification(method, params) {
+      if (method === "platform.error") {
+        const error = params?.error;
+        onError?.(
+          error?.message ?? "Platform error",
+          error?.code ?? "PLATFORM_ERROR",
+        );
+      }
+    },
+  });
 
   const announceReady = () => {
     if (!destroyed) {
       window.parent.postMessage(
-        { type: "playweft:bridge-ready", version: BRIDGE_VERSION },
+        {
+          type: "playweft:bridge-ready",
+          version: PLAYWEFT_BRIDGE_VERSION,
+        },
         "*",
       );
     }
@@ -26,29 +54,43 @@ export function createPlayweftSoloClient({ descriptor }) {
     if (
       event.source !== window.parent ||
       event.data?.type !== "playweft:bridge" ||
-      event.data?.version !== BRIDGE_VERSION
+      event.data?.version !== PLAYWEFT_BRIDGE_VERSION
     ) {
       return;
     }
     const [nextPort] = event.ports;
     if (!nextPort) return;
 
-    port?.close();
-    port = nextPort;
     window.clearInterval(probe);
-    port.start();
-    port.postMessage({ type: "descriptor", descriptor });
+    rpc.connect(nextPort);
+    void rpc
+      .call("game.initialize")
+      .then((context) => {
+        if (destroyed) return;
+        onContext?.(context);
+        onReady?.(context);
+      })
+      .catch((error) => {
+        if (destroyed) return;
+        onError?.(
+          error?.message ?? "Platform initialization failed",
+          error?.code ?? "RPC_ERROR",
+        );
+      });
   }
 
   window.addEventListener("message", receiveBridge);
   announceReady();
 
   return {
+    readClipboardText() {
+      return rpc.call("clipboard.readText");
+    },
     destroy() {
       destroyed = true;
       window.clearInterval(probe);
       window.removeEventListener("message", receiveBridge);
-      port?.close();
+      rpc.destroy();
     },
   };
 }

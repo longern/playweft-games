@@ -7,7 +7,6 @@ import {
   RotateCcw,
   ShieldQuestion,
 } from "lucide";
-import gameScript from "./game.lua?raw";
 import { createPlayweftClient } from "../../src/playweft-client.js";
 import "../../src/base.css";
 import "./styles.css";
@@ -82,17 +81,6 @@ createIcons({
 });
 
 const client = createPlayweftClient({
-  descriptor: {
-    name: "Texas Hold'em",
-    translations: {
-      "zh-CN": { name: "德州扑克" },
-    },
-    icon: "/texas-holdem.svg",
-    helpUrl: "./help.html",
-  },
-  script: gameScript,
-  minPlayers: 2,
-  maxPlayers: 6,
   onReady(message) {
     playerId = message.playerId;
     setConnection("waiting", "房间已连接");

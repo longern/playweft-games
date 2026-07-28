@@ -1,0 +1,43 @@
+{
+  "$schema": "https://playweft.dev/schemas/game-manifest-v1.json",
+  "manifestVersion": 1,
+  "id": "com.longern.playweft.texas-holdem",
+  "version": "1.0.0",
+  "protocol": {
+    "min": 1,
+    "max": 1
+  },
+  "client": {
+    "entry": "./"
+  },
+  "display": {
+    "defaultLocale": "en",
+    "locales": {
+      "en": {
+        "name": "Texas Hold'em",
+        "description": "Bet, raise, and bluff at a table for two to six players.",
+        "category": "Card game"
+      },
+      "zh-CN": {
+        "name": "德州扑克",
+        "description": "下注、加注与诈唬，在二至六人牌桌上争夺底池。",
+        "category": "纸牌"
+      }
+    },
+    "icon": "../texas-holdem.svg",
+    "help": "./help.html"
+  },
+  "modes": {
+    "room": {
+      "players": {
+        "min": 2,
+        "max": 6
+      },
+      "server": {
+        "runtime": "lua",
+        "entry": "./game.lua",
+        "persistence": "durable"
+      }
+    }
+  }
+}

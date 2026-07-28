@@ -1,5 +1,4 @@
 import { createIcons, Eye, EyeOff, RotateCcw, Vote } from "lucide";
-import gameScript from "./game.lua?raw";
 import { createPlayweftClient } from "../../src/playweft-client.js";
 import "../../src/base.css";
 import "./styles.css";
@@ -71,17 +70,6 @@ const preview = {
 };
 
 const client = createPlayweftClient({
-  descriptor: {
-    name: "Werewolf Dealer",
-    translations: {
-      "zh-CN": { name: "狼人杀发牌器" },
-    },
-    icon: "/werewolf-dealer.svg",
-    helpUrl: "./help.html",
-  },
-  script: gameScript,
-  minPlayers: 6,
-  maxPlayers: 12,
   onReady(message) {
     playerId = message.playerId;
     setConnection("waiting", "房间已连接");

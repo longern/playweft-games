@@ -1,4 +1,5 @@
 /featured-games.json
   Access-Control-Allow-Origin: *
-  Access-Control-Allow-Methods: GET, HEAD, OPTIONS
-  Access-Control-Max-Age: 86400
+
+/:game/playweft.json
+  Access-Control-Allow-Origin: *

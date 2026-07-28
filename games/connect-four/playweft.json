@@ -1,0 +1,43 @@
+{
+  "$schema": "https://playweft.dev/schemas/game-manifest-v1.json",
+  "manifestVersion": 1,
+  "id": "com.longern.playweft.connect-four",
+  "version": "1.0.0",
+  "protocol": {
+    "min": 1,
+    "max": 1
+  },
+  "client": {
+    "entry": "./"
+  },
+  "display": {
+    "defaultLocale": "en",
+    "locales": {
+      "en": {
+        "name": "Connect Four",
+        "description": "Connect four pieces in a row before your opponent does.",
+        "category": "Strategy"
+      },
+      "zh-CN": {
+        "name": "四子棋",
+        "description": "横、竖或斜线连成四子，抢在对手之前占据棋盘。",
+        "category": "策略"
+      }
+    },
+    "icon": "../connect-four.svg",
+    "help": "./help.html"
+  },
+  "modes": {
+    "room": {
+      "players": {
+        "min": 2,
+        "max": 2
+      },
+      "server": {
+        "runtime": "lua",
+        "entry": "./game.lua",
+        "persistence": "durable"
+      }
+    }
+  }
+}

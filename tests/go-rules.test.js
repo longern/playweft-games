@@ -32,7 +32,7 @@ on_action = function(state, action, context)
       protocolVersion = 1,
       matchId = "match_test",
       actionId = "action_test",
-      actionAt = 0,
+      actionAt = context.actionAt or 0,
       version = context.version or 0,
       actor = {
         id = context.playerId,
@@ -55,6 +55,21 @@ async function runGo(scenario) {
     lua.global.close();
   }
 }
+
+test("Go defaults to a 19 × 19 board", async () => {
+  const result = await runGo(`
+    state = setup({ players = { "black", "white" } })
+    result = {
+      size = state.settings.size,
+      boardSize = #state.board,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    size: 19,
+    boardSize: 19,
+  });
+});
 
 test("Go captures a surrounded group and alternates turns", async () => {
   const result = await runGo(`
@@ -127,7 +142,7 @@ test("Go enforces the simple ko rule", async () => {
   assert.equal(result.state.board[1][1], 0);
 });
 
-test("Go ends and scores after two consecutive passes", async () => {
+test("Go ends only after both players submit matching scores", async () => {
   const result = await runGo(`
     state = setup({ players = { "black", "white" } })
     state = on_action(state, {
@@ -135,14 +150,83 @@ test("Go ends and scores after two consecutive passes", async () => {
       handicap = 0, blackMode = "player1"
     }, { playerId = "black" }).state
     first = on_action(state, { type = "pass" }, { playerId = "black" })
-    result = on_action(first.state, { type = "pass" }, { playerId = "white" })
+    scoring = on_action(first.state, { type = "pass" }, { playerId = "white" })
+    scoring_phase = scoring.state.phase
+    scoring_ended = scoring.state.ended
+    scoring_event = scoring.events[1].type
+    proposal = {
+      black = 0, white = 6.5,
+      blackStones = 0, whiteStones = 0,
+      blackTerritory = 0, whiteTerritory = 0, neutral = 81,
+      komi = 6.5, rules = "chinese"
+    }
+    black_confirmed = on_action(scoring.state, {
+      type = "score", scoreRound = scoring.state.scoreRound, score = proposal
+    }, { playerId = "black" })
+    first_ended = black_confirmed.state.ended
+    first_event = black_confirmed.events[1].type
+    first_hidden = view(black_confirmed.state, {}, {}).state.scoreProposals == nil
+    white_confirmed = on_action(black_confirmed.state, {
+      type = "score", scoreRound = scoring.state.scoreRound, score = proposal
+    }, { playerId = "white" })
+    result = {
+      scoringPhase = scoring_phase,
+      scoringEnded = scoring_ended,
+      scoringEvent = scoring_event,
+      firstEnded = first_ended,
+      firstEvent = first_event,
+      firstProposalHidden = first_hidden,
+      finalConfirmation = white_confirmed,
+    }
   `);
 
-  assert.equal(result.state.ended, true);
-  assert.equal(result.state.scores.black, 0);
-  assert.equal(result.state.scores.white, 6.5);
-  assert.equal(result.state.winner, "white");
-  assert.equal(result.events[0].type, "scored");
+  assert.equal(result.scoringPhase, "scoring");
+  assert.equal(result.scoringEnded, false);
+  assert.equal(result.scoringEvent, "scoring_started");
+  assert.equal(result.firstEnded, false);
+  assert.equal(result.firstEvent, "score_submitted");
+  assert.equal(result.firstProposalHidden, true);
+  assert.equal(result.finalConfirmation.state.ended, true);
+  assert.equal(result.finalConfirmation.state.scores.black, 0);
+  assert.equal(result.finalConfirmation.state.scores.white, 6.5);
+  assert.equal(result.finalConfirmation.state.winner, "white");
+  assert.equal(result.finalConfirmation.events[0].type, "scored");
+});
+
+test("Go restarts confirmation when players submit different scores", async () => {
+  const result = await runGo(`
+    state = setup({ players = { "black", "white" } })
+    state = on_action(state, {
+      type = "start", size = 9, rules = "chinese", komi = 6.5,
+      handicap = 0, blackMode = "player1"
+    }, { playerId = "black" }).state
+    state = on_action(state, { type = "pass" }, { playerId = "black" }).state
+    state = on_action(state, { type = "pass" }, { playerId = "white" }).state
+    first = on_action(state, {
+      type = "score", scoreRound = 1,
+      score = {
+        black = 0, white = 6.5,
+        blackStones = 0, whiteStones = 0,
+        blackTerritory = 0, whiteTerritory = 0, neutral = 81,
+        komi = 6.5, rules = "chinese"
+      }
+    }, { playerId = "black" })
+    result = on_action(first.state, {
+      type = "score", scoreRound = 1,
+      score = {
+        black = 1, white = 6.5,
+        blackStones = 0, whiteStones = 0,
+        blackTerritory = 1, whiteTerritory = 0, neutral = 80,
+        komi = 6.5, rules = "chinese"
+      }
+    }, { playerId = "white" })
+  `);
+
+  assert.equal(result.state.phase, "scoring");
+  assert.equal(result.state.ended, false);
+  assert.equal(result.state.scoreRound, 2);
+  assert.deepEqual(result.state.scoreSubmitted, [false, false]);
+  assert.equal(result.events[0].type, "score_disputed");
 });
 
 test("Go preserves board, rule, komi, colour, and handicap settings for a rematch", async () => {
@@ -237,6 +321,30 @@ test("Go broadcasts host setting updates while remaining in setup", async () => 
     boardSize: 19,
     event: "settings_updated",
   });
+});
+
+test("Go tracks each player's elapsed turn time", async () => {
+  const result = await runGo(`
+    state = setup({ players = { "black", "white" }, hostId = "black" })
+    state = on_action(state, {
+      type = "start", size = 9, rules = "chinese", komi = 6.5,
+      handicap = 0, blackMode = "player1"
+    }, { playerId = "black", actionAt = 1000 }).state
+    state = on_action(
+      state,
+      { type = "play", row = 4, column = 4 },
+      { playerId = "black", actionAt = 4500 }
+    ).state
+    result = on_action(
+      state,
+      { type = "pass" },
+      { playerId = "white", actionAt = 7000 }
+    )
+  `);
+
+  assert.equal(result.state.timeUsed[0], 3500);
+  assert.equal(result.state.timeUsed[1], 2500);
+  assert.equal(result.state.turnStartedAt, 7000);
 });
 
 test("Go requires fixed black for handicap games and starts with white", async () => {
