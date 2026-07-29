@@ -1,0 +1,43 @@
+{
+  "$schema": "https://playweft.dev/schemas/game-manifest-v1.json",
+  "manifestVersion": 1,
+  "id": "com.longern.playweft.gomoku",
+  "version": "1.0.0",
+  "protocol": {
+    "min": 1,
+    "max": 1
+  },
+  "client": {
+    "entry": "./"
+  },
+  "display": {
+    "defaultLocale": "en",
+    "locales": {
+      "en": {
+        "name": "Gomoku",
+        "description": "Take turns placing stones and be first to connect five.",
+        "category": "Strategy"
+      },
+      "zh-CN": {
+        "name": "五子棋",
+        "description": "黑白轮流落子，率先横、竖或斜线连成五子获胜。",
+        "category": "策略"
+      }
+    },
+    "icon": "../gomoku.svg",
+    "help": "./help.html"
+  },
+  "modes": {
+    "room": {
+      "players": {
+        "min": 2,
+        "max": 2
+      },
+      "server": {
+        "runtime": "lua",
+        "entry": "./game.lua",
+        "persistence": "durable"
+      }
+    }
+  }
+}

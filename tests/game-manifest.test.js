@@ -10,6 +10,7 @@ const ROOM_GAMES = new Map([
   ["werewolf-dealer", [6, 12]],
   ["uno", [2, 4]],
   ["go", [2, 2]],
+  ["gomoku", [2, 2]],
 ]);
 const ALL_GAMES = [
   "pig-dice",
@@ -20,6 +21,7 @@ const ALL_GAMES = [
   "uno",
   "sudoku",
   "go",
+  "gomoku",
 ];
 
 test("Every game package has a strict Playweft Manifest v1 for bridge v1", async () => {
@@ -91,7 +93,7 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
   }
 });
 
-test("Featured list points exclusively to the eight game Manifests", async () => {
+test("Featured list points exclusively to the nine game Manifests", async () => {
   const featured = JSON.parse(
     await readFile("public/featured-games.json", "utf8"),
   );

@@ -183,6 +183,7 @@ body {
 .game-card-uno .game-card-meta { color: #bb3d38; }
 .game-card-sudoku .game-card-meta { color: #21705d; }
 .game-card-go .game-card-meta { color: #9a6122; }
+.game-card-gomoku .game-card-meta { color: #a54432; }
 
 @media (max-width: 720px) {
   .home-main {

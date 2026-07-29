@@ -11,6 +11,7 @@ const games = [
   "uno",
   "sudoku",
   "go",
+  "gomoku",
 ];
 
 const input = {

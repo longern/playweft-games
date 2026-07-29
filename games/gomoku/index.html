@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f5f1" />
+    <meta
+      name="description"
+      content="Playweft 五子棋：黑白双方轮流落子，率先横、竖或斜线连成五子获胜。"
+    />
+    <title>五子棋 | Playweft</title>
+    <script type="module" src="./main.js"></script>
+  </head>
+  <body>
+    <header class="game-header">
+      <div class="game-brand">
+        <img src="/gomoku.svg" alt="" />
+        <div>
+          <h1>五子棋</h1>
+          <p>五子连珠，双人对弈</p>
+        </div>
+      </div>
+      <div id="connection" class="connection-status" data-mode="waiting">
+        <span>连接平台中</span>
+      </div>
+    </header>
+
+    <main class="gomoku-layout">
+      <section
+        id="setup-panel"
+        class="setup-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="setup-title"
+        hidden
+      >
+        <form id="setup-form" class="setup-form" tabindex="-1">
+          <div class="setup-heading">
+            <h2 id="setup-title">对局设置</h2>
+            <p id="setup-note">房主确认设置后开始</p>
+          </div>
+
+          <label class="setting-field">
+            <span>执黑方式</span>
+            <select id="black-setting" name="blackMode">
+              <option value="random">随机执黑</option>
+              <option value="player1">玩家 1 执黑</option>
+              <option value="player2">玩家 2 执黑</option>
+            </select>
+          </label>
+
+          <label class="setting-field">
+            <span>禁手规则</span>
+            <select id="forbidden-setting" name="forbiddenMoves">
+              <option value="none">无禁手 · 休闲规则</option>
+              <option value="renju">黑方禁手 · 三三、四四、长连</option>
+            </select>
+          </label>
+
+          <p class="setup-rule">
+            固定 15 路棋盘，黑方先行；横、竖或斜线连续五子即获胜。再来一局时双方交换先后手。
+          </p>
+          <p
+            id="setup-feedback"
+            class="setup-feedback"
+            role="status"
+            aria-live="polite"
+            hidden
+          ></p>
+          <button id="start-button" class="start-action" type="submit">
+            <span id="start-label">开始对局</span>
+          </button>
+        </form>
+      </section>
+
+      <section id="table-layout" class="table-layout">
+        <aside class="players-panel" aria-label="对局玩家">
+          <div id="black-player" class="player-card is-current">
+            <span class="stone-swatch stone-black" aria-hidden="true"></span>
+            <div>
+              <strong data-player-name>黑方 · 玩家 1</strong>
+              <span data-player-detail>先手</span>
+            </div>
+            <time data-player-time datetime="PT0S">00:00</time>
+          </div>
+          <div id="white-player" class="player-card">
+            <span class="stone-swatch stone-white" aria-hidden="true"></span>
+            <div>
+              <strong data-player-name>白方 · 玩家 2</strong>
+              <span data-player-detail>后手</span>
+            </div>
+            <time data-player-time datetime="PT0S">00:00</time>
+          </div>
+        </aside>
+
+        <section class="board-shell" aria-label="15 × 15 五子棋棋盘">
+          <div id="board" class="gomoku-board" role="grid"></div>
+        </section>
+
+        <aside class="action-panel">
+          <div class="round-note">
+            <span>第 <b id="round-number">1</b> 局</span>
+            <span id="move-count">已落 0 子</span>
+          </div>
+          <p id="settings-summary" class="settings-summary">
+            15 × 15 · 无禁手
+          </p>
+          <div class="turn-status" aria-live="polite">
+            <strong id="status-title">准备开始</strong>
+            <span id="status-detail">黑方先行，率先连成五子获胜</span>
+          </div>
+          <button id="rematch-button" class="rematch-action" type="button" hidden>
+            <span class="icon-button-content">
+              <i data-lucide="rotate-ccw"></i>再来一局
+            </span>
+          </button>
+          <button id="settings-button" class="settings-action" type="button" hidden>
+            <span class="icon-button-content">
+              <i data-lucide="settings-2"></i>返回设置
+            </span>
+          </button>
+          <a class="rules-link" href="./help.html" target="_blank">
+            <i data-lucide="circle-help"></i>玩法说明
+          </a>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>

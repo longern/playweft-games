@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>五子棋玩法</title>
+    <link rel="stylesheet" href="../../src/help.css" />
+  </head>
+  <body>
+    <main class="help-page">
+      <header class="help-heading">
+        <img src="/gomoku.svg" alt="" />
+        <div>
+          <h1>五子棋玩法</h1>
+          <p>先连成五子的一方获胜</p>
+        </div>
+      </header>
+
+      <section class="help-section">
+        <h2>游戏目标</h2>
+        <p>
+          黑白双方在棋盘交叉点轮流落子。率先让五颗或更多同色棋子在<strong>横向、纵向或斜向</strong>连续相连的一方获胜。
+        </p>
+      </section>
+
+      <section class="help-section">
+        <h2>回合规则</h2>
+        <ol>
+          <li>黑方先行，每回合只能在一个空交叉点落一颗棋子。</li>
+          <li>棋子落下后不能移动或移除。</li>
+          <li>任一方向连成五子时对局立即结束。</li>
+          <li>棋盘落满仍无人连成五子时，本局为平手。</li>
+        </ol>
+      </section>
+
+      <section class="help-section">
+        <h2>本游戏采用的规则</h2>
+        <p>
+          开局时可选择无禁手或黑方禁手。禁手模式下，黑方不能落下形成双三、双四或六子及以上长连的棋；白方不受禁手限制。无禁手模式下双方均可形成长连。点击“再来一局”后双方交换先后手。
+        </p>
+        <div class="rule-strip" aria-label="五子棋规则摘要">
+          <div class="rule-item"><strong>棋盘</strong><span>固定 15 × 15</span></div>
+          <div class="rule-item"><strong>先手</strong><span>黑方先行</span></div>
+          <div class="rule-item"><strong>胜负</strong><span>任一方向连续五子</span></div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

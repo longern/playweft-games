@@ -1,6 +1,6 @@
 # Playweft Games
 
-Seven lightweight multiplayer games and one standalone game for the sibling
+Eight lightweight multiplayer games and one standalone game for the sibling
 [`playweft`](../playweft) platform. They share one Vite build and expose
 independent, versioned Playweft game packages.
 
@@ -19,6 +19,7 @@ the Manifest before opening the game iframe.
 | UNO | 2–4 | `http://localhost:5174/uno/` | `dist/uno/index.html` |
 | Sudoku | 1 | `http://localhost:5174/sudoku/` | `dist/sudoku/index.html` |
 | 围棋 | 2 | `http://localhost:5174/go/` | `dist/go/index.html` |
+| 五子棋 | 2 | `http://localhost:5174/gomoku/` | `dist/gomoku/index.html` |
 
 ## Run locally
 
@@ -49,7 +50,7 @@ npm run check
 npm run build
 ```
 
-The generated `dist` directory is one static deployment with eight game
+The generated `dist` directory is one static deployment with nine game
 packages. Each room package contains its `playweft.json`, client, help page and
 `game.lua`; Sudoku contains the same package metadata without a server entry.
 
