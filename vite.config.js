@@ -87,10 +87,7 @@ function preserveGameUrls() {
     async closeBundle() {
       const builtGamesDir = resolve(outDir, "games");
       for (const game of games) {
-        await rename(
-          resolve(builtGamesDir, game),
-          resolve(outDir, game),
-        );
+        await rename(resolve(builtGamesDir, game), resolve(outDir, game));
       }
       await rmdir(builtGamesDir);
     },
