@@ -74,7 +74,7 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
     }
 
     const [min, max] = ROOM_GAMES.get(game);
-    assert.deepEqual(manifest.modes, {
+    const expectedModes = {
       room: {
         players: { min, max },
         server: {
@@ -83,7 +83,9 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
           persistence: "durable",
         },
       },
-    });
+    };
+    if (game === "go") expectedModes.solo = {};
+    assert.deepEqual(manifest.modes, expectedModes);
     const main = await readFile(`games/${game}/main.js`, "utf8");
     assert.doesNotMatch(
       main,

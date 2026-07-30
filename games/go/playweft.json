@@ -15,12 +15,12 @@
     "locales": {
       "en": {
         "name": "Go",
-        "description": "Claim territory and capture stones on a configurable board.",
+        "description": "Play locally or online, claiming territory and capturing stones.",
         "category": "Strategy"
       },
       "zh-CN": {
         "name": "围棋",
-        "description": "选择棋盘与规则，围地、提子并通过计分决出胜负。",
+        "description": "支持本机轮流或双人房间对弈，围地、提子并通过计分决出胜负。",
         "category": "策略"
       }
     },
@@ -28,6 +28,7 @@
     "help": "./help.html"
   },
   "modes": {
+    "solo": {},
     "room": {
       "players": {
         "min": 2,

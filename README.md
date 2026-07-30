@@ -18,7 +18,7 @@ the Manifest before opening the game iframe.
 | Werewolf dealer | 6-12 | `http://localhost:5174/werewolf-dealer/` | `dist/werewolf-dealer/index.html` |
 | UNO | 2–4 | `http://localhost:5174/uno/` | `dist/uno/index.html` |
 | Sudoku | 1 | `http://localhost:5174/sudoku/` | `dist/sudoku/index.html` |
-| 围棋 | 2 | `http://localhost:5174/go/` | `dist/go/index.html` |
+| 围棋 | 1–2 | `http://localhost:5174/go/` | `dist/go/index.html` |
 | 五子棋 | 2 | `http://localhost:5174/gomoku/` | `dist/gomoku/index.html` |
 
 ## Run locally
@@ -42,6 +42,7 @@ a standalone game; paste a game's directory URL or its explicit
 use the platform-owned lobby; Texas Hold'em supports two to six seated players,
 斗地主 requires exactly three, the Werewolf dealer supports six to twelve, and
 UNO supports two to four.
+围棋同时支持双人房间与单终端黑白轮流落子的 Solo 模式。
 
 ## Verify and build
 
