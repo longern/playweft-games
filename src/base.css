@@ -15,6 +15,7 @@
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html,
@@ -59,6 +60,7 @@ a:focus-visible {
 .game-brand img {
   width: 42px;
   height: 42px;
+  border-radius: 4px;
 }
 
 .game-brand h1,

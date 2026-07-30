@@ -347,6 +347,33 @@ test("Go tracks each player's elapsed turn time", async () => {
   assert.equal(result.state.turnStartedAt, 7000);
 });
 
+test("Go lets either player resign and awards the game to the opponent", async () => {
+  const result = await runGo(`
+    state = setup({ players = { "black", "white" }, hostId = "black" })
+    state = on_action(state, {
+      type = "start", size = 9, rules = "chinese", komi = 6.5,
+      handicap = 0, blackMode = "player1"
+    }, { playerId = "black", actionAt = 1000 }).state
+    resigned = on_action(
+      state,
+      { type = "resign" },
+      { playerId = "white", actionAt = 4000 }
+    )
+    result = resigned
+  `);
+
+  assert.equal(result.accepted, true);
+  assert.equal(result.state.ended, true);
+  assert.equal(result.state.phase, "ended");
+  assert.equal(result.state.current, 0);
+  assert.equal(result.state.winner, "black");
+  assert.equal(result.state.winnerIndex, 1);
+  assert.equal(result.state.lastEvent.kind, "resigned");
+  assert.equal(result.state.lastEvent.playerIndex, 2);
+  assert.equal(result.state.timeUsed[0], 3000);
+  assert.equal(result.events[0].type, "resigned");
+});
+
 test("Go requires fixed black for handicap games and starts with white", async () => {
   const result = await runGo(`
     state = setup({ players = { "a", "b" }, hostId = "a" })

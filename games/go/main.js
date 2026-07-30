@@ -27,6 +27,7 @@ const elements = {
   connection: document.querySelector("#connection"),
   board: document.querySelector("#board"),
   boardShell: document.querySelector(".board-shell"),
+  confirmMove: document.querySelector("#confirm-move"),
   table: document.querySelector("#table-layout"),
   setupPanel: document.querySelector("#setup-panel"),
   setupForm: document.querySelector("#setup-form"),
@@ -48,6 +49,8 @@ const elements = {
   start: document.querySelector("#start-button"),
   startLabel: document.querySelector("#start-label"),
   pass: document.querySelector("#pass-button"),
+  resign: document.querySelector("#resign-button"),
+  resignLabel: document.querySelector("#resign-label"),
   rematch: document.querySelector("#rematch-button"),
   settings: document.querySelector("#settings-button"),
   settingsSummary: document.querySelector("#settings-summary"),
@@ -59,6 +62,19 @@ const elements = {
   ],
   playerTimes: [...document.querySelectorAll("[data-player-time]")],
 };
+const segmentNames = ["a", "b", "c", "d", "e", "f", "g"];
+const digitSegments = [
+  "abcdef",
+  "bc",
+  "abdeg",
+  "abcdg",
+  "bcfg",
+  "acdfg",
+  "acdefg",
+  "abc",
+  "abcdefg",
+  "abcdfg",
+];
 
 let playerId;
 let state;
@@ -72,9 +88,12 @@ let localMatchId;
 let localVersion = 0;
 const points = [];
 let boardSize = 0;
+let pendingMove;
+let lastPointerType = "";
 let setupCloseTimer;
 let historyCloseTimer;
 let historyClearTimer;
+let resignConfirmTimer;
 let serverTimeAtSync;
 let localTimeAtSync;
 
@@ -83,6 +102,7 @@ createIcons({
 });
 const clockTimer = window.setInterval(renderClocks, 1000);
 const historyStore = createGoHistoryStore();
+elements.playerTimes.forEach((element) => renderClockDigits(element, "00:00"));
 
 const preview = {
   players: ["preview-one", "preview-two"],
@@ -113,12 +133,15 @@ const preview = {
   round: 1,
 };
 
-const client = createPlayweftClient({
-  onReady: handleReady,
-  onState: handleState,
-  onActionResult: handleActionResult,
-  onError: handleError,
-});
+const isStandalone = window.parent === window;
+const client = isStandalone
+  ? undefined
+  : createPlayweftClient({
+      onReady: handleReady,
+      onState: handleState,
+      onActionResult: handleActionResult,
+      onError: handleError,
+    });
 
 function handleReady(message) {
   playMode = message.mode ?? "room";
@@ -142,6 +165,7 @@ function handleReady(message) {
 }
 
 function handleState(message) {
+  clearPendingMove();
   playerId = playMode === "solo" ? "solo-player-1" : message.playerId;
   state = message.state;
   historyStore.save(updateGoHistory(historyStore.load(), message));
@@ -229,17 +253,37 @@ function handleError(error, code, requestId) {
 window.addEventListener("pagehide", () => {
   window.clearInterval(clockTimer);
   window.clearTimeout(historyClearTimer);
-  client.destroy();
+  window.clearTimeout(resignConfirmTimer);
+  client?.destroy();
+});
+document.addEventListener("pointerdown", (event) => {
+  if (
+    pendingMove &&
+    !elements.board.contains(event.target) &&
+    !elements.confirmMove.contains(event.target)
+  ) {
+    clearPendingMove();
+  }
+});
+window.addEventListener("resize", positionConfirmMove);
+elements.confirmMove.addEventListener("click", () => {
+  if (!pendingMove) return;
+  const move = pendingMove;
+  clearPendingMove();
+  sendAction({ type: "play", row: move.row, column: move.column });
 });
 elements.setupForm.addEventListener("submit", (event) => {
   event.preventDefault();
   clearSetupFeedback();
   queuedSettings = undefined;
   draftSettings = undefined;
-  const sent = sendAction({
-    type: "start",
-    ...readSetupSettings(),
-  }, false);
+  const sent = sendAction(
+    {
+      type: "start",
+      ...readSetupSettings(),
+    },
+    false,
+  );
   if (!sent) {
     showSetupFeedback("尚未连接 Playweft 房间", "error");
     return;
@@ -253,8 +297,23 @@ elements.setupForm.addEventListener("input", (event) => {
   syncSetupSettings();
 });
 elements.pass.addEventListener("click", () => sendAction({ type: "pass" }));
-elements.rematch.addEventListener("click", () => sendAction({ type: "rematch" }));
-elements.settings.addEventListener("click", () => sendAction({ type: "configure" }));
+elements.resign.addEventListener("click", () => {
+  if (elements.resign.dataset.confirming === "true") {
+    resetResignConfirmation();
+    sendAction({ type: "resign" });
+    return;
+  }
+  elements.resign.dataset.confirming = "true";
+  elements.resignLabel.textContent = "确认认输";
+  window.clearTimeout(resignConfirmTimer);
+  resignConfirmTimer = window.setTimeout(resetResignConfirmation, 3000);
+});
+elements.rematch.addEventListener("click", () =>
+  sendAction({ type: "rematch" }),
+);
+elements.settings.addEventListener("click", () =>
+  sendAction({ type: "configure" }),
+);
 elements.historyOpen.addEventListener("click", () => setHistoryOpen(true));
 elements.historyClose.addEventListener("click", () => setHistoryOpen(false));
 elements.historyPanel.addEventListener("click", (event) => {
@@ -281,7 +340,11 @@ window.addEventListener("keydown", (event) => {
     setHistoryOpen(false);
   }
 });
-render(preview);
+if (isStandalone) {
+  handleReady({ mode: "solo" });
+} else {
+  render(preview);
+}
 
 function buildBoard(size) {
   elements.board.replaceChildren();
@@ -303,23 +366,37 @@ function buildBoard(size) {
       point.setAttribute("role", "gridcell");
       point.setAttribute("aria-label", `第 ${row} 行，第 ${column} 列`);
       point.disabled = true;
-      if (
-        star.includes(row) &&
-        star.includes(column)
-      ) {
+      if (star.includes(row) && star.includes(column)) {
         point.classList.add("is-star");
       }
-      point.addEventListener("click", () =>
-        sendAction({ type: "play", row, column }),
-      );
+      point.addEventListener("pointerdown", (event) => {
+        lastPointerType = event.pointerType;
+      });
+      point.addEventListener("click", (event) => {
+        if (requiresMoveConfirmation(event)) {
+          selectPendingMove(row, column, point);
+          return;
+        }
+        clearPendingMove();
+        sendAction({ type: "play", row, column });
+      });
       elements.board.append(point);
       points.push(point);
     }
   }
 }
 
+function requiresMoveConfirmation(event) {
+  if (event.detail === 0) return false;
+  return (
+    lastPointerType === "touch" ||
+    window.matchMedia("(pointer: coarse)").matches
+  );
+}
+
 function sendAction(action, renderPendingState = true) {
   if (pendingAction || !state) return;
+  clearPendingMove();
   const requestId = dispatchAction(action);
   if (!requestId) {
     setConnection("error", "尚未连接 Playweft 平台");
@@ -331,7 +408,7 @@ function sendAction(action, renderPendingState = true) {
 }
 
 function dispatchAction(action) {
-  if (playMode !== "solo") return client.sendAction(action);
+  if (playMode !== "solo") return client?.sendAction(action);
   const requestId = crypto.randomUUID();
   window.queueMicrotask(() => {
     const result = applySoloGoAction(state, action, { now: Date.now() });
@@ -357,12 +434,71 @@ function dispatchAction(action) {
   return requestId;
 }
 
+function selectPendingMove(row, column, point) {
+  if (pendingAction || point.disabled || point.dataset.piece !== "0") return;
+  pendingMove?.point.classList.remove("is-pending-move");
+  pendingMove?.point.removeAttribute("aria-pressed");
+  pendingMove = { row, column, point };
+  point.classList.add("is-pending-move");
+  point.setAttribute("aria-pressed", "true");
+  point.blur();
+  elements.confirmMove.hidden = false;
+  elements.confirmMove.setAttribute(
+    "aria-label",
+    `在第 ${row} 行，第 ${column} 列落子`,
+  );
+  positionConfirmMove();
+}
+
+function clearPendingMove() {
+  pendingMove?.point.classList.remove("is-pending-move");
+  pendingMove?.point.removeAttribute("aria-pressed");
+  pendingMove = undefined;
+  elements.confirmMove.hidden = true;
+  elements.confirmMove.removeAttribute("aria-label");
+}
+
+function positionConfirmMove() {
+  if (!pendingMove || elements.confirmMove.hidden) return;
+  const point = pendingMove.point;
+  const button = elements.confirmMove;
+  const boardWidth = elements.board.clientWidth;
+  const boardHeight = elements.board.clientHeight;
+  const horizontalPadding = button.offsetWidth / 2 + 8;
+  const verticalPadding = 8;
+  const stoneRadius = point.offsetWidth / 2;
+  const gap = 30;
+  const left = Math.min(
+    boardWidth - horizontalPadding,
+    Math.max(horizontalPadding, point.offsetLeft),
+  );
+  let top = point.offsetTop - stoneRadius - gap - button.offsetHeight;
+  if (top < verticalPadding) {
+    top = point.offsetTop + stoneRadius + gap;
+  }
+  top = Math.min(
+    boardHeight - button.offsetHeight - verticalPadding,
+    Math.max(verticalPadding, top),
+  );
+  button.style.left = `${left}px`;
+  button.style.top = `${top}px`;
+}
+
+function setPointClasses(point, piece, playable = false, previewColor = 0) {
+  const stoneColor = piece || (playable ? previewColor : 0);
+  point.classList.toggle("has-stone", piece !== 0);
+  point.classList.toggle("piece-black", stoneColor === 1);
+  point.classList.toggle("piece-white", stoneColor === 2);
+  point.classList.toggle("is-playable", playable);
+}
+
 function render(nextState) {
   const players = Array.isArray(nextState.players) ? nextState.players : [];
   const ownIndex = players.indexOf(playerId);
   const isSetup = nextState.phase === "setup";
   const actionPending = Boolean(pendingAction);
-  const size = Number(nextState.settings?.size) || nextState.board?.length || 19;
+  const size =
+    Number(nextState.settings?.size) || nextState.board?.length || 19;
   if (boardSize !== size) buildBoard(size);
 
   if (isSetup) {
@@ -379,19 +515,27 @@ function render(nextState) {
   const whiteIndex = blackIndex === 0 ? 1 : 0;
   const ended = Boolean(nextState.ended);
   const isScoring = nextState.phase === "scoring";
-  elements.board.dataset.turnColor =
-    currentIndex === blackIndex ? "black" : "white";
+  const previewColor = currentIndex === blackIndex ? 1 : 2;
   const canAct =
     Boolean(state) &&
     !ended &&
     !isScoring &&
     (playMode === "solo" || ownIndex === currentIndex) &&
     !actionPending;
+  const canResign =
+    Boolean(state) &&
+    !ended &&
+    !isScoring &&
+    (playMode === "solo" || ownIndex >= 0) &&
+    !actionPending;
 
   elements.round.textContent = String(nextState.round ?? 1);
   elements.moveCount.textContent = `已落 ${nextState.moves ?? 0} 子`;
   elements.pass.disabled = !canAct;
   elements.pass.hidden = ended || isScoring;
+  elements.resign.disabled = !canResign;
+  elements.resign.hidden = ended || isScoring;
+  if (!canResign) resetResignConfirmation();
   elements.rematch.hidden = !state || !ended || ownIndex < 0;
   elements.rematch.disabled = actionPending;
   elements.settings.hidden = !state || !ended || ownIndex < 0;
@@ -405,19 +549,32 @@ function render(nextState) {
   ];
   colorPlayers.forEach(({ playerIndex, label, color }, panelIndex) => {
     const panel = elements.players[panelIndex];
-    const name = playMode === "solo"
-      ? `${label} · 本机`
-      : playerIndex === ownIndex
-        ? `${label} · 你`
-        : `${label} · 玩家 ${playerIndex + 1}`;
+    const isSelf =
+      playMode === "solo"
+        ? color === 1
+        : ownIndex >= 0
+          ? playerIndex === ownIndex
+          : color === 1;
+    const name =
+      playMode === "solo"
+        ? label
+        : playerIndex === ownIndex
+          ? `${label} · 你`
+          : `${label} · 玩家 ${playerIndex + 1}`;
     panel.querySelector("[data-player-name]").textContent = name;
+    panel.classList.toggle("is-self", isSelf);
+    panel.classList.toggle("is-opponent", !isSelf);
     const detail = panel.querySelector("[data-player-detail]");
-    if (ended && nextState.scores) {
-      const score = color === 1 ? nextState.scores.black : nextState.scores.white;
-      detail.textContent = `${formatScore(score)} 目${color === 2 ? " · 含贴 6.5" : ""}`;
+    if (ended && nextState.lastEvent?.kind === "resigned") {
+      detail.textContent =
+        Number(nextState.winnerIndex) - 1 === playerIndex ? "获胜" : "已认输";
+    } else if (ended && nextState.scores) {
+      const score =
+        color === 1 ? nextState.scores.black : nextState.scores.white;
+      detail.textContent = `${formatScore(score)} 目`;
     } else {
       const captures = Number(nextState.captures?.[playerIndex]) || 0;
-      detail.textContent = `提子 ${captures}${color === 2 ? " · 贴 6.5 目" : ""}`;
+      detail.textContent = `提子 ${captures}`;
     }
     panel.classList.toggle(
       "is-current",
@@ -433,14 +590,10 @@ function render(nextState) {
     for (let column = 0; column < size; column += 1) {
       const point = points[row * size + column];
       const value = Number(nextState.board?.[row]?.[column]) || 0;
+      const playable = canAct && value === 0;
       point.dataset.piece = String(value);
-      point.disabled = !canAct || value !== 0;
-      point.classList.toggle(
-        "is-last",
-        value !== 0 &&
-          Number(nextState.lastMove?.row) === row + 1 &&
-          Number(nextState.lastMove?.column) === column + 1,
-      );
+      point.disabled = !playable;
+      setPointClasses(point, value, playable, previewColor);
       const pieceName = value === 1 ? "黑子" : value === 2 ? "白子" : "空位";
       point.setAttribute(
         "aria-label",
@@ -460,9 +613,25 @@ function render(nextState) {
   }
   if (ended) {
     const left = nextState.lastEvent?.kind === "player_left";
-    setConnection("live", left ? "对局提前结束" : "对局已结束");
+    const resigned = nextState.lastEvent?.kind === "resigned";
+    if (resigned) {
+      const resigner =
+        Number(nextState.lastEvent.playerIndex) - 1 === blackIndex
+          ? "黑方"
+          : "白方";
+      setConnection("live", `${resigner}认输，对局结束`);
+    } else {
+      setConnection("live", left ? "对局提前结束" : "对局已结束");
+    }
     return;
   }
+}
+
+function resetResignConfirmation() {
+  window.clearTimeout(resignConfirmTimer);
+  resignConfirmTimer = undefined;
+  elements.resign.dataset.confirming = "false";
+  elements.resignLabel.textContent = "认输";
 }
 
 function formatScore(score) {
@@ -511,11 +680,10 @@ function renderSetupBoard(nextState, size) {
   for (let row = 0; row < size; row += 1) {
     for (let column = 0; column < size; column += 1) {
       const point = points[row * size + column];
-      point.dataset.piece = String(
-        Number(nextState.board?.[row]?.[column]) || 0,
-      );
+      const value = Number(nextState.board?.[row]?.[column]) || 0;
+      point.dataset.piece = String(value);
       point.disabled = true;
-      point.classList.remove("is-last");
+      setPointClasses(point, value);
     }
   }
 }
@@ -605,8 +773,7 @@ function renderHistory() {
     main.className = "history-entry-main";
     const title = document.createElement("p");
     title.className = "history-entry-title";
-    title.textContent =
-      `第 ${record.round} 局 · 黑方 ${record.blackPlayer} 对 白方 ${record.whitePlayer}`;
+    title.textContent = `第 ${record.round} 局 · 黑方 ${record.blackPlayer} 对 白方 ${record.whitePlayer}`;
     const meta = document.createElement("p");
     meta.className = "history-entry-meta";
     const settings = record.settings ?? {};
@@ -621,7 +788,9 @@ function renderHistory() {
       settings.rules === "japanese" ? "日本规则" : "中国规则",
       `${record.moves?.length ?? 0} 手`,
       record.partial ? "部分记录" : "",
-    ].filter(Boolean).join(" · ");
+    ]
+      .filter(Boolean)
+      .join(" · ");
     main.append(title, meta);
 
     const result = document.createElement("p");
@@ -643,7 +812,9 @@ function exportHistoryRecord(recordId) {
   const record = historyStore.load().find((entry) => entry.id === recordId);
   if (!record) return;
   const content = goRecordToSgf(record);
-  const blob = new Blob([content], { type: "application/x-go-sgf;charset=utf-8" });
+  const blob = new Blob([content], {
+    type: "application/x-go-sgf;charset=utf-8",
+  });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   const date = new Date(record.createdAt).toISOString().slice(0, 10);
@@ -657,7 +828,8 @@ function showSetupFeedback(message, mode) {
   elements.setupFeedback.hidden = false;
   elements.setupFeedback.dataset.mode = mode;
   elements.setupFeedback.textContent = message;
-  elements.startLabel.textContent = mode === "pending" ? "正在开始…" : "开始对局";
+  elements.startLabel.textContent =
+    mode === "pending" ? "正在开始…" : "开始对局";
 }
 
 function clearSetupFeedback() {
@@ -669,7 +841,9 @@ function clearSetupFeedback() {
 
 function updateHandicapControls() {
   const hasHandicap = Number(elements.handicapSetting.value) > 0;
-  const randomOption = elements.blackSetting.querySelector('option[value="random"]');
+  const randomOption = elements.blackSetting.querySelector(
+    'option[value="random"]',
+  );
   randomOption.disabled = hasHandicap;
   if (hasHandicap && elements.blackSetting.value === "random") {
     elements.blackSetting.value = "player1";
@@ -752,11 +926,14 @@ function submitScoreIfNeeded() {
 
   const round = Number(state.scoreRound);
   scoreRequestRound = round;
-  const sent = sendAction({
-    type: "score",
-    scoreRound: round,
-    score: calculateGoScore(state),
-  }, false);
+  const sent = sendAction(
+    {
+      type: "score",
+      scoreRound: round,
+      score: calculateGoScore(state),
+    },
+    false,
+  );
   if (!sent) {
     scoreRequestRound = undefined;
     return;
@@ -784,13 +961,53 @@ function renderClocks() {
     if (!state.ended && playerIndex === currentIndex) {
       milliseconds += Math.max(
         0,
-        estimatedServerTime - (Number(state.turnStartedAt) || estimatedServerTime),
+        estimatedServerTime -
+          (Number(state.turnStartedAt) || estimatedServerTime),
       );
     }
     const seconds = Math.floor(milliseconds / 1000);
-    elements.playerTimes[colorIndex].textContent = formatDuration(seconds);
-    elements.playerTimes[colorIndex].dateTime = `PT${seconds}S`;
+    const clock = elements.playerTimes[colorIndex];
+    renderClockDigits(clock, formatDuration(seconds));
+    clock.dateTime = `PT${seconds}S`;
   });
+}
+
+function renderClockDigits(element, value) {
+  if (
+    element.dataset.clockValue === value &&
+    element.querySelector(".segment-display")
+  ) {
+    return;
+  }
+
+  const display = document.createElement("span");
+  display.className = "segment-display";
+  display.setAttribute("aria-hidden", "true");
+
+  for (const character of value) {
+    const part = document.createElement("span");
+    if (character === ":") {
+      part.className = "segment-colon";
+    } else {
+      part.className = "segment-digit";
+      const litSegments = digitSegments[Number(character)] ?? "";
+      for (const name of segmentNames) {
+        const segment = document.createElement("span");
+        segment.className = `segment segment-${name}`;
+        segment.classList.toggle("is-lit", litSegments.includes(name));
+        part.append(segment);
+      }
+    }
+    display.append(part);
+  }
+
+  const text = document.createElement("span");
+  text.className = "clock-text";
+  text.textContent = value;
+
+  element.replaceChildren(display, text);
+  element.dataset.clockValue = value;
+  element.setAttribute("aria-label", value);
 }
 
 function formatDuration(totalSeconds) {
@@ -804,7 +1021,8 @@ function formatDuration(totalSeconds) {
 
 function settingSummary(settings = {}) {
   const rules = settings.rules === "japanese" ? "日本规则" : "中国规则";
-  const handicap = Number(settings.handicap) > 0 ? ` · 让 ${settings.handicap} 子` : "";
+  const handicap =
+    Number(settings.handicap) > 0 ? ` · 让 ${settings.handicap} 子` : "";
   return `${settings.size ?? 19} × ${settings.size ?? 19} · ${rules} · 贴 ${formatScore(settings.komi)} 目${handicap}`;
 }
 

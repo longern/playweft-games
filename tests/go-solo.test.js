@@ -91,6 +91,25 @@ test("Go solo mode scores after two passes on the same terminal", () => {
   assert.equal(result.state.winnerIndex, 2);
 });
 
+test("Go solo mode lets the current color resign", () => {
+  const state = startSolo();
+  const result = applySoloGoAction(
+    state,
+    { type: "resign" },
+    { now: 3500 },
+  );
+
+  assert.equal(result.accepted, true);
+  assert.equal(result.state.ended, true);
+  assert.equal(result.state.phase, "ended");
+  assert.equal(result.state.current, 0);
+  assert.equal(result.state.winnerIndex, 2);
+  assert.equal(result.state.lastEvent.kind, "resigned");
+  assert.equal(result.state.lastEvent.playerIndex, 1);
+  assert.equal(result.state.timeUsed[0], 2500);
+  assert.equal(result.events[0].type, "resigned");
+});
+
 test("Go solo mode keeps settings for rematches and returns them to setup", () => {
   let state = startSolo({
     size: 13,

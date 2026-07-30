@@ -90,3 +90,21 @@ test("Go history stores the confirmed result", () => {
   assert.equal(historyResultLabel(records[0]), "白方胜 6.5 目");
   assert.match(goRecordToSgf(records[0]), /RE\[W\+6.5\]/);
 });
+
+test("Go history stores resignation as an SGF resignation result", () => {
+  const records = updateGoHistory([], {
+    matchId: "match-resigned",
+    version: 3,
+    state: gameState({
+      phase: "ended",
+      ended: true,
+      winner: "white",
+      winnerIndex: 2,
+      lastEvent: { kind: "resigned", playerIndex: 1 },
+    }),
+    events: [{ type: "resigned", player: "black", winner: "white" }],
+  });
+
+  assert.equal(historyResultLabel(records[0]), "白方胜");
+  assert.match(goRecordToSgf(records[0]), /RE\[W\+R\]/);
+});

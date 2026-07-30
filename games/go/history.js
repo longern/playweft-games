@@ -104,7 +104,11 @@ export function updateGoHistory(records, snapshot, recordedAt = Date.now()) {
       winnerColor: Number(state.winnerIndex) - 1 === blackIndex ? "B" : "W",
       black: Number(state.scores?.black) || 0,
       white: Number(state.scores?.white) || 0,
-      reason: state.lastEvent?.kind === "player_left" ? "resign" : "score",
+      reason:
+        state.lastEvent?.kind === "player_left" ||
+        state.lastEvent?.kind === "resigned"
+          ? "resign"
+          : "score",
     };
   }
 

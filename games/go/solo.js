@@ -59,6 +59,28 @@ export function applySoloGoAction(
     );
   }
 
+  if (action.type === "resign") {
+    if (state.ended || state.phase !== "playing") return rejected("GAME_OVER");
+    const playerIndex = state.current - 1;
+    const actor = state.players[playerIndex];
+    recordTurnTime(state, playerIndex, now);
+    state.ended = true;
+    state.phase = "ended";
+    state.current = 0;
+    state.winnerIndex = ((playerIndex + 1) % state.players.length) + 1;
+    state.winner = state.players[state.winnerIndex - 1];
+    state.lastEvent = {
+      kind: "resigned",
+      playerIndex: playerIndex + 1,
+      captured: 0,
+    };
+    return accepted(state, [{
+      type: "resigned",
+      player: actor,
+      winner: state.winner,
+    }]);
+  }
+
   if (state.phase === "scoring") {
     if (action.type !== "score") return rejected("SCORING_REQUIRED");
     const scores = calculateGoScore(state);

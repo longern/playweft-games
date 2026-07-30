@@ -441,6 +441,26 @@ function on_action(state, action, context)
     }
   end
 
+  if action.type == "resign" then
+    if state.ended then return rejected(state, "game_over") end
+    if state.phase == "playing" and tonumber(state.current) and state.current > 0 then
+      record_turn_time(state, state.current, context)
+    end
+    state.ended = true
+    state.phase = "ended"
+    state.current = 0
+    state.winnerIndex = (index % #state.players) + 1
+    state.winner = state.players[state.winnerIndex]
+    state.lastEvent = { kind = "resigned", playerIndex = index, captured = 0 }
+    return {
+      accepted = true,
+      state = state,
+      events = {
+        { type = "resigned", player = actor_id, winner = state.winner },
+      },
+    }
+  end
+
   if state.phase == "scoring" then
     if action.type ~= "score" then return rejected(state, "scoring_required") end
     if tonumber(action.scoreRound) ~= tonumber(state.scoreRound) then

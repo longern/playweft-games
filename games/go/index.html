@@ -141,20 +141,27 @@
               <strong data-player-name>黑方 · 玩家 1</strong>
               <span data-player-detail>提子 0</span>
             </div>
-            <time data-player-time datetime="PT0S">00:00</time>
+            <span class="clock-housing">
+              <time data-player-time datetime="PT0S">00:00</time>
+            </span>
           </div>
           <div id="white-player" class="player-card">
             <span class="stone-swatch stone-white" aria-hidden="true"></span>
             <div>
               <strong data-player-name>白方 · 玩家 2</strong>
-              <span data-player-detail>提子 0 · 贴 6.5 目</span>
+              <span data-player-detail>提子 0</span>
             </div>
-            <time data-player-time datetime="PT0S">00:00</time>
+            <span class="clock-housing">
+              <time data-player-time datetime="PT0S">00:00</time>
+            </span>
           </div>
         </aside>
 
         <section class="board-shell" aria-label="19 × 19 围棋棋盘">
           <div id="board" class="go-board" role="grid"></div>
+          <button id="confirm-move" class="confirm-move" type="button" hidden>
+            落子
+          </button>
         </section>
 
         <aside class="action-panel">
@@ -163,9 +170,14 @@
             <span id="move-count">已落 0 子</span>
           </div>
           <p id="settings-summary" class="settings-summary">19 × 19 · 中国规则 · 贴 6.5 目</p>
-          <button id="pass-button" class="pass-action" type="button" disabled>
-            <span class="icon-button-content"><i data-lucide="flag"></i>停一手</span>
-          </button>
+          <div class="turn-actions">
+            <button id="pass-button" class="pass-action" type="button" disabled>
+              <span class="icon-button-content"><i data-lucide="flag"></i>停一手</span>
+            </button>
+            <button id="resign-button" class="resign-action" type="button" disabled>
+              <span id="resign-label">认输</span>
+            </button>
+          </div>
           <button id="rematch-button" class="rematch-action" type="button" hidden>
             <span class="icon-button-content"><i data-lucide="rotate-ccw"></i>再来一局</span>
           </button>
