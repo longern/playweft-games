@@ -3,9 +3,15 @@ local DEFAULT_KOMI = 6.5
 local DIRECTIONS = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } }
 
 local function setup_players(context)
-  local players = {}
-  for _, player in ipairs(context.players) do table.insert(players, player.id) end
-  return players
+  local players, player_names = {}, {}
+  for _, player in ipairs(context.players) do
+    table.insert(players, player.id)
+    table.insert(
+      player_names,
+      type(player.name) == "string" and player.name or ""
+    )
+  end
+  return players, player_names
 end
 
 local function player_index(state, player_id)
@@ -267,13 +273,22 @@ local function same_score(left, right)
   return true
 end
 
-local function new_round(players, round, settings, seed, host_id, started_at)
+local function new_round(
+  players,
+  player_names,
+  round,
+  settings,
+  seed,
+  host_id,
+  started_at
+)
   local black_index, updated_seed = choose_black(settings, seed)
   local board = empty_board(settings.size)
   place_handicap(board, settings.handicap)
   local white_index = (black_index % #players) + 1
   return {
     players = players,
+    playerNames = player_names,
     hostId = host_id,
     phase = "playing",
     settings = settings,
@@ -314,9 +329,10 @@ local function new_round(players, round, settings, seed, host_id, started_at)
   }
 end
 
-local function setup_state(players, round, settings, seed, host_id)
+local function setup_state(players, player_names, round, settings, seed, host_id)
   return {
     players = players,
+    playerNames = player_names,
     hostId = host_id,
     phase = "setup",
     settings = settings,
@@ -349,7 +365,7 @@ local function setup_state(players, round, settings, seed, host_id)
 end
 
 function setup(context)
-  local players = setup_players(context)
+  local players, player_names = setup_players(context)
   local settings = {
     size = DEFAULT_SIZE,
     rules = "chinese",
@@ -359,6 +375,7 @@ function setup(context)
   }
   return setup_state(
     players,
+    player_names,
     1,
     settings,
     math.floor(math.abs(context.match.randomSeed or 1)),
@@ -379,6 +396,7 @@ function on_action(state, action, context)
       if not settings then return rejected(state, reason) end
       local next_state = setup_state(
         state.players,
+        state.playerNames,
         state.round or 1,
         settings,
         state.seed,
@@ -395,6 +413,7 @@ function on_action(state, action, context)
     if not settings then return rejected(state, reason) end
     local next_state = new_round(
       state.players,
+      state.playerNames,
       state.round or 1,
       settings,
       state.seed,
@@ -412,6 +431,7 @@ function on_action(state, action, context)
     if not state.ended then return rejected(state, "game_not_over") end
     local next_state = new_round(
       state.players,
+      state.playerNames,
       (state.round or 1) + 1,
       state.settings,
       state.seed,
@@ -429,6 +449,7 @@ function on_action(state, action, context)
     if not state.ended then return rejected(state, "game_not_over") end
     local next_state = setup_state(
       state.players,
+      state.playerNames,
       (state.round or 1) + 1,
       state.settings,
       state.seed,
@@ -527,6 +548,7 @@ function on_action(state, action, context)
 
   if action.type == "pass" then
     record_turn_time(state, index, context)
+    state.moves = (state.moves or 0) + 1
     state.consecutivePasses = state.consecutivePasses + 1
     state.lastMove = { row = 0, column = 0 }
     state.lastEvent = { kind = "pass", playerIndex = index, captured = 0 }

@@ -71,6 +71,49 @@ test("Go defaults to a 19 × 19 board", async () => {
   });
 });
 
+test("Go preserves optional player names for the game UI", async () => {
+  const result = await runGo(`
+    state = setup({
+      protocolVersion = 1,
+      players = {
+        { id = "host", name = "Alice", seat = 1 },
+        { id = "guest", name = "Bob", seat = 2 },
+      },
+      match = {
+        id = "match_names",
+        ownerId = "host",
+        startedAt = 0,
+        randomSeed = 1,
+      },
+    })
+    setup_names = state.playerNames
+    state = on_action(state, {
+      type = "start", size = 9, rules = "chinese", komi = 6.5,
+      handicap = 0, blackMode = "player2"
+    }, {
+      protocolVersion = 1,
+      matchId = "match_names",
+      actionId = "action_start",
+      actionAt = 100,
+      version = 0,
+      actor = { id = "host", role = "player", seat = 1, name = "Alice", isOwner = true },
+    }).state
+    result = {
+      setupNames = setup_names,
+      names = state.playerNames,
+      blackName = state.playerNames[state.blackIndex],
+      whiteName = state.playerNames[(state.blackIndex % #state.players) + 1],
+    }
+  `);
+
+  assert.deepEqual(result, {
+    setupNames: ["Alice", "Bob"],
+    names: ["Alice", "Bob"],
+    blackName: "Bob",
+    whiteName: "Alice",
+  });
+});
+
 test("Go captures a surrounded group and alternates turns", async () => {
   const result = await runGo(`
     state = setup({ players = { "black", "white" } })
@@ -152,6 +195,7 @@ test("Go ends only after both players submit matching scores", async () => {
     first = on_action(state, { type = "pass" }, { playerId = "black" })
     scoring = on_action(first.state, { type = "pass" }, { playerId = "white" })
     scoring_phase = scoring.state.phase
+    scoring_moves = scoring.state.moves
     scoring_ended = scoring.state.ended
     scoring_event = scoring.events[1].type
     proposal = {
@@ -171,6 +215,7 @@ test("Go ends only after both players submit matching scores", async () => {
     }, { playerId = "white" })
     result = {
       scoringPhase = scoring_phase,
+      scoringMoves = scoring_moves,
       scoringEnded = scoring_ended,
       scoringEvent = scoring_event,
       firstEnded = first_ended,
@@ -181,6 +226,7 @@ test("Go ends only after both players submit matching scores", async () => {
   `);
 
   assert.equal(result.scoringPhase, "scoring");
+  assert.equal(result.scoringMoves, 2);
   assert.equal(result.scoringEnded, false);
   assert.equal(result.scoringEvent, "scoring_started");
   assert.equal(result.firstEnded, false);
@@ -248,7 +294,10 @@ test("Go preserves board, rule, komi, colour, and handicap settings for a rematc
   assert.equal(result.state.settings.rules, "japanese");
   assert.equal(result.state.settings.komi, 0.5);
   assert.equal(result.state.settings.handicap, 2);
-  assert.equal(result.state.board.flat().filter((point) => point === 1).length, 2);
+  assert.equal(
+    result.state.board.flat().filter((point) => point === 1).length,
+    2,
+  );
   assert.equal(result.state.round, 2);
   assert.equal(result.events[0].type, "rematched");
 });

@@ -103,6 +103,7 @@ export function applySoloGoAction(
 
   if (action.type === "pass") {
     recordTurnTime(state, playerIndex, now);
+    state.moves += 1;
     state.consecutivePasses += 1;
     state.lastMove = { row: 0, column: 0 };
     state.lastEvent = {

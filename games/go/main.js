@@ -22,6 +22,9 @@ import {
 import { createPlayweftClient } from "../../src/playweft-client.js";
 import "../../src/base.css";
 import "./styles.css";
+import tableTextureUrl from "./assets/table-texture-plywood.webp?url";
+
+scheduleTableTexture();
 
 const elements = {
   connection: document.querySelector("#connection"),
@@ -54,8 +57,7 @@ const elements = {
   rematch: document.querySelector("#rematch-button"),
   settings: document.querySelector("#settings-button"),
   settingsSummary: document.querySelector("#settings-summary"),
-  round: document.querySelector("#round-number"),
-  moveCount: document.querySelector("#move-count"),
+  moveNumber: document.querySelector("#move-number"),
   players: [
     document.querySelector("#black-player"),
     document.querySelector("#white-player"),
@@ -75,6 +77,28 @@ const digitSegments = [
   "abcdefg",
   "abcdfg",
 ];
+
+function scheduleTableTexture() {
+  const applyTexture = () => {
+    document.body.style.setProperty(
+      "--table-texture-image",
+      `url("${tableTextureUrl}")`,
+    );
+  };
+  const scheduleWhenIdle = () => {
+    if ("requestIdleCallback" in window) {
+      window.requestIdleCallback(applyTexture, { timeout: 1500 });
+      return;
+    }
+    window.setTimeout(applyTexture, 0);
+  };
+
+  if (document.readyState === "complete") {
+    scheduleWhenIdle();
+  } else {
+    window.addEventListener("load", scheduleWhenIdle, { once: true });
+  }
+}
 
 let playerId;
 let state;
@@ -266,11 +290,19 @@ document.addEventListener("pointerdown", (event) => {
   }
 });
 window.addEventListener("resize", positionConfirmMove);
+window.addEventListener("scroll", positionConfirmMove, { passive: true });
+window.visualViewport?.addEventListener("resize", positionConfirmMove);
+window.visualViewport?.addEventListener("scroll", positionConfirmMove);
 elements.confirmMove.addEventListener("click", () => {
   if (!pendingMove) return;
   const move = pendingMove;
   clearPendingMove();
   sendAction({ type: "play", row: move.row, column: move.column });
+});
+elements.confirmMove.addEventListener("animationend", (event) => {
+  if (event.animationName !== "confirm-move-out" || pendingMove) return;
+  elements.confirmMove.hidden = true;
+  elements.confirmMove.classList.remove("is-exiting");
 });
 elements.setupForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -374,7 +406,7 @@ function buildBoard(size) {
       });
       point.addEventListener("click", (event) => {
         if (requiresMoveConfirmation(event)) {
-          selectPendingMove(row, column, point);
+          selectPendingMove(row, column, point, event);
           return;
         }
         clearPendingMove();
@@ -434,14 +466,22 @@ function dispatchAction(action) {
   return requestId;
 }
 
-function selectPendingMove(row, column, point) {
+function selectPendingMove(row, column, point, event) {
   if (pendingAction || point.disabled || point.dataset.piece !== "0") return;
   pendingMove?.point.classList.remove("is-pending-move");
   pendingMove?.point.removeAttribute("aria-pressed");
-  pendingMove = { row, column, point };
+  const pointRect = point.getBoundingClientRect();
+  pendingMove = {
+    row,
+    column,
+    point,
+    pointerOffsetX: event.clientX - (pointRect.left + pointRect.width / 2),
+    pointerOffsetY: event.clientY - (pointRect.top + pointRect.height / 2),
+  };
   point.classList.add("is-pending-move");
   point.setAttribute("aria-pressed", "true");
   point.blur();
+  elements.confirmMove.classList.remove("is-exiting");
   elements.confirmMove.hidden = false;
   elements.confirmMove.setAttribute(
     "aria-label",
@@ -451,45 +491,64 @@ function selectPendingMove(row, column, point) {
 }
 
 function clearPendingMove() {
+  const shouldAnimate = pendingMove && !elements.confirmMove.hidden;
   pendingMove?.point.classList.remove("is-pending-move");
   pendingMove?.point.removeAttribute("aria-pressed");
   pendingMove = undefined;
-  elements.confirmMove.hidden = true;
   elements.confirmMove.removeAttribute("aria-label");
+  if (shouldAnimate) {
+    elements.confirmMove.classList.add("is-exiting");
+  }
 }
 
 function positionConfirmMove() {
   if (!pendingMove || elements.confirmMove.hidden) return;
   const point = pendingMove.point;
   const button = elements.confirmMove;
-  const boardWidth = elements.board.clientWidth;
-  const boardHeight = elements.board.clientHeight;
-  const horizontalPadding = button.offsetWidth / 2 + 8;
-  const verticalPadding = 8;
-  const stoneRadius = point.offsetWidth / 2;
-  const gap = 30;
+  const pointRect = point.getBoundingClientRect();
+  const viewport = window.visualViewport;
+  const viewportLeft = viewport?.offsetLeft ?? 0;
+  const viewportTop = viewport?.offsetTop ?? 0;
+  const viewportWidth = viewport?.width ?? document.documentElement.clientWidth;
+  const viewportHeight =
+    viewport?.height ?? document.documentElement.clientHeight;
+  const viewportRight = viewportLeft + viewportWidth;
+  const viewportBottom = viewportTop + viewportHeight;
+  const safeInset = 8;
+  const touchClearance = Math.max(48, pointRect.width / 2 + 30);
+  const anchorX =
+    pointRect.left + pointRect.width / 2 + pendingMove.pointerOffsetX;
+  const anchorY =
+    pointRect.top + pointRect.height / 2 + pendingMove.pointerOffsetY;
+  const horizontalPadding = button.offsetWidth / 2 + safeInset;
   const left = Math.min(
-    boardWidth - horizontalPadding,
-    Math.max(horizontalPadding, point.offsetLeft),
+    viewportRight - horizontalPadding,
+    Math.max(viewportLeft + horizontalPadding, anchorX),
   );
-  let top = point.offsetTop - stoneRadius - gap - button.offsetHeight;
-  if (top < verticalPadding) {
-    top = point.offsetTop + stoneRadius + gap;
-  }
-  top = Math.min(
-    boardHeight - button.offsetHeight - verticalPadding,
-    Math.max(verticalPadding, top),
+  const top = Math.min(
+    viewportBottom - button.offsetHeight - safeInset,
+    Math.max(
+      viewportTop + safeInset,
+      anchorY - touchClearance - button.offsetHeight,
+    ),
   );
-  button.style.left = `${left}px`;
-  button.style.top = `${top}px`;
+  button.style.left = `${Math.round(left)}px`;
+  button.style.top = `${Math.round(top)}px`;
 }
 
-function setPointClasses(point, piece, playable = false, previewColor = 0) {
+function setPointClasses(
+  point,
+  piece,
+  playable = false,
+  previewColor = 0,
+  isLastMove = false,
+) {
   const stoneColor = piece || (playable ? previewColor : 0);
   point.classList.toggle("has-stone", piece !== 0);
   point.classList.toggle("piece-black", stoneColor === 1);
   point.classList.toggle("piece-white", stoneColor === 2);
   point.classList.toggle("is-playable", playable);
+  point.classList.toggle("is-last-move", isLastMove);
 }
 
 function render(nextState) {
@@ -497,9 +556,19 @@ function render(nextState) {
   const ownIndex = players.indexOf(playerId);
   const isSetup = nextState.phase === "setup";
   const actionPending = Boolean(pendingAction);
+  const currentIndex = Number(nextState.current) - 1;
+  const blackIndex = Math.max(0, Number(nextState.blackIndex) - 1);
+  const whiteIndex = blackIndex === 0 ? 1 : 0;
+  const ended = Boolean(nextState.ended);
+  const isScoring = nextState.phase === "scoring";
+  const colorPlayers = [
+    { playerIndex: blackIndex, label: "黑方", color: 1 },
+    { playerIndex: whiteIndex, label: "白方", color: 2 },
+  ];
   const size =
     Number(nextState.settings?.size) || nextState.board?.length || 19;
   if (boardSize !== size) buildBoard(size);
+  renderPlayerCards(nextState, ownIndex, currentIndex, ended, colorPlayers);
 
   if (isSetup) {
     renderSetup(nextState, ownIndex);
@@ -510,11 +579,6 @@ function render(nextState) {
   setSetupOpen(false);
   clearSetupFeedback();
 
-  const currentIndex = Number(nextState.current) - 1;
-  const blackIndex = Math.max(0, Number(nextState.blackIndex) - 1);
-  const whiteIndex = blackIndex === 0 ? 1 : 0;
-  const ended = Boolean(nextState.ended);
-  const isScoring = nextState.phase === "scoring";
   const previewColor = currentIndex === blackIndex ? 1 : 2;
   const canAct =
     Boolean(state) &&
@@ -529,8 +593,10 @@ function render(nextState) {
     (playMode === "solo" || ownIndex >= 0) &&
     !actionPending;
 
-  elements.round.textContent = String(nextState.round ?? 1);
-  elements.moveCount.textContent = `已落 ${nextState.moves ?? 0} 子`;
+  elements.moveNumber.hidden = false;
+  const moveNumber = Number(nextState.moves) || 0;
+  elements.moveNumber.textContent =
+    moveNumber > 0 ? `第 ${moveNumber} 手` : "开局";
   elements.pass.disabled = !canAct;
   elements.pass.hidden = ended || isScoring;
   elements.resign.disabled = !canResign;
@@ -543,61 +609,24 @@ function render(nextState) {
   elements.settingsSummary.textContent = settingSummary(nextState.settings);
   renderClocks();
 
-  const colorPlayers = [
-    { playerIndex: blackIndex, label: "黑方", color: 1 },
-    { playerIndex: whiteIndex, label: "白方", color: 2 },
-  ];
-  colorPlayers.forEach(({ playerIndex, label, color }, panelIndex) => {
-    const panel = elements.players[panelIndex];
-    const isSelf =
-      playMode === "solo"
-        ? color === 1
-        : ownIndex >= 0
-          ? playerIndex === ownIndex
-          : color === 1;
-    const name =
-      playMode === "solo"
-        ? label
-        : playerIndex === ownIndex
-          ? `${label} · 你`
-          : `${label} · 玩家 ${playerIndex + 1}`;
-    panel.querySelector("[data-player-name]").textContent = name;
-    panel.classList.toggle("is-self", isSelf);
-    panel.classList.toggle("is-opponent", !isSelf);
-    const detail = panel.querySelector("[data-player-detail]");
-    if (ended && nextState.lastEvent?.kind === "resigned") {
-      detail.textContent =
-        Number(nextState.winnerIndex) - 1 === playerIndex ? "获胜" : "已认输";
-    } else if (ended && nextState.scores) {
-      const score =
-        color === 1 ? nextState.scores.black : nextState.scores.white;
-      detail.textContent = `${formatScore(score)} 目`;
-    } else {
-      const captures = Number(nextState.captures?.[playerIndex]) || 0;
-      detail.textContent = `提子 ${captures}`;
-    }
-    panel.classList.toggle(
-      "is-current",
-      !ended && playerIndex === currentIndex,
-    );
-    panel.classList.toggle(
-      "is-winner",
-      ended && Number(nextState.winnerIndex) - 1 === playerIndex,
-    );
-  });
-
   for (let row = 0; row < size; row += 1) {
     for (let column = 0; column < size; column += 1) {
       const point = points[row * size + column];
       const value = Number(nextState.board?.[row]?.[column]) || 0;
       const playable = canAct && value === 0;
+      const isLastMove =
+        nextState.lastEvent?.kind === "play" &&
+        Number(nextState.lastMove?.row) === row + 1 &&
+        Number(nextState.lastMove?.column) === column + 1;
       point.dataset.piece = String(value);
       point.disabled = !playable;
-      setPointClasses(point, value, playable, previewColor);
+      setPointClasses(point, value, playable, previewColor, isLastMove);
       const pieceName = value === 1 ? "黑子" : value === 2 ? "白子" : "空位";
       point.setAttribute(
         "aria-label",
-        `第 ${row + 1} 行，第 ${column + 1} 列，${pieceName}`,
+        `第 ${row + 1} 行，第 ${column + 1} 列，${pieceName}${
+          isLastMove ? "，最后一手" : ""
+        }`,
       );
     }
   }
@@ -625,6 +654,52 @@ function render(nextState) {
     }
     return;
   }
+}
+
+function renderPlayerCards(
+  nextState,
+  ownIndex,
+  currentIndex,
+  ended,
+  colorPlayers,
+) {
+  colorPlayers.forEach(({ playerIndex, label, color }, panelIndex) => {
+    const panel = elements.players[panelIndex];
+    const isSelf =
+      playMode === "solo"
+        ? color === 1
+        : ownIndex >= 0
+          ? playerIndex === ownIndex
+          : color === 1;
+    const savedName = nextState.playerNames?.[playerIndex];
+    const name =
+      typeof savedName === "string" && savedName.trim()
+        ? savedName.trim()
+        : label;
+    panel.querySelector("[data-player-name]").textContent = name;
+    panel.classList.toggle("is-self", isSelf);
+    panel.classList.toggle("is-opponent", !isSelf);
+    const detail = panel.querySelector("[data-player-detail]");
+    if (ended && nextState.lastEvent?.kind === "resigned") {
+      detail.textContent =
+        Number(nextState.winnerIndex) - 1 === playerIndex ? "获胜" : "已认输";
+    } else if (ended && nextState.scores) {
+      const score =
+        color === 1 ? nextState.scores.black : nextState.scores.white;
+      detail.textContent = `${formatScore(score)} 目`;
+    } else {
+      const captures = Number(nextState.captures?.[playerIndex]) || 0;
+      detail.textContent = `提子 ${captures}`;
+    }
+    panel.classList.toggle(
+      "is-current",
+      !ended && playerIndex === currentIndex,
+    );
+    panel.classList.toggle(
+      "is-winner",
+      ended && Number(nextState.winnerIndex) - 1 === playerIndex,
+    );
+  });
 }
 
 function resetResignConfirmation() {
@@ -673,8 +748,7 @@ function renderSetup(nextState, ownIndex) {
 }
 
 function renderSetupBoard(nextState, size) {
-  elements.round.textContent = String(nextState.round ?? 1);
-  elements.moveCount.textContent = "已落 0 子";
+  elements.moveNumber.hidden = true;
   elements.settingsSummary.textContent = settingSummary(nextState.settings);
   renderClocks();
   for (let row = 0; row < size; row += 1) {

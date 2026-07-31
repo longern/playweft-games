@@ -99,6 +99,9 @@ if (restoreProgress()) {
 } else {
   openDifficultyPicker();
 }
+window.requestAnimationFrame(() => {
+  document.body.classList.remove("is-initializing");
+});
 window.setInterval(updateTimer, 1_000);
 window.addEventListener("pagehide", () => {
   stopTimer();

@@ -119,6 +119,11 @@ body {
   pointer-events: auto;
 }
 
+.is-initializing .paused-overlay,
+.is-initializing .difficulty-overlay {
+  transition: none;
+}
+
 .pause-menu {
   display: grid;
   width: 180px;
@@ -211,7 +216,7 @@ body {
   display: grid;
   width: min(100%, 620px, calc(100svh - 88px));
   aspect-ratio: 1;
-  border: 2px solid #202229;
+  border: 2.5px solid #202229;
   background: #202229;
   grid-template-columns: repeat(9, minmax(0, 1fr));
   grid-template-rows: repeat(9, minmax(0, 1fr));
@@ -260,7 +265,7 @@ body {
 }
 
 .sudoku-cell:nth-child(3n) {
-  border-right: 2px solid #202229;
+  border-right: 1px solid #202229;
 }
 
 .sudoku-cell:nth-child(9n) {
@@ -269,7 +274,7 @@ body {
 
 .sudoku-cell:nth-child(n + 19):nth-child(-n + 27),
 .sudoku-cell:nth-child(n + 46):nth-child(-n + 54) {
-  border-bottom: 2px solid #202229;
+  border-bottom: 1px solid #202229;
 }
 
 .sudoku-cell.is-given {
@@ -550,5 +555,73 @@ body {
 
   .sudoku-board {
     width: min(100%, calc(100svh - var(--mobile-board-reserve)));
+  }
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+  .sudoku-layout {
+    display: grid;
+    width: min(
+      900px,
+      calc(
+        100% - 64px - env(safe-area-inset-left) -
+          env(safe-area-inset-right)
+      )
+    );
+    height: 100svh;
+    grid-template-columns:
+      minmax(0, calc(100svh - 50px))
+      clamp(210px, 32vw, 270px);
+    align-items: center;
+    gap: clamp(16px, 3.5vw, 40px);
+    justify-content: center;
+    padding: 8px 0;
+  }
+
+  .sudoku-stage {
+    width: 100%;
+  }
+
+  .sudoku-status {
+    min-height: 22px;
+    margin-bottom: 4px;
+  }
+
+  .sudoku-board {
+    width: min(100%, calc(100svh - 50px));
+    margin: 0 auto;
+  }
+
+  .sudoku-controls {
+    width: 100%;
+    margin-top: 0;
+    padding: 0;
+  }
+
+  .digit-pad {
+    margin: 0;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(3px, 1.2svh, 7px);
+  }
+
+  .digit-pad button {
+    aspect-ratio: 1;
+    height: auto;
+    font-size: clamp(1rem, 4.6svh, 1.375rem);
+  }
+
+  .tool-row {
+    max-width: none;
+    margin-top: clamp(6px, 2svh, 12px);
+    gap: clamp(3px, 1.2svh, 7px);
+  }
+
+  .tool-button {
+    aspect-ratio: auto;
+    height: clamp(30px, 9svh, 44px);
+  }
+
+  .completion button {
+    min-height: clamp(36px, 10svh, 48px);
   }
 }

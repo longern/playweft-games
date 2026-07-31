@@ -79,6 +79,7 @@ test("Go solo mode scores after two passes on the same terminal", () => {
   ).state;
 
   assert.equal(state.phase, "scoring");
+  assert.equal(state.moves, 2);
   const result = applySoloGoAction(
     state,
     { type: "score", scoreRound: state.scoreRound },

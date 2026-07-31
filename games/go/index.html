@@ -1,199 +1,177 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f4f5f1" />
-    <meta
-      name="description"
-      content="Playweft 围棋：在棋盘上围地、提子，连续停一手后数子定胜负。"
-    />
-    <title>围棋 | Playweft</title>
-    <script type="module" src="./main.js"></script>
-  </head>
-  <body>
-    <header class="game-header">
-      <div class="game-brand">
-        <img src="/go.svg" alt="" />
-        <div>
-          <h1>围棋</h1>
-          <p>围地提子，双人对弈</p>
-        </div>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f4f5f1" />
+  <meta name="description" content="Playweft 围棋：在棋盘上围地、提子，连续停一手后数子定胜负。" />
+  <title>围棋 | Playweft</title>
+  <script type="module" src="./main.js"></script>
+</head>
+
+<body>
+  <header class="game-header">
+    <div class="game-brand">
+      <img src="/go.svg" alt="" />
+      <div>
+        <h1>围棋</h1>
+        <p>围地提子，双人对弈</p>
       </div>
-      <div id="connection" class="connection-status" data-mode="waiting">
-        <span>连接平台中</span>
-      </div>
-    </header>
+    </div>
+    <div id="move-number" class="move-number" hidden>开局</div>
+    <div id="connection" class="connection-status" data-mode="waiting">
+      <span>连接平台中</span>
+    </div>
+  </header>
 
-    <main class="go-layout">
-      <section
-        id="setup-panel"
-        class="setup-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="setup-title"
-        hidden
-      >
-        <form id="setup-form" class="setup-form" tabindex="-1">
-          <div class="setup-heading">
-            <h2 id="setup-title">对局设置</h2>
-            <p id="setup-note">房主确认设置后开始</p>
-          </div>
-
-          <label class="setting-field">
-            <span>棋盘大小</span>
-            <select id="size-setting" name="size">
-              <option value="9">9 × 9 · 快棋</option>
-              <option value="13">13 × 13 · 中盘</option>
-              <option value="19" selected>19 × 19 · 标准</option>
-            </select>
-          </label>
-
-          <label class="setting-field">
-            <span>计分规则</span>
-            <select id="rules-setting" name="rules">
-              <option value="chinese">中国规则 · 子与地</option>
-              <option value="japanese">日本规则 · 地与提子</option>
-            </select>
-          </label>
-
-          <label class="setting-field">
-            <span>贴目</span>
-            <span class="number-input">
-              <input id="komi-setting" name="komi" type="number" min="0" max="20" step="0.5" value="6.5" />
-              <b>目</b>
-            </span>
-          </label>
-
-          <label class="setting-field">
-            <span>执黑方式</span>
-            <select id="black-setting" name="blackMode">
-              <option value="random">随机执黑</option>
-              <option value="player1">玩家 1 执黑</option>
-              <option value="player2">玩家 2 执黑</option>
-            </select>
-          </label>
-
-          <label class="setting-field">
-            <span>让子</span>
-            <select id="handicap-setting" name="handicap">
-              <option value="0">不让子</option>
-              <option value="2">让 2 子</option>
-              <option value="3">让 3 子</option>
-              <option value="4">让 4 子</option>
-              <option value="5">让 5 子</option>
-              <option value="6">让 6 子</option>
-              <option value="7">让 7 子</option>
-              <option value="8">让 8 子</option>
-              <option value="9">让 9 子</option>
-            </select>
-          </label>
-
-          <p id="handicap-note" class="handicap-note">
-            让子时受让方固定执黑，摆好让子后由白方先行。
-          </p>
-          <p
-            id="setup-feedback"
-            class="setup-feedback"
-            role="status"
-            aria-live="polite"
-            hidden
-          ></p>
-          <button id="start-button" class="start-action" type="submit">
-            <span id="start-label">开始对局</span>
-          </button>
-        </form>
-      </section>
-
-      <section
-        id="history-panel"
-        class="history-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="history-title"
-        hidden
-      >
-        <div id="history-dialog" class="history-dialog" tabindex="-1">
-          <header class="history-heading">
-            <div>
-              <h2 id="history-title">本地棋谱</h2>
-              <p id="history-note">最近 50 局，仅保存在此浏览器</p>
-            </div>
-            <button id="history-close" class="history-close" type="button" aria-label="关闭棋谱">
-              <i data-lucide="x"></i>
-            </button>
-          </header>
-          <div id="history-list" class="history-list"></div>
-          <footer class="history-footer">
-            <button id="history-clear" class="history-clear" type="button">
-              <i data-lucide="trash-2"></i>
-              <span id="history-clear-label">清空全部</span>
-            </button>
-          </footer>
+  <main class="go-layout">
+    <section id="setup-panel" class="setup-panel" role="dialog" aria-modal="true" aria-labelledby="setup-title" hidden>
+      <form id="setup-form" class="setup-form" tabindex="-1">
+        <div class="setup-heading">
+          <h2 id="setup-title">对局设置</h2>
+          <p id="setup-note">房主确认设置后开始</p>
         </div>
+
+        <label class="setting-field">
+          <span>棋盘大小</span>
+          <select id="size-setting" name="size">
+            <option value="9">9 × 9 · 快棋</option>
+            <option value="13">13 × 13 · 中盘</option>
+            <option value="19" selected>19 × 19 · 标准</option>
+          </select>
+        </label>
+
+        <label class="setting-field">
+          <span>计分规则</span>
+          <select id="rules-setting" name="rules">
+            <option value="chinese">中国规则 · 子与地</option>
+            <option value="japanese">日本规则 · 地与提子</option>
+          </select>
+        </label>
+
+        <label class="setting-field">
+          <span>贴目</span>
+          <span class="number-input">
+            <input id="komi-setting" name="komi" type="number" min="0" max="20" step="0.5" value="6.5" />
+            <b>目</b>
+          </span>
+        </label>
+
+        <label class="setting-field">
+          <span>执黑方式</span>
+          <select id="black-setting" name="blackMode">
+            <option value="random">随机执黑</option>
+            <option value="player1">玩家 1 执黑</option>
+            <option value="player2">玩家 2 执黑</option>
+          </select>
+        </label>
+
+        <label class="setting-field">
+          <span>让子</span>
+          <select id="handicap-setting" name="handicap">
+            <option value="0">不让子</option>
+            <option value="2">让 2 子</option>
+            <option value="3">让 3 子</option>
+            <option value="4">让 4 子</option>
+            <option value="5">让 5 子</option>
+            <option value="6">让 6 子</option>
+            <option value="7">让 7 子</option>
+            <option value="8">让 8 子</option>
+            <option value="9">让 9 子</option>
+          </select>
+        </label>
+
+        <p id="handicap-note" class="handicap-note">
+          让子时受让方固定执黑，摆好让子后由白方先行。
+        </p>
+        <p id="setup-feedback" class="setup-feedback" role="status" aria-live="polite" hidden></p>
+        <button id="start-button" class="start-action" type="submit">
+          <span id="start-label">开始对局</span>
+        </button>
+      </form>
+    </section>
+
+    <section id="history-panel" class="history-panel" role="dialog" aria-modal="true" aria-labelledby="history-title"
+      hidden>
+      <div id="history-dialog" class="history-dialog" tabindex="-1">
+        <header class="history-heading">
+          <div>
+            <h2 id="history-title">本地棋谱</h2>
+            <p id="history-note">最近 50 局，仅保存在此浏览器</p>
+          </div>
+          <button id="history-close" class="history-close" type="button" aria-label="关闭棋谱">
+            <i data-lucide="x"></i>
+          </button>
+        </header>
+        <div id="history-list" class="history-list"></div>
+        <footer class="history-footer">
+          <button id="history-clear" class="history-clear" type="button">
+            <i data-lucide="trash-2"></i>
+            <span id="history-clear-label">清空全部</span>
+          </button>
+        </footer>
+      </div>
+    </section>
+
+    <section id="table-layout" class="table-layout">
+      <aside class="players-panel" aria-label="对局玩家">
+        <div id="black-player" class="player-card is-current">
+          <span class="stone-swatch stone-black" aria-hidden="true"></span>
+          <div class="player-info">
+            <strong class="player-name" data-player-name>黑方</strong>
+            <span class="player-detail" data-player-detail>提子 0</span>
+          </div>
+          <span class="clock-housing">
+            <time class="player-time" data-player-time datetime="PT0S">00:00</time>
+          </span>
+        </div>
+        <div id="white-player" class="player-card">
+          <span class="stone-swatch stone-white" aria-hidden="true"></span>
+          <div class="player-info">
+            <strong class="player-name" data-player-name>白方</strong>
+            <span class="player-detail" data-player-detail>提子 0</span>
+          </div>
+          <span class="clock-housing">
+            <time class="player-time" data-player-time datetime="PT0S">00:00</time>
+          </span>
+        </div>
+      </aside>
+
+      <section class="board-shell" aria-label="19 × 19 围棋棋盘">
+        <div id="board" class="go-board" role="grid"></div>
       </section>
 
-      <section id="table-layout" class="table-layout">
-        <aside class="players-panel" aria-label="对局玩家">
-          <div id="black-player" class="player-card is-current">
-            <span class="stone-swatch stone-black" aria-hidden="true"></span>
-            <div>
-              <strong data-player-name>黑方 · 玩家 1</strong>
-              <span data-player-detail>提子 0</span>
-            </div>
-            <span class="clock-housing">
-              <time data-player-time datetime="PT0S">00:00</time>
-            </span>
-          </div>
-          <div id="white-player" class="player-card">
-            <span class="stone-swatch stone-white" aria-hidden="true"></span>
-            <div>
-              <strong data-player-name>白方 · 玩家 2</strong>
-              <span data-player-detail>提子 0</span>
-            </div>
-            <span class="clock-housing">
-              <time data-player-time datetime="PT0S">00:00</time>
-            </span>
-          </div>
-        </aside>
+      <aside class="action-panel">
+        <p id="settings-summary" class="settings-summary">19 × 19 · 中国规则 · 贴 6.5 目</p>
+        <div class="turn-actions">
+          <button id="pass-button" class="pass-action" type="button" disabled>
+            <span class="icon-button-content"><i data-lucide="flag"></i>停一手</span>
+          </button>
+          <button id="resign-button" class="resign-action" type="button" disabled>
+            <span id="resign-label">认输</span>
+          </button>
+        </div>
+        <button id="rematch-button" class="rematch-action" type="button" hidden>
+          <span class="icon-button-content"><i data-lucide="rotate-ccw"></i>再来一局</span>
+        </button>
+        <button id="settings-button" class="settings-action" type="button" hidden>
+          <span class="icon-button-content"><i data-lucide="settings-2"></i>返回设置</span>
+        </button>
+        <div class="utility-links">
+          <button id="history-button" class="rules-link" type="button">
+            <i data-lucide="history"></i>本地棋谱
+          </button>
+          <a class="rules-link" href="./help.html" target="_blank">
+            <i data-lucide="circle-help"></i>玩法与计分
+          </a>
+        </div>
+      </aside>
+    </section>
+  </main>
+  <button id="confirm-move" class="confirm-move" type="button" hidden>
+    落子
+  </button>
+</body>
 
-        <section class="board-shell" aria-label="19 × 19 围棋棋盘">
-          <div id="board" class="go-board" role="grid"></div>
-          <button id="confirm-move" class="confirm-move" type="button" hidden>
-            落子
-          </button>
-        </section>
-
-        <aside class="action-panel">
-          <div class="round-note">
-            <span>第 <b id="round-number">1</b> 局</span>
-            <span id="move-count">已落 0 子</span>
-          </div>
-          <p id="settings-summary" class="settings-summary">19 × 19 · 中国规则 · 贴 6.5 目</p>
-          <div class="turn-actions">
-            <button id="pass-button" class="pass-action" type="button" disabled>
-              <span class="icon-button-content"><i data-lucide="flag"></i>停一手</span>
-            </button>
-            <button id="resign-button" class="resign-action" type="button" disabled>
-              <span id="resign-label">认输</span>
-            </button>
-          </div>
-          <button id="rematch-button" class="rematch-action" type="button" hidden>
-            <span class="icon-button-content"><i data-lucide="rotate-ccw"></i>再来一局</span>
-          </button>
-          <button id="settings-button" class="settings-action" type="button" hidden>
-            <span class="icon-button-content"><i data-lucide="settings-2"></i>返回设置</span>
-          </button>
-          <div class="utility-links">
-            <button id="history-button" class="rules-link" type="button">
-              <i data-lucide="history"></i>本地棋谱
-            </button>
-            <a class="rules-link" href="./help.html" target="_blank">
-              <i data-lucide="circle-help"></i>玩法与计分
-            </a>
-          </div>
-        </aside>
-      </section>
-    </main>
-  </body>
 </html>
