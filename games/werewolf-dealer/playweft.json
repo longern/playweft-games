@@ -24,7 +24,7 @@
         "category": "派对"
       }
     },
-    "icon": "../werewolf-dealer.svg",
+    "icon": "../werewolf-dealer.png",
     "help": "./help.html"
   },
   "modes": {
