@@ -18,7 +18,9 @@
   "description_localized": {
     "zh-CN": "选择难度，挑战一道拥有唯一解的数独。"
   },
-  "categories": ["Puzzle"],
+  "categories": [
+    "Puzzle"
+  ],
   "icons": [
     {
       "src": "../sudoku.svg",

@@ -115,7 +115,7 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
         },
       },
     };
-    if (game === "go") expectedModes.solo = {};
+    if (game === "go" || game === "dou-dizhu") expectedModes.solo = {};
     assert.deepEqual(manifest.modes, expectedModes);
     const main = await readFile(`games/${game}/main.js`, "utf8");
     assert.doesNotMatch(

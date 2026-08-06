@@ -417,6 +417,39 @@ test("Dou Dizhu deals a complete deck and awards the bottom cards", async () => 
   assert.equal(result.state.multiplier, 2);
 });
 
+test("Dou Dizhu preserves every player's display name", async () => {
+  const result = await runLua(
+    "games/dou-dizhu/game.lua",
+    `
+      state = setup({
+        protocolVersion = 1,
+        players = {
+          { id = "a", name = "Alice", seat = 1 },
+          { id = "b", name = "Bob", seat = 2 },
+          { id = "c", name = "Carol", seat = 3 },
+        },
+        match = {
+          id = "match_names",
+          ownerId = "a",
+          startedAt = 0,
+          randomSeed = 123,
+        },
+      })
+      setup_names = state.playerNames
+      state.winner = "a"
+      rematch = on_action(
+        state,
+        { type = "rematch" },
+        { playerId = "a", version = 0 }
+      ).state
+      result = { setupNames = setup_names, rematchNames = rematch.playerNames }
+    `,
+  );
+
+  assert.deepEqual(result.setupNames, ["Alice", "Bob", "Carol"]);
+  assert.deepEqual(result.rematchNames, ["Alice", "Bob", "Carol"]);
+});
+
 test("Dou Dizhu accepts bombs over ordinary hands and rejects lower cards", async () => {
   const result = await runLua(
     "games/dou-dizhu/game.lua",

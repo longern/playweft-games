@@ -2,9 +2,15 @@ local RANDOM_MODULUS = 2147483647
 local RANDOM_MULTIPLIER = 48271
 
 local function setup_players(context)
-  local players = {}
-  for _, player in ipairs(context.players) do table.insert(players, player.id) end
-  return players
+  local players, player_names = {}, {}
+  for _, player in ipairs(context.players) do
+    table.insert(players, player.id)
+    table.insert(
+      player_names,
+      type(player.name) == "string" and player.name or ""
+    )
+  end
+  return players, player_names
 end
 
 local function player_index(state, player_id)
@@ -77,11 +83,12 @@ local function deal(state)
   state.bottomCards = { deck[52], deck[53], deck[54] }
 end
 
-local function new_round(players, seed, round, starter)
+local function new_round(players, player_names, seed, round, starter)
   seed = math.floor(math.abs(tonumber(seed) or 1)) % RANDOM_MODULUS
   if seed == 0 then seed = 1 end
   local state = {
     players = players,
+    playerNames = player_names,
     seed = seed,
     round = round,
     starter = starter,
@@ -284,7 +291,8 @@ local function remove_cards(hand, cards)
 end
 
 function setup(context)
-  return new_round(setup_players(context), context.match.randomSeed, 1, 1)
+  local players, player_names = setup_players(context)
+  return new_round(players, player_names, context.match.randomSeed, 1, 1)
 end
 
 function view(state, events, context)
@@ -309,7 +317,13 @@ function on_action(state, action, context)
   if action.type == "rematch" then
     if state.winner == "" then return rejected(state, "game_not_over") end
     local starter = ((state.starter or 1) % #state.players) + 1
-    local next_state = new_round(state.players, state.seed, (state.round or 1) + 1, starter)
+    local next_state = new_round(
+      state.players,
+      state.playerNames or {},
+      state.seed,
+      (state.round or 1) + 1,
+      starter
+    )
     return {
       accepted = true,
       state = next_state,

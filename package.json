@@ -10,6 +10,7 @@
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {
+    "@fontsource/roboto-slab": "^5.3.0",
     "lucide": "1.25.0",
     "sudoku-core": "^3.0.3"
   },

@@ -104,6 +104,7 @@ export function createPlayweftClient({
           capabilities: Array.isArray(context?.capabilities)
             ? context.capabilities
             : [],
+          player: context?.player,
           playerId,
           phase: context?.phase,
         });

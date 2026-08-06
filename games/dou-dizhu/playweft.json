@@ -32,6 +32,7 @@
   "orientation": "landscape",
   "help_url": "./help.html",
   "modes": {
+    "solo": {},
     "room": {
       "players": {
         "min": 3,

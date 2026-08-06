@@ -70,6 +70,7 @@ test("Playweft room client uses bridge v1 and Manifest-owned initialization", as
   const errors = [];
   const states = [];
   const contexts = [];
+  const readyMessages = [];
   const ids = [
     "initialize-123",
     "action-123",
@@ -89,6 +90,7 @@ test("Playweft room client uses bridge v1 and Manifest-owned initialization", as
       onActionResult: (result) => results.push(result),
       onState: (state) => states.push(state),
       onContext: (context) => contexts.push(context),
+      onReady: (message) => readyMessages.push(message),
       onError: (error, code, requestId) =>
         errors.push({ error, code, requestId }),
     });
@@ -111,6 +113,7 @@ test("Playweft room client uses bridge v1 and Manifest-owned initialization", as
       protocolVersion: 1,
       capabilities: ["clipboard.readText"],
       phase: "lobby",
+      player: { id: "player-one", name: "牌友" },
       playerId: "player-one",
     });
     await Promise.resolve();
@@ -210,6 +213,17 @@ test("Playweft room client uses bridge v1 and Manifest-owned initialization", as
         protocolVersion: 1,
         capabilities: ["clipboard.readText"],
         phase: "lobby",
+        player: { id: "player-one", name: "牌友" },
+        playerId: "player-one",
+      },
+    ]);
+    assert.deepEqual(readyMessages, [
+      {
+        mode: "room",
+        protocolVersion: 1,
+        capabilities: ["clipboard.readText"],
+        phase: "lobby",
+        player: { id: "player-one", name: "牌友" },
         playerId: "player-one",
       },
     ]);

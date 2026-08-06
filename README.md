@@ -36,11 +36,12 @@ game development server from this repository:
 npm run dev
 ```
 
-Open `http://localhost:5174/` to browse the game list. Sudoku opens directly as
-a standalone game; paste a game's directory URL or its explicit
-`playweft.json` URL into Playweft. The multiplayer games
+Open `http://localhost:5174/` to browse the game list. Sudoku and the local-AI
+Dou Dizhu mode open directly as solo games; paste a game's directory URL or
+its explicit `playweft.json` URL into Playweft. The multiplayer games
 use the platform-owned lobby; Texas Hold'em supports two to six seated players,
-斗地主 requires exactly three, the Werewolf dealer supports six to twelve, and
+斗地主 supports one local player with two computer opponents or exactly three
+room players, the Werewolf dealer supports six to twelve, and
 UNO supports two to four.
 围棋同时支持双人房间与单终端黑白轮流落子的 Solo 模式。
 
