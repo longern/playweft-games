@@ -10,23 +10,26 @@
   "client": {
     "entry": "./"
   },
-  "display": {
-    "defaultLocale": "en",
-    "locales": {
-      "en": {
-        "name": "Werewolf Dealer",
-        "description": "Deal secret roles, collect votes, and run a social deduction game.",
-        "category": "Party"
-      },
-      "zh-CN": {
-        "name": "狼人杀发牌器",
-        "description": "分配隐藏角色、收集投票，组织一局线上狼人杀。",
-        "category": "派对"
-      }
-    },
-    "icon": "../werewolf-dealer.png",
-    "help": "./help.html"
+  "name": "Werewolf Dealer",
+  "name_localized": {
+    "zh-CN": "狼人杀发牌器"
   },
+  "description": "Deal secret roles, collect votes, and run a social deduction game.",
+  "description_localized": {
+    "zh-CN": "分配隐藏角色、收集投票，组织一局线上狼人杀。"
+  },
+  "categories": ["Party"],
+  "icons": [
+    {
+      "src": "../werewolf-dealer.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "background_color": "#f4f5f1",
+  "theme_color": "#312927",
+  "help_url": "./help.html",
   "modes": {
     "room": {
       "players": {

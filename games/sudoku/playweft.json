@@ -10,23 +10,26 @@
   "client": {
     "entry": "./"
   },
-  "display": {
-    "defaultLocale": "en",
-    "locales": {
-      "en": {
-        "name": "Sudoku",
-        "description": "Solve a uniquely generated grid at your preferred difficulty.",
-        "category": "Puzzle"
-      },
-      "zh-CN": {
-        "name": "数独",
-        "description": "选择难度，挑战一道拥有唯一解的数独。",
-        "category": "益智"
-      }
-    },
-    "icon": "../sudoku.svg",
-    "help": "./help.html"
+  "name": "Sudoku",
+  "name_localized": {
+    "zh-CN": "数独"
   },
+  "description": "Solve a uniquely generated grid at your preferred difficulty.",
+  "description_localized": {
+    "zh-CN": "选择难度，挑战一道拥有唯一解的数独。"
+  },
+  "categories": ["Puzzle"],
+  "icons": [
+    {
+      "src": "../sudoku.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "background_color": "#f5f5f0",
+  "theme_color": "#1e6e59",
+  "help_url": "./help.html",
   "modes": {
     "solo": {}
   }

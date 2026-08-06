@@ -10,23 +10,27 @@
   "client": {
     "entry": "./"
   },
-  "display": {
-    "defaultLocale": "en",
-    "locales": {
-      "en": {
-        "name": "Dou Dizhu",
-        "description": "Bid for the landlord and be the first team to play every card.",
-        "category": "Card game"
-      },
-      "zh-CN": {
-        "name": "斗地主",
-        "description": "叫分定地主，灵活配合出牌，率先出完手牌获胜。",
-        "category": "纸牌"
-      }
-    },
-    "icon": "../dou-dizhu.svg",
-    "help": "./help.html"
+  "name": "Dou Dizhu",
+  "name_localized": {
+    "zh-CN": "斗地主"
   },
+  "description": "Bid for the landlord and be the first team to play every card.",
+  "description_localized": {
+    "zh-CN": "叫分定地主，灵活配合出牌，率先出完手牌获胜。"
+  },
+  "categories": ["Card game"],
+  "icons": [
+    {
+      "src": "../dou-dizhu.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "background_color": "#f4f5f1",
+  "theme_color": "#1e664b",
+  "orientation": "landscape",
+  "help_url": "./help.html",
   "modes": {
     "room": {
       "players": {

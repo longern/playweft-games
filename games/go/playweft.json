@@ -10,23 +10,26 @@
   "client": {
     "entry": "./"
   },
-  "display": {
-    "defaultLocale": "en",
-    "locales": {
-      "en": {
-        "name": "Go",
-        "description": "Play locally or online, claiming territory and capturing stones.",
-        "category": "Strategy"
-      },
-      "zh-CN": {
-        "name": "围棋",
-        "description": "支持本机轮流或双人房间对弈，围地、提子并通过计分决出胜负。",
-        "category": "策略"
-      }
-    },
-    "icon": "../go.svg",
-    "help": "./help.html"
+  "name": "Go",
+  "name_localized": {
+    "zh-CN": "围棋"
   },
+  "description": "Play locally or online, claiming territory and capturing stones.",
+  "description_localized": {
+    "zh-CN": "支持本机轮流或双人房间对弈，围地、提子并通过计分决出胜负。"
+  },
+  "categories": ["Strategy"],
+  "icons": [
+    {
+      "src": "../go.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "background_color": "#f1f1ed",
+  "theme_color": "#d6a260",
+  "help_url": "./help.html",
   "modes": {
     "solo": {},
     "room": {

@@ -10,23 +10,26 @@
   "client": {
     "entry": "./"
   },
-  "display": {
-    "defaultLocale": "en",
-    "locales": {
-      "en": {
-        "name": "UNO",
-        "description": "Match colours and numbers to empty your hand before everyone else.",
-        "category": "Card game"
-      },
-      "zh-CN": {
-        "name": "UNO",
-        "description": "匹配颜色或数字，善用功能牌，抢先打完所有手牌。",
-        "category": "纸牌"
-      }
-    },
-    "icon": "../uno.svg",
-    "help": "./help.html"
+  "name": "UNO",
+  "name_localized": {
+    "zh-CN": "UNO"
   },
+  "description": "Match colours and numbers to empty your hand before everyone else.",
+  "description_localized": {
+    "zh-CN": "匹配颜色或数字，善用功能牌，抢先打完所有手牌。"
+  },
+  "categories": ["Card game"],
+  "icons": [
+    {
+      "src": "../uno.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "background_color": "#f1f3ee",
+  "theme_color": "#e2463e",
+  "help_url": "./help.html",
   "modes": {
     "room": {
       "players": {

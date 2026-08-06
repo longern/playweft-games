@@ -10,23 +10,26 @@
   "client": {
     "entry": "./"
   },
-  "display": {
-    "defaultLocale": "en",
-    "locales": {
-      "en": {
-        "name": "Gomoku",
-        "description": "Take turns placing stones and be first to connect five.",
-        "category": "Strategy"
-      },
-      "zh-CN": {
-        "name": "五子棋",
-        "description": "黑白轮流落子，率先横、竖或斜线连成五子获胜。",
-        "category": "策略"
-      }
-    },
-    "icon": "../gomoku.svg",
-    "help": "./help.html"
+  "name": "Gomoku",
+  "name_localized": {
+    "zh-CN": "五子棋"
   },
+  "description": "Take turns placing stones and be first to connect five.",
+  "description_localized": {
+    "zh-CN": "黑白轮流落子，率先横、竖或斜线连成五子获胜。"
+  },
+  "categories": ["Strategy"],
+  "icons": [
+    {
+      "src": "../gomoku.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "background_color": "#f4f5f1",
+  "theme_color": "#d9aa63",
+  "help_url": "./help.html",
   "modes": {
     "room": {
       "players": {

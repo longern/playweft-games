@@ -10,23 +10,26 @@
   "client": {
     "entry": "./"
   },
-  "display": {
-    "defaultLocale": "en",
-    "locales": {
-      "en": {
-        "name": "Texas Hold'em",
-        "description": "Bet, raise, and bluff at a table for two to six players.",
-        "category": "Card game"
-      },
-      "zh-CN": {
-        "name": "德州扑克",
-        "description": "下注、加注与诈唬，在二至六人牌桌上争夺底池。",
-        "category": "纸牌"
-      }
-    },
-    "icon": "../texas-holdem.svg",
-    "help": "./help.html"
+  "name": "Texas Hold'em",
+  "name_localized": {
+    "zh-CN": "德州扑克"
   },
+  "description": "Bet, raise, and bluff at a table for two to six players.",
+  "description_localized": {
+    "zh-CN": "下注、加注与诈唬，在二至六人牌桌上争夺底池。"
+  },
+  "categories": ["Card game"],
+  "icons": [
+    {
+      "src": "../texas-holdem.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "background_color": "#edf2ed",
+  "theme_color": "#1b7757",
+  "help_url": "./help.html",
   "modes": {
     "room": {
       "players": {

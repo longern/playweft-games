@@ -10,23 +10,26 @@
   "client": {
     "entry": "./"
   },
-  "display": {
-    "defaultLocale": "en",
-    "locales": {
-      "en": {
-        "name": "Pig Dice",
-        "description": "Roll, bank, and race to 50 without losing your turn total.",
-        "category": "Quick match"
-      },
-      "zh-CN": {
-        "name": "贪心骰子",
-        "description": "掷骰累积分数，见好就收，率先到达 50 分。",
-        "category": "快速对战"
-      }
-    },
-    "icon": "../pig-dice.svg",
-    "help": "./help.html"
+  "name": "Pig Dice",
+  "name_localized": {
+    "zh-CN": "贪心骰子"
   },
+  "description": "Roll, bank, and race to 50 without losing your turn total.",
+  "description_localized": {
+    "zh-CN": "掷骰累积分数，见好就收，率先到达 50 分。"
+  },
+  "categories": ["Quick match"],
+  "icons": [
+    {
+      "src": "../pig-dice.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "background_color": "#f4f5f1",
+  "theme_color": "#ef5b4c",
+  "help_url": "./help.html",
   "modes": {
     "room": {
       "players": {
