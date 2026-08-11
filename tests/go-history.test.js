@@ -2,8 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  canResumeGoRecord,
+  createGoHistoryStore,
+  goRecordToReplayFrames,
   goRecordToSgf,
   historyResultLabel,
+  restoreGoResumeState,
+  updateGoResumeSnapshot,
   updateGoHistory,
 } from "../games/go/history.js";
 
@@ -39,6 +44,7 @@ test("Go history records moves once and exports SGF", () => {
     state: gameState(),
     events: [{ type: "started", player: "black" }],
   }, Date.UTC(2026, 6, 28, 10));
+  assert.equal(records.length, 0);
 
   const board = gameState().board;
   board[3][3] = 1;
@@ -59,6 +65,7 @@ test("Go history records moves once and exports SGF", () => {
   records = updateGoHistory(records, played, Date.UTC(2026, 6, 28, 10, 2));
 
   assert.equal(records.length, 1);
+  assert.equal(records[0].partial, false);
   assert.equal(records[0].moves.length, 1);
   assert.deepEqual(records[0].moves[0], {
     color: "B",
@@ -73,12 +80,24 @@ test("Go history records moves once and exports SGF", () => {
 });
 
 test("Go history stores the confirmed result", () => {
-  const records = updateGoHistory([], {
+  let records = updateGoHistory([], {
+    matchId: "match-two",
+    version: 7,
+    state: gameState({
+      moves: 1,
+      current: 2,
+      lastMove: { row: 4, column: 4 },
+      lastEvent: { kind: "play", playerIndex: 1 },
+    }),
+    events: [{ type: "played", player: "black", row: 4, column: 4 }],
+  });
+  records = updateGoHistory(records, {
     matchId: "match-two",
     version: 8,
     state: gameState({
       phase: "ended",
       ended: true,
+      moves: 1,
       winner: "white",
       winnerIndex: 2,
       scores: { black: 1, white: 7.5 },
@@ -92,9 +111,73 @@ test("Go history stores the confirmed result", () => {
 });
 
 test("Go history stores resignation as an SGF resignation result", () => {
-  const records = updateGoHistory([], {
+  let records = updateGoHistory([], {
+    matchId: "match-resigned",
+    version: 2,
+    state: gameState({
+      moves: 1,
+      current: 2,
+      lastMove: { row: 4, column: 4 },
+      lastEvent: { kind: "play", playerIndex: 1 },
+    }),
+    events: [{ type: "played", player: "black", row: 4, column: 4 }],
+  });
+  records = updateGoHistory(records, {
     matchId: "match-resigned",
     version: 3,
+    state: gameState({
+      phase: "ended",
+      ended: true,
+      moves: 1,
+      winner: "white",
+      winnerIndex: 2,
+      lastEvent: { kind: "resigned", playerIndex: 1 },
+    }),
+    events: [{ type: "resigned", player: "black", winner: "white" }],
+  });
+
+  assert.equal(historyResultLabel(records[0]), "白方胜");
+  assert.match(goRecordToSgf(records[0]), /RE\[W\+R\]/);
+});
+
+test("Go history removes a game when its only move is undone", () => {
+  let records = updateGoHistory([], {
+    matchId: "match-undo",
+    version: 1,
+    state: gameState(),
+    events: [{ type: "started", player: "black" }],
+  });
+  records = updateGoHistory(records, {
+    matchId: "match-undo",
+    version: 2,
+    state: gameState({
+      moves: 1,
+      current: 2,
+      lastMove: { row: 4, column: 4 },
+      lastEvent: { kind: "play", playerIndex: 1 },
+    }),
+    events: [{ type: "played", player: "black", row: 4, column: 4 }],
+  });
+  records = updateGoHistory(records, {
+    matchId: "match-undo",
+    version: 3,
+    state: gameState(),
+    events: [{ type: "undo_accepted", player: "white" }],
+  });
+
+  assert.equal(records.length, 0);
+});
+
+test("Go history does not store a game that ends before the first move", () => {
+  const started = updateGoHistory([], {
+    matchId: "match-empty",
+    version: 1,
+    state: gameState(),
+    events: [{ type: "started", player: "black" }],
+  });
+  const resigned = updateGoHistory(started, {
+    matchId: "match-empty",
+    version: 2,
     state: gameState({
       phase: "ended",
       ended: true,
@@ -105,6 +188,186 @@ test("Go history stores resignation as an SGF resignation result", () => {
     events: [{ type: "resigned", player: "black", winner: "white" }],
   });
 
-  assert.equal(historyResultLabel(records[0]), "白方胜");
-  assert.match(goRecordToSgf(records[0]), /RE\[W\+R\]/);
+  assert.equal(resigned.length, 0);
+});
+
+test("Go history keeps handicap stones when recording starts on the first move", () => {
+  const board = gameState().board;
+  board[2][6] = 1;
+  board[6][2] = 1;
+  const records = updateGoHistory([], {
+    matchId: "match-handicap",
+    version: 2,
+    state: gameState({
+      board,
+      moves: 1,
+      current: 1,
+      blackIndex: 1,
+      settings: { ...gameState().settings, handicap: 2 },
+      lastMove: { row: 5, column: 5 },
+      lastEvent: { kind: "play", playerIndex: 2 },
+    }),
+    events: [{ type: "played", player: "white", row: 5, column: 5 }],
+  });
+
+  assert.deepEqual(records[0].initialBlack, [
+    { row: 3, column: 7 },
+    { row: 7, column: 3 },
+  ]);
+  assert.match(goRecordToSgf(records[0]), /HA\[2\].*AB\[gc\]\[cg\].*;W\[ee\]/);
+});
+
+test("Go history storage removes existing and newly saved empty records", () => {
+  let storedValue = JSON.stringify({
+    format: "playweft-go-history",
+    formatVersion: 1,
+    savedAt: 1,
+    records: [
+      {
+        format: "playweft-go-record",
+        formatVersion: 1,
+        id: "empty",
+        moves: [],
+      },
+      {
+        format: "playweft-go-record",
+        formatVersion: 1,
+        id: "played",
+        moves: [{ color: "B", row: 4, column: 4 }],
+      },
+    ],
+  });
+  const storage = {
+    getItem() {
+      return storedValue;
+    },
+    setItem(_key, value) {
+      storedValue = value;
+    },
+  };
+  const store = createGoHistoryStore(() => storage);
+
+  assert.deepEqual(store.load().map((record) => record.id), ["played"]);
+  store.save([
+    {
+      format: "playweft-go-record",
+      formatVersion: 1,
+      id: "another-empty",
+      moves: [],
+    },
+    {
+      format: "playweft-go-record",
+      formatVersion: 1,
+      id: "played",
+      moves: [{ color: "B", row: 4, column: 4 }],
+    },
+  ]);
+  const archive = JSON.parse(storedValue);
+  assert.equal(archive.format, "playweft-go-history");
+  assert.equal(archive.formatVersion, 1);
+  assert.deepEqual(archive.records.map((record) => record.id), ["played"]);
+});
+
+test("Go history stores a versioned solo resume snapshot with clock state", () => {
+  const savedAt = 10_000;
+  let records = updateGoHistory([], {
+    mode: "solo",
+    matchId: "match-resume",
+    version: 2,
+    state: gameState({
+      moves: 1,
+      current: 2,
+      timeUsed: [3500, 1000],
+      turnStartedAt: 8000,
+      previousBoard: "position-before-last-move",
+      lastMove: { row: 4, column: 4 },
+      lastEvent: { kind: "play", playerIndex: 1 },
+    }),
+    events: [{ type: "played", player: "black", row: 4, column: 4 }],
+  }, savedAt);
+
+  assert.equal(records[0].format, "playweft-go-record");
+  assert.equal(records[0].formatVersion, 1);
+  assert.equal(records[0].mode, "solo");
+  assert.equal(records[0].resume.formatVersion, 1);
+  assert.equal(records[0].resume.savedAt, savedAt);
+  assert.deepEqual(records[0].resume.state.timeUsed, [3500, 3000]);
+  assert.equal(records[0].resume.state.turnStartedAt, 0);
+  assert.equal(canResumeGoRecord(records[0]), true);
+  assert.equal(
+    records[0].resume.state.previousBoard,
+    "position-before-last-move",
+  );
+
+  records = updateGoResumeSnapshot(
+    records,
+    "match-resume",
+    gameState({
+      moves: 1,
+      current: 2,
+      timeUsed: [3500, 1000],
+      turnStartedAt: 8000,
+      previousBoard: "position-before-last-move",
+      lastMove: { row: 4, column: 4 },
+      lastEvent: { kind: "play", playerIndex: 1 },
+    }),
+    13_000,
+  );
+  assert.deepEqual(records[0].resume.state.timeUsed, [3500, 6000]);
+  const restored = restoreGoResumeState(records[0], 20_000);
+  assert.deepEqual(restored.timeUsed, [3500, 6000]);
+  assert.equal(restored.turnStartedAt, 20_000);
+
+  records = updateGoHistory(records, {
+    mode: "solo",
+    matchId: "match-resume",
+    version: 3,
+    state: gameState({
+      phase: "ended",
+      ended: true,
+      moves: 1,
+      winnerIndex: 2,
+      lastEvent: { kind: "resigned", playerIndex: 1 },
+    }),
+    events: [{ type: "resigned", player: "black", winner: "white" }],
+  }, 14_000);
+  assert.equal(records[0].resume, null);
+  assert.equal(canResumeGoRecord(records[0]), false);
+  assert.equal(restoreGoResumeState(records[0], 20_000), undefined);
+});
+
+test("Go history rebuilds every replay frame when resuming a solo game", () => {
+  const moves = [
+    { color: "B", row: 1, column: 2 },
+    { color: "W", row: 2, column: 2 },
+    { color: "B", row: 2, column: 1 },
+    { color: "W", pass: true },
+    { color: "B", row: 2, column: 3 },
+    { color: "W", pass: true },
+    { color: "B", row: 3, column: 2 },
+  ];
+  const frames = goRecordToReplayFrames({
+    round: 1,
+    createdAt: 1,
+    settings: gameState().settings,
+    moves,
+    resume: { state: { blackIndex: 1 } },
+  });
+
+  assert.deepEqual(
+    frames.map((frame) => frame.moveNumber),
+    [0, 1, 2, 3, 4, 5, 6, 7],
+  );
+  assert.deepEqual(
+    frames.slice(1).map((frame) => frame.move),
+    moves.map((move, index) => ({
+      number: index + 1,
+      color: move.color === "B" ? 1 : 2,
+      pass: Boolean(move.pass),
+      row: Number(move.row) || 0,
+      column: Number(move.column) || 0,
+    })),
+  );
+  assert.equal(frames[2].board[1][1], 2);
+  assert.equal(frames.at(-1).board[1][1], 0);
 });

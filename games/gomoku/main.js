@@ -4,6 +4,10 @@ import {
   Settings2,
   createIcons,
 } from "lucide";
+import {
+  applySoloGomokuAction,
+  createSoloGomokuState,
+} from "./solo.js";
 import { createPlayweftClient } from "../../src/playweft-client.js";
 import "../../src/base.css";
 import "./styles.css";
@@ -38,6 +42,7 @@ const elements = {
 let playerId;
 let state;
 let pendingActionId;
+let pendingActionType;
 let settingsRequestId;
 let queuedSettings;
 let draftSettings;
@@ -45,6 +50,9 @@ let boardSize = 0;
 let setupCloseTimer;
 let serverTimeAtSync;
 let localTimeAtSync;
+let playMode = "room";
+let localMatchId;
+let localVersion = 0;
 const points = [];
 
 createIcons({ icons: { CircleHelp, RotateCcw, Settings2 } });
@@ -71,65 +79,108 @@ const preview = {
   round: 1,
 };
 
-const client = createPlayweftClient({
-  onReady(message) {
-    playerId = message.playerId;
-    setConnection("waiting", "房间已连接");
-  },
-  onState(message) {
-    playerId = message.playerId;
-    state = message.state;
-    serverTimeAtSync = Number.isFinite(Number(message.serverTime))
-      ? Number(message.serverTime)
-      : undefined;
-    localTimeAtSync = Date.now();
-    if (
-      state.phase === "setup" &&
-      draftSettings &&
-      sameSettings(state.settings, draftSettings)
-    ) {
-      draftSettings = undefined;
-    } else if (state.phase !== "setup") {
-      settingsRequestId = undefined;
-      queuedSettings = undefined;
-      draftSettings = undefined;
+const isStandalone = window.parent === window;
+const client = isStandalone
+  ? undefined
+  : createPlayweftClient({
+      onReady: handleReady,
+      onState: handleState,
+      onActionResult: handleActionResult,
+      onError: handleError,
+    });
+
+function handleReady(message) {
+  playMode = message.mode ?? "room";
+  if (playMode === "solo") {
+    playerId = "solo-player-1";
+    localMatchId = `solo-${crypto.randomUUID()}`;
+    localVersion = 0;
+    const now = Date.now();
+    handleState({
+      playerId,
+      state: createSoloGomokuState(),
+      events: [],
+      matchId: localMatchId,
+      version: localVersion,
+      serverTime: now,
+    });
+    return;
+  }
+  playerId = message.playerId;
+  setConnection("waiting", "房间已连接");
+}
+
+function handleState(message) {
+  playerId = playMode === "solo" ? "solo-player-1" : message.playerId;
+  state = message.state;
+  serverTimeAtSync = Number.isFinite(Number(message.serverTime))
+    ? Number(message.serverTime)
+    : undefined;
+  localTimeAtSync = Date.now();
+  if (
+    state.phase === "setup" &&
+    draftSettings &&
+    sameSettings(state.settings, draftSettings)
+  ) {
+    draftSettings = undefined;
+  } else if (state.phase !== "setup") {
+    settingsRequestId = undefined;
+    queuedSettings = undefined;
+    draftSettings = undefined;
+  }
+  setConnection(
+    "live",
+    state.ended
+      ? "对局已结束"
+      : playMode === "solo"
+        ? "本机轮流对弈"
+        : "实时对局",
+  );
+  render(state);
+}
+
+function handleActionResult(result) {
+  if (result.requestId === settingsRequestId) {
+    settingsRequestId = undefined;
+    if (queuedSettings && state?.phase === "setup" && !pendingActionId) {
+      sendSettingsUpdate(queuedSettings);
     }
-    setConnection("live", state.ended ? "对局已结束" : "实时对局");
-    render(state);
-  },
-  onActionResult(result) {
-    if (result.requestId === settingsRequestId) {
-      settingsRequestId = undefined;
-      if (queuedSettings && state?.phase === "setup" && !pendingActionId) {
-        sendSettingsUpdate(queuedSettings);
-      }
+    return;
+  }
+  if (result.requestId !== pendingActionId) return;
+  const completedActionType = pendingActionType;
+  pendingActionId = undefined;
+  pendingActionType = undefined;
+  if (state?.phase === "setup") {
+    if (completedActionType === "configure") {
+      render(state);
       return;
     }
-    if (result.requestId !== pendingActionId) return;
+    showSetupFeedback("设置已确认，正在同步棋盘…", "pending");
+    return;
+  }
+  render(state ?? preview);
+}
+
+function handleError(error, code, requestId) {
+  if (requestId === settingsRequestId) {
+    settingsRequestId = undefined;
+    queuedSettings = undefined;
+    draftSettings = undefined;
+  }
+  if (requestId === pendingActionId) {
     pendingActionId = undefined;
-    if (state?.phase === "setup") {
-      showSetupFeedback("设置已确认，正在同步棋盘…", "pending");
-      return;
-    }
-    render(state ?? preview);
-  },
-  onError(error, code, requestId) {
-    if (requestId === settingsRequestId) {
-      settingsRequestId = undefined;
-      queuedSettings = undefined;
-      draftSettings = undefined;
-    }
-    if (requestId === pendingActionId) pendingActionId = undefined;
-    const message = translateError(error, code);
-    setConnection("error", message);
-    render(state ?? preview);
-    if (state?.phase === "setup") showSetupFeedback(message, "error");
-  },
-});
+    pendingActionType = undefined;
+  }
+  const message = translateError(error, code);
+  setConnection("error", message);
+  render(state ?? preview);
+  if (state?.phase === "setup") showSetupFeedback(message, "error");
+}
 
 window.addEventListener("pagehide", () => {
   window.clearInterval(clockTimer);
-  client.destroy();
+  client?.destroy();
 });
 
 elements.setupForm.addEventListener("submit", (event) => {
@@ -161,7 +212,8 @@ elements.settings.addEventListener("click", () =>
   sendAction({ type: "configure" }),
 );
 
-render(preview);
+if (isStandalone) handleReady({ mode: "solo" });
+else render(preview);
 
 function buildBoard(size) {
   elements.board.replaceChildren();
@@ -200,14 +252,42 @@ function buildBoard(size) {
 
 function sendAction(action, renderPendingState = true) {
   if (pendingActionId || !state) return false;
-  const requestId = client.sendAction(action);
+  const requestId = dispatchAction(action);
   if (!requestId) {
     setConnection("error", "尚未连接 Playweft 平台");
     return false;
   }
   pendingActionId = requestId;
+  pendingActionType = action.type;
   if (renderPendingState) render(state);
   return true;
+}
+
+function dispatchAction(action) {
+  if (playMode !== "solo") return client?.sendAction(action);
+  const requestId = crypto.randomUUID();
+  window.queueMicrotask(() => {
+    const result = applySoloGomokuAction(state, action, { now: Date.now() });
+    if (!result.accepted) {
+      handleError(
+        result.error?.message ?? "Action rejected",
+        result.error?.code ?? "ACTION_REJECTED",
+        requestId,
+      );
+      return;
+    }
+    localVersion += 1;
+    handleState({
+      playerId: "solo-player-1",
+      state: result.state,
+      events: result.events,
+      matchId: localMatchId,
+      version: localVersion,
+      serverTime: Date.now(),
+    });
+    handleActionResult({ requestId, accepted: true });
+  });
+  return requestId;
 }
 
 function render(nextState) {
@@ -233,7 +313,7 @@ function render(nextState) {
   const canAct =
     Boolean(state) &&
     !ended &&
-    ownIndex === currentIndex &&
+    (playMode === "solo" || ownIndex === currentIndex) &&
     !pendingActionId;
   const winning = new Set(
     Array.isArray(nextState.winningCells)
@@ -260,7 +340,11 @@ function render(nextState) {
     const panel = elements.players[panelIndex];
     const own = playerIndex === ownIndex;
     panel.querySelector("[data-player-name]").textContent =
-      own ? `${label} · 你` : `${label} · 玩家 ${playerIndex + 1}`;
+      playMode === "solo"
+        ? `${label} · 玩家 ${playerIndex + 1}`
+        : own
+          ? `${label} · 你`
+          : `${label} · 玩家 ${playerIndex + 1}`;
     panel.querySelector("[data-player-detail]").textContent =
       label === "黑方" ? "先手" : "后手";
     panel.classList.toggle(
@@ -298,7 +382,7 @@ function render(nextState) {
   }
 
   renderClocks();
-  renderStatus(nextState, ownIndex, currentIndex);
+  renderStatus(nextState, ownIndex, currentIndex, blackIndex);
 }
 
 function renderSetup(nextState, ownIndex) {
@@ -310,7 +394,9 @@ function renderSetup(nextState, ownIndex) {
     (isHost && draftSettings) || nextState.settings || preview.settings;
 
   elements.setupNote.textContent = canConfigure
-    ? "调整会立即同步给另一方，确认后开始"
+    ? playMode === "solo"
+      ? "本机控制黑白双方轮流落子"
+      : "调整会立即同步给另一方，确认后开始"
     : "设置会随房主调整实时更新";
   elements.forbiddenSetting.value = settings.forbiddenMoves ? "renju" : "none";
   elements.blackSetting.value = settings.blackMode ?? "random";
@@ -337,7 +423,7 @@ function renderSetupBoard(nextState, size) {
   renderClocks();
 }
 
-function renderStatus(nextState, ownIndex, currentIndex) {
+function renderStatus(nextState, ownIndex, currentIndex, blackIndex) {
   if (!state) return;
   if (nextState.draw) {
     elements.statusTitle.textContent = "本局平手";
@@ -345,6 +431,14 @@ function renderStatus(nextState, ownIndex, currentIndex) {
     return;
   }
   if (nextState.winner) {
+    if (playMode === "solo") {
+      elements.statusTitle.textContent =
+        Number(nextState.winnerIndex) - 1 === blackIndex
+          ? "黑方获胜"
+          : "白方获胜";
+      elements.statusDetail.textContent = "五子连珠，本局结束";
+      return;
+    }
     const won = Number(nextState.winnerIndex) - 1 === ownIndex;
     elements.statusTitle.textContent =
       ownIndex < 0 ? `玩家 ${nextState.winnerIndex} 获胜` : won ? "你赢了" : "对手获胜";
@@ -352,6 +446,12 @@ function renderStatus(nextState, ownIndex, currentIndex) {
       nextState.lastEvent?.kind === "player_left"
         ? "另一方已离开对局"
         : "五子连珠，本局结束";
+    return;
+  }
+  if (playMode === "solo") {
+    elements.statusTitle.textContent =
+      currentIndex === blackIndex ? "轮到黑方落子" : "轮到白方落子";
+    elements.statusDetail.textContent = "选择一个空交叉点";
     return;
   }
   if (ownIndex < 0) {
@@ -413,7 +513,7 @@ function syncSetupSettings() {
 
 function sendSettingsUpdate(settings) {
   queuedSettings = undefined;
-  const requestId = client.sendAction({
+  const requestId = dispatchAction({
     type: "update_settings",
     ...settings,
   });

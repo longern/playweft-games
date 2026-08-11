@@ -48,13 +48,12 @@ body {
   align-items: center;
   gap: 11px;
   background: rgba(255, 255, 255, 0.72);
-  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
 .player-card.is-current {
   border-color: #a99b83;
   box-shadow: 0 5px 16px rgba(70, 54, 36, 0.1);
-  transform: translateX(4px);
 }
 
 .player-card.is-winner {
@@ -388,7 +387,6 @@ body[data-play-mode="solo"] .connection-status {
   .round-tag,
   .river-mark { display: none; }
   .player-card { min-height: 58px; padding: 8px 10px; }
-  .player-card.is-current { transform: translateY(-2px); }
   .mini-piece { width: 34px; height: 34px; font-size: 1rem; }
   .board-column { grid-row: 2; }
   .turn-status { min-height: 82px; }

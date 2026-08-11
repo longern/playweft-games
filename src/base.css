@@ -122,7 +122,7 @@ a:focus-visible {
 
 @media (max-width: 560px) {
   .game-header {
-    min-height: 62px;
+    min-height: 60px;
     padding: 10px 16px;
   }
 

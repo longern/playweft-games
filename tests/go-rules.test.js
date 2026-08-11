@@ -467,3 +467,74 @@ test("Go can return to setup after a game and keeps prior values editable by the
   assert.equal(result.state.hostId, "host");
   assert.equal(result.events[0].type, "configuration_opened");
 });
+
+test("Go requires the opponent to approve a one-step undo", async () => {
+  const result = await runGo(`
+    state = setup({ players = { "black", "white" }, hostId = "black" })
+    state = on_action(state, {
+      type = "start", size = 9, rules = "chinese", komi = 6.5,
+      handicap = 0, blackMode = "player1"
+    }, { playerId = "black", actionAt = 1000 }).state
+    played = on_action(
+      state,
+      { type = "play", row = 4, column = 4 },
+      { playerId = "black", actionAt = 2500 }
+    )
+    hidden_snapshot = view(played.state, {}, {}).state.undoSnapshot == nil
+    wrong_requester = on_action(
+      played.state,
+      { type = "request_undo" },
+      { playerId = "white", actionAt = 2600 }
+    )
+    requested = on_action(
+      played.state,
+      { type = "request_undo" },
+      { playerId = "black", actionAt = 2700 }
+    )
+    request_index = requested.state.undoRequest.requesterIndex
+    blocked_move = on_action(
+      requested.state,
+      { type = "play", row = 5, column = 5 },
+      { playerId = "white", actionAt = 2800 }
+    )
+    requester_response = on_action(
+      requested.state,
+      { type = "respond_undo", accept = true },
+      { playerId = "black", actionAt = 2900 }
+    )
+    accepted = on_action(
+      requested.state,
+      { type = "respond_undo", accept = true },
+      { playerId = "white", actionAt = 3000 }
+    )
+    result = {
+      hiddenSnapshot = hidden_snapshot,
+      wrongRequester = wrong_requester.error.code,
+      requestEvent = requested.events[1].type,
+      requesterIndex = request_index,
+      blockedMove = blocked_move.error.code,
+      requesterResponse = requester_response.error.code,
+      acceptedEvent = accepted.events[1].type,
+      moves = accepted.state.moves,
+      current = accepted.state.current,
+      point = accepted.state.board[4][4],
+      undoAvailable = accepted.state.undoAvailable,
+      requestCleared = accepted.state.undoRequest == nil,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    hiddenSnapshot: true,
+    wrongRequester: "ONLY_LAST_PLAYER_CAN_UNDO",
+    requestEvent: "undo_requested",
+    requesterIndex: 1,
+    blockedMove: "UNDO_RESPONSE_REQUIRED",
+    requesterResponse: "UNDO_REQUESTER_CANNOT_RESPOND",
+    acceptedEvent: "undo_accepted",
+    moves: 0,
+    current: 1,
+    point: 0,
+    undoAvailable: false,
+    requestCleared: true,
+  });
+});

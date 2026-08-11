@@ -19,19 +19,41 @@
         <p>围地提子，双人对弈</p>
       </div>
     </div>
-    <div id="move-number" class="move-number" hidden>开局</div>
+    <div id="move-number" class="move-number" data-move-number hidden>开局</div>
     <div id="connection" class="connection-status" data-mode="waiting">
       <span>连接平台中</span>
     </div>
   </header>
 
   <main class="go-layout">
-    <section id="setup-panel" class="setup-panel" role="dialog" aria-modal="true" aria-labelledby="setup-title" hidden>
-      <form id="setup-form" class="setup-form" tabindex="-1">
+    <dialog id="setup-panel" class="overlay-dialog setup-panel" aria-labelledby="setup-title">
+      <form id="setup-form" class="overlay-dialog__surface setup-form" tabindex="-1">
         <div class="setup-heading">
           <h2 id="setup-title">对局设置</h2>
           <p id="setup-note">房主确认设置后开始</p>
         </div>
+
+        <fieldset id="setup-source" class="setup-source">
+          <legend>对局来源</legend>
+          <div class="setup-source-options">
+            <label>
+              <input type="radio" name="setupSource" value="new" checked />
+              <span>新对局</span>
+            </label>
+            <label>
+              <input id="resume-source" type="radio" name="setupSource" value="resume" />
+              <span>继续本地棋谱</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <section id="resume-setup" class="resume-setup" aria-label="选择续下棋谱" hidden>
+          <label class="setting-field">
+            <span>本地棋谱</span>
+            <select id="resume-setting" name="resumeRecord"></select>
+          </label>
+          <dl id="resume-summary" class="resume-summary"></dl>
+        </section>
 
         <label class="setting-field">
           <span>棋盘大小</span>
@@ -90,21 +112,17 @@
           <span id="start-label">开始对局</span>
         </button>
       </form>
-    </section>
+    </dialog>
 
-    <section id="history-panel" class="history-panel" role="dialog" aria-modal="true" aria-labelledby="history-title"
-      hidden>
-      <div id="history-dialog" class="history-dialog" tabindex="-1">
-        <header class="history-heading">
-          <div>
-            <h2 id="history-title">本地棋谱</h2>
-            <p id="history-note">最近 50 局，仅保存在此浏览器</p>
-          </div>
-          <button id="history-close" class="history-close" type="button" aria-label="关闭棋谱">
+    <dialog id="history-panel" class="overlay-dialog history-panel" aria-labelledby="history-title">
+      <div id="history-dialog" class="overlay-dialog__surface history-dialog" tabindex="-1">
+        <header class="overlay-dialog__header">
+          <h2 id="history-title">本地棋谱</h2>
+          <button id="history-close" class="overlay-dialog__close" type="button" aria-label="关闭棋谱">
             <i data-lucide="x"></i>
           </button>
         </header>
-        <div id="history-list" class="history-list"></div>
+        <ul id="history-list" class="history-list"></ul>
         <footer class="history-footer">
           <button id="history-clear" class="history-clear" type="button">
             <i data-lucide="trash-2"></i>
@@ -112,62 +130,134 @@
           </button>
         </footer>
       </div>
-    </section>
+    </dialog>
+
+    <dialog id="game-info-panel" class="overlay-dialog overlay-dialog--sheet-narrow game-info-panel"
+      aria-labelledby="game-info-title">
+      <div id="game-info-dialog" class="overlay-dialog__surface game-info-dialog" tabindex="-1">
+        <header class="overlay-dialog__header">
+          <h2 id="game-info-title">对局信息</h2>
+          <button id="game-info-close" class="overlay-dialog__close" type="button" aria-label="关闭对局信息">
+            <i data-lucide="x"></i>
+          </button>
+        </header>
+        <dl id="game-info-list" class="game-info-list"></dl>
+      </div>
+    </dialog>
 
     <section id="table-layout" class="table-layout">
-      <aside class="players-panel" aria-label="对局玩家">
-        <div id="black-player" class="player-card is-current">
-          <span class="stone-swatch stone-black" aria-hidden="true"></span>
+      <aside id="black-player" class="player-station is-current" aria-label="黑方玩家">
+        <div class="player-card">
+          <span class="go-stone go-stone--black stone-swatch" aria-hidden="true"></span>
           <div class="player-info">
             <strong class="player-name" data-player-name>黑方</strong>
             <span class="player-detail" data-player-detail>提子 0</span>
           </div>
-          <span class="clock-housing">
-            <time class="player-time" data-player-time datetime="PT0S">00:00</time>
-          </span>
         </div>
-        <div id="white-player" class="player-card">
-          <span class="stone-swatch stone-white" aria-hidden="true"></span>
+        <span class="clock-housing">
+          <time class="player-time" data-player-time datetime="PT0S">00:00</time>
+        </span>
+      </aside>
+
+      <aside id="white-player" class="player-station" aria-label="白方玩家">
+        <div class="player-card">
+          <span class="go-stone go-stone--white stone-swatch" aria-hidden="true"></span>
           <div class="player-info">
             <strong class="player-name" data-player-name>白方</strong>
             <span class="player-detail" data-player-detail>提子 0</span>
           </div>
-          <span class="clock-housing">
-            <time class="player-time" data-player-time datetime="PT0S">00:00</time>
-          </span>
         </div>
+        <span class="clock-housing">
+          <time class="player-time" data-player-time datetime="PT0S">00:00</time>
+        </span>
       </aside>
 
       <section class="board-shell" aria-label="19 × 19 围棋棋盘">
         <div id="board" class="go-board" role="grid"></div>
       </section>
-
-      <aside class="action-panel">
-        <p id="settings-summary" class="settings-summary">19 × 19 · 中国规则 · 贴 6.5 目</p>
-        <div class="turn-actions">
-          <button id="pass-button" class="pass-action" type="button" disabled>
-            <span class="icon-button-content"><i data-lucide="flag"></i>停一手</span>
-          </button>
-          <button id="resign-button" class="resign-action" type="button" disabled>
-            <span id="resign-label">认输</span>
-          </button>
-        </div>
-        <button id="rematch-button" class="rematch-action" type="button" hidden>
-          <span class="icon-button-content"><i data-lucide="rotate-ccw"></i>再来一局</span>
-        </button>
-        <button id="settings-button" class="settings-action" type="button" hidden>
-          <span class="icon-button-content"><i data-lucide="settings-2"></i>返回设置</span>
-        </button>
-        <div class="utility-links">
-          <button id="history-button" class="rules-link" type="button">
-            <i data-lucide="history"></i>本地棋谱
-          </button>
-          <a class="rules-link" href="./help.html" target="_blank">
-            <i data-lucide="circle-help"></i>玩法与计分
-          </a>
-        </div>
-      </aside>
     </section>
+
+    <aside class="action-panel">
+      <div class="sidebar-move-number" data-move-number hidden>开局</div>
+      <p id="scoring-summary" class="scoring-summary" hidden></p>
+      <section class="move-log" aria-labelledby="move-log-title">
+        <header class="move-log-heading">
+          <h2 id="move-log-title">落子记录</h2>
+          <div class="move-log-heading-actions">
+            <span id="move-log-count">0 手</span>
+            <button id="replay-button" class="move-log-replay" type="button" aria-expanded="false"
+              aria-controls="replay-controls" disabled>
+              <i data-lucide="history"></i>回看
+            </button>
+          </div>
+        </header>
+        <ol id="move-log-list" class="move-log-list">
+          <li class="move-log-empty">尚未落子</li>
+        </ol>
+        <section id="replay-controls" class="replay-controls" aria-label="对局回看" hidden>
+          <div class="replay-scrubber">
+            <button id="replay-first" type="button" aria-label="回到开局" title="回到开局">
+              <i data-lucide="chevrons-left"></i>
+            </button>
+            <button id="replay-previous" type="button" aria-label="上一手" title="上一手">
+              <i data-lucide="chevron-left"></i>
+            </button>
+            <div id="replay-slider-field" class="replay-slider-field">
+              <div class="replay-status-track" aria-hidden="true">
+                <output id="replay-status" class="replay-status" for="replay-slider">0</output>
+              </div>
+              <input id="replay-slider" type="range" min="0" max="0" value="0" step="1"
+                aria-label="回看进度" />
+            </div>
+            <button id="replay-next" type="button" aria-label="下一手" title="下一手">
+              <i data-lucide="chevron-right"></i>
+            </button>
+            <button id="replay-last" type="button" aria-label="回到最新" title="回到最新">
+              <i data-lucide="chevrons-right"></i>
+            </button>
+          </div>
+        </section>
+      </section>
+      <section id="undo-request" class="undo-request" aria-live="polite" hidden>
+        <p id="undo-request-label">对方请求悔棋</p>
+        <div id="undo-response-actions" class="undo-response-actions">
+          <button id="undo-reject" type="button">拒绝</button>
+          <button id="undo-accept" type="button">同意</button>
+        </div>
+      </section>
+      <div class="turn-actions">
+        <button id="undo-button" class="undo-action" type="button" disabled>
+          <span class="icon-button-content"><i data-lucide="undo-2"></i><span id="undo-label">悔棋</span></span>
+        </button>
+        <button id="pass-button" class="pass-action" type="button" disabled>
+          <span class="icon-button-content"><i data-lucide="flag"></i>停一手</span>
+        </button>
+        <button id="more-button" class="more-action" type="button" aria-label="更多操作" aria-haspopup="menu"
+          aria-expanded="false" aria-controls="more-menu">
+          <i data-lucide="ellipsis"></i>
+        </button>
+        <div id="more-menu" class="more-menu" role="menu" aria-label="更多操作" hidden>
+          <button id="game-info-button" class="more-menu-item" type="button" role="menuitem">
+            <i data-lucide="info"></i><span>对局信息</span>
+          </button>
+          <button id="history-button" class="more-menu-item" type="button" role="menuitem">
+            <i data-lucide="notebook-pen"></i><span>本地棋谱</span>
+          </button>
+          <a id="help-link" class="more-menu-item" href="./help.html" target="_blank" rel="noopener" role="menuitem">
+            <i data-lucide="circle-help"></i><span>玩法与计分</span>
+          </a>
+          <button id="resign-button" class="more-menu-item is-danger" type="button" role="menuitem" disabled>
+            <i data-lucide="flag"></i><span id="resign-label">认输</span>
+          </button>
+        </div>
+      </div>
+      <button id="rematch-button" class="rematch-action" type="button" hidden>
+        <span class="icon-button-content"><i data-lucide="rotate-ccw"></i>再来一局</span>
+      </button>
+      <button id="settings-button" class="settings-action" type="button" hidden>
+        <span class="icon-button-content"><i data-lucide="settings-2"></i>返回设置</span>
+      </button>
+    </aside>
   </main>
   <button id="confirm-move" class="confirm-move" type="button" hidden>
     落子

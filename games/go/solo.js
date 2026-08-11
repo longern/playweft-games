@@ -81,6 +81,14 @@ export function applySoloGoAction(
     }]);
   }
 
+  if (action.type === "undo") {
+    if (state.ended || !state.undoAvailable || !state.undoSnapshot) {
+      return rejected("NO_MOVE_TO_UNDO");
+    }
+    restoreUndoSnapshot(state, state.undoSnapshot, now);
+    return accepted(state, [{ type: "undo_accepted", player: state.players[0] }]);
+  }
+
   if (state.phase === "scoring") {
     if (action.type !== "score") return rejected("SCORING_REQUIRED");
     const scores = calculateGoScore(state);
@@ -102,6 +110,8 @@ export function applySoloGoAction(
   const actor = state.players[playerIndex];
 
   if (action.type === "pass") {
+    state.undoSnapshot = createUndoSnapshot(state);
+    state.undoAvailable = true;
     recordTurnTime(state, playerIndex, now);
     state.moves += 1;
     state.consecutivePasses += 1;
@@ -170,6 +180,8 @@ export function applySoloGoAction(
     return rejected("KO");
   }
 
+  state.undoSnapshot = createUndoSnapshot(state);
+  state.undoAvailable = true;
   recordTurnTime(state, playerIndex, now);
   state.previousBoard = boardSignature(state.board);
   state.board = candidate;
@@ -308,6 +320,8 @@ function setupState(round, settings) {
       rules: settings.rules,
     },
     previousBoard: "",
+    undoAvailable: false,
+    undoSnapshot: null,
     lastMove: { row: 0, column: 0 },
     lastEvent: { kind: "setup", playerIndex: 1, captured: 0 },
     round,
@@ -432,6 +446,41 @@ function placeHandicap(board, count) {
 function recordTurnTime(state, playerIndex, now) {
   state.timeUsed[playerIndex] += Math.max(0, now - state.turnStartedAt);
   state.turnStartedAt = now;
+}
+
+function createUndoSnapshot(state) {
+  return {
+    phase: state.phase,
+    board: state.board.map((row) => [...row]),
+    current: state.current,
+    captures: [...state.captures],
+    timeUsed: [...state.timeUsed],
+    scoreRound: state.scoreRound,
+    scoreSubmitted: [...state.scoreSubmitted],
+    consecutivePasses: state.consecutivePasses,
+    moves: state.moves,
+    previousBoard: state.previousBoard,
+    lastMove: { ...state.lastMove },
+    lastEvent: { ...state.lastEvent },
+  };
+}
+
+function restoreUndoSnapshot(state, snapshot, now) {
+  state.phase = snapshot.phase;
+  state.board = snapshot.board.map((row) => [...row]);
+  state.current = snapshot.current;
+  state.captures = [...snapshot.captures];
+  state.timeUsed = [...snapshot.timeUsed];
+  state.turnStartedAt = now;
+  state.scoreRound = snapshot.scoreRound;
+  state.scoreSubmitted = [...snapshot.scoreSubmitted];
+  state.consecutivePasses = snapshot.consecutivePasses;
+  state.moves = snapshot.moves;
+  state.previousBoard = snapshot.previousBoard;
+  state.lastMove = { ...snapshot.lastMove };
+  state.lastEvent = { ...snapshot.lastEvent };
+  state.undoAvailable = false;
+  state.undoSnapshot = null;
 }
 
 function emptyBoard(size) {

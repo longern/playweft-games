@@ -14,9 +14,9 @@
   "name_localized": {
     "zh-CN": "五子棋"
   },
-  "description": "Take turns placing stones and be first to connect five.",
+  "description": "Play locally or online, taking turns to be first to connect five.",
   "description_localized": {
-    "zh-CN": "黑白轮流落子，率先横、竖或斜线连成五子获胜。"
+    "zh-CN": "支持本机轮流或双人房间对弈，黑白交替落子，率先连成五子获胜。"
   },
   "categories": ["Strategy"],
   "icons": [
@@ -31,6 +31,7 @@
   "theme_color": "#d9aa63",
   "help_url": "./help.html",
   "modes": {
+    "solo": {},
     "room": {
       "players": {
         "min": 2,

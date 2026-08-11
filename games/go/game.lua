@@ -58,6 +58,56 @@ local function copy_board(board)
   return copy
 end
 
+local function copy_list(values)
+  local copy = {}
+  for index, value in ipairs(values or {}) do copy[index] = value end
+  return copy
+end
+
+local function copy_record(value)
+  local copy = {}
+  for key, field in pairs(value or {}) do copy[key] = field end
+  return copy
+end
+
+local function undo_snapshot(state)
+  return {
+    phase = state.phase,
+    board = copy_board(state.board),
+    current = state.current,
+    captures = copy_list(state.captures),
+    timeUsed = copy_list(state.timeUsed),
+    scoreRound = state.scoreRound,
+    scoreSubmitted = copy_list(state.scoreSubmitted),
+    consecutivePasses = state.consecutivePasses,
+    moves = state.moves,
+    previousBoard = state.previousBoard,
+    lastMove = copy_record(state.lastMove),
+    lastEvent = copy_record(state.lastEvent),
+  }
+end
+
+local function restore_undo_snapshot(state, snapshot, context)
+  state.phase = snapshot.phase
+  state.board = copy_board(snapshot.board)
+  state.current = snapshot.current
+  state.captures = copy_list(snapshot.captures)
+  state.timeUsed = copy_list(snapshot.timeUsed)
+  local now = tonumber(context and context.actionAt)
+  state.turnStartedAt = now and now >= 0 and now or 0
+  state.scoreRound = snapshot.scoreRound
+  state.scoreSubmitted = copy_list(snapshot.scoreSubmitted)
+  state.scoreProposals = {}
+  state.consecutivePasses = snapshot.consecutivePasses
+  state.moves = snapshot.moves
+  state.previousBoard = snapshot.previousBoard
+  state.lastMove = copy_record(snapshot.lastMove)
+  state.lastEvent = copy_record(snapshot.lastEvent)
+  state.undoRequest = nil
+  state.undoSnapshot = nil
+  state.undoAvailable = false
+end
+
 local function board_signature(board)
   local parts = {}
   for row = 1, #board do
@@ -318,6 +368,7 @@ local function new_round(
       rules = settings.rules,
     },
     previousBoard = "",
+    undoAvailable = false,
     lastMove = { row = 0, column = 0 },
     lastEvent = {
       kind = settings.handicap > 0 and "handicap" or "start",
@@ -357,6 +408,7 @@ local function setup_state(players, player_names, round, settings, seed, host_id
       rules = settings.rules,
     },
     previousBoard = "",
+    undoAvailable = false,
     lastMove = { row = 0, column = 0 },
     lastEvent = { kind = "setup", playerIndex = 1, captured = 0 },
     round = round,
@@ -482,6 +534,57 @@ function on_action(state, action, context)
     }
   end
 
+  if action.type == "request_undo" then
+    if state.ended or state.phase ~= "playing" then
+      return rejected(state, "undo_unavailable")
+    end
+    if not state.undoAvailable or not state.undoSnapshot or (state.moves or 0) <= 0 then
+      return rejected(state, "no_move_to_undo")
+    end
+    if state.undoRequest then return rejected(state, "undo_already_requested") end
+    if tonumber(state.lastEvent and state.lastEvent.playerIndex) ~= index then
+      return rejected(state, "only_last_player_can_undo")
+    end
+    state.undoRequest = { requesterIndex = index }
+    return {
+      accepted = true,
+      state = state,
+      events = { { type = "undo_requested", player = actor_id } },
+    }
+  end
+
+  if action.type == "respond_undo" then
+    if not state.undoRequest then return rejected(state, "no_undo_request") end
+    if tonumber(state.undoRequest.requesterIndex) == index then
+      return rejected(state, "undo_requester_cannot_respond")
+    end
+    if type(action.accept) ~= "boolean" then
+      return rejected(state, "invalid_undo_response")
+    end
+    local requester_index = tonumber(state.undoRequest.requesterIndex)
+    local requester_id = state.players[requester_index]
+    if action.accept then
+      restore_undo_snapshot(state, state.undoSnapshot, context)
+      return {
+        accepted = true,
+        state = state,
+        events = {
+          { type = "undo_accepted", player = actor_id, requester = requester_id },
+        },
+      }
+    end
+    state.undoRequest = nil
+    state.undoSnapshot = nil
+    state.undoAvailable = false
+    return {
+      accepted = true,
+      state = state,
+      events = {
+        { type = "undo_rejected", player = actor_id, requester = requester_id },
+      },
+    }
+  end
+
   if state.phase == "scoring" then
     if action.type ~= "score" then return rejected(state, "scoring_required") end
     if tonumber(action.scoreRound) ~= tonumber(state.scoreRound) then
@@ -544,9 +647,12 @@ function on_action(state, action, context)
   end
 
   if state.ended then return rejected(state, "game_over") end
+  if state.undoRequest then return rejected(state, "undo_response_required") end
   if index ~= state.current then return rejected(state, "not_your_turn") end
 
   if action.type == "pass" then
+    state.undoSnapshot = undo_snapshot(state)
+    state.undoAvailable = true
     record_turn_time(state, index, context)
     state.moves = (state.moves or 0) + 1
     state.consecutivePasses = state.consecutivePasses + 1
@@ -618,6 +724,8 @@ function on_action(state, action, context)
     return rejected(state, "ko")
   end
 
+  state.undoSnapshot = undo_snapshot(state)
+  state.undoAvailable = true
   record_turn_time(state, index, context)
   state.previousBoard = board_signature(state.board)
   state.board = candidate
@@ -662,7 +770,9 @@ end
 function view(state, events, context)
   local visible = {}
   for key, value in pairs(state) do
-    if key ~= "seed" and key ~= "scoreProposals" then visible[key] = value end
+    if key ~= "seed" and key ~= "scoreProposals" and key ~= "undoSnapshot" then
+      visible[key] = value
+    end
   end
   return { state = visible, events = events }
 end

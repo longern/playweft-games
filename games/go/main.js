@@ -1,19 +1,32 @@
 import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   CircleHelp,
+  Ellipsis,
   Flag,
   History,
+  Info,
+  NotebookPen,
   RotateCcw,
   Settings2,
   Trash2,
+  Undo2,
   X,
   createIcons,
 } from "lucide";
 import {
+  canResumeGoRecord,
   createGoHistoryStore,
+  goRecordToReplayFrames,
   goRecordToSgf,
   historyResultLabel,
+  restoreGoResumeState,
+  updateGoResumeSnapshot,
   updateGoHistory,
 } from "./history.js";
+import { createOverlayDialog } from "../../src/components/overlay-dialog.js";
 import {
   applySoloGoAction,
   calculateGoScore,
@@ -32,9 +45,15 @@ const elements = {
   boardShell: document.querySelector(".board-shell"),
   confirmMove: document.querySelector("#confirm-move"),
   table: document.querySelector("#table-layout"),
+  actionPanel: document.querySelector(".action-panel"),
   setupPanel: document.querySelector("#setup-panel"),
   setupForm: document.querySelector("#setup-form"),
   setupNote: document.querySelector("#setup-note"),
+  setupSources: [...document.querySelectorAll('[name="setupSource"]')],
+  resumeSource: document.querySelector("#resume-source"),
+  resumeSetup: document.querySelector("#resume-setup"),
+  resumeSetting: document.querySelector("#resume-setting"),
+  resumeSummary: document.querySelector("#resume-summary"),
   sizeSetting: document.querySelector("#size-setting"),
   rulesSetting: document.querySelector("#rules-setting"),
   komiSetting: document.querySelector("#komi-setting"),
@@ -43,21 +62,46 @@ const elements = {
   setupFeedback: document.querySelector("#setup-feedback"),
   historyPanel: document.querySelector("#history-panel"),
   historyDialog: document.querySelector("#history-dialog"),
-  historyNote: document.querySelector("#history-note"),
   historyList: document.querySelector("#history-list"),
   historyOpen: document.querySelector("#history-button"),
+  help: document.querySelector("#help-link"),
   historyClose: document.querySelector("#history-close"),
   historyClear: document.querySelector("#history-clear"),
   historyClearLabel: document.querySelector("#history-clear-label"),
+  gameInfoPanel: document.querySelector("#game-info-panel"),
+  gameInfoDialog: document.querySelector("#game-info-dialog"),
+  gameInfoList: document.querySelector("#game-info-list"),
+  gameInfoOpen: document.querySelector("#game-info-button"),
+  gameInfoClose: document.querySelector("#game-info-close"),
+  replayOpen: document.querySelector("#replay-button"),
+  replayControls: document.querySelector("#replay-controls"),
+  replayStatus: document.querySelector("#replay-status"),
+  replaySliderField: document.querySelector("#replay-slider-field"),
+  replaySlider: document.querySelector("#replay-slider"),
+  replayFirst: document.querySelector("#replay-first"),
+  replayPrevious: document.querySelector("#replay-previous"),
+  replayNext: document.querySelector("#replay-next"),
+  replayLast: document.querySelector("#replay-last"),
+  moveLogCount: document.querySelector("#move-log-count"),
+  moveLogList: document.querySelector("#move-log-list"),
   start: document.querySelector("#start-button"),
   startLabel: document.querySelector("#start-label"),
+  undo: document.querySelector("#undo-button"),
+  undoLabel: document.querySelector("#undo-label"),
+  undoRequest: document.querySelector("#undo-request"),
+  undoRequestLabel: document.querySelector("#undo-request-label"),
+  undoResponseActions: document.querySelector("#undo-response-actions"),
+  undoAccept: document.querySelector("#undo-accept"),
+  undoReject: document.querySelector("#undo-reject"),
   pass: document.querySelector("#pass-button"),
+  more: document.querySelector("#more-button"),
+  moreMenu: document.querySelector("#more-menu"),
   resign: document.querySelector("#resign-button"),
   resignLabel: document.querySelector("#resign-label"),
   rematch: document.querySelector("#rematch-button"),
   settings: document.querySelector("#settings-button"),
-  settingsSummary: document.querySelector("#settings-summary"),
-  moveNumber: document.querySelector("#move-number"),
+  scoringSummary: document.querySelector("#scoring-summary"),
+  moveNumbers: [...document.querySelectorAll("[data-move-number]")],
   players: [
     document.querySelector("#black-player"),
     document.querySelector("#white-player"),
@@ -114,15 +158,35 @@ const points = [];
 let boardSize = 0;
 let pendingMove;
 let lastPointerType = "";
-let setupCloseTimer;
-let historyCloseTimer;
 let historyClearTimer;
 let resignConfirmTimer;
+let moreMenuCloseTimer;
 let serverTimeAtSync;
 let localTimeAtSync;
+let replayGameKey = "";
+let replayFrames = [];
+let replayIndex;
+let setupSource = "new";
+let selectedResumeRecordId = "";
 
 createIcons({
-  icons: { CircleHelp, Flag, History, RotateCcw, Settings2, Trash2, X },
+  icons: {
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
+    CircleHelp,
+    Ellipsis,
+    Flag,
+    History,
+    Info,
+    NotebookPen,
+    RotateCcw,
+    Settings2,
+    Trash2,
+    Undo2,
+    X,
+  },
 });
 const clockTimer = window.setInterval(renderClocks, 1000);
 const historyStore = createGoHistoryStore();
@@ -167,6 +231,31 @@ const client = isStandalone
       onError: handleError,
     });
 
+const setupDialog = createOverlayDialog({
+  root: elements.setupPanel,
+  surface: elements.setupForm,
+  dismissible: false,
+  initialFocus: () =>
+    elements.sizeSetting.disabled ? elements.setupForm : elements.sizeSetting,
+});
+const historyDialog = createOverlayDialog({
+  root: elements.historyPanel,
+  surface: elements.historyDialog,
+  closeButtons: [elements.historyClose],
+  initialFocus: elements.historyDialog,
+  returnFocus: elements.more,
+  beforeOpen: renderHistory,
+  beforeClose: resetHistoryClear,
+});
+const gameInfoDialog = createOverlayDialog({
+  root: elements.gameInfoPanel,
+  surface: elements.gameInfoDialog,
+  closeButtons: [elements.gameInfoClose],
+  initialFocus: elements.gameInfoDialog,
+  returnFocus: elements.more,
+  beforeOpen: () => renderGameInfo(state ?? preview),
+});
+
 function handleReady(message) {
   playMode = message.mode ?? "room";
   if (playMode === "solo") {
@@ -192,8 +281,11 @@ function handleState(message) {
   clearPendingMove();
   playerId = playMode === "solo" ? "solo-player-1" : message.playerId;
   state = message.state;
-  historyStore.save(updateGoHistory(historyStore.load(), message));
-  if (!elements.historyPanel.hidden) renderHistory();
+  recordReplayFrame(message);
+  historyStore.save(
+    updateGoHistory(historyStore.load(), { ...message, mode: playMode }),
+  );
+  if (elements.historyPanel.open) renderHistory();
   serverTimeAtSync = Number.isFinite(Number(message.serverTime))
     ? Number(message.serverTime)
     : undefined;
@@ -275,10 +367,15 @@ function handleError(error, code, requestId) {
 }
 
 window.addEventListener("pagehide", () => {
+  persistSoloResumeSnapshot();
   window.clearInterval(clockTimer);
   window.clearTimeout(historyClearTimer);
   window.clearTimeout(resignConfirmTimer);
+  window.clearTimeout(moreMenuCloseTimer);
   client?.destroy();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") persistSoloResumeSnapshot();
 });
 document.addEventListener("pointerdown", (event) => {
   if (
@@ -287,6 +384,13 @@ document.addEventListener("pointerdown", (event) => {
     !elements.confirmMove.contains(event.target)
   ) {
     clearPendingMove();
+  }
+  if (
+    !elements.moreMenu.hidden &&
+    !elements.more.contains(event.target) &&
+    !elements.moreMenu.contains(event.target)
+  ) {
+    setMoreMenuOpen(false);
   }
 });
 window.addEventListener("resize", positionConfirmMove);
@@ -307,6 +411,14 @@ elements.confirmMove.addEventListener("animationend", (event) => {
 elements.setupForm.addEventListener("submit", (event) => {
   event.preventDefault();
   clearSetupFeedback();
+  if (setupSource === "resume") {
+    if (playMode === "solo" && selectedResumeRecordId) {
+      resumeHistoryRecord(selectedResumeRecordId);
+      return;
+    }
+    showSetupFeedback("这份棋谱暂时无法在房间中续下", "error");
+    return;
+  }
   queuedSettings = undefined;
   draftSettings = undefined;
   const sent = sendAction(
@@ -324,14 +436,60 @@ elements.setupForm.addEventListener("submit", (event) => {
   setSetupOpen(false);
 });
 elements.setupForm.addEventListener("input", (event) => {
+  if (event.target.name === "setupSource") {
+    setupSource = event.target.value;
+    clearSetupFeedback();
+    render(state ?? preview);
+    return;
+  }
+  if (event.target === elements.resumeSetting) {
+    selectedResumeRecordId = elements.resumeSetting.value;
+    clearSetupFeedback();
+    render(state ?? preview);
+    return;
+  }
   if (!isSettingControl(event.target)) return;
   updateHandicapControls();
   syncSetupSettings();
 });
 elements.pass.addEventListener("click", () => sendAction({ type: "pass" }));
+elements.undo.addEventListener("click", () =>
+  sendAction({ type: playMode === "solo" ? "undo" : "request_undo" }),
+);
+elements.undoAccept.addEventListener("click", () =>
+  sendAction({ type: "respond_undo", accept: true }),
+);
+elements.undoReject.addEventListener("click", () =>
+  sendAction({ type: "respond_undo", accept: false }),
+);
+elements.more.addEventListener("click", (event) => {
+  const shouldOpen =
+    elements.moreMenu.hidden || elements.moreMenu.dataset.state === "closing";
+  setMoreMenuOpen(shouldOpen, event.detail === 0);
+});
+elements.moreMenu.addEventListener("animationend", (event) => {
+  if (event.animationName === "more-menu-out") finishMoreMenuClose();
+});
+elements.moreMenu.addEventListener("keydown", (event) => {
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+  const items = [
+    ...elements.moreMenu.querySelectorAll('[role="menuitem"]'),
+  ].filter((item) => !item.hidden && !item.disabled);
+  if (items.length === 0) return;
+  event.preventDefault();
+  const currentIndex = items.indexOf(document.activeElement);
+  const direction = event.key === "ArrowDown" ? 1 : -1;
+  const nextIndex =
+    currentIndex < 0
+      ? direction > 0
+        ? 0
+        : items.length - 1
+      : (currentIndex + direction + items.length) % items.length;
+  items[nextIndex].focus();
+});
 elements.resign.addEventListener("click", () => {
   if (elements.resign.dataset.confirming === "true") {
-    resetResignConfirmation();
+    setMoreMenuOpen(false);
     sendAction({ type: "resign" });
     return;
   }
@@ -346,14 +504,53 @@ elements.rematch.addEventListener("click", () =>
 elements.settings.addEventListener("click", () =>
   sendAction({ type: "configure" }),
 );
-elements.historyOpen.addEventListener("click", () => setHistoryOpen(true));
-elements.historyClose.addEventListener("click", () => setHistoryOpen(false));
-elements.historyPanel.addEventListener("click", (event) => {
-  if (event.target === elements.historyPanel) setHistoryOpen(false);
+elements.historyOpen.addEventListener("click", () => {
+  setMoreMenuOpen(false);
+  setHistoryOpen(true);
+});
+elements.gameInfoOpen.addEventListener("click", () => {
+  setMoreMenuOpen(false);
+  setGameInfoOpen(true);
+});
+elements.help.addEventListener("click", () => setMoreMenuOpen(false));
+elements.replayOpen.addEventListener("click", () =>
+  setReplayOpen(!isReplayOpen()),
+);
+elements.replayControls.addEventListener("animationend", (event) => {
+  if (event.target !== elements.replayControls) return;
+  if (event.animationName === "replay-controls-in" && isReplayOpen()) {
+    elements.replayControls.dataset.state = "open";
+  }
+  if (event.animationName === "replay-controls-out" && !isReplayOpen()) {
+    elements.replayControls.hidden = true;
+    delete elements.replayControls.dataset.state;
+  }
+});
+elements.replayFirst.addEventListener("click", () => showReplayFrame(0));
+elements.replayPrevious.addEventListener("click", () =>
+  showReplayFrame((replayIndex ?? replayFrames.length - 1) - 1),
+);
+elements.replayNext.addEventListener("click", () =>
+  showReplayFrame((replayIndex ?? replayFrames.length - 1) + 1),
+);
+elements.replayLast.addEventListener("click", () =>
+  showReplayFrame(replayFrames.length - 1),
+);
+elements.replaySlider.addEventListener("input", () =>
+  showReplayFrame(Number(elements.replaySlider.value)),
+);
+elements.moveLogList.addEventListener("click", (event) => {
+  const entry = event.target.closest("[data-move-number]");
+  if (entry) showReplayMove(Number(entry.dataset.moveNumber));
 });
 elements.historyList.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-history-export]");
-  if (button) exportHistoryRecord(button.dataset.historyExport);
+  const resumeButton = event.target.closest("[data-history-resume]");
+  if (resumeButton) {
+    resumeHistoryRecord(resumeButton.dataset.historyResume);
+    return;
+  }
+  const exportButton = event.target.closest("[data-history-export]");
+  if (exportButton) exportHistoryRecord(exportButton.dataset.historyExport);
 });
 elements.historyClear.addEventListener("click", () => {
   if (elements.historyClear.dataset.confirm !== "true") {
@@ -368,8 +565,11 @@ elements.historyClear.addEventListener("click", () => {
   renderHistory();
 });
 window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !elements.historyPanel.hidden) {
-    setHistoryOpen(false);
+  if (event.key === "Escape" && !elements.moreMenu.hidden) {
+    setMoreMenuOpen(false);
+    elements.more.focus();
+  } else if (event.key === "Escape" && isReplayOpen()) {
+    setReplayOpen(false);
   }
 });
 if (isStandalone) {
@@ -525,13 +725,12 @@ function positionConfirmMove() {
     viewportRight - horizontalPadding,
     Math.max(viewportLeft + horizontalPadding, anchorX),
   );
-  const top = Math.min(
-    viewportBottom - button.offsetHeight - safeInset,
-    Math.max(
-      viewportTop + safeInset,
-      anchorY - touchClearance - button.offsetHeight,
-    ),
-  );
+  const minimumTop = viewportTop + safeInset;
+  const maximumTop = viewportBottom - button.offsetHeight - safeInset;
+  const topAbove = anchorY - touchClearance - button.offsetHeight;
+  const topBelow = anchorY + touchClearance;
+  const preferredTop = topAbove >= minimumTop ? topAbove : topBelow;
+  const top = Math.min(maximumTop, Math.max(minimumTop, preferredTop));
   button.style.left = `${Math.round(left)}px`;
   button.style.top = `${Math.round(top)}px`;
 }
@@ -551,6 +750,222 @@ function setPointClasses(
   point.classList.toggle("is-last-move", isLastMove);
 }
 
+function recordReplayFrame(message) {
+  const nextState = message.state;
+  if (!nextState || nextState.phase === "setup") {
+    replayGameKey = "";
+    replayFrames = [];
+    hideReplayImmediately();
+    return;
+  }
+
+  const gameKey = `${message.matchId ?? localMatchId ?? "current"}:${nextState.round ?? 1}`;
+  const moveNumber = Math.max(0, Number(nextState.moves) || 0);
+  const wasAtLatest =
+    replayIndex === undefined || replayIndex >= replayFrames.length - 1;
+  if (gameKey !== replayGameKey) {
+    replayGameKey = gameKey;
+    replayFrames = [];
+    hideReplayImmediately();
+  } else if (moveNumber < (replayFrames.at(-1)?.moveNumber ?? 0)) {
+    replayFrames = replayFrames.filter(
+      (frame) => frame.moveNumber <= moveNumber,
+    );
+    hideReplayImmediately();
+  }
+
+  const lastFrame = replayFrames.at(-1);
+  const eventKind = nextState.lastEvent?.kind;
+  const playerIndex = Number(nextState.lastEvent?.playerIndex) - 1;
+  const blackIndex = Math.max(0, Number(nextState.blackIndex) - 1);
+  const move =
+    moveNumber > 0 && (eventKind === "play" || eventKind === "pass")
+      ? {
+          number: moveNumber,
+          color: playerIndex === blackIndex ? 1 : 2,
+          pass: eventKind === "pass",
+          row: Number(nextState.lastMove?.row) || 0,
+          column: Number(nextState.lastMove?.column) || 0,
+        }
+      : lastFrame?.moveNumber === moveNumber
+        ? lastFrame.move
+        : undefined;
+  const frame = {
+    moveNumber,
+    board: (nextState.board ?? []).map((row) => [...row]),
+    lastMove: { ...nextState.lastMove },
+    lastEvent: { ...nextState.lastEvent },
+    move,
+  };
+  if (lastFrame?.moveNumber === moveNumber) {
+    replayFrames[replayFrames.length - 1] = frame;
+  } else {
+    replayFrames.push(frame);
+  }
+
+  if (isReplayOpen()) {
+    replayIndex = wasAtLatest
+      ? replayFrames.length - 1
+      : Math.min(replayIndex ?? 0, replayFrames.length - 1);
+  }
+}
+
+function setReplayOpen(open) {
+  if (open === isReplayOpen()) return;
+  if (open && replayFrames.length <= 1) return;
+  if (open) setMoreMenuOpen(false);
+  clearPendingMove();
+  elements.replayOpen.setAttribute("aria-expanded", String(open));
+  replayIndex = open ? replayFrames.length - 1 : undefined;
+  if (open) {
+    elements.replayControls.hidden = false;
+    elements.replayControls.dataset.state = "opening";
+  } else if (!elements.replayControls.hidden) {
+    elements.replayControls.dataset.state = "closing";
+  }
+  render(state ?? preview);
+}
+
+function isReplayOpen() {
+  return elements.replayOpen.getAttribute("aria-expanded") === "true";
+}
+
+function hideReplayImmediately() {
+  elements.replayOpen.setAttribute("aria-expanded", "false");
+  elements.replayControls.hidden = true;
+  delete elements.replayControls.dataset.state;
+  replayIndex = undefined;
+}
+
+function showReplayFrame(index) {
+  if (!isReplayOpen() || replayFrames.length === 0) return;
+  clearPendingMove();
+  replayIndex = Math.min(
+    replayFrames.length - 1,
+    Math.max(0, Number(index) || 0),
+  );
+  render(state ?? preview);
+}
+
+function showReplayMove(moveNumber) {
+  const frameIndex = replayFrames.findIndex(
+    (frame) => frame.moveNumber === moveNumber,
+  );
+  if (frameIndex < 0) return;
+  setMoreMenuOpen(false);
+  setReplayOpen(true);
+  showReplayFrame(frameIndex);
+}
+
+function renderReplayControls() {
+  const latestIndex = replayFrames.length - 1;
+  const selectedIndex = Math.min(
+    latestIndex,
+    Math.max(0, replayIndex ?? latestIndex),
+  );
+  const frame = replayFrames[selectedIndex];
+  const moveNumber = frame?.moveNumber ?? 0;
+  const replayRatio = latestIndex > 0 ? selectedIndex / latestIndex : 0;
+  elements.replayOpen.disabled = replayFrames.length <= 1;
+  elements.replaySlider.max = String(Math.max(0, latestIndex));
+  elements.replaySlider.value = String(Math.max(0, selectedIndex));
+  elements.replaySliderField.style.setProperty(
+    "--replay-progress",
+    `${replayRatio * 100}%`,
+  );
+  elements.replayStatus.value = String(moveNumber);
+  elements.replaySlider.setAttribute(
+    "aria-valuetext",
+    moveNumber > 0 ? `第 ${moveNumber} 手` : "开局",
+  );
+  elements.replayFirst.disabled = selectedIndex <= 0;
+  elements.replayPrevious.disabled = selectedIndex <= 0;
+  elements.replayNext.disabled = selectedIndex >= latestIndex;
+  elements.replayLast.disabled = selectedIndex >= latestIndex;
+}
+
+function renderMoveLog(size) {
+  const moves = replayFrames.map((frame) => frame.move).filter(Boolean);
+  const previousScrollTop = elements.moveLogList.scrollTop;
+  const previousCount = Number(elements.moveLogList.dataset.moveCount) || 0;
+  const latestIndex = replayFrames.length - 1;
+  const selectedMove =
+    replayFrames[replayIndex ?? latestIndex]?.moveNumber ??
+    moves.at(-1)?.number;
+  elements.moveLogCount.textContent = `${moves.length} 手`;
+  elements.moveLogList.dataset.moveCount = String(moves.length);
+  elements.moveLogList.replaceChildren();
+
+  if (moves.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "move-log-empty";
+    empty.textContent = "尚未落子";
+    elements.moveLogList.append(empty);
+    return;
+  }
+
+  for (let index = 0; index < moves.length; index += 2) {
+    const row = document.createElement("li");
+    row.className = "move-log-row";
+    for (const move of moves.slice(index, index + 2)) {
+      const entry = document.createElement("button");
+      const colorName = move.color === 1 ? "黑棋" : "白棋";
+      const coordinate = formatMoveCoordinate(move, size);
+      entry.type = "button";
+      entry.className = "move-log-entry";
+      entry.classList.toggle("is-selected", move.number === selectedMove);
+      if (move.number === selectedMove)
+        entry.setAttribute("aria-current", "step");
+      entry.dataset.moveNumber = String(move.number);
+      entry.setAttribute(
+        "aria-label",
+        `第 ${move.number} 手，${colorName}，${coordinate}`,
+      );
+
+      const stone = document.createElement("span");
+      stone.className = `go-stone move-log-stone ${move.color === 1 ? "go-stone--black" : "go-stone--white"}`;
+      stone.setAttribute("aria-hidden", "true");
+      const number = document.createElement("span");
+      number.className = "move-log-number";
+      number.textContent = String(move.number);
+      const point = document.createElement("strong");
+      point.textContent = coordinate;
+      entry.append(stone, number, point);
+      row.append(entry);
+    }
+    if (row.children.length === 1) {
+      const placeholder = document.createElement("span");
+      placeholder.className = "move-log-placeholder";
+      placeholder.setAttribute("aria-hidden", "true");
+      row.append(placeholder);
+    }
+    elements.moveLogList.append(row);
+  }
+
+  if (isReplayOpen() && replayIndex < latestIndex) {
+    const selected = elements.moveLogList.querySelector(".is-selected");
+    if (selected) {
+      elements.moveLogList.scrollTop = Math.max(
+        0,
+        selected.offsetTop -
+          elements.moveLogList.offsetTop -
+          (elements.moveLogList.clientHeight - selected.offsetHeight) / 2,
+      );
+    }
+  } else if (moves.length > previousCount) {
+    elements.moveLogList.scrollTop = elements.moveLogList.scrollHeight;
+  } else {
+    elements.moveLogList.scrollTop = previousScrollTop;
+  }
+}
+
+function formatMoveCoordinate(move, size) {
+  if (move.pass) return "停一手";
+  const columns = "ABCDEFGHJKLMNOPQRST";
+  const column = columns[move.column - 1] ?? "?";
+  return `${column}${size - move.row + 1}`;
+}
+
 function render(nextState) {
   const players = Array.isArray(nextState.players) ? nextState.players : [];
   const ownIndex = players.indexOf(playerId);
@@ -561,6 +976,13 @@ function render(nextState) {
   const whiteIndex = blackIndex === 0 ? 1 : 0;
   const ended = Boolean(nextState.ended);
   const isScoring = nextState.phase === "scoring";
+  elements.scoringSummary.hidden = !isScoring;
+  if (isScoring) {
+    elements.scoringSummary.textContent = scoringRuleSummary(
+      nextState.settings,
+    );
+  }
+  if (elements.gameInfoPanel.open) renderGameInfo(nextState);
   const colorPlayers = [
     { playerIndex: blackIndex, label: "黑方", color: 1 },
     { playerIndex: whiteIndex, label: "白方", color: 2 },
@@ -568,35 +990,93 @@ function render(nextState) {
   const size =
     Number(nextState.settings?.size) || nextState.board?.length || 19;
   if (boardSize !== size) buildBoard(size);
+  const latestReplayIndex = replayFrames.length - 1;
+  const selectedReplayFrame = isReplayOpen()
+    ? replayFrames[replayIndex ?? latestReplayIndex]
+    : undefined;
+  const isReviewingPast =
+    Boolean(selectedReplayFrame) && replayIndex < latestReplayIndex;
+  const boardState = isReviewingPast
+    ? {
+        ...nextState,
+        board: selectedReplayFrame.board,
+        moves: selectedReplayFrame.moveNumber,
+        lastMove: selectedReplayFrame.lastMove,
+        lastEvent: selectedReplayFrame.lastEvent,
+      }
+    : nextState;
   renderPlayerCards(nextState, ownIndex, currentIndex, ended, colorPlayers);
+  renderMoveLog(size);
 
   if (isSetup) {
+    elements.undo.hidden = true;
+    elements.undoRequest.hidden = true;
     renderSetup(nextState, ownIndex);
     renderSetupBoard(nextState, size);
+    elements.replayOpen.disabled = true;
     setSetupOpen(!actionPending);
     return;
   }
   setSetupOpen(false);
   clearSetupFeedback();
 
+  const undoRequest = nextState.undoRequest;
+  const hasUndoRequest = Boolean(undoRequest);
+  const undoRequesterIndex = Number(undoRequest?.requesterIndex) - 1;
+  const isUndoRequester = hasUndoRequest && undoRequesterIndex === ownIndex;
   const previewColor = currentIndex === blackIndex ? 1 : 2;
   const canAct =
     Boolean(state) &&
     !ended &&
     !isScoring &&
+    !hasUndoRequest &&
     (playMode === "solo" || ownIndex === currentIndex) &&
-    !actionPending;
+    !actionPending &&
+    !isReviewingPast;
   const canResign =
     Boolean(state) &&
     !ended &&
     !isScoring &&
     (playMode === "solo" || ownIndex >= 0) &&
-    !actionPending;
+    !actionPending &&
+    !isReviewingPast;
 
-  elements.moveNumber.hidden = false;
-  const moveNumber = Number(nextState.moves) || 0;
-  elements.moveNumber.textContent =
-    moveNumber > 0 ? `第 ${moveNumber} 手` : "开局";
+  const moveNumber = Number(boardState.moves) || 0;
+  const moveNumberLabel = isReviewingPast
+    ? `回看 · ${moveNumber > 0 ? `第 ${moveNumber} 手` : "开局"}`
+    : moveNumber > 0
+      ? `第 ${moveNumber} 手`
+      : "开局";
+  for (const moveNumberElement of elements.moveNumbers) {
+    moveNumberElement.hidden = false;
+    moveNumberElement.textContent = moveNumberLabel;
+  }
+  const canUndo =
+    Boolean(state) &&
+    !ended &&
+    !isScoring &&
+    !hasUndoRequest &&
+    Boolean(nextState.undoAvailable) &&
+    Number(nextState.moves) > 0 &&
+    !actionPending &&
+    !isReviewingPast &&
+    (playMode === "solo" ||
+      Number(nextState.lastEvent?.playerIndex) - 1 === ownIndex);
+  elements.undo.hidden = ended || isScoring;
+  elements.undo.disabled = !canUndo;
+  elements.undoLabel.textContent = isUndoRequester ? "等待同意" : "悔棋";
+  elements.undoRequest.hidden = playMode === "solo" || !hasUndoRequest || ended;
+  if (!elements.undoRequest.hidden) {
+    const requesterName =
+      nextState.playerNames?.[undoRequesterIndex] ||
+      (undoRequesterIndex === blackIndex ? "黑方" : "白方");
+    elements.undoRequestLabel.textContent = isUndoRequester
+      ? "已请求悔棋，等待对方同意"
+      : `${requesterName}请求悔棋`;
+    elements.undoResponseActions.hidden = isUndoRequester;
+    elements.undoAccept.disabled = actionPending;
+    elements.undoReject.disabled = actionPending;
+  }
   elements.pass.disabled = !canAct;
   elements.pass.hidden = ended || isScoring;
   elements.resign.disabled = !canResign;
@@ -606,18 +1086,18 @@ function render(nextState) {
   elements.rematch.disabled = actionPending;
   elements.settings.hidden = !state || !ended || ownIndex < 0;
   elements.settings.disabled = actionPending;
-  elements.settingsSummary.textContent = settingSummary(nextState.settings);
+  renderReplayControls();
   renderClocks();
 
   for (let row = 0; row < size; row += 1) {
     for (let column = 0; column < size; column += 1) {
       const point = points[row * size + column];
-      const value = Number(nextState.board?.[row]?.[column]) || 0;
+      const value = Number(boardState.board?.[row]?.[column]) || 0;
       const playable = canAct && value === 0;
       const isLastMove =
-        nextState.lastEvent?.kind === "play" &&
-        Number(nextState.lastMove?.row) === row + 1 &&
-        Number(nextState.lastMove?.column) === column + 1;
+        boardState.lastEvent?.kind === "play" &&
+        Number(boardState.lastMove?.row) === row + 1 &&
+        Number(boardState.lastMove?.column) === column + 1;
       point.dataset.piece = String(value);
       point.disabled = !playable;
       setPointClasses(point, value, playable, previewColor, isLastMove);
@@ -709,6 +1189,39 @@ function resetResignConfirmation() {
   elements.resignLabel.textContent = "认输";
 }
 
+function setMoreMenuOpen(open, focusFirst = false) {
+  window.clearTimeout(moreMenuCloseTimer);
+  moreMenuCloseTimer = undefined;
+  elements.more.setAttribute("aria-expanded", String(open));
+
+  if (open) {
+    if (isReplayOpen()) setReplayOpen(false);
+    elements.moreMenu.hidden = false;
+    elements.moreMenu.dataset.state = "open";
+    if (focusFirst) {
+      window.queueMicrotask(() =>
+        elements.moreMenu
+          .querySelector('[role="menuitem"]:not([hidden]):not(:disabled)')
+          ?.focus(),
+      );
+    }
+    return;
+  }
+
+  resetResignConfirmation();
+  if (elements.moreMenu.hidden) return;
+  elements.moreMenu.dataset.state = "closing";
+  moreMenuCloseTimer = window.setTimeout(finishMoreMenuClose, 170);
+}
+
+function finishMoreMenuClose() {
+  if (elements.moreMenu.dataset.state !== "closing") return;
+  window.clearTimeout(moreMenuCloseTimer);
+  moreMenuCloseTimer = undefined;
+  elements.moreMenu.hidden = true;
+  elements.moreMenu.removeAttribute("data-state");
+}
+
 function formatScore(score) {
   const value = Number(score);
   return Number.isFinite(value) ? value.toFixed(value % 1 === 0 ? 0 : 1) : "0";
@@ -719,8 +1232,34 @@ function renderSetup(nextState, ownIndex) {
   const hostId = nextState.hostId ?? nextState.players?.[0];
   const isHost = Boolean(state) && ownPlayer === hostId;
   const canConfigure = isHost && !pendingAction;
+  const resumeRecords = availableSetupResumeRecords();
+  if (
+    !selectedResumeRecordId ||
+    !resumeRecords.some((record) => record.id === selectedResumeRecordId)
+  ) {
+    selectedResumeRecordId = resumeRecords[0]?.id ?? "";
+  }
+  if (setupSource === "resume" && resumeRecords.length === 0) {
+    setupSource = "new";
+  }
+  elements.setupForm.classList.toggle("is-resuming", setupSource === "resume");
+  for (const source of elements.setupSources) {
+    source.checked = source.value === setupSource;
+    source.disabled =
+      !canConfigure ||
+      (source.value === "resume" && resumeRecords.length === 0);
+  }
+  elements.resumeSource.closest("label").dataset.empty = String(
+    resumeRecords.length === 0,
+  );
+  renderSetupResumePicker(resumeRecords, canConfigure);
+  const selectedRecord = resumeRecords.find(
+    (record) => record.id === selectedResumeRecordId,
+  );
   const settings =
-    (isHost && draftSettings) || nextState.settings || preview.settings;
+    setupSource === "resume" && selectedRecord
+      ? selectedRecord.settings
+      : (isHost && draftSettings) || nextState.settings || preview.settings;
   elements.setupNote.textContent = canConfigure
     ? playMode === "solo"
       ? "本机控制黑白双方轮流落子"
@@ -740,16 +1279,69 @@ function renderSetup(nextState, ownIndex) {
     elements.start,
   ];
   for (const control of controls) {
-    control.disabled = !canConfigure;
+    control.disabled = !canConfigure || setupSource === "resume";
   }
   elements.start.disabled = !canConfigure;
-  elements.startLabel.textContent = pendingAction ? "正在开始…" : "开始对局";
+  elements.startLabel.textContent = pendingAction
+    ? "正在开始…"
+    : setupSource === "resume"
+      ? "继续对局"
+      : "开始对局";
   updateHandicapControls();
 }
 
+function availableSetupResumeRecords() {
+  return historyStore
+    .load()
+    .filter(
+      (record) =>
+        record.mode === playMode && !record.result && canResumeGoRecord(record),
+    );
+}
+
+function renderSetupResumePicker(records, canConfigure) {
+  elements.resumeSetup.hidden = setupSource !== "resume";
+  if (elements.resumeSetup.hidden) return;
+
+  elements.resumeSetting.replaceChildren(
+    ...records.map((record) => {
+      const option = document.createElement("option");
+      option.value = record.id;
+      option.textContent = `第 ${record.round} 局 · ${record.moves.length} 手 · ${new Date(record.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+      return option;
+    }),
+  );
+  elements.resumeSetting.value = selectedResumeRecordId;
+  elements.resumeSetting.disabled = !canConfigure;
+  const record = records.find((entry) => entry.id === selectedResumeRecordId);
+  elements.resumeSummary.replaceChildren();
+  if (!record) return;
+
+  const settings = record.settings ?? {};
+  const currentIndex = Number(record.resume?.state?.current) - 1;
+  const blackIndex = Number(record.resume?.state?.blackIndex) - 1;
+  const currentColor = currentIndex === blackIndex ? "黑方" : "白方";
+  const values = [
+    ["对局", `黑方 ${record.blackPlayer} 对 白方 ${record.whitePlayer}`],
+    ["进度", `第 ${record.moves.length} 手 · 轮到${currentColor}`],
+    [
+      "规则",
+      `${settings.size ?? 19} × ${settings.size ?? 19} · ${settings.rules === "japanese" ? "日本规则" : "中国规则"} · 贴 ${settings.komi ?? 0} 目`,
+    ],
+  ];
+  for (const [label, value] of values) {
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const description = document.createElement("dd");
+    description.textContent = value;
+    elements.resumeSummary.append(term, description);
+  }
+}
+
 function renderSetupBoard(nextState, size) {
-  elements.moveNumber.hidden = true;
-  elements.settingsSummary.textContent = settingSummary(nextState.settings);
+  for (const moveNumberElement of elements.moveNumbers) {
+    moveNumberElement.hidden = true;
+  }
   renderClocks();
   for (let row = 0; row < size; row += 1) {
     for (let column = 0; column < size; column += 1) {
@@ -763,58 +1355,51 @@ function renderSetupBoard(nextState, size) {
 }
 
 function setSetupOpen(open) {
-  window.clearTimeout(setupCloseTimer);
-  document.body.classList.toggle("has-setup-modal", open);
-  elements.table.inert = open;
-  elements.table.setAttribute("aria-hidden", String(open));
-
-  if (open) {
-    if (elements.setupPanel.dataset.state === "open") return;
-    elements.setupPanel.hidden = false;
-    elements.setupPanel.dataset.state = "opening";
-    window.requestAnimationFrame(() => {
-      elements.setupPanel.dataset.state = "open";
-      const focusTarget = elements.sizeSetting.disabled
-        ? elements.setupForm
-        : elements.sizeSetting;
-      focusTarget.focus({ preventScroll: true });
-    });
-    return;
-  }
-
-  if (elements.setupPanel.hidden) return;
-  elements.setupPanel.dataset.state = "closing";
-  setupCloseTimer = window.setTimeout(() => {
-    elements.setupPanel.hidden = true;
-    delete elements.setupPanel.dataset.state;
-  }, 220);
+  setupDialog.setOpen(open);
 }
 
 function setHistoryOpen(open) {
-  window.clearTimeout(historyCloseTimer);
-  document.body.classList.toggle("has-history-modal", open);
-  elements.table.inert = open;
-  elements.table.setAttribute("aria-hidden", String(open));
+  historyDialog.setOpen(open);
+}
 
-  if (open) {
-    renderHistory();
-    elements.historyPanel.hidden = false;
-    elements.historyPanel.dataset.state = "opening";
-    window.requestAnimationFrame(() => {
-      elements.historyPanel.dataset.state = "open";
-      elements.historyDialog.focus({ preventScroll: true });
-    });
-    return;
-  }
+function setGameInfoOpen(open) {
+  gameInfoDialog.setOpen(open);
+}
 
-  if (elements.historyPanel.hidden) return;
-  resetHistoryClear();
-  elements.historyPanel.dataset.state = "closing";
-  historyCloseTimer = window.setTimeout(() => {
-    elements.historyPanel.hidden = true;
-    delete elements.historyPanel.dataset.state;
-    elements.historyOpen.focus({ preventScroll: true });
-  }, 220);
+function renderGameInfo(nextState) {
+  const settings = nextState.settings ?? preview.settings;
+  const blackIndex = Math.max(0, Number(nextState.blackIndex) - 1);
+  const blackName =
+    nextState.playerNames?.[blackIndex] ||
+    (playMode === "solo" ? "黑方" : `玩家 ${blackIndex + 1}`);
+  const blackMethod =
+    Number(settings.handicap) > 0
+      ? `${blackName}（受让）`
+      : settings.blackMode === "random"
+        ? `${blackName}（随机）`
+        : blackName;
+  const entries = [
+    ["棋盘", `${settings.size ?? 19} × ${settings.size ?? 19}`],
+    ["规则", ruleLabel(settings)],
+    ["贴目", `${formatScore(settings.komi)} 目`],
+    [
+      "让子",
+      Number(settings.handicap) > 0 ? `让 ${settings.handicap} 子` : "不让子",
+    ],
+    ["执黑", blackMethod],
+  ];
+
+  elements.gameInfoList.replaceChildren(
+    ...entries.map(([label, value]) => {
+      const row = document.createElement("div");
+      const term = document.createElement("dt");
+      const description = document.createElement("dd");
+      term.textContent = label;
+      description.textContent = value;
+      row.append(term, description);
+      return row;
+    }),
+  );
 }
 
 function resetHistoryClear() {
@@ -825,22 +1410,19 @@ function resetHistoryClear() {
 
 function renderHistory() {
   const records = historyStore.load();
-  elements.historyNote.textContent = historyStore.persistent
-    ? "最近 50 局，仅保存在此浏览器"
-    : "本地存储不可用，仅保留当前页面会话";
   elements.historyClear.disabled = records.length === 0;
   elements.historyList.replaceChildren();
 
   if (records.length === 0) {
-    const empty = document.createElement("p");
+    const empty = document.createElement("li");
     empty.className = "history-empty";
     empty.textContent = "完成或进行中的棋局会自动出现在这里";
     elements.historyList.append(empty);
     return;
   }
 
-  for (const record of records) {
-    const entry = document.createElement("article");
+  records.forEach((record, index) => {
+    const entry = document.createElement("li");
     entry.className = "history-entry";
 
     const main = document.createElement("div");
@@ -867,9 +1449,33 @@ function renderHistory() {
       .join(" · ");
     main.append(title, meta);
 
+    const isCurrentRecord =
+      playMode === "solo" &&
+      record.matchId === localMatchId &&
+      Number(record.round) === Number(state?.round) &&
+      !state?.ended;
+    const canResume =
+      playMode === "solo" && !isCurrentRecord && canResumeGoRecord(record);
+
+    const actions = document.createElement("div");
+    actions.className = "history-entry-actions";
     const result = document.createElement("p");
     result.className = "history-entry-result";
-    result.textContent = historyResultLabel(record);
+    result.textContent = isCurrentRecord
+      ? "当前对局"
+      : historyResultLabel(record);
+
+    const buttons = document.createElement("div");
+    buttons.className = "history-entry-buttons";
+
+    if (canResume) {
+      const resumeButton = document.createElement("button");
+      resumeButton.type = "button";
+      resumeButton.className = "history-resume";
+      resumeButton.dataset.historyResume = record.id;
+      resumeButton.textContent = "继续对局";
+      buttons.append(resumeButton);
+    }
 
     const exportButton = document.createElement("button");
     exportButton.type = "button";
@@ -877,9 +1483,59 @@ function renderHistory() {
     exportButton.dataset.historyExport = record.id;
     exportButton.textContent = "导出 SGF";
 
-    entry.append(main, result, exportButton);
+    buttons.append(exportButton);
+    actions.append(result, buttons);
+    entry.append(main, actions);
     elements.historyList.append(entry);
+
+    if (index < records.length - 1) {
+      const divider = document.createElement("li");
+      divider.className = "history-divider";
+      divider.setAttribute("role", "separator");
+      divider.setAttribute("aria-orientation", "horizontal");
+      elements.historyList.append(divider);
+    }
+  });
+}
+
+function resumeHistoryRecord(recordId) {
+  if (playMode !== "solo" || pendingAction) return;
+  persistSoloResumeSnapshot();
+  const record = historyStore.load().find((entry) => entry.id === recordId);
+  const resumedAt = Date.now();
+  const resumedState = restoreGoResumeState(record, resumedAt);
+  if (!record?.matchId || !resumedState) {
+    renderHistory();
+    return;
   }
+
+  localMatchId = record.matchId;
+  const moveVersions = record.moves.map((move) => Number(move.version) || 0);
+  localVersion = Math.max(0, Number(record.lastVersion) || 0, ...moveVersions);
+  replayGameKey = `${record.matchId}:${resumedState.round ?? record.round ?? 1}`;
+  replayFrames = goRecordToReplayFrames(record);
+  hideReplayImmediately();
+  setHistoryOpen(false);
+  handleState({
+    playerId: "solo-player-1",
+    state: resumedState,
+    events: [],
+    matchId: localMatchId,
+    version: localVersion,
+    serverTime: resumedAt,
+  });
+}
+
+function persistSoloResumeSnapshot() {
+  if (playMode !== "solo" || !localMatchId || !state) return;
+  historyStore.save(
+    updateGoResumeSnapshot(
+      historyStore.load(),
+      localMatchId,
+      state,
+      Date.now(),
+    ),
+  );
 }
 
 function exportHistoryRecord(recordId) {
@@ -1093,11 +1749,12 @@ function formatDuration(totalSeconds) {
     : `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-function settingSummary(settings = {}) {
-  const rules = settings.rules === "japanese" ? "日本规则" : "中国规则";
-  const handicap =
-    Number(settings.handicap) > 0 ? ` · 让 ${settings.handicap} 子` : "";
-  return `${settings.size ?? 19} × ${settings.size ?? 19} · ${rules} · 贴 ${formatScore(settings.komi)} 目${handicap}`;
+function ruleLabel(settings = {}) {
+  return settings.rules === "japanese" ? "日本规则" : "中国规则";
+}
+
+function scoringRuleSummary(settings = {}) {
+  return `按${ruleLabel(settings)}计分 · 贴 ${formatScore(settings.komi)} 目`;
 }
 
 function translateError(error, code) {
@@ -1124,6 +1781,22 @@ function translateError(error, code) {
     STALE_SCORE_ROUND: "计分状态已更新，请重新确认",
     score_already_submitted: "你已经提交了本轮计分结果",
     SCORE_ALREADY_SUBMITTED: "你已经提交了本轮计分结果",
+    undo_unavailable: "当前不能悔棋",
+    UNDO_UNAVAILABLE: "当前不能悔棋",
+    no_move_to_undo: "当前没有可以撤回的一手",
+    NO_MOVE_TO_UNDO: "当前没有可以撤回的一手",
+    undo_already_requested: "已经发起悔棋请求",
+    UNDO_ALREADY_REQUESTED: "已经发起悔棋请求",
+    only_last_player_can_undo: "只有刚刚落子的一方可以申请悔棋",
+    ONLY_LAST_PLAYER_CAN_UNDO: "只有刚刚落子的一方可以申请悔棋",
+    no_undo_request: "悔棋请求已经失效",
+    NO_UNDO_REQUEST: "悔棋请求已经失效",
+    undo_requester_cannot_respond: "请等待对方回应悔棋请求",
+    UNDO_REQUESTER_CANNOT_RESPOND: "请等待对方回应悔棋请求",
+    invalid_undo_response: "悔棋回应无效",
+    INVALID_UNDO_RESPONSE: "悔棋回应无效",
+    undo_response_required: "请先回应悔棋请求",
+    UNDO_RESPONSE_REQUIRED: "请先回应悔棋请求",
   };
   return messages[code] ?? messages[error] ?? error;
 }

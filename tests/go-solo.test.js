@@ -147,3 +147,26 @@ test("Go solo mode keeps settings for rematches and returns them to setup", () =
   assert.deepEqual(configure.state.settings, state.settings);
   assert.equal(configure.state.round, 3);
 });
+
+test("Go solo mode immediately undoes the last move", () => {
+  let state = startSolo();
+  state = applySoloGoAction(
+    state,
+    { type: "play", row: 4, column: 4 },
+    { now: 2500 },
+  ).state;
+
+  const result = applySoloGoAction(state, { type: "undo" }, { now: 3000 });
+
+  assert.equal(result.accepted, true);
+  assert.equal(result.events[0].type, "undo_accepted");
+  assert.equal(result.state.moves, 0);
+  assert.equal(result.state.current, 1);
+  assert.equal(result.state.board[3][3], 0);
+  assert.equal(result.state.undoAvailable, false);
+  assert.equal(result.state.undoSnapshot, null);
+  assert.equal(
+    applySoloGoAction(result.state, { type: "undo" }).error.code,
+    "NO_MOVE_TO_UNDO",
+  );
+});

@@ -1,4 +1,9 @@
+import { applySoloGoAction, createSoloGoState } from "./solo.js";
+
 const STORAGE_KEY = "playweft:go-history:v1";
+const ARCHIVE_FORMAT = "playweft-go-history";
+const ARCHIVE_VERSION = 1;
+const RECORD_FORMAT = "playweft-go-record";
 const HISTORY_LIMIT = 50;
 
 export function createGoHistoryStore(getStorage = () => window.localStorage) {
@@ -8,10 +13,20 @@ export function createGoHistoryStore(getStorage = () => window.localStorage) {
   return {
     load() {
       try {
-        const value = getStorage().getItem(STORAGE_KEY);
+        const storage = getStorage();
+        const value = storage.getItem(STORAGE_KEY);
         if (value) {
           const parsed = JSON.parse(value);
-          if (Array.isArray(parsed)) memory = parsed;
+          const sourceRecords =
+            parsed?.format === ARCHIVE_FORMAT &&
+            Number(parsed.formatVersion) === ARCHIVE_VERSION &&
+            Array.isArray(parsed.records)
+              ? parsed.records
+              : [];
+          memory = nonEmptyHistoryRecords(sourceRecords);
+          if (memory.length !== sourceRecords.length) {
+            writeArchive(storage, memory);
+          }
         }
       } catch {
         persistent = false;
@@ -19,9 +34,9 @@ export function createGoHistoryStore(getStorage = () => window.localStorage) {
       return memory;
     },
     save(records) {
-      memory = records;
+      memory = nonEmptyHistoryRecords(records);
       try {
-        getStorage().setItem(STORAGE_KEY, JSON.stringify(records));
+        writeArchive(getStorage(), memory);
       } catch {
         persistent = false;
       }
@@ -30,6 +45,28 @@ export function createGoHistoryStore(getStorage = () => window.localStorage) {
       return persistent;
     },
   };
+}
+
+function nonEmptyHistoryRecords(records) {
+  return records.filter(
+    (record) =>
+      record?.format === RECORD_FORMAT &&
+      Number(record.formatVersion) === ARCHIVE_VERSION &&
+      Array.isArray(record.moves) &&
+      record.moves.length > 0,
+  );
+}
+
+function writeArchive(storage, records) {
+  storage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      format: ARCHIVE_FORMAT,
+      formatVersion: ARCHIVE_VERSION,
+      savedAt: Date.now(),
+      records,
+    }),
+  );
 }
 
 export function updateGoHistory(records, snapshot, recordedAt = Date.now()) {
@@ -44,8 +81,10 @@ export function updateGoHistory(records, snapshot, recordedAt = Date.now()) {
     moves: [...(record.moves ?? [])],
     captures: [...(record.captures ?? [])],
     timeUsed: [...(record.timeUsed ?? [])],
+    resume: record.resume ? structuredClone(record.resume) : null,
   }));
   let record = nextRecords.find((entry) => entry.id === id);
+  const moveCount = Math.max(0, Number(state.moves) || 0);
   const versionNumber = Number(version);
   const hasVersion = Number.isFinite(versionNumber);
   if (
@@ -57,12 +96,17 @@ export function updateGoHistory(records, snapshot, recordedAt = Date.now()) {
     return records;
   }
 
+  if (!record && moveCount === 0) return records;
+
   if (!record) {
     const blackIndex = Math.max(0, Number(state.blackIndex) - 1);
     const whiteIndex = blackIndex === 0 ? 1 : 0;
     record = {
+      format: RECORD_FORMAT,
+      formatVersion: ARCHIVE_VERSION,
       id,
       matchId,
+      mode: snapshot.mode ?? "room",
       round: Number(state.round) || 1,
       createdAt: recordedAt,
       updatedAt: recordedAt,
@@ -70,20 +114,28 @@ export function updateGoHistory(records, snapshot, recordedAt = Date.now()) {
       settings: { ...state.settings },
       blackPlayer: `玩家 ${blackIndex + 1}`,
       whitePlayer: `玩家 ${whiteIndex + 1}`,
-      initialBlack: Number(state.moves) === 0
-        ? collectInitialBlack(state.board)
-        : [],
-      partial: Number(state.moves) > 0,
+      initialBlack:
+        moveCount === 1 ? collectInitialBlackBeforeFirstMove(state) : [],
+      partial: moveCount > 1,
       moves: [],
       timeUsed: [0, 0],
     };
     nextRecords.push(record);
   }
 
+  const undoAccepted = events.some((event) => event?.type === "undo_accepted");
+  if (undoAccepted) {
+    record.moves = record.moves.slice(0, Math.max(0, Number(state.moves) || 0));
+  }
+
   const moveEvents = events.filter(
     (event) => event?.type === "played" || event?.type === "passed",
   );
-  if (moveEvents.length === 0) {
+  if (
+    !undoAccepted &&
+    moveEvents.length === 0 &&
+    (Number(state.moves) || 0) > record.moves.length
+  ) {
     const fallback = fallbackMoveEvent(state);
     if (fallback) moveEvents.push(fallback);
   }
@@ -92,11 +144,16 @@ export function updateGoHistory(records, snapshot, recordedAt = Date.now()) {
   }
 
   record.updatedAt = recordedAt;
+  record.mode = snapshot.mode ?? record.mode ?? "room";
   record.status = state.ended ? "ended" : state.phase;
   record.settings = { ...state.settings };
   record.captures = [...(state.captures ?? [0, 0])];
   record.timeUsed = [...(state.timeUsed ?? [0, 0])];
   if (hasVersion) record.lastVersion = versionNumber;
+  record.resume =
+    record.mode === "solo" && !state.ended
+      ? createResumeSnapshot(state, recordedAt)
+      : null;
   if (state.ended) {
     const blackIndex = Math.max(0, Number(state.blackIndex) - 1);
     record.endedAt ??= recordedAt;
@@ -112,9 +169,134 @@ export function updateGoHistory(records, snapshot, recordedAt = Date.now()) {
     };
   }
 
+  if (moveCount === 0 && record.moves.length === 0) {
+    return nextRecords.filter((entry) => entry.id !== id);
+  }
+
   return nextRecords
     .sort((left, right) => right.updatedAt - left.updatedAt)
     .slice(0, HISTORY_LIMIT);
+}
+
+export function updateGoResumeSnapshot(
+  records,
+  matchId,
+  state,
+  savedAt = Date.now(),
+) {
+  if (!matchId || !state || state.ended || (Number(state.moves) || 0) <= 0) {
+    return records;
+  }
+  const id = `${matchId}:${state.round ?? 1}`;
+  const record = records.find((entry) => entry.id === id);
+  if (!record || record.mode !== "solo") return records;
+  const resume = createResumeSnapshot(state, savedAt);
+  const nextRecords = records.map((entry) =>
+    entry.id === id
+      ? {
+          ...entry,
+          updatedAt: savedAt,
+          timeUsed: [...resume.state.timeUsed],
+          resume,
+        }
+      : entry,
+  );
+  return nextRecords.sort((left, right) => right.updatedAt - left.updatedAt);
+}
+
+export function restoreGoResumeState(record, resumedAt = Date.now()) {
+  if (!canResumeGoRecord(record)) return undefined;
+  const state = structuredClone(record.resume.state);
+  state.turnStartedAt = state.phase === "playing" ? resumedAt : 0;
+  return state;
+}
+
+export function goRecordToReplayFrames(record) {
+  if (!Array.isArray(record?.moves) || !record.settings) return [];
+  const blackIndex = Number(record.resume?.state?.blackIndex);
+  if (blackIndex !== 1 && blackIndex !== 2) return [];
+
+  const setup = createSoloGoState();
+  setup.round = Number(record.round) || 1;
+  const started = applySoloGoAction(
+    setup,
+    { type: "start", ...record.settings },
+    {
+      now: Number(record.createdAt) || 0,
+      random: () => (blackIndex === 1 ? 0 : 1),
+    },
+  );
+  if (!started.accepted) return [];
+
+  let replayState = started.state;
+  const frames = [createReplayFrame(replayState)];
+  for (const [index, move] of record.moves.entries()) {
+    const currentIndex = Number(replayState.current) - 1;
+    const currentColor = currentIndex + 1 === blackIndex ? "B" : "W";
+    if (move.color !== currentColor) return [];
+    const result = applySoloGoAction(
+      replayState,
+      move.pass
+        ? { type: "pass" }
+        : { type: "play", row: move.row, column: move.column },
+      { now: Number(record.createdAt) || 0 },
+    );
+    if (!result.accepted) return [];
+    replayState = result.state;
+    frames.push(
+      createReplayFrame(replayState, {
+        number: index + 1,
+        color: move.color === "B" ? 1 : 2,
+        pass: Boolean(move.pass),
+        row: Number(move.row) || 0,
+        column: Number(move.column) || 0,
+      }),
+    );
+  }
+  return frames;
+}
+
+export function canResumeGoRecord(record) {
+  return Boolean(
+    record?.format === RECORD_FORMAT &&
+      Number(record.formatVersion) === ARCHIVE_VERSION &&
+      record.mode === "solo" &&
+      Number(record.resume?.formatVersion) === 1 &&
+      record.resume?.state &&
+      !record.resume.state.ended,
+  );
+}
+
+function createResumeSnapshot(state, savedAt) {
+  const resumeState = structuredClone(state);
+  const activePlayerIndex =
+    resumeState.phase === "playing" ? Number(resumeState.current) - 1 : -1;
+  if (
+    activePlayerIndex >= 0 &&
+    Number.isFinite(Number(resumeState.turnStartedAt)) &&
+    Number(resumeState.turnStartedAt) > 0
+  ) {
+    resumeState.timeUsed = [...(resumeState.timeUsed ?? [0, 0])];
+    resumeState.timeUsed[activePlayerIndex] =
+      (Number(resumeState.timeUsed[activePlayerIndex]) || 0) +
+      Math.max(0, savedAt - Number(resumeState.turnStartedAt));
+  }
+  resumeState.turnStartedAt = 0;
+  return {
+    formatVersion: 1,
+    savedAt,
+    state: resumeState,
+  };
+}
+
+function createReplayFrame(state, move) {
+  return {
+    moveNumber: Math.max(0, Number(state.moves) || 0),
+    board: (state.board ?? []).map((row) => [...row]),
+    lastMove: { ...state.lastMove },
+    lastEvent: { ...state.lastEvent },
+    move,
+  };
 }
 
 export function goRecordToSgf(record) {
@@ -208,6 +390,19 @@ function collectInitialBlack(board = []) {
     });
   });
   return points;
+}
+
+function collectInitialBlackBeforeFirstMove(state) {
+  const points = collectInitialBlack(state.board);
+  if (state.lastEvent?.kind !== "play") return points;
+  const playerIndex = Number(state.lastEvent.playerIndex) - 1;
+  const blackIndex = Math.max(0, Number(state.blackIndex) - 1);
+  if (playerIndex !== blackIndex) return points;
+  const lastRow = Number(state.lastMove?.row);
+  const lastColumn = Number(state.lastMove?.column);
+  return points.filter(
+    (point) => point.row !== lastRow || point.column !== lastColumn,
+  );
 }
 
 function toSgfPoint(point) {
