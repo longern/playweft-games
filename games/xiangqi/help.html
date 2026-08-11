@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>中国象棋玩法</title>
+    <link rel="stylesheet" href="../../src/help.css" />
+  </head>
+  <body>
+    <main class="help-page">
+      <header class="help-heading">
+        <img src="/xiangqi.svg" alt="" />
+        <div>
+          <h1>中国象棋玩法</h1>
+          <p>运子攻防，将死对方</p>
+        </div>
+      </header>
+
+      <section class="help-section">
+        <h2>游戏目标</h2>
+        <p>
+          红方先行，双方轮流移动一枚棋子。让对方的将（帅）受到攻击且无法解除，称为<strong>将死</strong>，即可获胜。被困到没有任何合法走法的一方同样判负。
+        </p>
+      </section>
+
+      <section class="help-section">
+        <h2>游玩模式</h2>
+        <p>
+          直接打开游戏时进入<strong>单机模式</strong>，由同一设备控制红黑双方轮流行棋；通过 Playweft 创建双人房间时进入<strong>联机模式</strong>，每位玩家各执一方，棋盘实时同步。
+        </p>
+      </section>
+
+      <section class="help-section">
+        <h2>棋子走法</h2>
+        <ul>
+          <li><strong>将／帅：</strong>只能在九宫内横走或直走一格；双方将帅不能在同一路上直接照面。</li>
+          <li><strong>士／仕：</strong>只能在九宫内沿斜线走一格。</li>
+          <li><strong>象／相：</strong>沿斜线走两格，不能过河；中间的“象眼”有棋子时不能走。</li>
+          <li><strong>马：</strong>走“日”字；紧邻方向有棋子挡住“马腿”时不能走。</li>
+          <li><strong>车：</strong>沿横线或直线走任意格，途中不能越过棋子。</li>
+          <li><strong>炮：</strong>不吃子时与车相同；吃子时必须隔着恰好一枚棋子跳吃。</li>
+          <li><strong>兵／卒：</strong>过河前只能向前一格；过河后还可向左或向右一格，不能后退。</li>
+        </ul>
+      </section>
+
+      <section class="help-section">
+        <h2>将军与胜负</h2>
+        <ol>
+          <li>被将军时，下一步必须解除将军。</li>
+          <li>任何让己方将帅继续受攻击的走法都不合法。</li>
+          <li>将死、困毙或直接吃掉对方将帅时获胜。</li>
+          <li>连续 120 步双方均未吃子时，本局自动判和。</li>
+          <li>点击“再来一局”后，双方交换红黑方，仍由红方先行。</li>
+        </ol>
+        <div class="rule-strip" aria-label="中国象棋规则摘要">
+          <div class="rule-item"><strong>9 × 10</strong><span>九路十行棋盘</span></div>
+          <div class="rule-item"><strong>红先</strong><span>双方轮流走一步</span></div>
+          <div class="rule-item"><strong>将死</strong><span>无合法应将即败</span></div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

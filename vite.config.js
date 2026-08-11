@@ -12,6 +12,7 @@ const games = [
   "sudoku",
   "go",
   "gomoku",
+  "xiangqi",
 ];
 
 const input = {

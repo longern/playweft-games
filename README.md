@@ -1,6 +1,6 @@
 # Playweft Games
 
-Eight lightweight multiplayer games and one standalone game for the sibling
+Nine lightweight multiplayer games and one standalone game for the sibling
 [`playweft`](../playweft) platform. They share one Vite build and expose
 independent, versioned Playweft game packages.
 
@@ -20,6 +20,7 @@ the Manifest before opening the game iframe.
 | Sudoku | 1 | `http://localhost:5174/sudoku/` | `dist/sudoku/index.html` |
 | 围棋 | 1–2 | `http://localhost:5174/go/` | `dist/go/index.html` |
 | 五子棋 | 2 | `http://localhost:5174/gomoku/` | `dist/gomoku/index.html` |
+| 中国象棋 | 2 | `http://localhost:5174/xiangqi/` | `dist/xiangqi/index.html` |
 
 ## Run locally
 
@@ -36,14 +37,14 @@ game development server from this repository:
 npm run dev
 ```
 
-Open `http://localhost:5174/` to browse the game list. Sudoku and the local-AI
-Dou Dizhu mode open directly as solo games; paste a game's directory URL or
+Open `http://localhost:5174/` to browse the game list. Sudoku, Xiangqi and the
+local-AI Dou Dizhu mode open directly as solo games; paste a game's directory URL or
 its explicit `playweft.json` URL into Playweft. The multiplayer games
 use the platform-owned lobby; Texas Hold'em supports two to six seated players,
 斗地主 supports one local player with two computer opponents or exactly three
 room players, the Werewolf dealer supports six to twelve, and
 UNO supports two to four.
-围棋同时支持双人房间与单终端黑白轮流落子的 Solo 模式。
+围棋和中国象棋同时支持双人房间与单终端双方轮流行棋的 Solo 模式。
 
 ## Verify and build
 
@@ -52,7 +53,7 @@ npm run check
 npm run build
 ```
 
-The generated `dist` directory is one static deployment with nine game
+The generated `dist` directory is one static deployment with ten game
 packages. Each room package contains its `playweft.json`, client, help page and
 `game.lua`; Sudoku contains the same package metadata without a server entry.
 

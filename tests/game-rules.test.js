@@ -150,6 +150,7 @@ test("All room games implement the current Playweft protocol contract", async ()
     ["games/uno/game.lua", 2],
     ["games/go/game.lua", 2],
     ["games/gomoku/game.lua", 2],
+    ["games/xiangqi/game.lua", 2],
   ]);
 
   for (const [gamePath, playerCount] of games) {

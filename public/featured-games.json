@@ -25,5 +25,8 @@
   },
   {
     "manifestUrl": "./gomoku/playweft.json"
+  },
+  {
+    "manifestUrl": "./xiangqi/playweft.json"
   }
 ]

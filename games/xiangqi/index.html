@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#9f3027" />
+    <meta
+      name="description"
+      content="Playweft 中国象棋：楚河汉界，两人轮流行棋，将死对方获胜。"
+    />
+    <title>中国象棋 | Playweft</title>
+    <script type="module" src="./main.js"></script>
+  </head>
+  <body>
+    <header class="game-header">
+      <div class="game-brand">
+        <img src="/xiangqi.svg" alt="" />
+        <div>
+          <h1>中国象棋</h1>
+          <p>楚河汉界，单机或联机对弈</p>
+        </div>
+      </div>
+      <div id="connection" class="connection-status" data-mode="waiting">
+        <span>连接平台中</span>
+      </div>
+    </header>
+
+    <main class="xiangqi-layout">
+      <aside class="match-panel">
+        <div class="round-tag">第 <b id="round-number">1</b> 局</div>
+        <div id="black-player" class="player-card black-card">
+          <span class="mini-piece black-piece">将</span>
+          <div>
+            <strong data-player-name>黑方 · 玩家 2</strong>
+            <span data-player-detail>后手</span>
+          </div>
+        </div>
+        <div class="river-mark"><span>楚河</span><i></i><span>汉界</span></div>
+        <div id="red-player" class="player-card red-card is-current">
+          <span class="mini-piece red-piece">帅</span>
+          <div>
+            <strong data-player-name>红方 · 玩家 1</strong>
+            <span data-player-detail>先手</span>
+          </div>
+        </div>
+      </aside>
+
+      <section class="board-column">
+        <div class="turn-status" aria-live="polite">
+          <span id="status-kicker">红方先行</span>
+          <h2 id="status-title">准备开局</h2>
+          <p id="status-detail">选择棋子，再选择它要到达的位置</p>
+        </div>
+
+        <div class="board-frame">
+          <div id="board" class="xiangqi-board" role="grid" aria-label="中国象棋棋盘">
+            <svg class="board-lines" viewBox="0 0 800 900" aria-hidden="true">
+              <g>
+                <path d="M0 0H800V900H0Z" />
+                <path d="M0 100H800M0 200H800M0 300H800M0 400H800M0 500H800M0 600H800M0 700H800M0 800H800" />
+                <path d="M100 0V400M200 0V400M300 0V400M400 0V400M500 0V400M600 0V400M700 0V400" />
+                <path d="M100 500V900M200 500V900M300 500V900M400 500V900M500 500V900M600 500V900M700 500V900" />
+                <path d="M300 0L500 200M500 0L300 200M300 700L500 900M500 700L300 900" />
+              </g>
+              <g class="river-label">
+                <text x="205" y="468">楚 河</text>
+                <text x="595" y="468">汉 界</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      <aside class="action-panel">
+        <div class="move-summary">
+          <span>对局进度</span>
+          <strong id="move-count">0 回合</strong>
+        </div>
+        <div class="selection-note">
+          <span>当前选择</span>
+          <strong id="selection-label">尚未选择棋子</strong>
+        </div>
+        <button id="cancel-button" class="secondary-action" type="button" hidden>
+          <span class="icon-button-content"><i data-lucide="x"></i>取消选择</span>
+        </button>
+        <button id="rematch-button" class="primary-action" type="button" hidden>
+          <span class="icon-button-content"><i data-lucide="rotate-ccw"></i>再来一局</span>
+        </button>
+        <a class="rules-link" href="./help.html" target="_blank">
+          <i data-lucide="circle-help"></i>玩法与棋子走法
+        </a>
+      </aside>
+    </main>
+  </body>
+</html>

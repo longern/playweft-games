@@ -186,6 +186,7 @@ body {
 .game-card-sudoku .game-card-meta { color: #21705d; }
 .game-card-go .game-card-meta { color: #9a6122; }
 .game-card-gomoku .game-card-meta { color: #a54432; }
+.game-card-xiangqi .game-card-meta { color: #9d3028; }
 
 @media (max-width: 900px) {
   .game-list {

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://playweft.dev/schemas/game-manifest-v1.json",
+  "manifestVersion": 1,
+  "id": "com.longern.playweft.xiangqi",
+  "version": "1.0.0",
+  "protocol": {
+    "min": 1,
+    "max": 1
+  },
+  "client": {
+    "entry": "./"
+  },
+  "name": "Xiangqi",
+  "name_localized": {
+    "zh-CN": "中国象棋"
+  },
+  "description": "Play locally or online, command seven kinds of pieces, and checkmate the opposing general.",
+  "description_localized": {
+    "zh-CN": "支持本机轮流或双人房间对弈，以将死或困毙对方将帅取胜。"
+  },
+  "categories": ["Strategy"],
+  "icons": [
+    {
+      "src": "../xiangqi.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "background_color": "#f1f0ea",
+  "theme_color": "#9f3027",
+  "help_url": "./help.html",
+  "modes": {
+    "solo": {},
+    "room": {
+      "players": {
+        "min": 2,
+        "max": 2
+      },
+      "server": {
+        "runtime": "lua",
+        "entry": "./game.lua",
+        "persistence": "durable"
+      }
+    }
+  }
+}

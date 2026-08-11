@@ -11,6 +11,7 @@ const ROOM_GAMES = new Map([
   ["uno", [2, 4]],
   ["go", [2, 2]],
   ["gomoku", [2, 2]],
+  ["xiangqi", [2, 2]],
 ]);
 const ALL_GAMES = [
   "pig-dice",
@@ -22,6 +23,7 @@ const ALL_GAMES = [
   "sudoku",
   "go",
   "gomoku",
+  "xiangqi",
 ];
 
 test("Every game package has a strict Playweft Manifest v1 for bridge v1", async () => {
@@ -115,7 +117,9 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
         },
       },
     };
-    if (game === "go" || game === "dou-dizhu") expectedModes.solo = {};
+    if (["go", "dou-dizhu", "xiangqi"].includes(game)) {
+      expectedModes.solo = {};
+    }
     assert.deepEqual(manifest.modes, expectedModes);
     const main = await readFile(`games/${game}/main.js`, "utf8");
     assert.doesNotMatch(
@@ -126,7 +130,7 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
   }
 });
 
-test("Featured list points exclusively to the nine game Manifests", async () => {
+test("Featured list points exclusively to every game Manifest", async () => {
   const featured = JSON.parse(
     await readFile("public/featured-games.json", "utf8"),
   );

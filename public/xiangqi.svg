@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" fill="#d7ab63"/>
+  <g fill="none" stroke="#664421" stroke-width="2" opacity=".72">
+    <path d="M15 14h98v100H15zM15 34h98M15 54h98M15 74h98M15 94h98"/>
+    <path d="M35 14v40m20-40v40m18-40v40m20-40v40M35 74v40m20-40v40m18-40v40m20-40v40"/>
+    <path d="m55 14 36 40M91 14 55 54m0 20 36 40M91 74l-36 40"/>
+  </g>
+  <circle cx="64" cy="65" r="38" fill="#edcf91" stroke="#8d2b24" stroke-width="4"/>
+  <circle cx="64" cy="65" r="31" fill="none" stroke="#a7332a" stroke-width="2"/>
+  <text x="64" y="82" fill="#9d2f27" font-family="serif" font-size="48" font-weight="700" text-anchor="middle">帅</text>
+</svg>
