@@ -2,7 +2,7 @@
   "$schema": "https://playweft.dev/schemas/game-manifest-v1.json",
   "manifestVersion": 1,
   "id": "com.longern.playweft.werewolf-dealer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "protocol": {
     "min": 1,
     "max": 1
@@ -14,9 +14,9 @@
   "name_localized": {
     "zh-CN": "狼人杀发牌器"
   },
-  "description": "Deal secret roles, collect votes, and run a social deduction game.",
+  "description": "Deal secret roles locally on one phone or run an online social deduction room.",
   "description_localized": {
-    "zh-CN": "分配隐藏角色、收集投票，组织一局线上狼人杀。"
+    "zh-CN": "支持一台手机轮流查看身份，也可在线分配隐藏角色、收集投票并组织狼人杀。"
   },
   "categories": ["Party"],
   "icons": [
@@ -31,6 +31,7 @@
   "theme_color": "#312927",
   "help_url": "./help.html",
   "modes": {
+    "solo": {},
     "room": {
       "players": {
         "min": 6,
