@@ -1,5 +1,6 @@
 import { createIcons, Eye, EyeOff, RotateCcw, Vote } from "lucide";
 import { createPlayweftClient } from "../../src/playweft-client.js";
+import { startSoloDealer } from "./solo.js";
 import "../../src/base.css";
 import "./styles.css";
 
@@ -13,6 +14,7 @@ const ROLE_DETAILS = {
 };
 
 const elements = {
+  root: document.querySelector(".dealer-layout"),
   connection: document.querySelector("#connection"),
   kicker: document.querySelector("#round-kicker"),
   heading: document.querySelector("#round-heading"),
@@ -36,6 +38,8 @@ let state;
 let pendingActionId;
 let roleVisible = false;
 let visibleRound;
+let playMode = "room";
+let soloStarted = false;
 
 const preview = {
   players: [
@@ -69,45 +73,69 @@ const preview = {
   lastEvent: { kind: "dealt", round: 1 },
 };
 
-const client = createPlayweftClient({
-  onReady(message) {
-    playerId = message.playerId;
-    setConnection("waiting", "房间已连接");
-    elements.kicker.textContent = "等待房主开始";
-    elements.heading.textContent = "6 至 12 位玩家就位后开局";
-  },
-  onState(message) {
-    playerId = message.playerId;
-    state = message.state;
-    setConnection("live", "实时房间");
+const isStandalone = window.parent === window;
+const client = isStandalone
+  ? undefined
+  : createPlayweftClient({
+      onReady(message) {
+        playMode = message.mode ?? "room";
+        if (playMode === "solo") {
+          startSolo();
+          return;
+        }
+        playerId = message.playerId;
+        setConnection("waiting", "房间已连接");
+        elements.kicker.textContent = "等待房主开始";
+        elements.heading.textContent = "6 至 12 位玩家就位后开局";
+      },
+      onState(message) {
+        if (playMode === "solo") return;
+        playerId = message.playerId;
+        state = message.state;
+        setConnection("live", "实时房间");
+        render(state);
+      },
+      onActionResult(result) {
+        if (playMode === "solo" || result.requestId !== pendingActionId) return;
+        pendingActionId = undefined;
+        render(state ?? preview);
+      },
+      onError(error, _code, requestId) {
+        if (playMode === "solo") return;
+        if (requestId === pendingActionId) pendingActionId = undefined;
+        setConnection("error", "连接异常");
+        elements.message.textContent = error;
+        render(state ?? preview);
+      },
+    });
+
+if (elements.roleReveal) {
+  elements.roleReveal.addEventListener("click", () => {
+    if (!state || !state.roles?.[playerId]) return;
+    roleVisible = !roleVisible;
     render(state);
-  },
-  onActionResult(result) {
-    if (result.requestId !== pendingActionId) return;
-    pendingActionId = undefined;
-    render(state ?? preview);
-  },
-  onError(error, _code, requestId) {
-    if (requestId === pendingActionId) pendingActionId = undefined;
-    setConnection("error", "连接异常");
-    elements.message.textContent = error;
-    render(state ?? preview);
-  },
-});
+  });
+}
 
-elements.roleReveal.addEventListener("click", () => {
-  if (!state || !state.roles?.[playerId]) return;
-  roleVisible = !roleVisible;
-  render(state);
-});
-elements.redeal.addEventListener("click", () => send({ type: "rematch" }));
-window.addEventListener("pagehide", () => client.destroy());
+if (elements.redeal) {
+  elements.redeal.addEventListener("click", () => send({ type: "rematch" }));
+}
 
-render(preview);
+window.addEventListener("pagehide", () => client?.destroy());
+
+if (isStandalone) startSolo();
+else render(preview);
+
+function startSolo() {
+  if (soloStarted) return;
+  soloStarted = true;
+  playMode = "solo";
+  startSoloDealer({ root: elements.root, setConnection });
+}
 
 function send(action) {
-  if (pendingActionId || !state) return;
-  const requestId = client.sendAction(action);
+  if (pendingActionId || !state || playMode !== "room") return;
+  const requestId = client?.sendAction(action);
   if (!requestId) {
     elements.message.textContent = "尚未连接 Playweft 平台";
   } else {
@@ -126,6 +154,7 @@ function isAlive(nextState, id) {
 }
 
 function render(nextState) {
+  if (playMode === "solo") return;
   const players = Array.isArray(nextState.players) ? nextState.players : [];
   const ownIndex = players.indexOf(playerId);
   const ownRole = nextState.roles?.[playerId];
@@ -151,21 +180,20 @@ function render(nextState) {
     ? `已投 ${votesCast} / ${activePlayers.length}，所有在场玩家投票后自动翻牌`
     : "牌桌已空，可重新发牌开始下一局";
 
-  if (!live) return;
-  renderStatus(nextState, players, ownIndex, activePlayers.length, votedFor);
+  if (live) renderStatus(nextState, players, ownIndex, activePlayers.length, votedFor);
 }
 
 function renderOwnRole(role, live) {
   const detail = roleVisible && role ? ROLE_DETAILS[role] : undefined;
   elements.roleCard.dataset.role = detail ? role : "hidden";
   elements.roleEmblem.textContent = detail?.mark ?? "?";
-  elements.roleName.textContent =
-    detail?.name ?? (live ? "身份未翻开" : "等待发牌");
+  elements.roleName.textContent = detail?.name ?? (live ? "身份未翻开" : "等待发牌");
   elements.roleCopy.textContent = detail?.copy ?? "开局后由你自己翻开身份牌";
   elements.roleReveal.disabled = !live || !role || Boolean(pendingActionId);
   elements.roleReveal.innerHTML = roleVisible
     ? '<span class="icon-button-content"><i data-lucide="eye-off"></i><span>盖回身份</span></span>'
     : '<span class="icon-button-content"><i data-lucide="eye"></i><span>查看身份</span></span>';
+  createIcons({ icons: { Eye, EyeOff, RotateCcw, Vote } });
 }
 
 function renderPlayers(nextState, players, ownIndex, ownAlive, votedFor, live) {
@@ -189,6 +217,7 @@ function renderPlayers(nextState, players, ownIndex, ownAlive, votedFor, live) {
         </article>`;
     })
     .join("");
+
   elements.playerField.querySelectorAll("[data-target]").forEach((button) => {
     button.addEventListener("click", () =>
       send({ type: "vote", target: button.dataset.target }),
@@ -205,10 +234,7 @@ function renderFlips(nextState, players) {
   elements.flipLog.innerHTML = flips.length
     ? flips
         .map((flip) => {
-          const detail = ROLE_DETAILS[flip.role] ?? {
-            name: "未知身份",
-            mark: "?",
-          };
+          const detail = ROLE_DETAILS[flip.role] ?? { name: "未知身份", mark: "?" };
           return `<article class="flip-entry" data-role="${flip.role}">
             <span class="flip-mark">${detail.mark}</span>
             <div><strong>${playerLabel(players, flip.player)} · ${detail.name}</strong><p>${flip.whiteGod ? "白神已翻牌并离场，不保留在场上。" : "已翻牌并离场。"}</p></div>
@@ -261,9 +287,7 @@ function renderStatus(nextState, players, ownIndex, activeCount, votedFor) {
     return;
   }
   elements.kicker.textContent = `第 ${nextState.round} 局 · 投票中`;
-  elements.heading.textContent = votedFor
-    ? "你的票已提交"
-    : "请选择本轮投票目标";
+  elements.heading.textContent = votedFor ? "你的票已提交" : "请选择本轮投票目标";
   elements.message.textContent =
     event.kind === "vote_cast"
       ? `${player} 已投票，等待其他玩家。`
