@@ -1,0 +1,1061 @@
+.solo-setup-panel,
+.solo-deal-panel {
+  width: min(520px, 100%);
+  margin: 0 auto;
+}
+
+.solo-setup-panel {
+  padding-bottom: calc(82px + env(safe-area-inset-bottom));
+}
+
+.solo-config-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.solo-group {
+  border-radius: 12px;
+  background: #fff;
+}
+
+.solo-count-section,
+.solo-section-heading,
+.solo-selected-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.solo-count-section > div:first-child,
+.solo-section-heading > div,
+.solo-selected-heading > div {
+  min-width: 0;
+}
+
+.solo-count-section strong,
+.solo-section-heading strong,
+.solo-selected-heading h3,
+.solo-selected-heading p,
+.solo-selected-heading span {
+  margin: 0;
+}
+
+.solo-count-section strong,
+.solo-section-heading strong {
+  display: block;
+  font-size: 0.94rem;
+  font-weight: 650;
+}
+
+.solo-count-section {
+  min-height: 64px;
+  padding: 10px 16px;
+}
+
+.solo-count-stepper {
+  display: grid;
+  flex: 0 0 auto;
+  width: 140px;
+  overflow: hidden;
+  border-radius: 8px;
+  grid-template-columns: 40px 60px 40px;
+  align-items: center;
+}
+
+.solo-count-stepper button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  background: #f1f2f4;
+  color: #202229;
+  cursor: pointer;
+  font-size: 1.18rem;
+  place-items: center;
+}
+
+.solo-count-stepper button:not(:disabled):hover {
+  background: #e7e8ea;
+}
+
+.solo-count-stepper button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.solo-count-stepper output {
+  display: grid;
+  min-height: 40px;
+  background: #f7f7f8;
+  font-size: 0.92rem;
+  font-weight: 700;
+  place-items: center;
+}
+
+.solo-layout-section {
+  padding: 0 12px 12px;
+}
+
+.solo-section-heading {
+  min-height: 52px;
+  padding: 0 4px;
+  border-bottom: 1px solid #ededed;
+}
+
+.solo-text-action {
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #576b95;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.solo-text-action:hover {
+  color: #3c4f79;
+}
+
+.solo-layout-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.solo-quick-layouts {
+  padding-top: 12px;
+}
+
+.solo-layout-card {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 8px;
+  background: #f5f6f7;
+  transition: background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.solo-layout-card:hover {
+  background: #eff0f1;
+}
+
+.solo-layout-card.is-selected {
+  background: #fdf1ef;
+  box-shadow: inset 0 0 0 1px #cf5d55;
+}
+
+.solo-layout-main {
+  display: grid;
+  width: 100%;
+  min-height: 118px;
+  padding: 14px 42px 14px 14px;
+  border: 0;
+  background: transparent;
+  color: #202229;
+  cursor: pointer;
+  text-align: left;
+  gap: 7px;
+}
+
+.solo-layout-card.is-compact .solo-layout-main {
+  min-height: 86px;
+}
+
+.solo-layout-card-top {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.solo-layout-card-top strong {
+  overflow: hidden;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.solo-layout-card-top > span {
+  flex: 0 0 auto;
+  color: #8b8b8b;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.solo-layout-team-summary {
+  color: #8f4540;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.solo-layout-description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #888;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.solo-layout-tags {
+  display: flex;
+  min-height: 18px;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.solo-layout-tags:empty {
+  display: none;
+}
+
+.solo-layout-tags em {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #e9ece5;
+  color: #5e665d;
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.solo-favorite-action {
+  position: absolute;
+  top: 8px;
+  right: 7px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #8b8e88;
+  cursor: pointer;
+  font-size: 1.15rem;
+  place-items: center;
+}
+
+.solo-favorite-action:hover {
+  background: #f0f1ed;
+  color: #8d5b1a;
+}
+
+.solo-favorite-action.is-favorite {
+  color: #b97819;
+}
+
+.solo-selected-layout {
+  padding: 0 16px 15px;
+}
+
+.solo-selected-heading {
+  min-height: 66px;
+  border-bottom: 1px solid #ededed;
+}
+
+.solo-selected-heading strong {
+  display: inline;
+  font-size: 0.94rem;
+  font-weight: 650;
+}
+
+.solo-selected-heading h3 {
+  display: inline;
+  margin-left: 8px;
+  color: #858585;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.solo-selected-heading p {
+  margin-top: 5px;
+  color: #999;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.solo-role-summary {
+  display: flex;
+  margin-top: 14px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.solo-role-chip {
+  display: inline-flex;
+  min-height: 27px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: #f3f4f5;
+  align-items: center;
+  color: #555;
+  font-size: 0.7rem;
+  font-weight: 550;
+}
+
+.solo-role-chip[data-team="wolf"] {
+  background: #403331;
+  color: #fff;
+}
+
+.solo-config-feedback {
+  margin: 0 16px;
+  color: #a7423e;
+  font-size: 0.76rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.solo-config-feedback[data-ready="true"] {
+  color: #247154;
+}
+
+.solo-secondary-action,
+.solo-danger-action {
+  min-height: 40px;
+  padding: 0 13px;
+  border: 1px solid #c7cbc2;
+  border-radius: 6px;
+  background: #fff;
+  color: #30322f;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.solo-danger-action {
+  border-color: #e1b9b5;
+  color: #a13b35;
+}
+
+.solo-primary-action {
+  min-height: 48px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 8px;
+  background: #242428;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.solo-primary-action:disabled {
+  border-color: #a7aaa4;
+  background: #a7aaa4;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.solo-action-bar {
+  position: fixed;
+  z-index: 15;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+}
+
+.solo-action-bar .solo-primary-action {
+  display: block;
+  width: min(496px, 100%);
+  margin: 0 auto;
+}
+
+.solo-dialog {
+  z-index: 30;
+  transition-duration: 220ms;
+}
+
+.solo-dialog-panel {
+  display: flex;
+  width: min(760px, 100%);
+  max-height: min(820px, calc(100vh - 48px));
+  overflow: hidden;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+  flex-direction: column;
+}
+
+.solo-dialog-header {
+  position: relative;
+  display: flex;
+  min-height: 56px;
+  padding: 8px 18px;
+  border-bottom: 1px solid #ededed;
+  background: #fff;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.solo-dialog-header span,
+.solo-dialog-header h2 {
+  margin: 0;
+}
+
+.solo-dialog-header span {
+  color: #a7423e;
+  font-size: 0.7rem;
+  font-weight: 850;
+}
+
+.solo-dialog-header h2 {
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.solo-dialog-header > button {
+  position: absolute;
+  right: 8px;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #777;
+  cursor: pointer;
+  font-size: 1.25rem;
+  place-items: center;
+}
+
+.solo-search-field {
+  display: block;
+  padding: 12px 16px 8px;
+}
+
+.solo-search-field input,
+.solo-field input,
+.solo-field textarea,
+.solo-role-row input,
+.room-role-config select,
+.room-role-config textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 11px;
+  border: 1px solid #dedede;
+  border-radius: 8px;
+  background: #fff;
+  color: #202229;
+  font: inherit;
+}
+
+.solo-search-field input {
+  min-height: 44px;
+  border: 0;
+  background: #f3f4f5;
+}
+
+.solo-search-field input:focus,
+.solo-field input:focus,
+.solo-field textarea:focus,
+.solo-role-row input:focus {
+  outline: 0;
+  border-color: #8796b3;
+  box-shadow: 0 0 0 1px #8796b3;
+}
+
+.solo-all-layouts {
+  min-height: 0;
+  padding: 4px 16px 18px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  gap: 10px;
+  grid-auto-rows: max-content;
+  align-content: start;
+  overscroll-behavior: contain;
+}
+
+.solo-all-layouts .solo-layout-description {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
+.solo-empty-state {
+  margin: 0;
+  padding: 42px 20px;
+  color: #73766f;
+  text-align: center;
+}
+
+.solo-dialog-footer {
+  display: flex;
+  margin-top: auto;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid #ededed;
+  background: #fff;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.solo-editor-scroll {
+  display: grid;
+  padding: 16px;
+  overflow-y: auto;
+  gap: 16px;
+}
+
+.solo-field {
+  display: grid;
+  gap: 7px;
+}
+
+.solo-field > span,
+.solo-editor-label strong {
+  font-size: 0.8rem;
+  font-weight: 850;
+}
+
+.solo-field textarea,
+.room-role-config textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.solo-editor-label {
+  display: flex;
+  margin-bottom: -6px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.solo-editor-label span {
+  color: #73766f;
+  font-size: 0.72rem;
+}
+
+.solo-role-list {
+  display: grid;
+  gap: 8px;
+}
+
+.solo-role-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 132px 36px;
+  gap: 7px;
+}
+
+.solo-role-count {
+  display: grid;
+  grid-template-columns: 36px minmax(48px, 1fr) 36px;
+}
+
+.solo-role-count button,
+.solo-role-remove,
+.solo-role-row > button,
+.room-role-config .solo-secondary-action {
+  border: 1px solid #c7cbc2;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.solo-role-count button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.solo-role-count button:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.solo-role-count input {
+  min-width: 0;
+  padding: 6px 3px;
+  border-right: 0;
+  border-left: 0;
+  border-radius: 0;
+  text-align: center;
+  appearance: textfield;
+}
+
+.solo-role-count input::-webkit-inner-spin-button,
+.solo-role-count input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.solo-role-remove {
+  border-radius: 6px;
+  color: #8c4944;
+  font-size: 1.1rem;
+}
+
+.solo-add-role {
+  width: 100%;
+}
+
+.solo-editor-panel > .solo-config-feedback {
+  margin: 0;
+  padding: 12px 22px;
+  border-top: 1px solid #ededed;
+  background: #fafafa;
+}
+
+.solo-editor-footer {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+}
+
+.room-role-config {
+  display: grid;
+  grid-column: 1 / -1;
+  padding: 4px;
+  gap: 10px;
+}
+
+.room-role-config label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.room-role-config p {
+  margin: 0;
+  color: #73766f;
+  font-size: 0.78rem;
+}
+
+.room-config-waiting {
+  grid-column: 1 / -1;
+  padding: 32px 16px;
+  border: 1px dashed #cfd1ca;
+  border-radius: 8px;
+  color: #73766f;
+  text-align: center;
+}
+
+.solo-deal-heading {
+  margin-bottom: 18px;
+}
+
+.solo-deal-heading h2,
+.solo-deal-heading p {
+  margin: 0;
+}
+
+.solo-deal-heading h2 {
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+
+.solo-deal-heading p {
+  margin-top: 7px;
+  color: #888;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.solo-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.solo-deal-card {
+  display: flex;
+  min-height: 132px;
+  padding: 14px 10px;
+  border: 0;
+  border-radius: 10px;
+  aspect-ratio: 0.78;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.05), transparent 45%), #312927;
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(32, 34, 41, 0.1);
+  cursor: pointer;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+}
+
+.solo-deal-card:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.solo-deal-card.is-viewed {
+  border-color: #cfd5c9;
+  background: #e8ece5;
+  color: #526052;
+  box-shadow: none;
+  cursor: default;
+}
+
+.solo-card-number {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  font-size: 1.5rem;
+  font-weight: 900;
+  place-items: center;
+}
+
+.solo-card-state {
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.solo-reset-action {
+  width: 100%;
+  margin-top: 14px;
+}
+
+.solo-privacy {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+  background: rgba(26, 25, 24, 0.94);
+  place-items: center;
+}
+
+.solo-privacy[hidden] {
+  display: none;
+}
+
+.solo-privacy-card {
+  width: min(420px, 100%);
+  padding: 20px;
+  border-radius: 14px;
+  background: #f7f7f7;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+  text-align: center;
+}
+
+.solo-privacy-card h2 {
+  margin: 0 0 8px;
+  font-size: 2rem;
+}
+
+.solo-privacy-prompt {
+  margin: 0 0 14px;
+  color: #777;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.solo-privacy[data-stage="reveal"] .solo-privacy-prompt {
+  display: none;
+}
+
+.solo-role-flip {
+  width: min(210px, 62vw);
+  margin-right: auto;
+  margin-left: auto;
+  aspect-ratio: 5 / 7;
+  perspective: 1000px;
+}
+
+.solo-role-flip[hidden] {
+  display: none;
+}
+
+.solo-role-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+
+.solo-role-flip.is-revealed .solo-role-flip-inner {
+  animation: solo-role-reveal 560ms cubic-bezier(0.22, 0.72, 0.2, 1) both;
+}
+
+.solo-identity-card,
+.solo-identity-card-back {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  box-shadow: 0 7px 16px rgba(0, 0, 0, 0.12);
+}
+
+.solo-identity-card {
+  display: flex;
+  padding: 22px 15px;
+  border: 1px solid #dad8d1;
+  border-radius: 12px;
+  background: #f7f6f1;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  transform: rotateY(180deg) translateZ(1px);
+}
+
+.solo-identity-card[data-role="werewolf"] {
+  border-color: #312927;
+  background: #312927;
+  color: #fff;
+}
+
+.solo-identity-card[data-role="villager"] {
+  border-color: #bfcfba;
+  background: #e7eee5;
+}
+
+.solo-identity-card[data-role="seer"] {
+  border-color: #aebfe4;
+  background: #e6edfb;
+}
+
+.solo-identity-card[data-role="witch"] {
+  border-color: #dcb4c7;
+  background: #f4e6ee;
+}
+
+.solo-identity-card[data-role="hunter"] {
+  border-color: #e0bd91;
+  background: #f6e9d8;
+}
+
+.solo-identity-card[data-role="white_god"] {
+  border-color: #b6bbb3;
+  background: #eff0ed;
+}
+
+.solo-identity-card-back {
+  display: grid;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 44%),
+    repeating-linear-gradient(45deg, transparent 0 12px, rgba(255, 255, 255, 0.025) 12px 13px),
+    #312927;
+  color: #fff;
+  place-content: center;
+  gap: 12px;
+  transform: translateZ(1px);
+}
+
+.solo-identity-card-back span {
+  display: grid;
+  width: 62px;
+  height: 62px;
+  margin: 0 auto;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  font-size: 1.65rem;
+  font-weight: 800;
+  place-items: center;
+}
+
+.solo-identity-emblem {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 12px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  align-items: center;
+  font-size: 1.55rem;
+  font-weight: 900;
+  justify-content: center;
+}
+
+.solo-identity-card strong {
+  font-size: 1.25rem;
+}
+
+.solo-identity-card p {
+  margin: 8px 0 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.solo-identity-card-back strong {
+  font-size: 0.9rem;
+  letter-spacing: 0.08em;
+}
+
+@keyframes solo-role-reveal {
+  0% {
+    transform: rotateY(0deg) scale(1);
+  }
+  48% {
+    transform: rotateY(88deg) scale(1.025);
+  }
+  52% {
+    transform: rotateY(92deg) scale(1.025);
+  }
+  100% {
+    transform: rotateY(180deg) scale(1);
+  }
+}
+
+.solo-role-actions {
+  display: grid;
+  padding-top: 20px;
+}
+
+.solo-role-actions .solo-primary-action {
+  width: 100%;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 620px) {
+  .solo-config-shell { gap: 12px; }
+
+  .solo-layout-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .solo-quick-layouts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .solo-layout-card.is-compact .solo-layout-main {
+    min-height: 86px;
+    padding: 12px 36px 12px 11px;
+  }
+
+  .solo-layout-card.is-compact .solo-layout-card-top {
+    display: grid;
+    gap: 4px;
+  }
+
+  .solo-layout-card.is-compact .solo-layout-card-top > span {
+    grid-row: 2;
+  }
+
+  .solo-layout-card.is-compact .solo-favorite-action {
+    top: 7px;
+    right: 5px;
+  }
+
+  .solo-dialog.overlay-dialog--sheet-narrow {
+    --solo-drawer-top-gap: max(96px, calc(env(safe-area-inset-top) + 64px));
+    padding: var(--solo-drawer-top-gap) 0 0;
+  }
+
+  .solo-dialog.overlay-dialog--sheet-narrow .solo-dialog-panel {
+    position: fixed;
+    inset: auto 0 0;
+    width: 100%;
+    max-height: calc(100dvh - var(--solo-drawer-top-gap));
+    border-radius: 14px 14px 0 0;
+    opacity: 1;
+    transform: translateY(0);
+    transition: transform 220ms cubic-bezier(0, 0, 0.2, 1);
+    will-change: transform;
+  }
+
+  .solo-dialog.overlay-dialog--sheet-narrow[data-state="closing"] .solo-dialog-panel {
+    bottom: 0;
+    transform: translateY(100%);
+    transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  }
+
+  @starting-style {
+    .solo-dialog.overlay-dialog--sheet-narrow[data-state="open"] .solo-dialog-panel {
+      bottom: 0;
+      transform: translateY(100%);
+    }
+  }
+
+  .solo-dialog-header,
+  .solo-search-field,
+  .solo-editor-scroll,
+  .solo-dialog-footer {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .solo-all-layouts {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .solo-role-row {
+    grid-template-columns: minmax(90px, 1fr) 120px 34px;
+    gap: 6px;
+  }
+
+  .solo-role-count {
+    grid-template-columns: 34px minmax(46px, 1fr) 34px;
+  }
+
+  .solo-role-remove {
+    min-width: 34px;
+  }
+
+  .solo-editor-footer {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .solo-editor-footer > span {
+    display: none;
+  }
+
+  .solo-editor-footer .solo-danger-action {
+    grid-column: 1 / -1;
+  }
+
+  .solo-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .solo-deal-card {
+    min-height: 112px;
+    padding: 10px 6px;
+  }
+
+  .solo-card-number {
+    width: 44px;
+    height: 44px;
+    font-size: 1.25rem;
+  }
+}
+
+@media (max-width: 390px) {
+  .solo-text-action {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 350px) {
+  .solo-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .solo-dialog,
+  .solo-dialog.overlay-dialog--sheet-narrow .solo-dialog-panel {
+    transition-duration: 1ms;
+  }
+
+  .solo-role-flip.is-revealed .solo-role-flip-inner {
+    animation-duration: 1ms;
+  }
+}

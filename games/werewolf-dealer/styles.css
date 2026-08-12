@@ -1,5 +1,14 @@
+html:root,
 body {
-  background: #f4f5f1;
+  background: #f7f7f7;
+}
+
+.game-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 0;
+  background: #ededed;
 }
 
 .dealer-layout {
@@ -89,12 +98,31 @@ body {
   text-align: center;
 }
 
-.role-card[data-role="werewolf"] { background: #312927; border-color: #312927; color: #fff; }
-.role-card[data-role="villager"] { background: #e7eee5; border-color: #bfcfba; }
-.role-card[data-role="seer"] { background: #e6edfb; border-color: #aebfe4; }
-.role-card[data-role="witch"] { background: #f4e6ee; border-color: #dcb4c7; }
-.role-card[data-role="hunter"] { background: #f6e9d8; border-color: #e0bd91; }
-.role-card[data-role="white_god"] { background: #eff0ed; border-color: #b6bbb3; }
+.role-card[data-role="werewolf"] {
+  background: #312927;
+  border-color: #312927;
+  color: #fff;
+}
+.role-card[data-role="villager"] {
+  background: #e7eee5;
+  border-color: #bfcfba;
+}
+.role-card[data-role="seer"] {
+  background: #e6edfb;
+  border-color: #aebfe4;
+}
+.role-card[data-role="witch"] {
+  background: #f4e6ee;
+  border-color: #dcb4c7;
+}
+.role-card[data-role="hunter"] {
+  background: #f6e9d8;
+  border-color: #e0bd91;
+}
+.role-card[data-role="white_god"] {
+  background: #eff0ed;
+  border-color: #b6bbb3;
+}
 
 .role-emblem {
   display: grid;
@@ -109,8 +137,14 @@ body {
   justify-content: center;
 }
 
-.role-card strong { font-size: 1.25rem; }
-.role-card p { margin: 8px 0 0; font-size: 0.84rem; line-height: 1.55; }
+.role-card strong {
+  font-size: 1.25rem;
+}
+.role-card p {
+  margin: 8px 0 0;
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
 
 .reveal-action,
 .redeal-action,
@@ -136,7 +170,9 @@ body {
   text-align: center;
 }
 
-.field-panel { padding: 22px; }
+.field-panel {
+  padding: 22px;
+}
 
 .field-heading {
   display: flex;
@@ -177,8 +213,14 @@ body {
   column-gap: 10px;
 }
 
-.player-seat.is-self { border-color: #aebfe4; background: #f2f6ff; }
-.player-seat.is-selected { border-color: #d79c4b; background: #fff8ed; }
+.player-seat.is-self {
+  border-color: #aebfe4;
+  background: #f2f6ff;
+}
+.player-seat.is-selected {
+  border-color: #d79c4b;
+  background: #fff8ed;
+}
 
 .seat-number {
   display: grid;
@@ -193,11 +235,21 @@ body {
   justify-content: center;
 }
 
-.seat-copy { min-width: 0; }
+.seat-copy {
+  min-width: 0;
+}
 .seat-copy strong,
-.seat-copy span { display: block; }
-.seat-copy strong { font-size: 0.86rem; }
-.seat-copy span { margin-top: 3px; color: #777a73; font-size: 0.72rem; }
+.seat-copy span {
+  display: block;
+}
+.seat-copy strong {
+  font-size: 0.86rem;
+}
+.seat-copy span {
+  margin-top: 3px;
+  color: #777a73;
+  font-size: 0.72rem;
+}
 
 .vote-action {
   display: inline-flex;
@@ -213,8 +265,14 @@ body {
   justify-content: center;
 }
 
-.vote-action svg { width: 15px; height: 15px; }
-.vote-action:not(:disabled):hover { border-color: #a7423e; color: #8b302c; }
+.vote-action svg {
+  width: 15px;
+  height: 15px;
+}
+.vote-action:not(:disabled):hover {
+  border-color: #a7423e;
+  color: #8b302c;
+}
 
 .field-footer {
   display: flex;
@@ -227,7 +285,12 @@ body {
   gap: 16px;
 }
 
-#vote-progress { margin: 0; color: #73766f; font-size: 0.78rem; line-height: 1.45; }
+#vote-progress {
+  margin: 0;
+  color: #73766f;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
 
 .redeal-action {
   display: inline-flex;
@@ -244,7 +307,10 @@ body {
 
 .reveal-action:disabled,
 .redeal-action:disabled,
-.vote-action:disabled { cursor: not-allowed; opacity: 0.42; }
+.vote-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
 
 .flip-section {
   margin-top: 22px;
@@ -286,24 +352,95 @@ body {
   justify-content: center;
 }
 
-.flip-entry[data-role="white_god"] { border-color: #aeb4ab; background: #f8f9f6; }
-.flip-entry strong { display: block; font-size: 0.8rem; }
-.flip-entry p { margin: 3px 0 0; color: #73766f; font-size: 0.72rem; line-height: 1.4; }
-.empty-flips { margin: 0; color: #747771; font-size: 0.84rem; }
+.flip-entry[data-role="white_god"] {
+  border-color: #aeb4ab;
+  background: #f8f9f6;
+}
+.flip-entry strong {
+  display: block;
+  font-size: 0.8rem;
+}
+.flip-entry p {
+  margin: 3px 0 0;
+  color: #73766f;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+.empty-flips {
+  margin: 0;
+  color: #747771;
+  font-size: 0.84rem;
+}
 
 @media (max-width: 760px) {
-  .dealer-layout { width: min(620px, calc(100% - 32px)); padding-top: 28px; }
-  .dealer-status h2 { font-size: 1.75rem; }
-  .table-layout { grid-template-columns: 1fr; }
-  .role-panel { min-height: 0; }
-  .role-card { min-height: 170px; }
+  .dealer-layout {
+    width: min(620px, calc(100% - 32px));
+    padding-top: 28px;
+  }
+  .dealer-status h2 {
+    font-size: 1.75rem;
+  }
+  .table-layout {
+    grid-template-columns: 1fr;
+  }
+  .role-panel {
+    min-height: 0;
+  }
+  .role-card {
+    min-height: 170px;
+  }
 }
 
 @media (max-width: 480px) {
-  .dealer-layout { width: calc(100% - 24px); }
-  .player-field { grid-template-columns: 1fr; }
-  .field-panel, .role-panel { padding: 16px; }
-  .field-footer { align-items: flex-start; flex-direction: column; }
-  .redeal-action { width: 100%; }
-  .flip-entry { min-width: 100%; }
+  .dealer-layout {
+    width: calc(100% - 24px);
+  }
+  .player-field {
+    grid-template-columns: 1fr;
+  }
+  .field-panel,
+  .role-panel {
+    padding: 16px;
+  }
+  .field-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .redeal-action {
+    width: 100%;
+  }
+  .flip-entry {
+    min-width: 100%;
+  }
+}
+
+body.is-solo-mode {
+  background: #f7f7f7;
+}
+
+body.is-solo-mode .game-header {
+  min-height: 52px;
+  padding: 0 16px;
+  justify-content: center;
+}
+
+body.is-solo-mode .game-brand {
+  gap: 0;
+}
+
+body.is-solo-mode .game-brand img,
+body.is-solo-mode .game-brand p,
+body.is-solo-mode .connection-status {
+  display: none;
+}
+
+body.is-solo-mode .game-brand h1 {
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+body.is-solo-mode .dealer-layout {
+  width: min(544px, calc(100% - 24px));
+  min-height: calc(100vh - 52px);
+  padding: 12px 0 32px;
 }

@@ -1,201 +1,81 @@
-local RANDOM_MODULUS = 2147483647
-local RANDOM_MULTIPLIER = 48271
-
-local function setup_players(context)
-  local players = {}
-  for _, player in ipairs(context.players) do table.insert(players, player.id) end
-  return players
-end
-
-local function rejected(state, reason)
-  return {
-    accepted = false,
-    error = {
-      code = string.upper(reason),
-      message = string.gsub(reason, "_", " "),
-    },
-  }
-end
-
-local function player_index(state, player_id)
-  for index, id in ipairs(state.players) do
-    if id == player_id then return index end
+local RANDOM_MODULUS=2147483647
+local RANDOM_MULTIPLIER=48271
+local function setup_players(context)local players={} for _,p in ipairs(context.players)do table.insert(players,p.id)end return players end
+local function rejected(state,reason)return{accepted=false,error={code=string.upper(reason),message=string.gsub(reason,"_"," ")}}end
+local function player_index(state,id)for i,p in ipairs(state.players)do if p==id then return i end end return nil end
+local function next_seed(seed)return(seed*RANDOM_MULTIPLIER)%RANDOM_MODULUS end
+local function copy_role(role)return{id=role.id,name=role.name,mark=role.mark,team=role.team,copy=role.copy}end
+local function sanitize_config(input,player_count)
+ if type(input)~="table" or type(input.roles)~="table" then return nil end
+ local config={name=tostring(input.name or "自定义版型"),rules=tostring(input.rules or ""),roles={}}
+ if #config.name>80 or #config.rules>3000 then return nil end
+ local total=0
+ for _,role in ipairs(input.roles)do
+  if type(role)~="table" then return nil end
+  local count=tonumber(role.count) or 0
+  if count<0 or count>12 or count~=math.floor(count) then return nil end
+  if count>0 then
+   local name=tostring(role.name or "") local id=tostring(role.id or "custom")
+   if name=="" or #name>72 or #id>80 then return nil end
+   local clean={id=id,name=name,mark=tostring(role.mark or string.sub(name,1,1)),team=tostring(role.team or "god"),copy=tostring(role.copy or "")}
+   if #clean.copy>500 then return nil end
+   for _=1,count do table.insert(config.roles,copy_role(clean)) end total=total+count
   end
-  return nil
+ end
+ if total~=player_count then return nil end
+ return config
 end
-
-local function next_seed(seed)
-  return (seed * RANDOM_MULTIPLIER) % RANDOM_MODULUS
+local function shuffled_roles(deck,seed)
+ local roles={} for i,role in ipairs(deck)do roles[i]=copy_role(role)end
+ for i=#roles,2,-1 do seed=next_seed(seed)local j=(seed%i)+1 roles[i],roles[j]=roles[j],roles[i]end
+ return roles,seed
 end
-
-local function role_deck(player_count)
-  local deck = { "seer", "witch", "hunter", "white_god" }
-  local wolf_count = math.max(2, math.floor(player_count / 3))
-  for _ = 1, wolf_count do table.insert(deck, "werewolf") end
-  while #deck < player_count do table.insert(deck, "villager") end
-  return deck
+local function deal_game(base,config,round)
+ local deck,next_seed_value=shuffled_roles(config.roles,base.seed)
+ local roles,status={},{}
+ for i,id in ipairs(base.players)do roles[id]=deck[i] status[id]="alive" end
+ return{phase="playing",players=base.players,roles=roles,status=status,votes={},flips={},seed=next_seed_value,round=round,voteRound=1,config={name=config.name,rules=config.rules,roles=config.roles},lastEvent={kind="dealt",round=round}}
 end
-
-local function shuffled_roles(player_count, seed)
-  local deck = role_deck(player_count)
-  for index = #deck, 2, -1 do
-    seed = next_seed(seed)
-    local swap_index = (seed % index) + 1
-    deck[index], deck[swap_index] = deck[swap_index], deck[index]
-  end
-  return deck, seed
-end
-
-local function new_game(players, seed, round)
-  local deck, next_round_seed = shuffled_roles(#players, seed)
-  local roles, status = {}, {}
-  for index, player_id in ipairs(players) do
-    roles[player_id] = deck[index]
-    status[player_id] = "alive"
-  end
-  return {
-    players = players,
-    roles = roles,
-    status = status,
-    votes = {},
-    flips = {},
-    seed = next_round_seed,
-    round = round,
-    voteRound = 1,
-    lastEvent = { kind = "dealt", round = round },
-  }
-end
-
-local function alive_players(state)
-  local players = {}
-  for _, player_id in ipairs(state.players) do
-    if state.status[player_id] == "alive" then table.insert(players, player_id) end
-  end
-  return players
-end
-
+local function alive_players(state)local result={} for _,id in ipairs(state.players)do if state.status[id]=="alive"then table.insert(result,id)end end return result end
 local function resolve_vote(state)
-  local tally = {}
-  local highest = 0
-  for _, target in pairs(state.votes) do
-    tally[target] = (tally[target] or 0) + 1
-    if tally[target] > highest then highest = tally[target] end
-  end
-
-  local tied = {}
-  for _, player_id in ipairs(alive_players(state)) do
-    if tally[player_id] == highest then table.insert(tied, player_id) end
-  end
-
-  state.votes = {}
-  if #tied ~= 1 then
-    state.lastEvent = { kind = "tied", players = tied, voteRound = state.voteRound }
-    state.voteRound = state.voteRound + 1
-    return {
-      accepted = true,
-      state = state,
-      events = { { type = "vote_tied", players = tied } },
-    }
-  end
-
-  local eliminated = tied[1]
-  local role = state.roles[eliminated]
-  state.status[eliminated] = "eliminated"
-  table.insert(state.flips, {
-    player = eliminated,
-    role = role,
-    whiteGod = role == "white_god",
-  })
-  state.lastEvent = {
-    kind = "eliminated",
-    player = eliminated,
-    role = role,
-    whiteGod = role == "white_god",
-    voteRound = state.voteRound,
-  }
-  state.voteRound = state.voteRound + 1
-  return {
-    accepted = true,
-    state = state,
-    events = { { type = "eliminated", player = eliminated, role = role } },
-  }
+ local tally={} local highest=0
+ for _,target in pairs(state.votes)do tally[target]=(tally[target]or 0)+1 if tally[target]>highest then highest=tally[target]end end
+ local tied={} for _,id in ipairs(alive_players(state))do if tally[id]==highest then table.insert(tied,id)end end state.votes={}
+ if #tied~=1 then state.lastEvent={kind="tied",players=tied,voteRound=state.voteRound} state.voteRound=state.voteRound+1 return{accepted=true,state=state,events={{type="vote_tied",players=tied}}}end
+ local eliminated=tied[1] local role=state.roles[eliminated] state.status[eliminated]="eliminated"
+ table.insert(state.flips,{player=eliminated,role=copy_role(role),whiteGod=role.id=="white_god"})
+ state.lastEvent={kind="eliminated",player=eliminated,role=copy_role(role),whiteGod=role.id=="white_god",voteRound=state.voteRound} state.voteRound=state.voteRound+1
+ return{accepted=true,state=state,events={{type="eliminated",player=eliminated,role=copy_role(role)}}}
 end
-
-function setup(context)
-  return new_game(setup_players(context), context.match.randomSeed, 1)
+function setup(context)return{phase="setup",players=setup_players(context),seed=context.match.randomSeed,round=1,lastEvent={kind="setup"}}end
+function view(state,events,context)
+ state.seed=nil state.canConfigure=context.viewer.isOwner==true
+ if state.phase=="setup" then return{state=state,events=events}end
+ local viewer=context.viewer.id local own=state.roles[viewer] state.roles={} if own then state.roles[viewer]=own end
+ local visible={} for voter,target in pairs(state.votes)do visible[voter]=voter==viewer and target or true end state.votes=visible
+ return{state=state,events=events}
 end
-
-function view(state, events, context)
-  state.seed = nil
-
-  local viewer_id = context.viewer.id
-  local own_role = state.roles[viewer_id]
-  state.roles = {}
-  if own_role then state.roles[viewer_id] = own_role end
-
-  local visible_votes = {}
-  for voter, target in pairs(state.votes) do
-    visible_votes[voter] = voter == viewer_id and target or true
-  end
-  state.votes = visible_votes
-  return { state = state, events = events }
+function on_action(state,action,context)
+ if type(action)~="table"then return rejected(state,"invalid_action")end
+ local actor=context.actor.id if not player_index(state,actor)then return rejected(state,"not_a_player")end
+ if state.phase=="setup" then
+  if not context.actor.isOwner then return rejected(state,"host_only")end
+  if action.type~="deal"then return rejected(state,"configuration_required")end
+  local config=sanitize_config(action.config,#state.players) if not config then return rejected(state,"invalid_role_pool")end
+  local next_state=deal_game(state,config,state.round or 1) return{accepted=true,state=next_state,events={{type="dealt",player=actor}}}
+ end
+ if action.type=="rematch"then local next_state=deal_game(state,state.config,(state.round or 1)+1)return{accepted=true,state=next_state,events={{type="redealt",player=actor}}}end
+ if action.type~="vote"then return rejected(state,"unknown_action")end
+ if state.status[actor]~="alive"then return rejected(state,"not_alive")end
+ if type(action.target)~="string"or not player_index(state,action.target)then return rejected(state,"invalid_target")end
+ if state.status[action.target]~="alive"then return rejected(state,"target_not_alive")end
+ state.votes[actor]=action.target local active=alive_players(state)local cast=0 for _,id in ipairs(active)do if state.votes[id]then cast=cast+1 end end
+ if cast<#active then state.lastEvent={kind="vote_cast",player=actor,votesCast=cast,voters=#active}return{accepted=true,state=state,events={{type="vote_cast",player=actor}}}end
+ return resolve_vote(state)
 end
-
-function on_action(state, action, context)
-  if type(action) ~= "table" then return rejected(state, "invalid_action") end
-  local actor_id = context.actor.id
-  local actor_index = player_index(state, actor_id)
-  if not actor_index then return rejected(state, "not_a_player") end
-
-  if action.type == "rematch" then
-    local next_state = new_game(state.players, state.seed, (state.round or 1) + 1)
-    return {
-      accepted = true,
-      state = next_state,
-      events = { { type = "redealt", player = actor_id } },
-    }
-  end
-
-  if action.type ~= "vote" then return rejected(state, "unknown_action") end
-  if state.status[actor_id] ~= "alive" then return rejected(state, "not_alive") end
-  if type(action.target) ~= "string" or not player_index(state, action.target) then
-    return rejected(state, "invalid_target")
-  end
-  if state.status[action.target] ~= "alive" then return rejected(state, "target_not_alive") end
-
-  state.votes[actor_id] = action.target
-  local active_players = alive_players(state)
-  local votes_cast = 0
-  for _, player_id in ipairs(active_players) do
-    if state.votes[player_id] then votes_cast = votes_cast + 1 end
-  end
-  if votes_cast < #active_players then
-    state.lastEvent = {
-      kind = "vote_cast",
-      player = actor_id,
-      votesCast = votes_cast,
-      voters = #active_players,
-    }
-    return {
-      accepted = true,
-      state = state,
-      events = { { type = "vote_cast", player = actor_id } },
-    }
-  end
-  return resolve_vote(state)
+function on_player_left(state,context)
+ if state.phase=="setup"then return{state=state,events={}}end
+ local actor=context.actor.id if not player_index(state,actor)or state.status[actor]~="alive"then return{state=state,events={}}end
+ state.status[actor]="left" state.votes={} state.lastEvent={kind="left",player=actor} return{state=state,events={{type="player_left",player=actor}}}
 end
-
-function on_player_left(state, context)
-  local actor_id = context.actor.id
-  if not player_index(state, actor_id) or state.status[actor_id] ~= "alive" then
-    return { state = state, events = {} }
-  end
-  state.status[actor_id] = "left"
-  state.votes = {}
-  state.lastEvent = { kind = "left", player = actor_id }
-  return { state = state, events = { { type = "player_left", player = actor_id } } }
-end
-
-function on_return_to_room(state, context)
-  return true
-end
+function on_return_to_room(state,context)return true end

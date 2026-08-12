@@ -2,45 +2,20 @@
   "$schema": "https://playweft.dev/schemas/game-manifest-v1.json",
   "manifestVersion": 1,
   "id": "com.longern.playweft.werewolf-dealer",
-  "version": "1.0.0",
-  "protocol": {
-    "min": 1,
-    "max": 1
-  },
-  "client": {
-    "entry": "./"
-  },
+  "version": "1.2.0",
+  "protocol": { "min": 1, "max": 1 },
+  "client": { "entry": "./" },
   "name": "Werewolf Dealer",
-  "name_localized": {
-    "zh-CN": "狼人杀发牌器"
-  },
-  "description": "Deal secret roles, collect votes, and run a social deduction game.",
-  "description_localized": {
-    "zh-CN": "分配隐藏角色、收集投票，组织一局线上狼人杀。"
-  },
+  "name_localized": { "zh-CN": "狼人杀发牌器" },
+  "description": "Deal configurable secret-role layouts locally on one phone or in an online room.",
+  "description_localized": { "zh-CN": "支持单机或在线房间自选版型、配置身份池并分配隐藏角色。" },
   "categories": ["Party"],
-  "icons": [
-    {
-      "src": "../werewolf-dealer.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    }
-  ],
+  "icons": [{ "src": "../werewolf-dealer.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }],
   "background_color": "#f4f5f1",
   "theme_color": "#312927",
   "help_url": "./help.html",
   "modes": {
-    "room": {
-      "players": {
-        "min": 6,
-        "max": 12
-      },
-      "server": {
-        "runtime": "lua",
-        "entry": "./game.lua",
-        "persistence": "durable"
-      }
-    }
+    "solo": {},
+    "room": { "players": { "min": 6, "max": 12 }, "server": { "runtime": "lua", "entry": "./game.lua", "persistence": "durable" } }
   }
 }

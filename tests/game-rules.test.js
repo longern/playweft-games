@@ -533,8 +533,17 @@ test("Werewolf dealer includes the four supported special roles and deals determ
   const result = await runLua(
     "games/werewolf-dealer/game.lua",
     `
-      first = setup({ players = { "a", "b", "c", "d", "e", "f" }, randomSeed = 123 })
-      second = setup({ players = { "a", "b", "c", "d", "e", "f" }, randomSeed = 123 })
+      config = { name = "六人局", roles = {
+        { id = "werewolf", name = "狼人", count = 2 },
+        { id = "seer", name = "预言家", count = 1 },
+        { id = "witch", name = "女巫", count = 1 },
+        { id = "hunter", name = "猎人", count = 1 },
+        { id = "white_god", name = "白神", count = 1 }
+      } }
+      first_setup = setup({ players = { "a", "b", "c", "d", "e", "f" }, randomSeed = 123 })
+      second_setup = setup({ players = { "a", "b", "c", "d", "e", "f" }, randomSeed = 123 })
+      first = on_action(first_setup, { type = "deal", config = config }, { actor = { id = "a", isOwner = true } }).state
+      second = on_action(second_setup, { type = "deal", config = config }, { actor = { id = "a", isOwner = true } }).state
       result = { first = first, second = second }
     `,
   );
@@ -542,9 +551,9 @@ test("Werewolf dealer includes the four supported special roles and deals determ
   const roles = Object.values(result.first.roles);
   assert.deepEqual(result.first.roles, result.second.roles);
   for (const role of ["seer", "witch", "hunter", "white_god"]) {
-    assert.equal(roles.filter((candidate) => candidate === role).length, 1);
+    assert.equal(roles.filter((candidate) => candidate.id === role).length, 1);
   }
-  assert.equal(roles.filter((candidate) => candidate === "werewolf").length, 2);
+  assert.equal(roles.filter((candidate) => candidate.id === "werewolf").length, 2);
   assert.equal(result.first.status.a, "alive");
 });
 
@@ -553,7 +562,15 @@ test("Werewolf dealer resolves a unanimous vote and removes White God from the f
     "games/werewolf-dealer/game.lua",
     `
       state = setup({ players = { "a", "b", "c", "d", "e", "f" }, randomSeed = 123 })
-      state.roles.a = "white_god"
+      config = { name = "六人局", roles = {
+        { id = "werewolf", name = "狼人", count = 2 },
+        { id = "seer", name = "预言家", count = 1 },
+        { id = "witch", name = "女巫", count = 1 },
+        { id = "hunter", name = "猎人", count = 1 },
+        { id = "white_god", name = "白神", count = 1 }
+      } }
+      state = on_action(state, { type = "deal", config = config }, { actor = { id = "a", isOwner = true } }).state
+      state.roles.a = { id = "white_god", name = "白神", mark = "B", team = "god", copy = "" }
       first = on_action(state, { type = "vote", target = "a" }, { playerId = "a", version = 0 })
       on_action(state, { type = "vote", target = "a" }, { playerId = "b", version = 1 })
       on_action(state, { type = "vote", target = "a" }, { playerId = "c", version = 2 })
@@ -568,7 +585,7 @@ test("Werewolf dealer resolves a unanimous vote and removes White God from the f
   assert.equal(result.final.accepted, true);
   assert.equal(result.final.events[0].type, "eliminated");
   assert.equal(result.final.state.status.a, "eliminated");
-  assert.equal(result.final.state.flips[0].role, "white_god");
+  assert.equal(result.final.state.flips[0].role.id, "white_god");
   assert.equal(result.final.state.flips[0].whiteGod, true);
   assert.deepEqual(result.final.state.votes, {});
 });
@@ -578,6 +595,14 @@ test("Werewolf dealer clears votes after a tie and starts the next vote round", 
     "games/werewolf-dealer/game.lua",
     `
       state = setup({ players = { "a", "b", "c", "d", "e", "f" }, randomSeed = 123 })
+      config = { name = "六人局", roles = {
+        { id = "werewolf", name = "狼人", count = 2 },
+        { id = "seer", name = "预言家", count = 1 },
+        { id = "witch", name = "女巫", count = 1 },
+        { id = "hunter", name = "猎人", count = 1 },
+        { id = "white_god", name = "白神", count = 1 }
+      } }
+      state = on_action(state, { type = "deal", config = config }, { actor = { id = "a", isOwner = true } }).state
       on_action(state, { type = "vote", target = "a" }, { playerId = "a", version = 0 })
       on_action(state, { type = "vote", target = "a" }, { playerId = "b", version = 1 })
       on_action(state, { type = "vote", target = "a" }, { playerId = "c", version = 2 })
@@ -878,13 +903,21 @@ test("Werewolf dealer view hides roles and other players' vote targets", async (
     "games/werewolf-dealer/game.lua",
     `
       state = setup({ players = { "a", "b", "c", "d", "e", "f" }, randomSeed = 123 })
+      config = { name = "六人局", roles = {
+        { id = "werewolf", name = "狼人", count = 2 },
+        { id = "seer", name = "预言家", count = 1 },
+        { id = "witch", name = "女巫", count = 1 },
+        { id = "hunter", name = "猎人", count = 1 },
+        { id = "white_god", name = "白神", count = 1 }
+      } }
+      state = on_action(state, { type = "deal", config = config }, { actor = { id = "a", isOwner = true } }).state
       state.votes.a = "b"
       state.votes.b = "c"
       result = view(state, { playerId = "a", version = 2 }).state
     `,
   );
 
-  assert.equal(typeof result.roles.a, "string");
+  assert.equal(typeof result.roles.a, "object");
   assert.equal(result.roles.b, undefined);
   assert.equal(Object.keys(result.roles).length, 1);
   assert.equal(result.votes.a, "b");
