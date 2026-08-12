@@ -76,6 +76,7 @@ test("Playweft room client uses bridge v1 and Manifest-owned initialization", as
     "action-123",
     "action-456",
     "clipboard-123",
+    "confirm-123",
   ];
   const originalWindow = globalThis.window;
   const originalCrypto = globalThis.crypto;
@@ -111,7 +112,7 @@ test("Playweft room client uses bridge v1 and Manifest-owned initialization", as
     respond(harness.fakePort, "initialize-123", {
       mode: "room",
       protocolVersion: 1,
-      capabilities: ["clipboard.readText"],
+      capabilities: ["navigator.clipboard.readText"],
       phase: "lobby",
       player: { id: "player-one", name: "牌友" },
       playerId: "player-one",
@@ -182,10 +183,20 @@ test("Playweft room client uses bridge v1 and Manifest-owned initialization", as
     assert.deepEqual(harness.portMessages.at(-1), {
       jsonrpc: "2.0",
       id: "clipboard-123",
-      method: "clipboard.readText",
+      method: "navigator.clipboard.readText",
     });
     respond(harness.fakePort, "clipboard-123", "copied text");
     assert.equal(await clipboard, "copied text");
+
+    const confirmation = client.confirm("确定删除吗？");
+    assert.deepEqual(harness.portMessages.at(-1), {
+      jsonrpc: "2.0",
+      id: "confirm-123",
+      method: "window.confirm",
+      params: { message: "确定删除吗？" },
+    });
+    respond(harness.fakePort, "confirm-123", true);
+    assert.equal(await confirmation, true);
 
     assert.deepEqual(results, [
       {
@@ -211,7 +222,7 @@ test("Playweft room client uses bridge v1 and Manifest-owned initialization", as
       {
         mode: "room",
         protocolVersion: 1,
-        capabilities: ["clipboard.readText"],
+        capabilities: ["navigator.clipboard.readText"],
         phase: "lobby",
         player: { id: "player-one", name: "牌友" },
         playerId: "player-one",
@@ -221,7 +232,7 @@ test("Playweft room client uses bridge v1 and Manifest-owned initialization", as
       {
         mode: "room",
         protocolVersion: 1,
-        capabilities: ["clipboard.readText"],
+        capabilities: ["navigator.clipboard.readText"],
         phase: "lobby",
         player: { id: "player-one", name: "牌友" },
         playerId: "player-one",

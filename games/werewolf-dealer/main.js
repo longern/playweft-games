@@ -65,7 +65,10 @@ const client = isStandalone
         if (playMode === "solo") return;
         playerId = message.playerId;
         state = message.state;
-        setConnection("live", state.phase === "setup" ? "房间配置中" : "实时房间");
+        setConnection(
+          "live",
+          state.phase === "setup" ? "房间配置中" : "实时房间",
+        );
         render(state);
       },
       onActionResult(result) {
@@ -99,7 +102,13 @@ function startLocalDealer() {
   if (localStarted) return;
   localStarted = true;
   playMode = "solo";
-  startDealer({ root: elements.root, setConnection });
+  startDealer({
+    root: elements.root,
+    setConnection,
+    confirmAction: isStandalone
+      ? (message) => Promise.resolve(window.confirm(message))
+      : (message) => client.confirm(message),
+  });
 }
 
 function send(action) {
@@ -154,10 +163,13 @@ function renderRoomSetup(next) {
     roomSetupController = startDealer({
       root: elements.root,
       setConnection,
+      confirmAction: (message) => client.confirm(message),
       room: {
         ...room,
         onConfigure(config) {
-          send(config ? { type: "configure", config } : { type: "clear_config" });
+          send(
+            config ? { type: "configure", config } : { type: "clear_config" },
+          );
         },
         onDeal(config) {
           send({ type: "deal", config });
@@ -178,7 +190,8 @@ function restoreRoomView() {
 
 function detail(role) {
   if (!role) return undefined;
-  if (typeof role === "string") return { id: role, name: role, mark: "?", copy: "" };
+  if (typeof role === "string")
+    return { id: role, name: role, mark: "?", copy: "" };
   return role;
 }
 
@@ -186,7 +199,8 @@ function renderOwnRole(role, live) {
   const roleDetail = roleVisible ? detail(role) : undefined;
   elements.roleCard.dataset.role = roleDetail?.id ?? "hidden";
   elements.roleEmblem.textContent = roleDetail?.mark ?? "?";
-  elements.roleName.textContent = roleDetail?.name ?? (live ? "身份未翻开" : "等待发牌");
+  elements.roleName.textContent =
+    roleDetail?.name ?? (live ? "身份未翻开" : "等待发牌");
   elements.roleCopy.textContent =
     roleDetail?.copy ?? state?.config?.rules ?? "开局后由你自己翻开身份牌";
   elements.roleReveal.disabled = !live || !role || Boolean(pendingActionId);
@@ -212,14 +226,18 @@ function renderPlayers(next, players, ownIndex, ownAlive, votedFor, live) {
     })
     .join("");
   elements.playerField.querySelectorAll("[data-target]").forEach((button) => {
-    button.addEventListener("click", () => send({ type: "vote", target: button.dataset.target }));
+    button.addEventListener("click", () =>
+      send({ type: "vote", target: button.dataset.target }),
+    );
   });
   renderIcons();
 }
 
 function renderFlips(next, players) {
   const flips = next.flips ?? [];
-  elements.flipHeading.textContent = flips.length ? `已翻 ${flips.length} 张身份牌` : "尚无人出局";
+  elements.flipHeading.textContent = flips.length
+    ? `已翻 ${flips.length} 张身份牌`
+    : "尚无人出局";
   elements.flipLog.innerHTML = flips.length
     ? flips
         .map((flip) => {
@@ -255,8 +273,11 @@ function renderStatus(next, players, ownIndex, activeCount, votedFor) {
     return;
   }
   elements.kicker.textContent = `第 ${next.round} 局 · ${next.config?.name ?? "狼人杀"}`;
-  elements.heading.textContent = votedFor ? "你的票已提交" : "请选择本轮投票目标";
-  elements.message.textContent = next.config?.rules || "全部在场玩家投票后，系统自动结算并翻牌。";
+  elements.heading.textContent = votedFor
+    ? "你的票已提交"
+    : "请选择本轮投票目标";
+  elements.message.textContent =
+    next.config?.rules || "全部在场玩家投票后，系统自动结算并翻牌。";
 }
 
 function playerLabel(players, id) {

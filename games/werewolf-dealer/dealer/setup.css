@@ -227,7 +227,6 @@
 .dealer-preset-main {
   display: flex;
   width: 100%;
-  min-height: 118px;
   padding: 14px 42px 14px 14px;
   border: 0;
   background: transparent;
@@ -266,54 +265,38 @@
   overflow: hidden;
   width: 100%;
   color: #f0dfb8;
-  font-size: 0.86rem;
+  font-size: 1rem;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.dealer-preset-card-top > span {
+.dealer-preset-card-top > em {
   flex: 0 0 auto;
-  color: #8b8b8b;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(213, 180, 111, 0.12);
+  color: #ccb77f;
   font-size: 0.75rem;
-  font-weight: 500;
+  font-style: normal;
+  font-weight: 650;
 }
 
 .dealer-preset-team-summary {
-  color: #8f4540;
+  color: #d1b77f;
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 650;
 }
 
 .dealer-preset-description {
-  display: -webkit-box;
+  display: block;
+  min-width: 0;
   overflow: hidden;
-  color: #888;
+  color: rgba(222, 213, 195, 0.66);
   font-size: 0.75rem;
   line-height: 1.5;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.dealer-preset-tags {
-  display: flex;
-  min-height: 18px;
-  align-items: flex-end;
-  gap: 6px;
-}
-
-.dealer-preset-tags:empty {
-  display: none;
-}
-
-.dealer-preset-tags em {
-  padding: 3px 7px;
-  border-radius: 999px;
-  background: #e9ece5;
-  color: #5e665d;
-  font-size: 0.75rem;
-  font-style: normal;
-  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dealer-favorite-action {

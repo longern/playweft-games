@@ -1,5 +1,5 @@
 {
-  "$schema": "https://playweft.dev/schemas/game-manifest-v1.json",
+  "$schema": "https://play.longern.com/schemas/game-manifest-v1.json",
   "manifestVersion": 1,
   "id": "com.longern.playweft.dou-dizhu",
   "version": "1.0.0",
@@ -18,7 +18,9 @@
   "description_localized": {
     "zh-CN": "叫分定地主，灵活配合出牌，率先出完手牌获胜。"
   },
-  "categories": ["Card game"],
+  "categories": [
+    "Card game"
+  ],
   "icons": [
     {
       "src": "../dou-dizhu.svg",

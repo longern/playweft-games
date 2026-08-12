@@ -23,11 +23,7 @@ export function createPlayweftClient({
       error instanceof PlayweftRpcError
         ? error
         : new PlayweftRpcError({ code: -32603, message: String(error) });
-    onError?.(
-      rpcError.message,
-      rpcError.code ?? "RPC_ERROR",
-      requestId,
-    );
+    onError?.(rpcError.message, rpcError.code ?? "RPC_ERROR", requestId);
   };
 
   const rpc = createPlayweftRpcPeer({
@@ -150,7 +146,10 @@ export function createPlayweftClient({
       return requestId;
     },
     readClipboardText() {
-      return rpc.call("clipboard.readText");
+      return rpc.call("navigator.clipboard.readText");
+    },
+    confirm(message) {
+      return rpc.call("window.confirm", { message: String(message ?? "") });
     },
     destroy() {
       destroyed = true;

@@ -15,7 +15,7 @@ local function sanitize_config(input,player_count)
  for _,role in ipairs(input.roles)do
   if type(role)~="table" then return nil end
   local count=tonumber(role.count) or 0
-  if count<0 or count>12 or count~=math.floor(count) then return nil end
+  if count<0 or count>15 or count~=math.floor(count) then return nil end
   if count>0 then
    local name=platform_safe_text(role.name or "") local id=tostring(role.id or "custom")
    if id=="white_god"then name="白神"end

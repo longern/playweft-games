@@ -1,5 +1,5 @@
 {
-  "$schema": "https://playweft.dev/schemas/game-manifest-v1.json",
+  "$schema": "https://play.longern.com/schemas/game-manifest-v1.json",
   "manifestVersion": 1,
   "id": "com.longern.playweft.sudoku",
   "version": "1.0.0",

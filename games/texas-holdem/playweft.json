@@ -1,5 +1,5 @@
 {
-  "$schema": "https://playweft.dev/schemas/game-manifest-v1.json",
+  "$schema": "https://play.longern.com/schemas/game-manifest-v1.json",
   "manifestVersion": 1,
   "id": "com.longern.playweft.texas-holdem",
   "version": "1.0.0",
@@ -18,7 +18,9 @@
   "description_localized": {
     "zh-CN": "下注、加注与诈唬，在二至六人牌桌上争夺底池。"
   },
-  "categories": ["Card game"],
+  "categories": [
+    "Card game"
+  ],
   "icons": [
     {
       "src": "../texas-holdem.svg",

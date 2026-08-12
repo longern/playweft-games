@@ -206,11 +206,22 @@ test("All room games implement the current Playweft protocol contract", async ()
       `);
       const result = lua.global.get("result");
 
-      assert.equal(result.players[0], "p1", `${gamePath} should normalize players`);
-      assert.equal(result.rejection.accepted, false, `${gamePath} should reject explicitly`);
+      assert.equal(
+        result.players[0],
+        "p1",
+        `${gamePath} should normalize players`,
+      );
+      assert.equal(
+        result.rejection.accepted,
+        false,
+        `${gamePath} should reject explicitly`,
+      );
       assert.match(result.rejection.error.code, /^[A-Z][A-Z0-9_]{0,63}$/);
       assert.ok(result.rejection.error.message.length > 0);
-      assert.ok(result.projection.state, `${gamePath} view should return state`);
+      assert.ok(
+        result.projection.state,
+        `${gamePath} view should return state`,
+      );
       assert.equal(result.projection.events[0].type, "contract_probe");
     } finally {
       lua.global.close();
@@ -553,8 +564,37 @@ test("Werewolf dealer includes the four supported special roles and deals determ
   for (const role of ["seer", "witch", "hunter", "white_god"]) {
     assert.equal(roles.filter((candidate) => candidate.id === role).length, 1);
   }
-  assert.equal(roles.filter((candidate) => candidate.id === "werewolf").length, 2);
+  assert.equal(
+    roles.filter((candidate) => candidate.id === "werewolf").length,
+    2,
+  );
   assert.equal(result.first.status.a, "alive");
+});
+
+test("Werewolf dealer accepts and deals a complete 15-player role pool", async () => {
+  const result = await runLua(
+    "games/werewolf-dealer/game.lua",
+    `
+      players = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o" }
+      state = setup({ players = players, randomSeed = 321 })
+      config = { presetId = "basic-15", name = "十五人局", rules = "十五人规则", roles = {
+        { id = "werewolf", name = "狼人", team = "wolf", count = 5 },
+        { id = "villager", name = "平民", team = "villager", count = 5 },
+        { id = "seer", name = "预言家", team = "god", count = 1 },
+        { id = "witch", name = "女巫", team = "god", count = 1 },
+        { id = "hunter", name = "猎人", team = "god", count = 1 },
+        { id = "guard", name = "守卫", team = "god", count = 1 },
+        { id = "white_god", name = "白神", team = "god", count = 1 }
+      } }
+      dealt = on_action(state, { type = "deal", config = config }, { actor = { id = "a", isOwner = true } })
+      result = dealt
+    `,
+  );
+
+  assert.equal(result.accepted, true);
+  assert.equal(result.state.phase, "playing");
+  assert.equal(Object.keys(result.state.roles).length, 15);
+  assert.equal(result.state.config.rules, "十五人规则");
 });
 
 test("Werewolf dealer shares the host preset before dealing", async () => {

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://playweft.dev/schemas/game-manifest-v1.json",
+  "$schema": "https://play.longern.com/schemas/game-manifest-v1.json",
   "manifestVersion": 1,
   "id": "com.longern.playweft.pig-dice",
   "version": "1.0.0",
@@ -18,7 +18,9 @@
   "description_localized": {
     "zh-CN": "掷骰累积分数，见好就收，率先到达 50 分。"
   },
-  "categories": ["Quick match"],
+  "categories": [
+    "Quick match"
+  ],
   "icons": [
     {
       "src": "../pig-dice.svg",

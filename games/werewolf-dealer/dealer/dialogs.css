@@ -126,12 +126,6 @@
   overscroll-behavior: contain;
 }
 
-.dealer-all-presets .dealer-preset-description {
-  display: block;
-  overflow: visible;
-  -webkit-line-clamp: unset;
-}
-
 .dealer-empty-state {
   margin: 0;
   padding: 42px 20px;

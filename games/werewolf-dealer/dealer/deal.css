@@ -310,31 +310,14 @@
   inset: 7px;
 }
 
-.dealer-identity-emblem {
-  display: flex;
-  width: 62px;
-  height: 62px;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  font-size: 1.6rem;
-  font-weight: 750;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 0 22px rgba(204, 164, 87, 0.13);
-}
-
-.dealer-identity-emblem {
-  width: 56px;
-  height: 56px;
-  margin-bottom: 14px;
-}
-
 .dealer-identity-card strong {
-  font-size: 1.25rem;
+  font-size: clamp(1.65rem, 8vw, 2rem);
+  line-height: 1.2;
+  letter-spacing: 0.06em;
 }
 
 .dealer-identity-card p {
-  margin: 9px 0 0;
+  margin: 16px 0 0;
   color: rgba(234, 217, 184, 0.78);
   font-size: 0.76rem;
   line-height: 1.5;

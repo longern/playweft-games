@@ -37,7 +37,7 @@
     "room": {
       "players": {
         "min": 6,
-        "max": 12
+        "max": 15
       },
       "server": {
         "runtime": "lua",

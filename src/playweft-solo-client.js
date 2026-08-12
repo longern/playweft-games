@@ -84,7 +84,7 @@ export function createPlayweftSoloClient({
 
   return {
     readClipboardText() {
-      return rpc.call("clipboard.readText");
+      return rpc.call("navigator.clipboard.readText");
     },
     destroy() {
       destroyed = true;

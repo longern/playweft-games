@@ -1,5 +1,5 @@
 {
-  "$schema": "https://playweft.dev/schemas/game-manifest-v1.json",
+  "$schema": "https://play.longern.com/schemas/game-manifest-v1.json",
   "manifestVersion": 1,
   "id": "com.longern.playweft.connect-four",
   "version": "1.0.0",
@@ -18,7 +18,9 @@
   "description_localized": {
     "zh-CN": "横、竖或斜线连成四子，抢在对手之前占据棋盘。"
   },
-  "categories": ["Strategy"],
+  "categories": [
+    "Strategy"
+  ],
   "icons": [
     {
       "src": "../connect-four.svg",

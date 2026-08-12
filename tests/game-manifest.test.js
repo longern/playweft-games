@@ -7,7 +7,7 @@ const ROOM_GAMES = new Map([
   ["connect-four", [2, 2]],
   ["texas-holdem", [2, 6]],
   ["dou-dizhu", [3, 3]],
-  ["werewolf-dealer", [6, 12]],
+  ["werewolf-dealer", [6, 15]],
   ["uno", [2, 4]],
   ["go", [2, 2]],
   ["gomoku", [2, 2]],
@@ -176,6 +176,25 @@ test("Werewolf dealer keeps visible rem text at least 0.75rem", async () => {
   }
 });
 
+test("Werewolf dealer supports complete presets through 15 players", async () => {
+  const html = await readFile("games/werewolf-dealer/index.html", "utf8");
+  const dealerJs = await readFile("games/werewolf-dealer/dealer.js", "utf8");
+  const { MAX_PLAYER_COUNT, MIN_PLAYER_COUNT, PRESETS, roleCount } =
+    await import("../games/werewolf-dealer/role-config.js");
+
+  assert.equal(MIN_PLAYER_COUNT, 6);
+  assert.equal(MAX_PLAYER_COUNT, 15);
+  for (const playerCount of [13, 14, 15]) {
+    assert.match(html, new RegExp(`data-player-count="${playerCount}"`));
+    assert.ok(
+      PRESETS.some((preset) => roleCount(preset) === playerCount),
+      `${playerCount} players should have a built-in preset`,
+    );
+  }
+  assert.match(dealerJs, /state\.playerCount >= MAX_PLAYER_COUNT/);
+  assert.match(dealerJs, /max="\$\{MAX_PLAYER_COUNT\}"/);
+});
+
 test("Werewolf dealer uses the platform-safe White God role name", async () => {
   const files = [
     "games/werewolf-dealer/role-config.js",
@@ -285,6 +304,22 @@ test("Werewolf dealer header stays borderless", async () => {
   assert.doesNotMatch(headerRule[1], /border(?:-bottom)?:/);
 });
 
+test("Werewolf dealer back action is circular and only paints mouse interaction states", async () => {
+  const themeCss = await readFile(
+    "games/werewolf-dealer/dealer/theme.css",
+    "utf8",
+  );
+  const backRule = themeCss.match(/\.dealer-back-action\s*\{([^}]*)\}/s);
+
+  assert.ok(backRule);
+  assert.match(backRule[1], /border-radius:\s*50%/);
+  assert.match(backRule[1], /background:\s*transparent/);
+  assert.match(
+    themeCss,
+    /@media\s*\(hover:\s*hover\)\s*and\s*\(pointer:\s*fine\)[\s\S]*?\.dealer-back-action:hover[\s\S]*?\.dealer-back-action:active/,
+  );
+});
+
 test("Hidden game views cannot be reopened by component layout styles", async () => {
   const baseCss = await readFile("src/base.css", "utf8");
 
@@ -324,6 +359,78 @@ test("Werewolf dealer uses the top-left back action instead of a deal footer res
     /elements\.back\.addEventListener\("click", handleBack\)/,
   );
   assert.match(dealerJs, /state\.phase === "setup"[\s\S]*?resetToSetup\(\)/);
+});
+
+test("Werewolf dealer delegates custom preset deletion confirmation", async () => {
+  const html = await readFile("games/werewolf-dealer/index.html", "utf8");
+  const dealerJs = await readFile("games/werewolf-dealer/dealer.js", "utf8");
+  const mainJs = await readFile("games/werewolf-dealer/main.js", "utf8");
+
+  assert.doesNotMatch(html, /id="dealer-delete-confirm"/);
+  assert.match(dealerJs, /await confirmAction\(/);
+  assert.match(mainJs, /isStandalone[\s\S]*?window\.confirm\(message\)/);
+  assert.match(mainJs, /client\.confirm\(message\)/);
+});
+
+test("Werewolf dealer fades the enlarged identity view without scaling it", async () => {
+  const dealerJs = await readFile("games/werewolf-dealer/dealer.js", "utf8");
+  const presenceBlock = dealerJs.match(
+    /const privacyLayerPresence = createPresence\(\{([\s\S]*?)\n  \}\);/,
+  );
+
+  assert.ok(presenceBlock);
+  assert.match(presenceBlock[1], /enter:\s*\{\s*opacity:\s*\[0, 1\]\s*\}/);
+  assert.match(presenceBlock[1], /exit:\s*\{\s*opacity:\s*0\s*\}/);
+  assert.doesNotMatch(presenceBlock[1], /scale|transform/);
+  assert.match(
+    dealerJs,
+    /privacyLayerPresence\.setVisible\([\s\S]*?\["privacy", "reveal"\]\.includes\(state\.phase\)/,
+  );
+});
+
+test("Werewolf dealer presents the role name without an ambiguous letter emblem", async () => {
+  const html = await readFile("games/werewolf-dealer/index.html", "utf8");
+  const dealerJs = await readFile("games/werewolf-dealer/dealer.js", "utf8");
+  const dealCss = await readFile(
+    "games/werewolf-dealer/dealer/deal.css",
+    "utf8",
+  );
+
+  assert.doesNotMatch(html, /dealer-role-mark|dealer-identity-emblem/);
+  assert.doesNotMatch(dealerJs, /roleMark/);
+  assert.match(
+    dealCss,
+    /\.dealer-identity-card strong\s*\{[^}]*font-size:\s*clamp\(1\.65rem,\s*8vw,\s*2rem\)/s,
+  );
+});
+
+test("Werewolf preset picker keeps summaries readable and rules to one line", async () => {
+  const dealerJs = await readFile("games/werewolf-dealer/dealer.js", "utf8");
+  const setupCss = await readFile(
+    "games/werewolf-dealer/dealer/setup.css",
+    "utf8",
+  );
+  const dialogsCss = await readFile(
+    "games/werewolf-dealer/dealer/dialogs.css",
+    "utf8",
+  );
+  const descriptionRule = setupCss.match(
+    /\.dealer-preset-description\s*\{([^}]*)\}/s,
+  );
+  const summaryRule = setupCss.match(
+    /\.dealer-preset-team-summary\s*\{([^}]*)\}/s,
+  );
+
+  assert.ok(descriptionRule);
+  assert.match(descriptionRule[1], /white-space:\s*nowrap/);
+  assert.match(descriptionRule[1], /text-overflow:\s*ellipsis/);
+  assert.ok(summaryRule);
+  assert.doesNotMatch(summaryRule[1], /#8f4540/);
+  assert.doesNotMatch(dealerJs, /roleCount\(preset\)\}\s*人/);
+  assert.match(
+    dialogsCss,
+    /\.dealer-all-presets \.dealer-preset-main\s*\{[^}]*min-height:\s*104px/s,
+  );
 });
 
 test("Werewolf dealer uses the generated artwork for its card back", async () => {

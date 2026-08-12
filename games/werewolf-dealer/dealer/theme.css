@@ -9,10 +9,11 @@ body.is-dealer-config-setup {
   --dealer-background-shade: linear-gradient(
     180deg,
     rgba(3, 9, 18, 0.03) 0,
-    rgba(3, 9, 18, 0.08) 32%,
-    rgba(6, 16, 30, 0.38) 45%,
-    rgba(6, 16, 30, 0.9) 61%,
-    #06101e 70%
+    rgba(3, 9, 18, 0.08) clamp(24%, calc(100% - 450px), 42%),
+    rgba(5, 14, 27, 0.44) clamp(34%, calc(100% - 400px), 52%),
+    rgba(6, 16, 30, 0.76) clamp(44%, calc(100% - 340px), 64%),
+    rgba(6, 16, 30, 0.96) clamp(58%, calc(100% - 240px), 75%),
+    #06101e clamp(68%, calc(100% - 150px), 84%)
   );
   background:
     var(--dealer-background-shade),
@@ -24,20 +25,6 @@ body.is-dealer-config-setup {
     ),
     url("../assets/moonlit-werewolf-hero.webp") 50% 52px / cover no-repeat fixed,
     #06101e;
-}
-
-@media (orientation: landscape) and (min-width: 900px) {
-  body.is-dealer-config-setup {
-    --dealer-background-shade: linear-gradient(
-      180deg,
-      rgba(3, 9, 18, 0.03) 0,
-      rgba(3, 9, 18, 0.08) calc(100% - 450px),
-      rgba(5, 14, 27, 0.44) calc(100% - 400px),
-      rgba(6, 16, 30, 0.76) calc(100% - 340px),
-      rgba(6, 16, 30, 0.96) calc(100% - 240px),
-      #06101e calc(100% - 150px)
-    );
-  }
 }
 
 body.is-dealer-config .game-header {
@@ -55,14 +42,25 @@ body.is-dealer-config .game-header {
   height: 44px;
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: 50%;
   background: transparent;
   color: inherit;
   cursor: pointer;
 }
 
-.dealer-back-action:hover {
-  background: rgba(213, 180, 111, 0.1);
+.dealer-back-action:focus-visible {
+  outline: 2px solid rgba(225, 186, 108, 0.86);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dealer-back-action:hover {
+    background: rgba(213, 180, 111, 0.1);
+  }
+
+  .dealer-back-action:active {
+    background: rgba(213, 180, 111, 0.18);
+  }
 }
 
 .dealer-back-action svg {

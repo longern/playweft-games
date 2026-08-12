@@ -1,5 +1,5 @@
 {
-  "$schema": "https://playweft.dev/schemas/game-manifest-v1.json",
+  "$schema": "https://play.longern.com/schemas/game-manifest-v1.json",
   "manifestVersion": 1,
   "id": "com.longern.playweft.go",
   "version": "1.0.0",
@@ -18,7 +18,9 @@
   "description_localized": {
     "zh-CN": "支持本机轮流或双人房间对弈，围地、提子并通过计分决出胜负。"
   },
-  "categories": ["Strategy"],
+  "categories": [
+    "Strategy"
+  ],
   "icons": [
     {
       "src": "../go.svg",

@@ -1,5 +1,7 @@
 import {
   PRESETS,
+  MAX_PLAYER_COUNT,
+  MIN_PLAYER_COUNT,
   addCustomGod,
   clonePreset,
   normalizedConfig,
@@ -45,13 +47,21 @@ const FEATURED_PRESET_IDS = {
     "gargoyle-gravekeeper",
     "mechanical-wolf-psychic",
   ],
+  13: ["basic-13"],
+  14: ["basic-14"],
+  15: ["basic-15"],
 };
 
 function setVisible(element, visible) {
   element.hidden = !visible;
 }
 
-export function startDealer({ root, setConnection, room }) {
+export function startDealer({
+  root,
+  setConnection,
+  room,
+  confirmAction = (message) => Promise.resolve(window.confirm(message)),
+}) {
   const isRoom = Boolean(room);
   let canConfigure = room?.canConfigure ?? true;
   document.body.classList.add("is-dealer-config");
@@ -71,6 +81,7 @@ export function startDealer({ root, setConnection, room }) {
   let pickerFavoritesChanged = false;
   let editorDraft;
   let lastFocusedElement;
+  let deleteConfirmationPending = false;
   let rulesExpanded = false;
   let renderedRulesKey = "";
   let quickPresetIds = buildQuickPresetIds(preferences, state.playerCount);
@@ -126,7 +137,6 @@ export function startDealer({ root, setConnection, room }) {
     reveal: $("dealer-reveal"),
     roleFlip: $("dealer-role-flip"),
     roleCard: $("dealer-role-card"),
-    roleMark: $("dealer-role-mark"),
     roleName: $("dealer-role-name"),
     roleCopy: $("dealer-role-copy"),
     cover: $("dealer-cover"),
@@ -147,6 +157,14 @@ export function startDealer({ root, setConnection, room }) {
     enterOptions: { duration: 0.2, ease: [0, 0, 0.2, 1] },
     exitOptions: { duration: 0.16, ease: [0.4, 0, 1, 1] },
     clearStyles: ["transform", "opacity"],
+  });
+  const privacyLayerPresence = createPresence({
+    element: elements.privacyLayer,
+    enter: { opacity: [0, 1] },
+    exit: { opacity: 0 },
+    enterOptions: { duration: 0.18, ease: "linear" },
+    exitOptions: { duration: 0.16, ease: "linear" },
+    clearStyles: ["opacity"],
   });
   const dialogControllers = new Map([
     [
@@ -231,6 +249,7 @@ export function startDealer({ root, setConnection, room }) {
     },
     destroy() {
       actionBarPresence.destroy();
+      privacyLayerPresence.destroy();
       document.body.classList.remove(
         "is-dealer-config",
         "is-dealer-config-setup",
@@ -415,7 +434,7 @@ export function startDealer({ root, setConnection, room }) {
       const role = editorDraft.roles[index];
       if (!role) return;
       role.count = Math.min(
-        12,
+        MAX_PLAYER_COUNT,
         Math.max(0, role.count + Number(adjust.dataset.adjustRole)),
       );
       renderRoleEditor();
@@ -483,11 +502,22 @@ export function startDealer({ root, setConnection, room }) {
     if (isRoom) room.onConfigure(normalizedConfig(state.config));
   }
 
-  function deleteCustomPreset() {
-    if (!canConfigure) return;
-    if (!editorDraft || !window.confirm(`删除“${editorDraft.name}”吗？`))
-      return;
-    const id = editorDraft.presetId;
+  async function deleteCustomPreset() {
+    if (!canConfigure || !editorDraft || deleteConfirmationPending) return;
+    const pendingDraft = editorDraft;
+    deleteConfirmationPending = true;
+    elements.editorDelete.disabled = true;
+    let confirmed = false;
+    try {
+      confirmed = await confirmAction(`确定删除“${pendingDraft.name}”吗？`);
+    } catch {
+      elements.editorFeedback.textContent = "无法打开确认弹窗，请稍后重试。";
+    } finally {
+      deleteConfirmationPending = false;
+      elements.editorDelete.disabled = false;
+    }
+    if (!confirmed || editorDraft !== pendingDraft) return;
+    const id = pendingDraft.presetId;
     preferences.customPresets = preferences.customPresets.filter(
       (preset) => preset.presetId !== id,
     );
@@ -496,6 +526,7 @@ export function startDealer({ root, setConnection, room }) {
     quickPresetIds = buildQuickPresetIds(preferences, state.playerCount);
     persistPreferences(preferences);
     closeDialog(elements.editor);
+    editorDraft = undefined;
     render();
     if (isRoom) room.onConfigure(null);
   }
@@ -560,8 +591,7 @@ export function startDealer({ root, setConnection, room }) {
     );
     setVisible(elements.setup, inSetup);
     setVisible(elements.deal, !inSetup);
-    setVisible(
-      elements.privacyLayer,
+    privacyLayerPresence.setVisible(
       ["privacy", "reveal"].includes(state.phase),
     );
     actionBarPresence.setVisible(inSetup && hasSelection);
@@ -584,8 +614,8 @@ export function startDealer({ root, setConnection, room }) {
       "aria-label",
       `当前 ${state.playerCount} 人，点击选择人数`,
     );
-    elements.decrease.disabled = state.playerCount <= 6;
-    elements.increase.disabled = state.playerCount >= 12;
+    elements.decrease.disabled = state.playerCount <= MIN_PLAYER_COUNT;
+    elements.increase.disabled = state.playerCount >= MAX_PLAYER_COUNT;
     renderQuickPresets();
     setVisible(elements.presetSection, !hasSelection);
     setVisible(elements.selectedPreset, hasSelection);
@@ -774,7 +804,6 @@ export function startDealer({ root, setConnection, room }) {
     elements.reveal.hidden = true;
     elements.roleFlip.classList.add("is-revealed");
     elements.roleCard.dataset.role = role.id;
-    elements.roleMark.textContent = role.mark || role.name.slice(0, 1);
     elements.roleName.textContent = role.name;
     elements.roleCopy.textContent =
       role.copy || state.config.rules || "请按当前版型规则行动。";
@@ -788,10 +817,9 @@ export function startDealer({ root, setConnection, room }) {
     const custom = !PRESETS.some((preset) => preset.id === id);
     return `<article class="dealer-preset-card${selected ? " is-selected" : ""}${compact ? " is-compact" : ""}">
       <button class="dealer-preset-main" type="button" data-select-preset="${escapeHtml(id)}" aria-pressed="${selected}">
-        <span class="dealer-preset-card-top"><strong title="${escapeHtml(preset.name)}">${escapeHtml(preset.name)}</strong>${compact ? "" : `<span>${roleCount(preset)} 人</span>`}</span>
+        <span class="dealer-preset-card-top"><strong title="${escapeHtml(preset.name)}">${escapeHtml(preset.name)}</strong>${!compact && custom ? "<em>自定义</em>" : ""}</span>
         ${compact ? "" : `<span class="dealer-preset-team-summary">${escapeHtml(presetMeta(preset))}</span>`}
         ${compact ? "" : `<span class="dealer-preset-description">${escapeHtml(preset.rules || "自定义身份配置")}</span>`}
-        ${compact ? "" : `<span class="dealer-preset-tags">${custom ? "<em>自定义</em>" : ""}</span>`}
       </button>
       <button class="dealer-favorite-action${favorite ? " is-favorite" : ""}" type="button" data-favorite-preset="${escapeHtml(id)}" aria-label="${favorite ? "取消收藏" : "收藏"}${escapeHtml(preset.name)}" aria-pressed="${favorite}"><i data-lucide="star"></i></button>
     </article>`;
@@ -882,7 +910,7 @@ function editorRoleRow(role, index) {
     <input data-role-name value="${escapeHtml(role.name)}" aria-label="身份名称">
     <div class="dealer-role-count" aria-label="${escapeHtml(role.name)}数量">
       <button type="button" data-adjust-role="-1" data-role-index="${index}" aria-label="减少${escapeHtml(role.name)}"><i data-lucide="minus"></i></button>
-      <input data-role-count type="number" min="0" max="12" value="${role.count}" aria-label="${escapeHtml(role.name)}数量">
+      <input data-role-count type="number" min="0" max="${MAX_PLAYER_COUNT}" value="${role.count}" aria-label="${escapeHtml(role.name)}数量">
       <button type="button" data-adjust-role="1" data-role-index="${index}" aria-label="增加${escapeHtml(role.name)}"><i data-lucide="plus"></i></button>
     </div>
     <button class="dealer-role-remove" type="button" data-remove-role="${index}" aria-label="删除${escapeHtml(role.name)}"><i data-lucide="x"></i></button>
@@ -904,7 +932,10 @@ function roleCountMessage(count, playerCount) {
 }
 
 function clampPlayerCount(value) {
-  return Math.min(12, Math.max(6, Math.round(Number(value) || 12)));
+  return Math.min(
+    MAX_PLAYER_COUNT,
+    Math.max(MIN_PLAYER_COUNT, Math.round(Number(value) || 12)),
+  );
 }
 
 function cloneConfig(config) {
