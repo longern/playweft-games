@@ -88,7 +88,7 @@ body.is-dealer-config .game-brand h1 {
 }
 
 body.is-dealer-config .dealer-layout {
-  width: min(544px, calc(100% - 24px));
+  width: 100%;
   height: calc(100vh - 52px);
   height: calc(100svh - 52px);
   min-height: 0;

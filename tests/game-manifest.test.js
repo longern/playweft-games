@@ -284,3 +284,66 @@ test("Werewolf dealer header stays borderless", async () => {
   assert.ok(headerRule);
   assert.doesNotMatch(headerRule[1], /border(?:-bottom)?:/);
 });
+
+test("Hidden game views cannot be reopened by component layout styles", async () => {
+  const baseCss = await readFile("src/base.css", "utf8");
+
+  assert.match(baseCss, /\[hidden\]\s*\{[^}]*display:\s*none\s*!important/s);
+});
+
+test("Werewolf dealer page scrollbar belongs to the full-width viewport layer", async () => {
+  const themeCss = await readFile(
+    "games/werewolf-dealer/dealer/theme.css",
+    "utf8",
+  );
+  const setupCss = await readFile(
+    "games/werewolf-dealer/dealer/setup.css",
+    "utf8",
+  );
+  const layoutRule = themeCss.match(
+    /body\.is-dealer-config \.dealer-layout\s*\{([^}]*)\}/s,
+  );
+
+  assert.ok(layoutRule);
+  assert.match(layoutRule[1], /width:\s*100%/);
+  assert.match(layoutRule[1], /overflow-y:\s*auto/);
+  assert.match(
+    setupCss,
+    /\.dealer-deal-panel\s*\{[^}]*width:\s*min\(520px,\s*calc\(100%\s*-\s*24px\)\)/s,
+  );
+});
+
+test("Werewolf dealer uses the top-left back action instead of a deal footer reset", async () => {
+  const html = await readFile("games/werewolf-dealer/index.html", "utf8");
+  const dealerJs = await readFile("games/werewolf-dealer/dealer.js", "utf8");
+
+  assert.match(html, /id="dealer-back"/);
+  assert.doesNotMatch(html, /id="dealer-reset"/);
+  assert.match(
+    dealerJs,
+    /elements\.back\.addEventListener\("click", handleBack\)/,
+  );
+  assert.match(dealerJs, /state\.phase === "setup"[\s\S]*?resetToSetup\(\)/);
+});
+
+test("Werewolf dealer uses the generated artwork for its card back", async () => {
+  const html = await readFile("games/werewolf-dealer/index.html", "utf8");
+  const dealCss = await readFile(
+    "games/werewolf-dealer/dealer/deal.css",
+    "utf8",
+  );
+  const cardBack = await readFile(
+    "games/werewolf-dealer/assets/werewolf-card-back.jpg",
+  );
+
+  assert.match(html, /class="dealer-identity-card-back"[^>]*><\/div>/);
+  assert.match(dealCss, /url\("\.\.\/assets\/werewolf-card-back\.jpg"\)/);
+  const numberedCardRule = dealCss.match(/\.dealer-deal-card\s*\{([^}]*)\}/s);
+  assert.ok(numberedCardRule);
+  assert.match(
+    numberedCardRule[1],
+    /url\("\.\.\/assets\/werewolf-card-back\.jpg"\)/,
+  );
+  assert.ok(cardBack.byteLength > 30_000);
+  assert.ok(cardBack.byteLength < 150_000);
+});

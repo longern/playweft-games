@@ -51,9 +51,8 @@
   border-radius: 11px;
   aspect-ratio: 5 / 7;
   background:
-    radial-gradient(circle at 50% 38%, rgba(125, 158, 190, 0.18) 0 17%, transparent 18%),
-    radial-gradient(circle at 50% 38%, transparent 0 27%, rgba(205, 169, 99, 0.16) 28% 29%, transparent 30%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.055), transparent 42%),
+    linear-gradient(rgba(3, 11, 21, 0.16), rgba(3, 11, 21, 0.34)),
+    url("../assets/werewolf-card-back.jpg") center / cover no-repeat,
     #0a182b;
   color: #e6cb91;
   box-shadow:
@@ -66,13 +65,25 @@
   gap: 10px;
 }
 
+.dealer-deal-card::before {
+  position: absolute;
+  z-index: 0;
+  background: radial-gradient(
+    circle at 50% 46%,
+    rgba(4, 13, 24, 0.16) 0 24%,
+    rgba(4, 13, 24, 0.56) 72%
+  );
+  content: "";
+  inset: 0;
+}
+
 .dealer-deal-card::after {
   position: absolute;
-  width: 68%;
-  border-top: 1px solid rgba(205, 169, 99, 0.12);
-  border-bottom: 1px solid rgba(205, 169, 99, 0.12);
+  z-index: 0;
+  border: 1px solid rgba(237, 202, 130, 0.24);
+  border-radius: 7px;
   content: "";
-  inset-block: 9px;
+  inset: 6px;
 }
 
 .dealer-deal-card:focus-visible {
@@ -82,12 +93,13 @@
 
 .dealer-deal-card.is-viewed {
   border-color: rgba(137, 151, 165, 0.22);
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.025), transparent 42%),
-    #0a1422;
   color: rgba(169, 180, 188, 0.5);
   box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.24);
   cursor: default;
+}
+
+.dealer-deal-card.is-viewed::before {
+  background: rgba(3, 11, 21, 0.62);
 }
 
 .dealer-card-number {
@@ -122,22 +134,16 @@
   height: 14px;
 }
 
-.dealer-reset-action {
-  width: 100%;
-  min-height: 46px;
-  margin-top: 16px;
-  border-color: rgba(205, 169, 99, 0.32);
-  background: rgba(9, 22, 38, 0.78);
-  color: #d9c398;
-  box-shadow: none;
-}
-
 .dealer-privacy-layer {
   position: fixed;
   z-index: 40;
   overflow-y: auto;
   background:
-    radial-gradient(circle at 50% 28%, rgba(43, 76, 109, 0.42), transparent 34%),
+    radial-gradient(
+      circle at 50% 28%,
+      rgba(43, 76, 109, 0.42),
+      transparent 34%
+    ),
     linear-gradient(180deg, rgba(3, 10, 20, 0.97), rgba(5, 16, 30, 0.99));
   inset: 0;
 }
@@ -170,13 +176,17 @@
   color: rgba(222, 207, 177, 0.58);
   font-size: 0.76rem;
   line-height: 1.5;
-  transition: opacity 160ms ease, visibility 0s linear 0s;
+  transition:
+    opacity 160ms ease,
+    visibility 0s linear 0s;
 }
 
 .dealer-privacy[data-stage="reveal"] .dealer-privacy-prompt {
   visibility: hidden;
   opacity: 0;
-  transition: opacity 160ms ease, visibility 0s linear 160ms;
+  transition:
+    opacity 160ms ease,
+    visibility 0s linear 160ms;
 }
 
 .dealer-role-flip {
@@ -223,9 +233,12 @@
   display: flex;
   padding: 22px 16px;
   background:
-    radial-gradient(circle at 50% 34%, rgba(104, 139, 176, 0.2), transparent 30%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.05), transparent 42%),
-    #0b1a2d;
+    radial-gradient(
+      circle at 50% 34%,
+      rgba(104, 139, 176, 0.2),
+      transparent 30%
+    ),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.05), transparent 42%), #0b1a2d;
   color: #ead9b8;
   align-items: center;
   flex-direction: column;
@@ -240,47 +253,63 @@
 .dealer-identity-card[data-role="mechanical_wolf"] {
   border-color: rgba(224, 155, 98, 0.62);
   background:
-    radial-gradient(circle at 50% 34%, rgba(156, 52, 46, 0.34), transparent 32%),
-    linear-gradient(145deg, rgba(255, 216, 159, 0.07), transparent 42%),
-    #281018;
+    radial-gradient(
+      circle at 50% 34%,
+      rgba(156, 52, 46, 0.34),
+      transparent 32%
+    ),
+    linear-gradient(145deg, rgba(255, 216, 159, 0.07), transparent 42%), #281018;
   color: #f0cf9a;
 }
 
 .dealer-identity-card[data-role="villager"] {
   border-color: rgba(158, 181, 183, 0.55);
   background:
-    radial-gradient(circle at 50% 34%, rgba(100, 139, 146, 0.24), transparent 32%),
+    radial-gradient(
+      circle at 50% 34%,
+      rgba(100, 139, 146, 0.24),
+      transparent 32%
+    ),
     #10222a;
 }
 
 .dealer-identity-card[data-role="witch"] {
   border-color: rgba(181, 140, 189, 0.62);
-  background: radial-gradient(circle at 50% 34%, rgba(119, 74, 139, 0.34), transparent 32%), #18152b;
+  background:
+    radial-gradient(
+      circle at 50% 34%,
+      rgba(119, 74, 139, 0.34),
+      transparent 32%
+    ),
+    #18152b;
 }
 
 .dealer-identity-card[data-role="hunter"],
 .dealer-identity-card[data-role="guard"],
 .dealer-identity-card[data-role="knight"] {
   border-color: rgba(201, 165, 108, 0.62);
-  background: radial-gradient(circle at 50% 34%, rgba(128, 93, 51, 0.3), transparent 32%), #1d1b20;
+  background:
+    radial-gradient(circle at 50% 34%, rgba(128, 93, 51, 0.3), transparent 32%),
+    #1d1b20;
 }
 
 .dealer-identity-card-back {
-  display: flex;
   background:
-    radial-gradient(circle at 50% 42%, rgba(97, 134, 172, 0.2) 0 20%, transparent 21%),
-    radial-gradient(circle at 50% 42%, transparent 0 31%, rgba(213, 176, 105, 0.25) 32% 33%, transparent 34%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.06), transparent 42%),
-    #09172a;
-  color: #e2c583;
-  align-items: center;
-  flex-direction: column;
-  justify-content: center;
-  gap: 12px;
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 32%),
+    url("../assets/werewolf-card-back.jpg") center / cover no-repeat,
+    #071425;
   transform: translateZ(1px);
 }
 
-.dealer-identity-card-back span,
+.dealer-identity-card-back::before {
+  position: absolute;
+  border: 1px solid rgba(237, 202, 130, 0.36);
+  border-radius: 8px;
+  box-shadow: inset 0 0 20px rgba(1, 7, 15, 0.24);
+  content: "";
+  inset: 7px;
+}
+
 .dealer-identity-emblem {
   display: flex;
   width: 62px;
@@ -311,19 +340,23 @@
   line-height: 1.5;
 }
 
-.dealer-identity-card-back strong {
-  font-size: 0.88rem;
-  letter-spacing: 0.1em;
-}
-
 @keyframes dealer-role-turn {
-  from { transform: rotateY(0deg); }
-  to { transform: rotateY(180deg); }
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(180deg);
+  }
 }
 
 @keyframes dealer-role-lift {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.018); }
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.018);
+  }
 }
 
 .dealer-role-actions {

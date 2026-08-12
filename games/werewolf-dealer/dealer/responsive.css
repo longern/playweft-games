@@ -87,15 +87,10 @@
   .dealer-deal-heading {
     margin-bottom: 12px;
   }
-
-  .dealer-reset-action {
-    margin-top: 12px;
-  }
 }
 
 @media (orientation: landscape) and (max-height: 620px) {
   body.is-dealer-config:not(.is-dealer-config-setup) .dealer-layout {
-    width: 100%;
     padding: 0;
   }
 
@@ -134,11 +129,6 @@
     width: 36px;
     height: 36px;
     font-size: 1rem;
-  }
-
-  .dealer-reset-action {
-    min-height: 44px;
-    margin-top: 8px;
   }
 }
 

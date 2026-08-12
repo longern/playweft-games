@@ -1,7 +1,10 @@
 .dealer-setup-panel,
 .dealer-deal-panel {
-  width: min(520px, 100%);
   margin: 0 auto;
+}
+
+.dealer-deal-panel {
+  width: min(520px, calc(100% - 24px));
 }
 
 .dealer-setup-panel {

@@ -191,11 +191,10 @@ export function startDealer({ root, setConnection, room }) {
   elements.quickPresets.addEventListener("click", handlePresetCardClick);
   elements.openPicker.addEventListener("click", openPresetPicker);
   elements.changePreset.addEventListener("click", openPresetPicker);
-  elements.back.addEventListener("click", clearPresetSelection);
+  elements.back.addEventListener("click", handleBack);
   elements.openEditor.addEventListener("click", openRoleEditor);
   elements.toggleRules.addEventListener("click", toggleSelectedRules);
   elements.start.addEventListener("click", startDealing);
-  $("dealer-reset").addEventListener("click", resetToSetup);
 
   elements.pickerSearch.addEventListener("input", renderPresetPicker);
   elements.pickerGrid.addEventListener("click", handlePickerClick);
@@ -331,6 +330,14 @@ export function startDealer({ root, setConnection, room }) {
     pickerSelectedId = null;
     render();
     if (isRoom) room.onConfigure(null);
+  }
+
+  function handleBack() {
+    if (state.phase === "setup") {
+      clearPresetSelection();
+      return;
+    }
+    resetToSetup();
   }
 
   function toggleFavorite(id) {
@@ -545,7 +552,12 @@ export function startDealer({ root, setConnection, room }) {
     const inSetup = state.phase === "setup";
     const hasSelection = Boolean(state.config);
     document.body.classList.toggle("is-dealer-config-setup", inSetup);
-    setVisible(elements.back, inSetup && hasSelection && canConfigure);
+    const canGoBack = hasSelection && canConfigure && (inSetup || !isRoom);
+    setVisible(elements.back, canGoBack);
+    elements.back.setAttribute(
+      "aria-label",
+      inSetup ? "返回版型选择" : "返回版型配置",
+    );
     setVisible(elements.setup, inSetup);
     setVisible(elements.deal, !inSetup);
     setVisible(
