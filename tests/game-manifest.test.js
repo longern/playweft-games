@@ -67,10 +67,7 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
     assert.equal(typeof manifest.name, "string");
     assert.equal(typeof manifest.name_localized["zh-CN"], "string");
     assert.equal(typeof manifest.description, "string");
-    assert.equal(
-      typeof manifest.description_localized["zh-CN"],
-      "string",
-    );
+    assert.equal(typeof manifest.description_localized["zh-CN"], "string");
     assert.ok(manifest.categories.length > 0);
     assert.equal(manifest.help_url, "./help.html");
     assert.equal(manifest.icons.length, 1);
@@ -117,7 +114,9 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
         },
       },
     };
-    if (["go", "dou-dizhu", "gomoku", "xiangqi", "werewolf-dealer"].includes(game)) {
+    if (
+      ["go", "dou-dizhu", "gomoku", "xiangqi", "werewolf-dealer"].includes(game)
+    ) {
       expectedModes.solo = {};
     }
     assert.deepEqual(manifest.modes, expectedModes);
@@ -154,4 +153,134 @@ test("Cloudflare Pages limits static CORS to browser-fetched JSON", async () => 
   );
   assert.doesNotMatch(headers, /^\/\*\s*$/m);
   assert.doesNotMatch(headers, /game\.lua/);
+});
+
+test("Werewolf dealer keeps visible rem text at least 0.75rem", async () => {
+  const files = [
+    "games/werewolf-dealer/styles.css",
+    "games/werewolf-dealer/dealer/deal.css",
+    "games/werewolf-dealer/dealer/dialogs.css",
+    "games/werewolf-dealer/dealer/responsive.css",
+    "games/werewolf-dealer/dealer/setup.css",
+    "games/werewolf-dealer/dealer/theme.css",
+  ];
+
+  for (const file of files) {
+    const css = await readFile(file, "utf8");
+    for (const match of css.matchAll(/font-size:\s*(\d*\.?\d+)rem/g)) {
+      assert.ok(
+        Number(match[1]) >= 0.75,
+        `${file} contains text smaller than 0.75rem: ${match[0]}`,
+      );
+    }
+  }
+});
+
+test("Werewolf dealer uses the platform-safe White God role name", async () => {
+  const files = [
+    "games/werewolf-dealer/role-config.js",
+    "games/werewolf-dealer/help.html",
+    "games/werewolf-dealer/index.html",
+    "games/werewolf-dealer/dealer.js",
+  ];
+  const prohibitedRoleName = ["白", "痴"].join("");
+
+  for (const file of files) {
+    const source = await readFile(file, "utf8");
+    assert.equal(
+      source.includes(prohibitedRoleName),
+      false,
+      `${file} contains a prohibited role name`,
+    );
+  }
+});
+
+test("Werewolf dealer prioritizes a one-screen mobile deal grid", async () => {
+  const dealCss = await readFile(
+    "games/werewolf-dealer/dealer/deal.css",
+    "utf8",
+  );
+  const responsiveCss = await readFile(
+    "games/werewolf-dealer/dealer/responsive.css",
+    "utf8",
+  );
+  const themeCss = await readFile(
+    "games/werewolf-dealer/dealer/theme.css",
+    "utf8",
+  );
+
+  assert.match(
+    dealCss,
+    /\.dealer-card-grid\[data-density="dense"\][^{]*\{[^}]*repeat\(4,/s,
+  );
+  assert.match(themeCss, /height:\s*calc\(100svh\s*-\s*52px\)/);
+  assert.match(
+    responsiveCss,
+    /orientation:\s*landscape[\s\S]*?\.dealer-card-grid\[data-density="dense"\][^{]*\{[^}]*repeat\(6,/,
+  );
+  assert.match(themeCss, /overflow-y:\s*auto/);
+});
+
+test("Werewolf dealer setup uses remaining height before it scrolls", async () => {
+  const setupCss = await readFile(
+    "games/werewolf-dealer/dealer/setup.css",
+    "utf8",
+  );
+  const responsiveCss = await readFile(
+    "games/werewolf-dealer/dealer/responsive.css",
+    "utf8",
+  );
+
+  assert.match(
+    setupCss,
+    /\.dealer-setup-panel\.has-action-bar\s*\{[^}]*display:\s*flex/s,
+  );
+  assert.match(
+    setupCss,
+    /\.dealer-selected-rules\s*\{[^}]*margin-top:\s*14px/s,
+  );
+  assert.match(
+    setupCss,
+    /\.dealer-config-shell\.is-confirming::before\s*\{[^}]*flex:\s*1\s+1\s+220px/s,
+  );
+  assert.doesNotMatch(
+    setupCss,
+    /\.dealer-config-shell\.is-confirming[^}]*padding-top/s,
+  );
+  assert.match(
+    setupCss,
+    /#dealer-selected-rules-copy[^}]*-webkit-line-clamp:\s*3/s,
+  );
+  assert.match(
+    responsiveCss,
+    /orientation:\s*landscape[\s\S]*?\.dealer-config-shell\.is-confirming::before\s*\{[^}]*clamp\([^)]*100svh/s,
+  );
+  const compactLandscapeStart = responsiveCss.indexOf(
+    "@media (orientation: landscape) and (max-height: 620px)",
+  );
+  const continuousLandscapeStart = responsiveCss.indexOf(
+    "@media (orientation: landscape) {",
+    compactLandscapeStart,
+  );
+  const compactLandscapeCss = responsiveCss.slice(
+    compactLandscapeStart,
+    continuousLandscapeStart,
+  );
+  assert.doesNotMatch(
+    compactLandscapeCss,
+    /\.dealer-config-shell\.is-confirming::before/,
+  );
+});
+
+test("Werewolf dealer header stays borderless", async () => {
+  const themeCss = await readFile(
+    "games/werewolf-dealer/dealer/theme.css",
+    "utf8",
+  );
+  const headerRule = themeCss.match(
+    /body\.is-dealer-config \.game-header\s*\{([^}]*)\}/s,
+  );
+
+  assert.ok(headerRule);
+  assert.doesNotMatch(headerRule[1], /border(?:-bottom)?:/);
 });

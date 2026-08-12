@@ -557,6 +557,29 @@ test("Werewolf dealer includes the four supported special roles and deals determ
   assert.equal(result.first.status.a, "alive");
 });
 
+test("Werewolf dealer shares the host preset before dealing", async () => {
+  const result = await runLua(
+    "games/werewolf-dealer/game.lua",
+    `
+      state = setup({ players = { "a", "b", "c", "d", "e", "f" }, randomSeed = 123 })
+      config = { presetId = "basic-6", name = "六人局", roles = {
+        { id = "werewolf", name = "狼人", team = "wolf", count = 2 },
+        { id = "villager", name = "平民", team = "villager", count = 3 },
+        { id = "seer", name = "预言家", team = "god", count = 1 }
+      } }
+      configured = on_action(state, { type = "configure", config = config }, { actor = { id = "a", isOwner = true } })
+      guest_view = view(configured.state, {}, { viewer = { id = "b", isOwner = false } }).state
+      result = { configured = configured, guest = guest_view }
+    `,
+  );
+
+  assert.equal(result.configured.accepted, true);
+  assert.equal(result.configured.state.phase, "setup");
+  assert.equal(result.guest.config.name, "六人局");
+  assert.equal(result.guest.config.roles[0].count, 2);
+  assert.equal(result.guest.canConfigure, false);
+});
+
 test("Werewolf dealer resolves a unanimous vote and removes White God from the field after flipping", async () => {
   const result = await runLua(
     "games/werewolf-dealer/game.lua",

@@ -5,9 +5,11 @@ local function rejected(state,reason)return{accepted=false,error={code=string.up
 local function player_index(state,id)for i,p in ipairs(state.players)do if p==id then return i end end return nil end
 local function next_seed(seed)return(seed*RANDOM_MULTIPLIER)%RANDOM_MODULUS end
 local function copy_role(role)return{id=role.id,name=role.name,mark=role.mark,team=role.team,copy=role.copy}end
+local LEGACY_WHITE_GOD_NAME=string.char(0xE7,0x99,0xBD,0xE7,0x97,0xB4)
+local function platform_safe_text(value)return string.gsub(tostring(value or ""),LEGACY_WHITE_GOD_NAME,"白神")end
 local function sanitize_config(input,player_count)
  if type(input)~="table" or type(input.roles)~="table" then return nil end
- local config={name=tostring(input.name or "自定义版型"),rules=tostring(input.rules or ""),roles={}}
+ local config={presetId=tostring(input.presetId or "custom"),name=platform_safe_text(input.name or "自定义版型"),rules=platform_safe_text(input.rules or ""),roles={}}
  if #config.name>80 or #config.rules>3000 then return nil end
  local total=0
  for _,role in ipairs(input.roles)do
@@ -15,11 +17,12 @@ local function sanitize_config(input,player_count)
   local count=tonumber(role.count) or 0
   if count<0 or count>12 or count~=math.floor(count) then return nil end
   if count>0 then
-   local name=tostring(role.name or "") local id=tostring(role.id or "custom")
+   local name=platform_safe_text(role.name or "") local id=tostring(role.id or "custom")
+   if id=="white_god"then name="白神"end
    if name=="" or #name>72 or #id>80 then return nil end
-   local clean={id=id,name=name,mark=tostring(role.mark or string.sub(name,1,1)),team=tostring(role.team or "god"),copy=tostring(role.copy or "")}
+   local clean={id=id,name=name,mark=tostring(role.mark or string.sub(name,1,1)),team=tostring(role.team or "god"),copy=platform_safe_text(role.copy or ""),count=count}
    if #clean.copy>500 then return nil end
-   for _=1,count do table.insert(config.roles,copy_role(clean)) end total=total+count
+   table.insert(config.roles,clean) total=total+count
   end
  end
  if total~=player_count then return nil end
@@ -30,11 +33,12 @@ local function shuffled_roles(deck,seed)
  for i=#roles,2,-1 do seed=next_seed(seed)local j=(seed%i)+1 roles[i],roles[j]=roles[j],roles[i]end
  return roles,seed
 end
+local function expand_roles(roles)local deck={} for _,role in ipairs(roles)do for _=1,role.count do table.insert(deck,copy_role(role))end end return deck end
 local function deal_game(base,config,round)
- local deck,next_seed_value=shuffled_roles(config.roles,base.seed)
+ local deck,next_seed_value=shuffled_roles(expand_roles(config.roles),base.seed)
  local roles,status={},{}
  for i,id in ipairs(base.players)do roles[id]=deck[i] status[id]="alive" end
- return{phase="playing",players=base.players,roles=roles,status=status,votes={},flips={},seed=next_seed_value,round=round,voteRound=1,config={name=config.name,rules=config.rules,roles=config.roles},lastEvent={kind="dealt",round=round}}
+ return{phase="playing",players=base.players,roles=roles,status=status,votes={},flips={},seed=next_seed_value,round=round,voteRound=1,config=config,lastEvent={kind="dealt",round=round}}
 end
 local function alive_players(state)local result={} for _,id in ipairs(state.players)do if state.status[id]=="alive"then table.insert(result,id)end end return result end
 local function resolve_vote(state)
@@ -60,8 +64,10 @@ function on_action(state,action,context)
  local actor=context.actor.id if not player_index(state,actor)then return rejected(state,"not_a_player")end
  if state.phase=="setup" then
   if not context.actor.isOwner then return rejected(state,"host_only")end
-  if action.type~="deal"then return rejected(state,"configuration_required")end
+  if action.type=="clear_config"then state.config=nil state.lastEvent={kind="configuration_cleared",player=actor}return{accepted=true,state=state,events={{type="configuration_cleared",player=actor}}}end
+  if action.type~="configure"and action.type~="deal"then return rejected(state,"configuration_required")end
   local config=sanitize_config(action.config,#state.players) if not config then return rejected(state,"invalid_role_pool")end
+  if action.type=="configure"then state.config=config state.lastEvent={kind="configured",player=actor}return{accepted=true,state=state,events={{type="configured",player=actor}}}end
   local next_state=deal_game(state,config,state.round or 1) return{accepted=true,state=next_state,events={{type="dealt",player=actor}}}
  end
  if action.type=="rematch"then local next_state=deal_game(state,state.config,(state.round or 1)+1)return{accepted=true,state=next_state,events={{type="redealt",player=actor}}}end

@@ -1,0 +1,220 @@
+@media (max-width: 620px) {
+  .dealer-config-shell {
+    gap: 12px;
+  }
+
+  .dealer-preset-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dealer-quick-presets {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .dealer-preset-card.is-compact .dealer-preset-main {
+    min-height: 88px;
+    padding: 14px 36px;
+  }
+
+  .dealer-preset-card.is-compact .dealer-favorite-action {
+    top: 7px;
+    right: 5px;
+  }
+
+  .dealer-dialog-header,
+  .dealer-search-field,
+  .dealer-editor-scroll,
+  .dealer-dialog-footer {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .dealer-all-presets {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .dealer-role-row {
+    grid-template-columns: minmax(90px, 1fr) 120px 34px;
+    gap: 6px;
+  }
+
+  .dealer-role-count {
+    grid-template-columns: 34px minmax(46px, 1fr) 34px;
+  }
+
+  .dealer-role-remove {
+    min-width: 34px;
+  }
+
+  .dealer-editor-footer {
+    flex-wrap: wrap;
+  }
+
+  .dealer-editor-footer > span {
+    display: none;
+  }
+
+  .dealer-editor-footer .dealer-danger-action {
+    flex: 1 0 100%;
+  }
+
+  .dealer-editor-footer .dealer-secondary-action,
+  .dealer-editor-footer .dealer-primary-action {
+    flex: 1 1 0;
+  }
+
+  .dealer-card-grid {
+    gap: 8px;
+  }
+
+  .dealer-deal-card {
+    padding: 8px 5px;
+    gap: 7px;
+  }
+
+  .dealer-card-number {
+    width: 44px;
+    height: 44px;
+    font-size: 1.25rem;
+  }
+
+  .dealer-deal-content {
+    padding: 14px 0 max(14px, env(safe-area-inset-bottom));
+  }
+
+  .dealer-deal-heading {
+    margin-bottom: 12px;
+  }
+
+  .dealer-reset-action {
+    margin-top: 12px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 620px) {
+  body.is-dealer-config:not(.is-dealer-config-setup) .dealer-layout {
+    width: 100%;
+    padding: 0;
+  }
+
+  .dealer-deal-content {
+    width: min(460px, calc(100% - 24px));
+    min-height: 100%;
+    margin: 0 auto;
+    padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+  }
+
+  .dealer-deal-heading {
+    margin-bottom: 8px;
+  }
+
+  .dealer-deal-heading h2 {
+    font-size: 1rem;
+  }
+
+  .dealer-deal-heading p {
+    margin-top: 3px;
+    line-height: 1.35;
+  }
+
+  .dealer-card-grid,
+  .dealer-card-grid[data-density="dense"] {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .dealer-deal-card {
+    padding: 5px 3px;
+    gap: 4px;
+  }
+
+  .dealer-card-number {
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
+  }
+
+  .dealer-reset-action {
+    min-height: 44px;
+    margin-top: 8px;
+  }
+}
+
+@media (orientation: landscape) {
+  .dealer-setup-panel {
+    padding-top: clamp(72px, 14vh, 126px);
+  }
+
+  .dealer-setup-panel.has-action-bar {
+    padding-top: 0;
+  }
+
+  .dealer-config-shell.is-confirming {
+    width: min(560px, calc(100% - 40px));
+  }
+
+  .dealer-config-shell.is-confirming::before {
+    min-height: clamp(8px, calc(100svh - 480px), 150px);
+    max-height: clamp(8px, calc(100svh - 420px), 300px);
+    flex-basis: clamp(8px, calc(100svh - 420px), 300px);
+  }
+
+  .dealer-selected-heading {
+    min-height: clamp(36px, 6svh, 42px);
+  }
+
+  .dealer-selected-meta {
+    min-height: clamp(24px, 4svh, 28px);
+  }
+
+  .dealer-config-shell.is-confirming .dealer-role-summary {
+    margin-top: 10px;
+    padding-top: 14px;
+  }
+
+  .dealer-selected-rules {
+    margin-top: clamp(8px, 1.8svh, 14px);
+    padding-top: clamp(8px, 1.8svh, 14px);
+  }
+
+  .dealer-selected-rules-heading {
+    min-height: clamp(22px, 4svh, 28px);
+  }
+
+  #dealer-selected-rules-copy {
+    -webkit-line-clamp: 2;
+  }
+}
+
+@media (max-width: 390px) {
+  .dealer-text-action {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 350px) {
+  .dealer-card-number {
+    width: 38px;
+    height: 38px;
+    font-size: 1.08rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dealer-dialog,
+  .dealer-dialog.overlay-dialog--sheet-narrow .dealer-dialog-panel {
+    transition-duration: 1ms;
+  }
+
+  .dealer-role-flip.is-revealed,
+  .dealer-role-flip.is-revealed .dealer-role-flip-inner {
+    animation-duration: 1ms;
+  }
+
+  .dealer-privacy-prompt,
+  .dealer-privacy[data-stage="reveal"] .dealer-privacy-prompt {
+    transition-duration: 1ms;
+  }
+}

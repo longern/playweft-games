@@ -3,9 +3,12 @@ body.has-overlay-dialog {
 }
 
 .overlay-dialog {
+  --overlay-dialog-backdrop-color: rgba(0, 0, 0, 0.5);
+  --overlay-dialog-backdrop-filter: blur(0px);
+
   position: fixed;
   inset: 0;
-  display: grid;
+  display: flex;
   width: 100%;
   max-width: none;
   height: 100%;
@@ -14,12 +17,12 @@ body.has-overlay-dialog {
   padding: 24px;
   border: 0;
   box-sizing: border-box;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
   background: rgba(0, 0, 0, 0);
   color: inherit;
   overflow: hidden;
   pointer-events: none;
-  transition: background 180ms ease;
 }
 
 .overlay-dialog:not([open]) {
@@ -32,16 +35,6 @@ body.has-overlay-dialog {
 
 .overlay-dialog:is([data-state="open"], [data-state="closing"]) {
   pointer-events: auto;
-}
-
-.overlay-dialog[data-state="open"] {
-  background: rgba(0, 0, 0, 0.5);
-}
-
-@starting-style {
-  .overlay-dialog[data-state="open"] {
-    background: rgba(0, 0, 0, 0);
-  }
 }
 
 .overlay-dialog__surface {
@@ -85,7 +78,7 @@ body.has-overlay-dialog {
 }
 
 .overlay-dialog__close {
-  display: inline-grid;
+  display: inline-flex;
   width: 34px;
   height: 34px;
   flex: 0 0 auto;
@@ -94,7 +87,8 @@ body.has-overlay-dialog {
   background: transparent;
   color: #555851;
   cursor: pointer;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
 }
 
 .overlay-dialog__close:hover {
@@ -125,19 +119,9 @@ body.has-overlay-dialog {
     border-width: 1px 0 0;
     border-radius: 16px 16px 0 0;
     opacity: 1;
-    transition: bottom 180ms cubic-bezier(0, 0, 0.2, 1);
-    will-change: bottom;
-  }
-
-  .overlay-dialog--sheet-narrow[data-state="closing"] .overlay-dialog__surface {
-    bottom: -75dvh;
-    transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
-  }
-
-  @starting-style {
-    .overlay-dialog--sheet-narrow[data-state="open"] .overlay-dialog__surface {
-      bottom: -75dvh;
-    }
+    transform: translateY(0);
+    transition: none;
+    will-change: transform;
   }
 }
 

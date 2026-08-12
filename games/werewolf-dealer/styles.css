@@ -125,7 +125,7 @@ body {
 }
 
 .role-emblem {
-  display: grid;
+  display: flex;
   width: 58px;
   height: 58px;
   margin-bottom: 14px;
@@ -223,7 +223,7 @@ body {
 }
 
 .seat-number {
-  display: grid;
+  display: flex;
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -248,7 +248,7 @@ body {
 .seat-copy span {
   margin-top: 3px;
   color: #777a73;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .vote-action {
@@ -260,7 +260,7 @@ body {
   background: #fff;
   align-items: center;
   color: #30322f;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   gap: 5px;
   justify-content: center;
 }
@@ -340,7 +340,7 @@ body {
 }
 
 .flip-mark {
-  display: grid;
+  display: flex;
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -363,7 +363,7 @@ body {
 .flip-entry p {
   margin: 3px 0 0;
   color: #73766f;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   line-height: 1.4;
 }
 .empty-flips {
@@ -412,35 +412,4 @@ body {
   .flip-entry {
     min-width: 100%;
   }
-}
-
-body.is-solo-mode {
-  background: #f7f7f7;
-}
-
-body.is-solo-mode .game-header {
-  min-height: 52px;
-  padding: 0 16px;
-  justify-content: center;
-}
-
-body.is-solo-mode .game-brand {
-  gap: 0;
-}
-
-body.is-solo-mode .game-brand img,
-body.is-solo-mode .game-brand p,
-body.is-solo-mode .connection-status {
-  display: none;
-}
-
-body.is-solo-mode .game-brand h1 {
-  font-size: 1rem;
-  font-weight: 650;
-}
-
-body.is-solo-mode .dealer-layout {
-  width: min(544px, calc(100% - 24px));
-  min-height: calc(100vh - 52px);
-  padding: 12px 0 32px;
 }

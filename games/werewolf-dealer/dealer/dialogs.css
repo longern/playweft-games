@@ -1,0 +1,296 @@
+.dealer-dialog {
+  --overlay-dialog-backdrop-color: rgba(1, 6, 14, 0.72);
+  --overlay-dialog-backdrop-filter: blur(3px);
+
+  z-index: 30;
+  color: #eadbb9;
+}
+
+.dealer-dialog-panel {
+  --dealer-control-bg: rgba(255, 255, 255, 0.045);
+  --dealer-control-border: rgba(190, 159, 98, 0.3);
+  --dealer-control-color: #e8dcc3;
+  display: flex;
+  width: min(760px, 100%);
+  max-height: min(820px, calc(100vh - 48px));
+  overflow: hidden;
+  border: 1px solid rgba(205, 169, 99, 0.46);
+  border-radius: 16px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 34%),
+    #071323;
+  box-shadow:
+    0 24px 72px rgba(0, 0, 0, 0.58),
+    inset 0 1px rgba(255, 255, 255, 0.035);
+  flex-direction: column;
+}
+
+.dealer-dialog-header {
+  position: relative;
+  display: flex;
+  min-height: 56px;
+  padding: 8px 18px;
+  border-bottom: 1px solid rgba(205, 169, 99, 0.18);
+  background: rgba(4, 12, 23, 0.82);
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.dealer-dialog-header h2 {
+  margin: 0;
+  color: #f1dfb8;
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.dealer-dialog-header > button {
+  position: absolute;
+  right: 8px;
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 50%;
+  color: rgba(231, 213, 176, 0.72);
+  cursor: pointer;
+  font-size: 1.25rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.dealer-dialog-header > button:hover {
+  background: rgba(213, 180, 111, 0.1);
+  color: #f3dfb4;
+}
+
+.dealer-dialog-header > button svg {
+  width: 19px;
+  height: 19px;
+}
+
+.dealer-search-field {
+  display: block;
+  padding: 12px 16px 8px;
+}
+
+.dealer-field input,
+.dealer-field textarea,
+.dealer-role-row input {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 11px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(3, 11, 22, 0.78);
+  color: #eee1c6;
+  font: inherit;
+}
+
+.dealer-search-field input {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 11px;
+  border: 1px solid rgba(190, 159, 98, 0.26);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  color: #eee1c6;
+  font: inherit;
+}
+
+.dealer-search-field input::placeholder {
+  color: rgba(222, 213, 195, 0.5);
+}
+
+.dealer-search-field input:focus,
+.dealer-field input:focus,
+.dealer-field textarea:focus,
+.dealer-role-row input:focus {
+  outline: 0;
+  border-color: rgba(225, 186, 108, 0.72);
+  box-shadow:
+    0 0 0 1px rgba(225, 186, 108, 0.34),
+    0 0 18px rgba(175, 125, 55, 0.12);
+}
+
+.dealer-all-presets {
+  min-height: 0;
+  padding: 4px 16px 18px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  gap: 10px;
+  grid-auto-rows: max-content;
+  align-content: start;
+  overscroll-behavior: contain;
+}
+
+.dealer-all-presets .dealer-preset-description {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
+.dealer-empty-state {
+  margin: 0;
+  padding: 42px 20px;
+  color: rgba(222, 213, 195, 0.58);
+  text-align: center;
+}
+
+.dealer-dialog-footer {
+  display: flex;
+  margin-top: auto;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(205, 169, 99, 0.18);
+  background: rgba(4, 12, 23, 0.9);
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dealer-dialog .dealer-secondary-action {
+  border-color: rgba(195, 166, 111, 0.34);
+  background: rgba(255, 255, 255, 0.045);
+  color: #ded3bc;
+}
+
+.dealer-dialog .dealer-secondary-action:hover {
+  border-color: rgba(222, 184, 111, 0.58);
+  background: rgba(211, 166, 92, 0.1);
+}
+
+.dealer-dialog .dealer-primary-action:disabled {
+  border-color: rgba(172, 163, 142, 0.22);
+  background: rgba(143, 146, 143, 0.26);
+  color: rgba(228, 221, 207, 0.46);
+}
+
+.dealer-editor-scroll {
+  display: flex;
+  padding: 16px;
+  overflow-y: auto;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dealer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.dealer-field > span,
+.dealer-editor-label strong {
+  font-size: 0.8rem;
+  font-weight: 850;
+}
+
+.dealer-field textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.dealer-editor-label {
+  display: flex;
+  margin-bottom: -6px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dealer-editor-label span {
+  color: #73766f;
+  font-size: 0.75rem;
+}
+
+.dealer-role-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dealer-role-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 132px 36px;
+  gap: 7px;
+}
+
+.dealer-role-count {
+  display: grid;
+  grid-template-columns: 36px minmax(48px, 1fr) 36px;
+}
+
+.dealer-role-count button,
+.dealer-role-remove,
+.dealer-role-row > button {
+  border: 1px solid var(--dealer-control-border, #c7cbc2);
+  background: var(--dealer-control-bg, #fff);
+  color: var(--dealer-control-color, #202229);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.dealer-role-count button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.dealer-role-count button:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.dealer-role-count input {
+  min-width: 0;
+  padding: 6px 3px;
+  border-right: 0;
+  border-left: 0;
+  border-radius: 0;
+  text-align: center;
+  appearance: textfield;
+}
+
+.dealer-role-count input::-webkit-inner-spin-button,
+.dealer-role-count input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.dealer-role-remove {
+  border-radius: 6px;
+  color: #c68f83;
+  font-size: 1.1rem;
+}
+
+.dealer-role-count button svg,
+.dealer-role-remove svg {
+  width: 16px;
+  height: 16px;
+}
+
+.dealer-add-role {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.dealer-add-role svg {
+  width: 17px;
+  height: 17px;
+}
+
+.dealer-editor-panel > .dealer-config-feedback {
+  margin: 0;
+  padding: 12px 22px;
+  border-top: 1px solid rgba(205, 169, 99, 0.18);
+  background: rgba(4, 12, 23, 0.9);
+}
+
+.dealer-editor-footer {
+  display: flex;
+}
+
+.dealer-editor-footer > span {
+  flex: 1 1 auto;
+}

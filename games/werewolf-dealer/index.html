@@ -3,12 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#ededed" />
+    <meta name="theme-color" content="#050d19" />
     <title>狼人杀发牌器 | Playweft</title>
     <script type="module" src="./main.js"></script>
   </head>
   <body>
     <header class="game-header">
+      <button
+        id="dealer-back"
+        class="dealer-back-action"
+        type="button"
+        aria-label="返回版型选择"
+        hidden
+      >
+        <i data-lucide="chevron-left" aria-hidden="true"></i>
+      </button>
       <div class="game-brand">
         <img src="/werewolf-dealer.png" alt="" />
         <div>
@@ -40,7 +49,9 @@
             <p id="role-copy">开局后由你自己翻开身份牌</p>
           </div>
           <button id="role-reveal" class="reveal-action" type="button" disabled>
-            <span class="icon-button-content"><i data-lucide="eye"></i><span>查看身份</span></span>
+            <span class="icon-button-content"
+              ><i data-lucide="eye"></i><span>查看身份</span></span
+            >
           </button>
           <p class="role-hint">身份牌只在本机界面翻开</p>
         </aside>
@@ -56,8 +67,15 @@
           <div id="player-field" class="player-field"></div>
           <div class="field-footer">
             <p id="vote-progress">所有在场玩家投票后自动翻牌</p>
-            <button id="redeal-button" class="redeal-action" type="button" disabled>
-              <span class="icon-button-content"><i data-lucide="rotate-ccw"></i><span>重新发牌</span></span>
+            <button
+              id="redeal-button"
+              class="redeal-action"
+              type="button"
+              disabled
+            >
+              <span class="icon-button-content"
+                ><i data-lucide="rotate-ccw"></i><span>重新发牌</span></span
+              >
             </button>
           </div>
         </section>
@@ -71,5 +89,338 @@
         <div id="flip-log" class="flip-log"></div>
       </section>
     </main>
+
+    <template id="dealer-template">
+      <section id="dealer-setup" class="dealer-setup-panel">
+        <div class="dealer-config-shell">
+          <div id="dealer-count-section" class="dealer-count-section">
+            <div class="dealer-count-control">
+              <div
+                class="dealer-count-stepper"
+                role="group"
+                aria-label="选择游戏人数"
+              >
+                <button
+                  id="dealer-count-decrease"
+                  type="button"
+                  aria-label="减少一人"
+                >
+                  <i data-lucide="minus"></i>
+                </button>
+                <button
+                  id="dealer-player-count"
+                  class="dealer-count-value"
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-label="当前 12 人，点击选择人数"
+                >
+                  <span>12 人</span
+                  ><i data-lucide="chevron-down" aria-hidden="true"></i>
+                </button>
+                <button
+                  id="dealer-count-increase"
+                  type="button"
+                  aria-label="增加一人"
+                >
+                  <i data-lucide="plus"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <section class="dealer-preset-section" aria-label="常用版型">
+            <button
+              id="dealer-open-picker"
+              class="dealer-preset-more"
+              type="button"
+            >
+              全部版型 <i data-lucide="chevron-right" aria-hidden="true"></i>
+            </button>
+            <div
+              id="dealer-quick-presets"
+              class="dealer-preset-grid dealer-quick-presets"
+            ></div>
+          </section>
+
+          <section
+            id="dealer-selected-preset"
+            class="dealer-selected-preset"
+            aria-labelledby="dealer-selected-name"
+            hidden
+          >
+            <div class="dealer-selected-heading">
+              <h3 id="dealer-selected-name"></h3>
+              <div class="dealer-selected-actions">
+                <button
+                  id="dealer-change-preset"
+                  class="dealer-text-action"
+                  type="button"
+                >
+                  更换
+                </button>
+                <button
+                  id="dealer-open-editor"
+                  class="dealer-text-action"
+                  type="button"
+                >
+                  编辑
+                </button>
+              </div>
+            </div>
+            <div class="dealer-selected-meta">
+              <span id="dealer-selected-count"></span>
+            </div>
+            <div id="dealer-selected-roles" class="dealer-role-summary"></div>
+            <section
+              class="dealer-selected-rules"
+              aria-labelledby="dealer-selected-rules-label"
+            >
+              <div class="dealer-selected-rules-heading">
+                <h4 id="dealer-selected-rules-label">版型规则</h4>
+                <button
+                  id="dealer-toggle-rules"
+                  class="dealer-text-action"
+                  type="button"
+                  aria-controls="dealer-selected-rules-copy"
+                  hidden
+                >
+                  展开
+                </button>
+              </div>
+              <p id="dealer-selected-rules-copy"></p>
+            </section>
+          </section>
+
+          <p
+            id="dealer-config-feedback"
+            class="dealer-config-feedback"
+            role="status"
+            aria-live="polite"
+          ></p>
+          <div
+            id="dealer-action-bar-presence"
+            class="dealer-action-bar-presence"
+            hidden
+          >
+            <div class="dealer-action-bar">
+              <button
+                id="dealer-start"
+                class="dealer-primary-action"
+                type="button"
+              >
+                开始发牌
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="dealer-deal" class="dealer-deal-panel" hidden>
+        <div class="dealer-deal-content">
+          <div class="dealer-deal-heading">
+            <h2>请选择自己的编号</h2>
+            <p id="dealer-progress"></p>
+          </div>
+          <div id="dealer-card-grid" class="dealer-card-grid"></div>
+          <button
+            id="dealer-reset"
+            class="redeal-action dealer-reset-action"
+            type="button"
+          >
+            重新配置并发牌
+          </button>
+        </div>
+      </section>
+
+      <dialog
+        id="dealer-player-count-picker"
+        class="overlay-dialog overlay-dialog--sheet-narrow dealer-dialog"
+        aria-labelledby="dealer-count-picker-title"
+      >
+        <section
+          class="overlay-dialog__surface dealer-dialog-panel dealer-count-picker-panel"
+          tabindex="-1"
+        >
+          <header class="dealer-dialog-header">
+            <h2 id="dealer-count-picker-title">选择人数</h2>
+            <button type="button" data-close-dialog aria-label="关闭人数选择">
+              <i data-lucide="x"></i>
+            </button>
+          </header>
+          <div
+            class="dealer-count-options"
+            role="listbox"
+            aria-label="游戏人数"
+          >
+            <button type="button" data-player-count="6" role="option">
+              6 人
+            </button>
+            <button type="button" data-player-count="7" role="option">
+              7 人
+            </button>
+            <button type="button" data-player-count="8" role="option">
+              8 人
+            </button>
+            <button type="button" data-player-count="9" role="option">
+              9 人
+            </button>
+            <button type="button" data-player-count="10" role="option">
+              10 人
+            </button>
+            <button type="button" data-player-count="11" role="option">
+              11 人
+            </button>
+            <button type="button" data-player-count="12" role="option">
+              12 人
+            </button>
+          </div>
+        </section>
+      </dialog>
+
+      <dialog
+        id="dealer-preset-picker"
+        class="overlay-dialog overlay-dialog--sheet-narrow dealer-dialog"
+        aria-labelledby="dealer-picker-title"
+      >
+        <section
+          class="overlay-dialog__surface dealer-dialog-panel dealer-picker-panel"
+          tabindex="-1"
+        >
+          <header class="dealer-dialog-header">
+            <h2 id="dealer-picker-title">选择版型</h2>
+            <button type="button" data-close-dialog aria-label="关闭版型列表">
+              <i data-lucide="x"></i>
+            </button>
+          </header>
+          <label class="dealer-search-field">
+            <span class="sr-only">搜索版型</span>
+            <input
+              id="dealer-preset-search"
+              type="search"
+              placeholder="搜索版型或身份名称"
+            />
+          </label>
+          <div
+            id="dealer-preset-grid"
+            class="dealer-preset-grid dealer-all-presets"
+          ></div>
+          <p id="dealer-preset-empty" class="dealer-empty-state" hidden>
+            没有找到匹配的版型。
+          </p>
+        </section>
+      </dialog>
+
+      <dialog
+        id="dealer-role-editor"
+        class="overlay-dialog overlay-dialog--sheet-narrow dealer-dialog"
+        aria-labelledby="dealer-editor-title"
+      >
+        <section
+          class="overlay-dialog__surface dealer-dialog-panel dealer-editor-panel"
+          tabindex="-1"
+        >
+          <header class="dealer-dialog-header">
+            <h2 id="dealer-editor-title">编辑身份</h2>
+            <button type="button" data-close-dialog aria-label="关闭身份编辑">
+              <i data-lucide="x"></i>
+            </button>
+          </header>
+          <div class="dealer-editor-scroll">
+            <label class="dealer-field">
+              <span>版型名称</span>
+              <input id="dealer-preset-name" maxlength="40" />
+            </label>
+            <div class="dealer-editor-label"><strong>身份列表</strong></div>
+            <div id="dealer-editor-roles" class="dealer-role-list"></div>
+            <button
+              id="dealer-editor-add-role"
+              class="dealer-secondary-action dealer-add-role"
+              type="button"
+            >
+              <i data-lucide="plus"></i><span>添加自定义神职</span>
+            </button>
+            <label class="dealer-field">
+              <span>规则说明（可选）</span>
+              <textarea
+                id="dealer-editor-rules"
+                rows="4"
+                maxlength="1000"
+              ></textarea>
+            </label>
+          </div>
+          <p
+            id="dealer-editor-feedback"
+            class="dealer-config-feedback"
+            role="status"
+            aria-live="polite"
+          ></p>
+          <footer class="dealer-dialog-footer dealer-editor-footer">
+            <button
+              id="dealer-editor-delete"
+              class="dealer-danger-action"
+              type="button"
+            >
+              删除版型
+            </button>
+            <span></span>
+            <button
+              class="dealer-secondary-action"
+              type="button"
+              data-close-dialog
+            >
+              取消
+            </button>
+            <button
+              id="dealer-editor-save"
+              class="dealer-primary-action"
+              type="button"
+            >
+              保存
+            </button>
+          </footer>
+        </section>
+      </dialog>
+
+      <div id="dealer-privacy-layer" class="dealer-privacy-layer" hidden>
+        <div id="dealer-privacy" class="dealer-privacy" data-stage="privacy">
+          <div class="dealer-privacy-card">
+            <h2 id="dealer-privacy-title">1 号玩家</h2>
+            <p class="dealer-privacy-prompt">确认周围无人看到屏幕后再翻牌</p>
+            <div id="dealer-role-flip" class="dealer-role-flip">
+              <div class="dealer-role-flip-inner">
+                <div class="dealer-identity-card-back" aria-hidden="true">
+                  <span>?</span>
+                  <strong>身份牌</strong>
+                </div>
+                <div id="dealer-role-card" class="dealer-identity-card">
+                  <span id="dealer-role-mark" class="dealer-identity-emblem"
+                    >?</span
+                  >
+                  <strong id="dealer-role-name">身份</strong>
+                  <p id="dealer-role-copy"></p>
+                </div>
+              </div>
+            </div>
+            <div class="dealer-role-actions">
+              <button
+                id="dealer-reveal"
+                class="dealer-primary-action"
+                type="button"
+              >
+                翻开身份牌
+              </button>
+              <button
+                id="dealer-cover"
+                class="dealer-primary-action"
+                type="button"
+                hidden
+              >
+                盖回身份
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
   </body>
 </html>

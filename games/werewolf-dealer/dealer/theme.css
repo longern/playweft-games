@@ -1,0 +1,103 @@
+body.is-dealer-config {
+  height: 100vh;
+  height: 100svh;
+  overflow: hidden;
+  background: #06101e;
+}
+
+body.is-dealer-config-setup {
+  --dealer-background-shade: linear-gradient(
+    180deg,
+    rgba(3, 9, 18, 0.03) 0,
+    rgba(3, 9, 18, 0.08) 32%,
+    rgba(6, 16, 30, 0.38) 45%,
+    rgba(6, 16, 30, 0.9) 61%,
+    #06101e 70%
+  );
+  background:
+    var(--dealer-background-shade),
+    linear-gradient(
+      90deg,
+      rgba(2, 7, 15, 0.2),
+      transparent 28% 72%,
+      rgba(2, 7, 15, 0.2)
+    ),
+    url("../assets/moonlit-werewolf-hero.webp") 50% 52px / cover no-repeat fixed,
+    #06101e;
+}
+
+@media (orientation: landscape) and (min-width: 900px) {
+  body.is-dealer-config-setup {
+    --dealer-background-shade: linear-gradient(
+      180deg,
+      rgba(3, 9, 18, 0.03) 0,
+      rgba(3, 9, 18, 0.08) calc(100% - 450px),
+      rgba(5, 14, 27, 0.44) calc(100% - 400px),
+      rgba(6, 16, 30, 0.76) calc(100% - 340px),
+      rgba(6, 16, 30, 0.96) calc(100% - 240px),
+      #06101e calc(100% - 150px)
+    );
+  }
+}
+
+body.is-dealer-config .game-header {
+  min-height: 52px;
+  padding: 0 16px;
+  background: rgba(5, 13, 25, 0.96);
+  color: #f1dfb8;
+  justify-content: center;
+}
+
+.dealer-back-action {
+  position: absolute;
+  left: max(4px, env(safe-area-inset-left));
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.dealer-back-action:hover {
+  background: rgba(213, 180, 111, 0.1);
+}
+
+.dealer-back-action svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+  margin: auto;
+}
+
+body.is-dealer-config .game-brand {
+  gap: 0;
+}
+
+body.is-dealer-config .game-brand img,
+body.is-dealer-config .game-brand p,
+body.is-dealer-config .connection-status {
+  display: none;
+}
+
+body.is-dealer-config .game-brand h1 {
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+body.is-dealer-config .dealer-layout {
+  width: min(544px, calc(100% - 24px));
+  height: calc(100vh - 52px);
+  height: calc(100svh - 52px);
+  min-height: 0;
+  padding: 12px 0 32px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+body.is-dealer-config-setup .dealer-layout {
+  width: 100%;
+  padding: 0;
+}
