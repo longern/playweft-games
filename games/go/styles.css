@@ -201,13 +201,15 @@ body {
   color: #fff;
 }
 
-.history-export:hover {
-  background: #f3f3f0;
-}
+@media (hover: hover) and (pointer: fine) {
+  .history-export:hover {
+    background: #f3f3f0;
+  }
 
-.history-resume:hover {
-  border-color: #8f551c;
-  background: #8f551c;
+  .history-resume:hover {
+    border-color: #8f551c;
+    background: #8f551c;
+  }
 }
 
 .history-export:active,
@@ -987,7 +989,7 @@ body {
   transform: scale(1);
 }
 
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .go-point.is-playable:hover::before {
     opacity: var(--preview-opacity);
     transform: scale(1);
@@ -1213,17 +1215,19 @@ body {
   text-decoration: none;
 }
 
-.more-menu-item:hover:not(:disabled) {
-  background: #f1f0eb;
-}
-
 .more-menu-item.is-danger {
   color: #9b3029;
 }
 
-.more-menu-item.is-danger:hover:not(:disabled) {
-  background: #faeeec;
-  color: #81231e;
+@media (hover: hover) and (pointer: fine) {
+  .more-menu-item:hover:not(:disabled) {
+    background: #f1f0eb;
+  }
+
+  .more-menu-item.is-danger:hover:not(:disabled) {
+    background: #faeeec;
+    color: #81231e;
+  }
 }
 
 .more-menu-item.is-danger[data-confirming="true"] {
@@ -1528,9 +1532,11 @@ body {
   place-items: center;
 }
 
-.replay-scrubber button:hover:not(:disabled) {
-  background: #e8dfd2;
-  color: #7e4d1e;
+@media (hover: hover) and (pointer: fine) {
+  .replay-scrubber button:hover:not(:disabled) {
+    background: #e8dfd2;
+    color: #7e4d1e;
+  }
 }
 
 .replay-scrubber button:active:not(:disabled) {

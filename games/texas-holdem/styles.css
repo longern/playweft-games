@@ -469,10 +469,12 @@ body {
     box-shadow 120ms ease;
 }
 
-.action-grid button:hover:not(:disabled),
-.next-hand-action:hover:not(:disabled),
-.rematch-action:hover:not(:disabled) {
-  transform: translateY(-1px);
+@media (hover: hover) and (pointer: fine) {
+  .action-grid button:hover:not(:disabled),
+  .next-hand-action:hover:not(:disabled),
+  .rematch-action:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
 }
 
 .quiet-action {

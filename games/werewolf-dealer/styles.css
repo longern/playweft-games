@@ -269,9 +269,11 @@ body {
   width: 15px;
   height: 15px;
 }
-.vote-action:not(:disabled):hover {
-  border-color: #a7423e;
-  color: #8b302c;
+@media (hover: hover) and (pointer: fine) {
+  .vote-action:not(:disabled):hover {
+    border-color: #a7423e;
+    color: #8b302c;
+  }
 }
 
 .field-footer {

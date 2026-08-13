@@ -273,8 +273,10 @@ body {
   overflow: hidden;
 }
 
-.draw-pile:not(:disabled):hover .card-back {
-  transform: translateY(-4px) rotate(-2deg);
+@media (hover: hover) and (pointer: fine) {
+  .draw-pile:not(:disabled):hover .card-back {
+    transform: translateY(-4px) rotate(-2deg);
+  }
 }
 
 .discard-pile {
@@ -362,8 +364,10 @@ body {
   cursor: pointer;
 }
 
-.color-picker button:hover {
-  transform: scale(1.15);
+@media (hover: hover) and (pointer: fine) {
+  .color-picker button:hover {
+    transform: scale(1.15);
+  }
 }
 
 .hand-area {
@@ -432,10 +436,16 @@ button.uno-card:disabled {
   opacity: 0.55;
 }
 
-button.uno-card.is-playable:not(:disabled):hover,
 button.uno-card.is-selected {
   transform: translateY(-8px);
   box-shadow: 0 10px 0 rgba(36, 40, 36, 0.18);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  button.uno-card.is-playable:not(:disabled):hover {
+    transform: translateY(-8px);
+    box-shadow: 0 10px 0 rgba(36, 40, 36, 0.18);
+  }
 }
 
 button.uno-card.is-selected {

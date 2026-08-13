@@ -202,11 +202,6 @@ body {
   border-width: 3px;
 }
 
-.board-column:not(:disabled):hover .board-cell.is-target::after {
-  opacity: 0.45;
-  transform: translateY(0);
-}
-
 .board-column[data-piece="1"] .board-cell.is-target::after {
   background: #ed4b45;
 }
@@ -215,15 +210,22 @@ body {
   background: #f6c945;
 }
 
-.board-wrap:has(.board-column:nth-child(1):not(:disabled):hover) .column-guides span:nth-child(1),
-.board-wrap:has(.board-column:nth-child(2):not(:disabled):hover) .column-guides span:nth-child(2),
-.board-wrap:has(.board-column:nth-child(3):not(:disabled):hover) .column-guides span:nth-child(3),
-.board-wrap:has(.board-column:nth-child(4):not(:disabled):hover) .column-guides span:nth-child(4),
-.board-wrap:has(.board-column:nth-child(5):not(:disabled):hover) .column-guides span:nth-child(5),
-.board-wrap:has(.board-column:nth-child(6):not(:disabled):hover) .column-guides span:nth-child(6),
-.board-wrap:has(.board-column:nth-child(7):not(:disabled):hover) .column-guides span:nth-child(7) {
-  opacity: 1;
-  transform: translateY(0);
+@media (hover: hover) and (pointer: fine) {
+  .board-column:not(:disabled):hover .board-cell.is-target::after {
+    opacity: 0.45;
+    transform: translateY(0);
+  }
+
+  .board-wrap:has(.board-column:nth-child(1):not(:disabled):hover) .column-guides span:nth-child(1),
+  .board-wrap:has(.board-column:nth-child(2):not(:disabled):hover) .column-guides span:nth-child(2),
+  .board-wrap:has(.board-column:nth-child(3):not(:disabled):hover) .column-guides span:nth-child(3),
+  .board-wrap:has(.board-column:nth-child(4):not(:disabled):hover) .column-guides span:nth-child(4),
+  .board-wrap:has(.board-column:nth-child(5):not(:disabled):hover) .column-guides span:nth-child(5),
+  .board-wrap:has(.board-column:nth-child(6):not(:disabled):hover) .column-guides span:nth-child(6),
+  .board-wrap:has(.board-column:nth-child(7):not(:disabled):hover) .column-guides span:nth-child(7) {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .board-footer {

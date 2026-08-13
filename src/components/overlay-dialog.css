@@ -91,9 +91,11 @@ body.has-overlay-dialog {
   justify-content: center;
 }
 
-.overlay-dialog__close:hover {
-  background: rgba(89, 92, 86, 0.1);
-  color: #202229;
+@media (hover: hover) and (pointer: fine) {
+  .overlay-dialog__close:hover {
+    background: rgba(89, 92, 86, 0.1);
+    color: #202229;
+  }
 }
 
 .overlay-dialog__close:active {

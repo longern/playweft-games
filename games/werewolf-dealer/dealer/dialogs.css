@@ -61,9 +61,11 @@
   justify-content: center;
 }
 
-.dealer-dialog-header > button:hover {
-  background: rgba(213, 180, 111, 0.1);
-  color: #f3dfb4;
+@media (hover: hover) and (pointer: fine) {
+  .dealer-dialog-header > button:hover {
+    background: rgba(213, 180, 111, 0.1);
+    color: #f3dfb4;
+  }
 }
 
 .dealer-dialog-header > button svg {
@@ -149,9 +151,11 @@
   color: #ded3bc;
 }
 
-.dealer-dialog .dealer-secondary-action:hover {
-  border-color: rgba(222, 184, 111, 0.58);
-  background: rgba(211, 166, 92, 0.1);
+@media (hover: hover) and (pointer: fine) {
+  .dealer-dialog .dealer-secondary-action:hover {
+    border-color: rgba(222, 184, 111, 0.58);
+    background: rgba(211, 166, 92, 0.1);
+  }
 }
 
 .dealer-dialog .dealer-primary-action:disabled {

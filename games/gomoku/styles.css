@@ -1,6 +1,10 @@
 body {
   background:
-    radial-gradient(circle at 50% 40%, rgba(221, 187, 121, 0.14), transparent 36%),
+    radial-gradient(
+      circle at 50% 40%,
+      rgba(221, 187, 121, 0.14),
+      transparent 36%
+    ),
     #f4f5f1;
 }
 
@@ -17,7 +21,10 @@ body.has-setup-modal {
 
 .table-layout {
   display: grid;
-  grid-template-columns: minmax(170px, 1fr) minmax(420px, 620px) minmax(170px, 1fr);
+  grid-template-columns: minmax(170px, 1fr) minmax(420px, 620px) minmax(
+      170px,
+      1fr
+    );
   align-items: center;
   gap: 28px;
 }
@@ -33,7 +40,9 @@ body.has-setup-modal {
   opacity: 0;
   overflow: auto;
   pointer-events: none;
-  transition: background 200ms ease, opacity 200ms ease;
+  transition:
+    background 200ms ease,
+    opacity 200ms ease;
 }
 
 .setup-panel[hidden] {
@@ -191,7 +200,9 @@ body.has-setup-modal {
   border-radius: 9px;
   background: rgba(255, 255, 255, 0.68);
   color: #6d706a;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .player-card.is-current {
@@ -246,13 +257,23 @@ body.has-setup-modal {
 
 .stone-black {
   border: 1px solid #080908;
-  background: radial-gradient(circle at 34% 28%, #63645f, #171816 54%, #050505 100%);
+  background: radial-gradient(
+    circle at 34% 28%,
+    #63645f,
+    #171816 54%,
+    #050505 100%
+  );
   box-shadow: 0 2px 3px rgba(0, 0, 0, 0.28);
 }
 
 .stone-white {
   border: 1px solid #c7c5bd;
-  background: radial-gradient(circle at 34% 28%, #ffffff, #eeeae0 65%, #c8c4bb 100%);
+  background: radial-gradient(
+    circle at 34% 28%,
+    #ffffff,
+    #eeeae0 65%,
+    #c8c4bb 100%
+  );
   box-shadow: 0 2px 3px rgba(0, 0, 0, 0.16);
 }
 
@@ -269,7 +290,11 @@ body.has-setup-modal {
   border-radius: 8px;
   background:
     linear-gradient(rgba(255, 255, 255, 0.12), transparent),
-    repeating-linear-gradient(90deg, rgba(113, 66, 20, 0.04) 0 1px, transparent 1px 9px),
+    repeating-linear-gradient(
+      90deg,
+      rgba(113, 66, 20, 0.04) 0 1px,
+      transparent 1px 9px
+    ),
     #d9aa63;
   box-shadow:
     0 8px 0 #a96f35,
@@ -318,7 +343,9 @@ body.has-setup-modal {
   border-radius: 50%;
   content: "";
   transform: scale(0.78);
-  transition: opacity 100ms ease, transform 130ms ease;
+  transition:
+    opacity 100ms ease,
+    transform 130ms ease;
 }
 
 .gomoku-point::after {
@@ -340,14 +367,24 @@ body.has-setup-modal {
 
 .gomoku-point[data-piece="1"]::before {
   border-color: #050505;
-  background: radial-gradient(circle at 34% 28%, #62635e, #151614 55%, #030303 100%);
+  background: radial-gradient(
+    circle at 34% 28%,
+    #62635e,
+    #151614 55%,
+    #030303 100%
+  );
   box-shadow: 0 3px 4px rgba(0, 0, 0, 0.35);
   transform: scale(1);
 }
 
 .gomoku-point[data-piece="2"]::before {
   border-color: #c0bdb5;
-  background: radial-gradient(circle at 34% 28%, #ffffff, #efebe2 66%, #c8c3b9 100%);
+  background: radial-gradient(
+    circle at 34% 28%,
+    #ffffff,
+    #efebe2 66%,
+    #c8c3b9 100%
+  );
   box-shadow: 0 3px 4px rgba(0, 0, 0, 0.24);
   transform: scale(1);
 }
@@ -371,25 +408,61 @@ body.has-setup-modal {
 }
 
 .gomoku-board[data-turn-color="black"]
-  .gomoku-point:not(:disabled)[data-piece="0"]:hover::before,
-.gomoku-board[data-turn-color="black"]
   .gomoku-point:not(:disabled)[data-piece="0"]:focus-visible::before {
   border-color: rgba(5, 5, 5, 0.55);
-  background: radial-gradient(circle at 34% 28%, #62635e, #151614 55%, #030303 100%);
+  background: radial-gradient(
+    circle at 34% 28%,
+    #62635e,
+    #151614 55%,
+    #030303 100%
+  );
   box-shadow: 0 3px 4px rgba(0, 0, 0, 0.22);
   opacity: 0.55;
   transform: scale(1);
 }
 
 .gomoku-board[data-turn-color="white"]
-  .gomoku-point:not(:disabled)[data-piece="0"]:hover::before,
-.gomoku-board[data-turn-color="white"]
   .gomoku-point:not(:disabled)[data-piece="0"]:focus-visible::before {
   border-color: rgba(192, 189, 181, 0.85);
-  background: radial-gradient(circle at 34% 28%, #ffffff, #efebe2 66%, #c8c3b9 100%);
+  background: radial-gradient(
+    circle at 34% 28%,
+    #ffffff,
+    #efebe2 66%,
+    #c8c3b9 100%
+  );
   box-shadow: 0 3px 4px rgba(0, 0, 0, 0.18);
   opacity: 0.78;
   transform: scale(1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .gomoku-board[data-turn-color="black"]
+    .gomoku-point:not(:disabled)[data-piece="0"]:hover::before {
+    border-color: rgba(5, 5, 5, 0.55);
+    background: radial-gradient(
+      circle at 34% 28%,
+      #62635e,
+      #151614 55%,
+      #030303 100%
+    );
+    box-shadow: 0 3px 4px rgba(0, 0, 0, 0.22);
+    opacity: 0.55;
+    transform: scale(1);
+  }
+
+  .gomoku-board[data-turn-color="white"]
+    .gomoku-point:not(:disabled)[data-piece="0"]:hover::before {
+    border-color: rgba(192, 189, 181, 0.85);
+    background: radial-gradient(
+      circle at 34% 28%,
+      #ffffff,
+      #efebe2 66%,
+      #c8c3b9 100%
+    );
+    box-shadow: 0 3px 4px rgba(0, 0, 0, 0.18);
+    opacity: 0.78;
+    transform: scale(1);
+  }
 }
 
 .gomoku-point:disabled {
@@ -475,8 +548,10 @@ body.has-setup-modal {
   text-decoration: none;
 }
 
-.rules-link:hover {
-  color: #202229;
+@media (hover: hover) and (pointer: fine) {
+  .rules-link:hover {
+    color: #202229;
+  }
 }
 
 .rules-link svg {
@@ -575,7 +650,9 @@ body.has-setup-modal {
 
   .gomoku-board {
     border-radius: 5px;
-    box-shadow: 0 5px 0 #a96f35, 0 14px 32px rgba(89, 54, 21, 0.18);
+    box-shadow:
+      0 5px 0 #a96f35,
+      0 14px 32px rgba(89, 54, 21, 0.18);
   }
 }
 

@@ -860,26 +860,28 @@ body {
   color: #3f2a08;
 }
 
-.bid-actions button:hover:not(:disabled),
-.play-actions button:hover:not(:disabled),
-.rematch-action:hover:not(:disabled) {
-  border-color: #839087;
-  background-color: #f2f5f2;
-}
+@media (hover: hover) and (pointer: fine) {
+  .bid-actions button:hover:not(:disabled),
+  .play-actions button:hover:not(:disabled),
+  .rematch-action:hover:not(:disabled) {
+    border-color: #839087;
+    background-color: #f2f5f2;
+  }
 
-.play-action:hover:not(:disabled) {
-  border-color: #174f3b;
-  background-color: #174f3b;
-}
+  .play-action:hover:not(:disabled) {
+    border-color: #174f3b;
+    background-color: #174f3b;
+  }
 
-.bid-actions .strong-bid:hover:not(:disabled) {
-  border-color: #bc8124;
-  background-color: #d39a35;
-}
+  .bid-actions .strong-bid:hover:not(:disabled) {
+    border-color: #bc8124;
+    background-color: #d39a35;
+  }
 
-.result-panel .rematch-action:hover:not(:disabled) {
-  border-color: #ad741e;
-  background-color: #dda33c;
+  .result-panel .rematch-action:hover:not(:disabled) {
+    border-color: #ad741e;
+    background-color: #dda33c;
+  }
 }
 
 .result-panel[data-outcome="loss"] .result-title {

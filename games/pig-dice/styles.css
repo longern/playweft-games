@@ -1,7 +1,5 @@
 body {
-  background:
-    linear-gradient(#e5e7e0 1px, transparent 1px),
-    #f4f5f1;
+  background: linear-gradient(#e5e7e0 1px, transparent 1px), #f4f5f1;
   background-size: 100% 96px;
 }
 
@@ -185,11 +183,16 @@ body {
   border-radius: 6px;
   cursor: pointer;
   font-weight: 800;
-  transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    opacity 120ms ease;
 }
 
-.pig-actions button:hover:not(:disabled) {
-  transform: translateY(-2px);
+@media (hover: hover) and (pointer: fine) {
+  .pig-actions button:hover:not(:disabled) {
+    transform: translateY(-2px);
+  }
 }
 
 .primary-action {

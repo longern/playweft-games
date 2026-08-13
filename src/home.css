@@ -3,8 +3,7 @@
 body {
   background:
     linear-gradient(#f4f5f1 1px, transparent 1px),
-    linear-gradient(90deg, #f4f5f1 1px, transparent 1px),
-    #eceee9;
+    linear-gradient(90deg, #f4f5f1 1px, transparent 1px), #eceee9;
   background-size: 24px 24px;
 }
 
@@ -120,8 +119,10 @@ body {
   transition: background-color 160ms ease;
 }
 
-.game-card:hover {
-  background: #ffffff;
+@media (hover: hover) and (pointer: fine) {
+  .game-card:hover {
+    background: #ffffff;
+  }
 }
 
 .game-card img {
@@ -129,7 +130,9 @@ body {
   width: 96px;
   height: 96px;
   border-radius: 16px;
-  box-shadow: 0 1px 2px 0 #3c40434d, 0 1px 3px 1px #3c404326;
+  box-shadow:
+    0 1px 2px 0 #3c40434d,
+    0 1px 3px 1px #3c404326;
   object-fit: cover;
 }
 
@@ -168,7 +171,10 @@ body {
   border: 1px solid #d5d8d1;
   border-radius: 50%;
   color: #4a4f48;
-  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
 }
 
 .game-card-action svg {
@@ -177,16 +183,36 @@ body {
   stroke-width: 2.5;
 }
 
-.game-card-pig .game-card-meta { color: #bd453b; }
-.game-card-connect .game-card-meta { color: #275cc0; }
-.game-card-holdem .game-card-meta { color: #167151; }
-.game-card-landlord .game-card-meta { color: #247154; }
-.game-card-werewolf .game-card-meta { color: #8d5b1a; }
-.game-card-uno .game-card-meta { color: #bb3d38; }
-.game-card-sudoku .game-card-meta { color: #21705d; }
-.game-card-go .game-card-meta { color: #9a6122; }
-.game-card-gomoku .game-card-meta { color: #a54432; }
-.game-card-xiangqi .game-card-meta { color: #9d3028; }
+.game-card-pig .game-card-meta {
+  color: #bd453b;
+}
+.game-card-connect .game-card-meta {
+  color: #275cc0;
+}
+.game-card-holdem .game-card-meta {
+  color: #167151;
+}
+.game-card-landlord .game-card-meta {
+  color: #247154;
+}
+.game-card-werewolf .game-card-meta {
+  color: #8d5b1a;
+}
+.game-card-uno .game-card-meta {
+  color: #bb3d38;
+}
+.game-card-sudoku .game-card-meta {
+  color: #21705d;
+}
+.game-card-go .game-card-meta {
+  color: #9a6122;
+}
+.game-card-gomoku .game-card-meta {
+  color: #a54432;
+}
+.game-card-xiangqi .game-card-meta {
+  color: #9d3028;
+}
 
 @media (max-width: 900px) {
   .game-list {

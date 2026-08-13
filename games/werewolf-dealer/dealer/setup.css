@@ -82,8 +82,10 @@
   justify-content: center;
 }
 
-.dealer-count-stepper button:not(:disabled):hover {
-  background: rgba(190, 143, 69, 0.16);
+@media (hover: hover) and (pointer: fine) {
+  .dealer-count-stepper button:not(:disabled):hover {
+    background: rgba(190, 143, 69, 0.16);
+  }
 }
 
 .dealer-count-stepper button:disabled {
@@ -138,9 +140,11 @@
   font-weight: 650;
 }
 
-.dealer-count-options button:hover {
-  border-color: rgba(222, 184, 111, 0.58);
-  background: rgba(211, 166, 92, 0.1);
+@media (hover: hover) and (pointer: fine) {
+  .dealer-count-options button:hover {
+    border-color: rgba(222, 184, 111, 0.58);
+    background: rgba(211, 166, 92, 0.1);
+  }
 }
 
 .dealer-count-options button.is-selected {
@@ -167,8 +171,10 @@
   font-weight: 500;
 }
 
-.dealer-text-action:hover {
-  color: #f2d99d;
+@media (hover: hover) and (pointer: fine) {
+  .dealer-text-action:hover {
+    color: #f2d99d;
+  }
 }
 
 .dealer-preset-grid {
@@ -204,8 +210,10 @@
     box-shadow 160ms ease;
 }
 
-.dealer-preset-card:hover {
-  border-color: rgba(221, 185, 114, 0.55);
+@media (hover: hover) and (pointer: fine) {
+  .dealer-preset-card:hover {
+    border-color: rgba(221, 185, 114, 0.55);
+  }
 }
 
 .dealer-preset-card.is-selected {
@@ -317,9 +325,11 @@
   justify-content: center;
 }
 
-.dealer-favorite-action:hover {
-  background: rgba(211, 166, 92, 0.12);
-  color: #efcd84;
+@media (hover: hover) and (pointer: fine) {
+  .dealer-favorite-action:hover {
+    background: rgba(211, 166, 92, 0.12);
+    color: #efcd84;
+  }
 }
 
 .dealer-favorite-action.is-favorite {
@@ -354,8 +364,10 @@
   gap: 3px;
 }
 
-.dealer-preset-more:hover {
-  background: rgba(211, 166, 92, 0.08);
+@media (hover: hover) and (pointer: fine) {
+  .dealer-preset-more:hover {
+    background: rgba(211, 166, 92, 0.08);
+  }
 }
 
 .dealer-preset-more svg {
