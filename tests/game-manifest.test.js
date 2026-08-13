@@ -40,30 +40,30 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
         "$schema",
         "background_color",
         "categories",
-        "client",
         "description",
         "description_localized",
         "help_url",
         "id",
         "icons",
-        "manifestVersion",
+        "manifest_version",
         "modes",
         "name",
         "name_localized",
         ...(game === "dou-dizhu" ? ["orientation"] : []),
         "protocol",
+        "start_url",
         "theme_color",
         "version",
       ].sort(),
       `${game} manifest should not contain unknown top-level fields`,
     );
-    assert.equal(manifest.manifestVersion, 1);
-    assert.match(manifest.id, /^[a-z0-9]+(?:[.-][a-z0-9]+)+$/);
+    assert.equal(manifest.manifest_version, 1);
+    assert.equal(manifest.id, `/${game}/`);
     assert.equal(ids.has(manifest.id), false, `${manifest.id} must be unique`);
     ids.add(manifest.id);
     assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
     assert.deepEqual(manifest.protocol, { min: 1, max: 1 });
-    assert.deepEqual(manifest.client, { entry: "./" });
+    assert.equal(manifest.start_url, "./");
     assert.equal(typeof manifest.name, "string");
     assert.equal(typeof manifest.name_localized["zh-CN"], "string");
     assert.equal(typeof manifest.description, "string");

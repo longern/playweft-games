@@ -401,6 +401,10 @@
   height: 15px;
 }
 
+#dealer-open-picker {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.72);
+}
+
 .dealer-selected-preset {
   min-width: 0;
   padding: 0 4px;

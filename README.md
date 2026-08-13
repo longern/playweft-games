@@ -5,7 +5,7 @@ Nine lightweight multiplayer games and one standalone game for the sibling
 independent, versioned Playweft game packages.
 
 Each package is described by `/<game>/playweft.json`. Its Manifest contains
-the client entry, localized catalogue metadata, supported modes, room player
+the `start_url`, localized catalogue metadata, supported modes, room player
 limits, and authoritative Lua entry. Playweft bridge v1 fetches and validates
 the Manifest before opening the game iframe.
 

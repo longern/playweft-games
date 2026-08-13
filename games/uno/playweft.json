@@ -1,15 +1,13 @@
 {
   "$schema": "https://play.longern.com/schemas/game-manifest-v1.json",
-  "manifestVersion": 1,
-  "id": "com.longern.playweft.uno",
+  "manifest_version": 1,
+  "id": "/uno/",
   "version": "1.0.0",
   "protocol": {
     "min": 1,
     "max": 1
   },
-  "client": {
-    "entry": "./"
-  },
+  "start_url": "./",
   "name": "UNO",
   "name_localized": {
     "zh-CN": "UNO"
