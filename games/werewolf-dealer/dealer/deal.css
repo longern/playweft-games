@@ -9,12 +9,16 @@
 }
 
 .dealer-deal-heading {
+  display: flex;
+  min-height: 40px;
   margin-bottom: 18px;
   padding: 0 2px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.dealer-deal-heading h2,
-.dealer-deal-heading p {
+.dealer-deal-heading h2 {
   margin: 0;
 }
 
@@ -25,11 +29,60 @@
   letter-spacing: 0.02em;
 }
 
-.dealer-deal-heading p {
-  margin-top: 7px;
-  color: rgba(220, 206, 177, 0.62);
-  font-size: 0.76rem;
-  line-height: 1.55;
+.dealer-rules-action {
+  display: inline-flex;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(226, 195, 132, 0.76);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+
+.dealer-rules-action svg {
+  width: 20px;
+  height: 20px;
+}
+
+.dealer-rules-action:focus-visible {
+  outline: 2px solid #e1ba6c;
+  outline-offset: 2px;
+}
+
+.dealer-rules-action:active {
+  background: rgba(211, 166, 92, 0.14);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dealer-rules-action:hover {
+    background: rgba(211, 166, 92, 0.1);
+    color: #efd291;
+  }
+}
+
+.dealer-rules-dialog-panel {
+  width: min(440px, 100%);
+  min-height: clamp(220px, 32svh, 280px);
+}
+
+.dealer-rules-dialog-copy {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.dealer-rules-dialog-copy p {
+  margin: 0;
+  color: rgba(231, 218, 192, 0.76);
+  font-size: 0.84rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
 }
 
 .dealer-card-grid {

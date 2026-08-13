@@ -94,8 +94,12 @@
     padding: 0;
   }
 
+  .dealer-deal-panel {
+    width: min(760px, calc(100% - 24px));
+  }
+
   .dealer-deal-content {
-    width: min(460px, calc(100% - 24px));
+    width: min(760px, calc(210svh - 245px), 100%);
     min-height: 100%;
     margin: 0 auto;
     padding: 8px 0 max(8px, env(safe-area-inset-bottom));
@@ -109,15 +113,19 @@
     font-size: 1rem;
   }
 
-  .dealer-deal-heading p {
-    margin-top: 3px;
-    line-height: 1.35;
-  }
-
   .dealer-card-grid,
   .dealer-card-grid[data-density="dense"] {
     grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 6px;
+  }
+
+  .dealer-card-grid[data-count="13"],
+  .dealer-card-grid[data-count="14"] {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  .dealer-card-grid[data-count="15"] {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
   }
 
   .dealer-deal-card {
@@ -129,6 +137,44 @@
     width: 36px;
     height: 36px;
     font-size: 1rem;
+  }
+}
+
+@media (orientation: landscape) and (min-height: 621px) {
+  .dealer-deal-panel {
+    width: min(840px, calc(100% - 24px));
+  }
+
+  .dealer-deal-content {
+    width: min(840px, 100%);
+    margin: 0 auto;
+  }
+
+  .dealer-card-grid,
+  .dealer-card-grid[data-density="dense"] {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .dealer-card-grid[data-count="13"],
+  .dealer-card-grid[data-count="14"] {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  .dealer-card-grid[data-count="15"] {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+}
+
+@media (orientation: portrait) and (max-width: 375px) and (min-height: 800px),
+  (orientation: portrait) and (min-width: 376px) and (max-width: 390px) and (min-height: 820px),
+  (orientation: portrait) and (min-width: 391px) and (max-width: 620px) and (min-height: 900px) {
+  .dealer-card-grid[data-count="7"],
+  .dealer-card-grid[data-count="8"],
+  .dealer-card-grid[data-count="9"],
+  .dealer-card-grid[data-count="10"],
+  .dealer-card-grid[data-count="11"],
+  .dealer-card-grid[data-count="12"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -175,6 +221,7 @@
 
   #dealer-selected-rules-copy {
     -webkit-line-clamp: 2;
+    line-clamp: 2;
   }
 }
 

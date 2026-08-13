@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CircleQuestionMark,
   Minus,
   Plus,
   Star,
@@ -29,6 +30,7 @@ const DEALER_ICONS = {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CircleQuestionMark,
   Minus,
   Plus,
   Star,
@@ -81,6 +83,7 @@ export function startDealer({
   let pickerFavoritesChanged = false;
   let editorDraft;
   let lastFocusedElement;
+  let backConfirmationPending = false;
   let deleteConfirmationPending = false;
   let rulesExpanded = false;
   let renderedRulesKey = "";
@@ -98,13 +101,18 @@ export function startDealer({
     configShell: root.querySelector(".dealer-config-shell"),
     deal: $("dealer-deal"),
     grid: $("dealer-card-grid"),
-    progress: $("dealer-progress"),
+    dealPresetName: $("dealer-deal-preset-name"),
+    openRules: $("dealer-open-rules"),
+    rulesDialog: $("dealer-rules-dialog"),
+    rulesDialogTitle: $("dealer-rules-dialog-title"),
+    rulesDialogCopy: $("dealer-rules-dialog-copy"),
     countSection: $("dealer-count-section"),
     playerCount: $("dealer-player-count"),
     decrease: $("dealer-count-decrease"),
     increase: $("dealer-count-increase"),
     countPicker: $("dealer-player-count-picker"),
     countOptions: root.querySelector(".dealer-count-options"),
+    hostWaiting: $("dealer-host-waiting"),
     quickPresets: $("dealer-quick-presets"),
     presetSection: root.querySelector(".dealer-preset-section"),
     selectedName: $("dealer-selected-name"),
@@ -168,6 +176,17 @@ export function startDealer({
   });
   const dialogControllers = new Map([
     [
+      elements.rulesDialog,
+      createOverlayDialog({
+        root: elements.rulesDialog,
+        surface: elements.rulesDialog.querySelector(".dealer-dialog-panel"),
+        closeButtons: elements.rulesDialog.querySelectorAll(
+          "[data-close-dialog]",
+        ),
+        returnFocus: () => lastFocusedElement,
+      }),
+    ],
+    [
       elements.countPicker,
       createOverlayDialog({
         root: elements.countPicker,
@@ -213,6 +232,7 @@ export function startDealer({
   elements.openEditor.addEventListener("click", openRoleEditor);
   elements.toggleRules.addEventListener("click", toggleSelectedRules);
   elements.start.addEventListener("click", startDealing);
+  elements.openRules.addEventListener("click", openDealRules);
 
   elements.pickerSearch.addEventListener("input", renderPresetPicker);
   elements.pickerGrid.addEventListener("click", handlePickerClick);
@@ -351,12 +371,26 @@ export function startDealer({
     if (isRoom) room.onConfigure(null);
   }
 
-  function handleBack() {
+  async function handleBack() {
     if (state.phase === "setup") {
       clearPresetSelection();
       return;
     }
-    resetToSetup();
+    if (backConfirmationPending) return;
+    backConfirmationPending = true;
+    elements.back.disabled = true;
+    let confirmed = false;
+    try {
+      confirmed = await confirmAction(
+        "返回将结束本轮发牌，确定返回版型配置吗？",
+      );
+    } catch {
+      confirmed = false;
+    } finally {
+      backConfirmationPending = false;
+      elements.back.disabled = false;
+    }
+    if (confirmed) resetToSetup();
   }
 
   function toggleFavorite(id) {
@@ -401,6 +435,7 @@ export function startDealer({
       editorDraft.name = `${editorDraft.name}（自定义）`;
     }
     elements.editorTitle.textContent = "编辑身份";
+    elements.editorSave.textContent = sourceIsPreset ? "复制并保存" : "保存";
     elements.editorDelete.hidden = sourceIsPreset;
     renderRoleEditor();
     openDialog(elements.editor);
@@ -604,6 +639,7 @@ export function startDealer({
 
   function renderSetup() {
     const hasSelection = Boolean(state.config);
+    const awaitingHost = isRoom && !canConfigure && !hasSelection;
     const count = hasSelection ? roleCount(state.config) : 0;
     elements.setup.classList.toggle("has-action-bar", hasSelection);
     elements.configShell.classList.toggle("is-confirming", hasSelection);
@@ -617,7 +653,8 @@ export function startDealer({
     elements.decrease.disabled = state.playerCount <= MIN_PLAYER_COUNT;
     elements.increase.disabled = state.playerCount >= MAX_PLAYER_COUNT;
     renderQuickPresets();
-    setVisible(elements.presetSection, !hasSelection);
+    setVisible(elements.hostWaiting, awaitingHost);
+    setVisible(elements.presetSection, !hasSelection && !awaitingHost);
     setVisible(elements.selectedPreset, hasSelection);
     setVisible(elements.changePreset, canConfigure);
     setVisible(elements.openEditor, canConfigure);
@@ -767,13 +804,10 @@ export function startDealer({
   }
 
   function renderDeal() {
-    const viewedCount = state.viewed.filter(Boolean).length;
+    elements.grid.dataset.count = String(state.roles.length);
     elements.grid.dataset.density =
       state.roles.length >= 7 ? "dense" : "regular";
-    elements.progress.textContent =
-      viewedCount === state.roles.length
-        ? `全部 ${state.roles.length} 位玩家都已查看身份，可以开始游戏。`
-        : `${state.config.name} · 已查看 ${viewedCount} / ${state.roles.length} · 点击自己的编号牌查看身份`;
+    elements.dealPresetName.textContent = state.config.name;
     elements.grid.innerHTML = state.roles
       .map(
         (_, index) =>
@@ -808,6 +842,13 @@ export function startDealer({
     elements.roleCopy.textContent =
       role.copy || state.config.rules || "请按当前版型规则行动。";
     elements.cover.hidden = false;
+  }
+
+  function openDealRules() {
+    elements.rulesDialogTitle.textContent = state.config.name;
+    elements.rulesDialogCopy.textContent =
+      state.config.rules.trim() || "暂无规则说明";
+    openDialog(elements.rulesDialog);
   }
 
   function presetCard(preset, { compact = false, selectedId } = {}) {

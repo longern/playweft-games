@@ -240,6 +240,55 @@ test("Werewolf dealer prioritizes a one-screen mobile deal grid", async () => {
   assert.match(themeCss, /overflow-y:\s*auto/);
 });
 
+test("Werewolf local deal header shows only the preset name and rules action", async () => {
+  const html = await readFile("games/werewolf-dealer/index.html", "utf8");
+  const dealerJs = await readFile("games/werewolf-dealer/dealer.js", "utf8");
+
+  assert.match(html, /id="dealer-deal-preset-name"/);
+  assert.match(html, /id="dealer-open-rules"[\s\S]*?aria-label="查看版型规则"/);
+  assert.doesNotMatch(html, /请选择自己的编号/);
+  assert.doesNotMatch(html, /id="dealer-progress"/);
+  assert.doesNotMatch(dealerJs, /已查看 \$\{viewedCount\}/);
+  assert.match(dealerJs, /dealPresetName\.textContent = state\.config\.name/);
+  assert.match(
+    dealerJs,
+    /rulesDialogCopy\.textContent =[\s\S]*?state\.config\.rules\.trim\(\)/,
+  );
+});
+
+test("Werewolf local deal grid uses available space without adding rows", async () => {
+  const dealCss = await readFile(
+    "games/werewolf-dealer/dealer/deal.css",
+    "utf8",
+  );
+  const dealerJs = await readFile("games/werewolf-dealer/dealer.js", "utf8");
+  const responsiveCss = await readFile(
+    "games/werewolf-dealer/dealer/responsive.css",
+    "utf8",
+  );
+
+  assert.match(
+    dealerJs,
+    /grid\.dataset\.count = String\(state\.roles\.length\)/,
+  );
+  assert.match(
+    responsiveCss,
+    /orientation:\s*landscape[\s\S]*?max-height:\s*620px[\s\S]*?\.dealer-deal-panel\s*\{[^}]*760px[\s\S]*?repeat\(6,[\s\S]*?data-count="15"[\s\S]*?repeat\(8,/,
+  );
+  assert.match(
+    responsiveCss,
+    /orientation:\s*landscape[\s\S]*?min-height:\s*621px[\s\S]*?\.dealer-deal-panel\s*\{[^}]*840px[\s\S]*?\.dealer-card-grid\[data-density="dense"\][^{]*\{[^}]*repeat\(6,[\s\S]*?data-count="15"[\s\S]*?repeat\(8,/,
+  );
+  assert.match(
+    responsiveCss,
+    /orientation:\s*portrait[\s\S]*?min-height:\s*900px[\s\S]*?data-count="12"[\s\S]*?repeat\(3,/,
+  );
+  assert.match(
+    dealCss,
+    /\.dealer-rules-dialog-panel\s*\{[^}]*min-height:\s*clamp\(220px,\s*32svh,\s*280px\)/s,
+  );
+});
+
 test("Werewolf dealer setup uses remaining height before it scrolls", async () => {
   const setupCss = await readFile(
     "games/werewolf-dealer/dealer/setup.css",
@@ -268,7 +317,11 @@ test("Werewolf dealer setup uses remaining height before it scrolls", async () =
   );
   assert.match(
     setupCss,
-    /#dealer-selected-rules-copy[^}]*-webkit-line-clamp:\s*3/s,
+    /#dealer-selected-rules-copy[^}]*-webkit-line-clamp:\s*3;[^}]*line-clamp:\s*3/s,
+  );
+  assert.match(
+    responsiveCss,
+    /#dealer-selected-rules-copy\s*\{[^}]*-webkit-line-clamp:\s*2;[^}]*line-clamp:\s*2/s,
   );
   assert.match(
     responsiveCss,
@@ -359,6 +412,49 @@ test("Werewolf dealer uses the top-left back action instead of a deal footer res
     /elements\.back\.addEventListener\("click", handleBack\)/,
   );
   assert.match(dealerJs, /state\.phase === "setup"[\s\S]*?resetToSetup\(\)/);
+});
+
+test("Werewolf dealer confirms before leaving an active local deal", async () => {
+  const dealerJs = await readFile("games/werewolf-dealer/dealer.js", "utf8");
+
+  assert.match(
+    dealerJs,
+    /state\.phase === "setup"[\s\S]*?await confirmAction\([\s\S]*?结束本轮发牌[\s\S]*?if \(confirmed\) resetToSetup\(\)/,
+  );
+});
+
+test("Werewolf dealer gives guests a dedicated host waiting state", async () => {
+  const html = await readFile("games/werewolf-dealer/index.html", "utf8");
+  const dealerJs = await readFile("games/werewolf-dealer/dealer.js", "utf8");
+
+  assert.match(html, /id="dealer-host-waiting"[\s\S]*?等待房主选择版型/);
+  assert.match(
+    dealerJs,
+    /awaitingHost = isRoom && !canConfigure && !hasSelection/,
+  );
+  assert.match(
+    dealerJs,
+    /setVisible\(elements\.presetSection, !hasSelection && !awaitingHost\)/,
+  );
+  const setupCss = await readFile(
+    "games/werewolf-dealer/dealer/setup.css",
+    "utf8",
+  );
+  assert.match(
+    setupCss,
+    /\.dealer-host-waiting\[hidden\]\s*\{[^}]*display:\s*none/s,
+  );
+});
+
+test("Werewolf dealer labels preset switching and built-in copying explicitly", async () => {
+  const html = await readFile("games/werewolf-dealer/index.html", "utf8");
+  const dealerJs = await readFile("games/werewolf-dealer/dealer.js", "utf8");
+
+  assert.match(html, /id="dealer-change-preset"[\s\S]*?>\s*全部版型\s*</);
+  assert.match(
+    dealerJs,
+    /editorSave\.textContent = sourceIsPreset \? "复制并保存" : "保存"/,
+  );
 });
 
 test("Werewolf dealer delegates custom preset deletion confirmation", async () => {

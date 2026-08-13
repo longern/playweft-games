@@ -128,6 +128,17 @@
             </div>
           </div>
 
+          <section
+            id="dealer-host-waiting"
+            class="dealer-host-waiting"
+            role="status"
+            aria-live="polite"
+            hidden
+          >
+            <span class="dealer-host-waiting-dot" aria-hidden="true"></span>
+            <strong>等待房主选择版型</strong>
+          </section>
+
           <section class="dealer-preset-section" aria-label="常用版型">
             <button
               id="dealer-open-picker"
@@ -156,7 +167,7 @@
                   class="dealer-text-action"
                   type="button"
                 >
-                  更换
+                  全部版型
                 </button>
                 <button
                   id="dealer-open-editor"
@@ -218,12 +229,40 @@
       <section id="dealer-deal" class="dealer-deal-panel" hidden>
         <div class="dealer-deal-content">
           <div class="dealer-deal-heading">
-            <h2>请选择自己的编号</h2>
-            <p id="dealer-progress"></p>
+            <h2 id="dealer-deal-preset-name"></h2>
+            <button
+              id="dealer-open-rules"
+              class="dealer-rules-action"
+              type="button"
+              aria-label="查看版型规则"
+            >
+              <i data-lucide="circle-question-mark" aria-hidden="true"></i>
+            </button>
           </div>
           <div id="dealer-card-grid" class="dealer-card-grid"></div>
         </div>
       </section>
+
+      <dialog
+        id="dealer-rules-dialog"
+        class="overlay-dialog overlay-dialog--sheet-narrow dealer-dialog"
+        aria-labelledby="dealer-rules-dialog-title"
+      >
+        <section
+          class="overlay-dialog__surface dealer-dialog-panel dealer-rules-dialog-panel"
+          tabindex="-1"
+        >
+          <header class="dealer-dialog-header">
+            <h2 id="dealer-rules-dialog-title"></h2>
+            <button type="button" data-close-dialog aria-label="关闭版型规则">
+              <i data-lucide="x"></i>
+            </button>
+          </header>
+          <div class="dealer-rules-dialog-copy">
+            <p id="dealer-rules-dialog-copy"></p>
+          </div>
+        </section>
+      </dialog>
 
       <dialog
         id="dealer-player-count-picker"

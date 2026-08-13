@@ -160,6 +160,32 @@
   padding: 0;
 }
 
+.dealer-host-waiting {
+  display: flex;
+  min-height: 96px;
+  color: rgba(238, 222, 187, 0.76);
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.dealer-host-waiting[hidden] {
+  display: none;
+}
+
+.dealer-host-waiting-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d5b46f;
+  box-shadow: 0 0 12px rgba(213, 180, 111, 0.48);
+}
+
+.dealer-host-waiting strong {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
 .dealer-text-action {
   min-height: 40px;
   padding: 0;
@@ -565,12 +591,14 @@
   white-space: pre-wrap;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
 }
 
 #dealer-selected-rules-copy.is-expanded {
   display: block;
   overflow: visible;
   -webkit-line-clamp: unset;
+  line-clamp: unset;
 }
 
 .dealer-config-feedback {
