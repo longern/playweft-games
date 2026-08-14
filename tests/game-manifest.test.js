@@ -97,6 +97,7 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
     } else {
       assert.equal("orientation" in manifest, false);
     }
+    assert.equal("permissions" in manifest, false);
 
     if (game === "sudoku") {
       assert.deepEqual(manifest.modes, { solo: {} });

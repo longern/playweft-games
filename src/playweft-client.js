@@ -11,6 +11,7 @@ export function createPlayweftClient({
   onActionResult,
   onError,
   onContext,
+  onPlayerProfileChanged,
 } = {}) {
   let playerId;
   let latestMatchId;
@@ -34,6 +35,17 @@ export function createPlayweftClient({
           error?.message ?? "Platform error",
           error?.code ?? "PLATFORM_ERROR",
         );
+        return;
+      }
+      if (method === "room.players.profileChanged") {
+        const fields = Array.isArray(params?.fields)
+          ? params.fields.filter(
+              (field) => field === "name" || field === "avatar",
+            )
+          : [];
+        if (typeof params?.playerId === "string" && fields.length > 0) {
+          onPlayerProfileChanged?.({ playerId: params.playerId, fields });
+        }
         return;
       }
       if (method !== "game.state") return;
@@ -147,6 +159,12 @@ export function createPlayweftClient({
     },
     readClipboardText() {
       return rpc.call("navigator.clipboard.readText");
+    },
+    getRoomPlayerProfile({ playerId, fields }) {
+      return rpc.call("room.players.getProfile", { playerId, fields });
+    },
+    getUserProfile({ fields }) {
+      return rpc.call("user.getProfile", { fields });
     },
     confirm(message) {
       return rpc.call("window.confirm", { message: String(message ?? "") });

@@ -68,6 +68,7 @@ const preview = {
 
 let playerId;
 let playerName = "";
+let capabilities = new Set();
 let state;
 let pendingAction;
 let selected = new Set();
@@ -82,6 +83,10 @@ let bottomCardCeremonyEndsAt = 0;
 let renderedPhase;
 const tablePlayHistory = new Map();
 const tablePassHistory = new Set();
+const roomPlayerNames = new Map();
+const avatarSources = new Map();
+const profileRequests = new Set();
+const pendingProfileRefreshes = new Set();
 let tableActivityAwaitingLead = false;
 let tableActivityActivePlayer = "";
 let lastRenderedTurnIndex = 0;
@@ -94,6 +99,7 @@ const client = isStandalone
       onState: handleState,
       onActionResult: handleActionResult,
       onError: handleError,
+      onPlayerProfileChanged: handleRoomPlayerProfileChanged,
     });
 
 elements.bidButtons.forEach((button) => {
@@ -119,6 +125,9 @@ else render(preview);
 
 function handleReady(message) {
   playMode = message.mode ?? "room";
+  capabilities = new Set(
+    Array.isArray(message.capabilities) ? message.capabilities : [],
+  );
   playerName = typeof message.player?.name === "string"
     ? message.player.name.trim()
     : "";
@@ -148,6 +157,92 @@ function handleState(message) {
   state = message.state;
   setConnection("live", playMode === "solo" ? "本地 AI 对局" : "实时对局");
   render(state);
+  requestPlayerAvatars(state);
+}
+
+function requestPlayerAvatars(nextState) {
+  if (!client) return;
+  if (playMode === "solo") {
+    if (capabilities.has("user.getProfile")) requestSoloPlayerAvatar();
+    return;
+  }
+  if (!capabilities.has("room.players.getProfile")) return;
+  (nextState.players ?? []).forEach(requestRoomPlayerProfile);
+}
+
+function requestRoomPlayerProfile(id, force = false) {
+  if (profileRequests.has(id)) {
+    if (force) pendingProfileRefreshes.add(id);
+    return;
+  }
+  if (!force && avatarSources.has(id)) return;
+  profileRequests.add(id);
+  void client
+    .getRoomPlayerProfile({ playerId: id, fields: ["name", "avatar"] })
+    .then((profile) => storeRoomPlayerProfile(id, profile))
+    .catch(() => storeRoomPlayerProfile(id, {}))
+    .finally(() => {
+      profileRequests.delete(id);
+      if (!pendingProfileRefreshes.delete(id)) return;
+      avatarSources.delete(id);
+      void requestRoomPlayerProfile(id, true);
+    });
+}
+
+function handleRoomPlayerProfileChanged({ playerId: changedId, fields }) {
+  if (playMode !== "room" || !state?.players?.includes(changedId)) return;
+  if (fields.includes("name")) roomPlayerNames.delete(changedId);
+  if (fields.includes("avatar")) avatarSources.delete(changedId);
+  renderStoredPlayerProfile(changedId);
+  void requestRoomPlayerProfile(changedId, true);
+}
+
+function requestSoloPlayerAvatar() {
+  if (
+    avatarSources.has(SOLO_PLAYER_ID) ||
+    profileRequests.has(SOLO_PLAYER_ID)
+  ) {
+    return;
+  }
+  profileRequests.add(SOLO_PLAYER_ID);
+  void client
+    .getUserProfile({ fields: ["avatar"] })
+    .then((profile) => storePlayerAvatar(SOLO_PLAYER_ID, profile?.avatar?.src))
+    .catch(() => storePlayerAvatar(SOLO_PLAYER_ID))
+    .finally(() => profileRequests.delete(SOLO_PLAYER_ID));
+}
+
+function storeRoomPlayerProfile(id, profile) {
+  if (typeof profile?.name === "string" && profile.name.trim()) {
+    roomPlayerNames.set(id, profile.name.trim());
+  }
+  avatarSources.set(
+    id,
+    typeof profile?.avatar?.src === "string" && profile.avatar.src
+      ? profile.avatar.src
+      : null,
+  );
+  renderStoredPlayerProfile(id);
+}
+
+function storePlayerAvatar(id, source) {
+  avatarSources.set(id, typeof source === "string" && source ? source : null);
+  renderStoredPlayerProfile(id);
+}
+
+function renderStoredPlayerProfile(id) {
+  if (!state) return;
+  const index = state.players?.indexOf(id) ?? -1;
+  const ownIndex = state.players?.indexOf(playerId) ?? -1;
+  if (index < 0) return;
+  const panel = elements.playerPanels[relativeSeatPosition(index, ownIndex)];
+  panel.querySelector("[data-player-name]").textContent = playerDisplayName(
+    state,
+    id,
+    index,
+    ownIndex,
+  );
+  renderPlayerAvatar(panel, id);
 }
 
 function handleActionResult(result) {
@@ -628,9 +723,41 @@ function renderPlayer(nextState, id, index, ownIndex, currentIndex, ended) {
   panel.classList.toggle("is-current", !ended && index === currentIndex);
   panel.classList.toggle("is-landlord", isLandlord);
   panel.classList.toggle("is-winner", nextState.winner === id);
+  renderPlayerAvatar(panel, id);
+}
+
+function renderPlayerAvatar(panel, id) {
+  const marker = panel.querySelector(".seat-marker");
+  const image = marker.querySelector("[data-player-avatar]");
+  const source = avatarSources.get(id);
+  if (!source) {
+    marker.classList.remove("has-avatar");
+    image.hidden = true;
+    image.removeAttribute("src");
+    delete image.dataset.source;
+    return;
+  }
+  if (image.dataset.source === source) return;
+
+  marker.classList.remove("has-avatar");
+  image.hidden = true;
+  image.dataset.source = source;
+  image.onload = () => {
+    if (image.dataset.source !== source) return;
+    image.hidden = false;
+    marker.classList.add("has-avatar");
+  };
+  image.onerror = () => {
+    if (image.dataset.source !== source) return;
+    image.hidden = true;
+    marker.classList.remove("has-avatar");
+  };
+  image.src = source;
 }
 
 function playerDisplayName(nextState, id, index, ownIndex) {
+  const roomName = roomPlayerNames.get(id);
+  if (roomName) return roomName;
   const savedName = nextState.playerNames?.[index];
   if (typeof savedName === "string" && savedName.trim()) {
     return savedName.trim();

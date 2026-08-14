@@ -21,6 +21,11 @@ export function createPlayweftSoloClient({
           new Error("The game is not running inside Playweft"),
         );
       },
+      getUserProfile() {
+        return Promise.reject(
+          new Error("The game is not running inside Playweft"),
+        );
+      },
       destroy() {},
     };
   }
@@ -85,6 +90,9 @@ export function createPlayweftSoloClient({
   return {
     readClipboardText() {
       return rpc.call("navigator.clipboard.readText");
+    },
+    getUserProfile({ fields }) {
+      return rpc.call("user.getProfile", { fields });
     },
     destroy() {
       destroyed = true;

@@ -71,12 +71,15 @@ test("Playweft room client uses bridge v1 and Manifest-owned initialization", as
   const states = [];
   const contexts = [];
   const readyMessages = [];
+  const profileChanges = [];
   const ids = [
     "initialize-123",
     "action-123",
     "action-456",
     "clipboard-123",
     "confirm-123",
+    "avatar-123",
+    "profile-123",
   ];
   const originalWindow = globalThis.window;
   const originalCrypto = globalThis.crypto;
@@ -92,6 +95,7 @@ test("Playweft room client uses bridge v1 and Manifest-owned initialization", as
       onState: (state) => states.push(state),
       onContext: (context) => contexts.push(context),
       onReady: (message) => readyMessages.push(message),
+      onPlayerProfileChanged: (change) => profileChanges.push(change),
       onError: (error, code, requestId) =>
         errors.push({ error, code, requestId }),
     });
@@ -154,6 +158,10 @@ test("Playweft room client uses bridge v1 and Manifest-owned initialization", as
         retryable: true,
       },
     });
+    notify(harness.fakePort, "room.players.profileChanged", {
+      playerId: "player-two",
+      fields: ["avatar"],
+    });
     notify(harness.fakePort, "game.state", {
       phase: "playing",
       state: { round: 1 },
@@ -198,6 +206,44 @@ test("Playweft room client uses bridge v1 and Manifest-owned initialization", as
     respond(harness.fakePort, "confirm-123", true);
     assert.equal(await confirmation, true);
 
+    const roomProfile = client.getRoomPlayerProfile({
+      playerId: "player-two",
+      fields: ["name", "avatar"],
+    });
+    assert.deepEqual(harness.portMessages.at(-1), {
+      jsonrpc: "2.0",
+      id: "avatar-123",
+      method: "room.players.getProfile",
+      params: {
+        playerId: "player-two",
+        fields: ["name", "avatar"],
+      },
+    });
+    respond(harness.fakePort, "avatar-123", {
+      name: "牌友二",
+      avatar: { src: "https://play.example/avatar/player-two" },
+    });
+    assert.deepEqual(await roomProfile, {
+      name: "牌友二",
+      avatar: { src: "https://play.example/avatar/player-two" },
+    });
+
+    const profile = client.getUserProfile({ fields: ["name", "avatar"] });
+    assert.deepEqual(harness.portMessages.at(-1), {
+      jsonrpc: "2.0",
+      id: "profile-123",
+      method: "user.getProfile",
+      params: { fields: ["name", "avatar"] },
+    });
+    respond(harness.fakePort, "profile-123", {
+      name: "牌友",
+      avatar: { src: "https://play.example/avatar/self" },
+    });
+    assert.deepEqual(await profile, {
+      name: "牌友",
+      avatar: { src: "https://play.example/avatar/self" },
+    });
+
     assert.deepEqual(results, [
       {
         requestId: "action-123",
@@ -217,6 +263,9 @@ test("Playweft room client uses bridge v1 and Manifest-owned initialization", as
         code: "ROOM_ERROR",
         requestId: undefined,
       },
+    ]);
+    assert.deepEqual(profileChanges, [
+      { playerId: "player-two", fields: ["avatar"] },
     ]);
     assert.deepEqual(contexts, [
       {
@@ -354,9 +403,10 @@ test("Solo client initializes from its Manifest contract", async () => {
   const originalWindow = globalThis.window;
   const originalCrypto = globalThis.crypto;
   globalThis.window = harness.fakeWindow;
+  const ids = ["solo-initialize", "solo-profile"];
   Object.defineProperty(globalThis, "crypto", {
     configurable: true,
-    value: { randomUUID: () => "solo-initialize" },
+    value: { randomUUID: () => ids.shift() },
   });
 
   try {
@@ -391,6 +441,20 @@ test("Solo client initializes from its Manifest contract", async () => {
         capabilities: [],
       },
     ]);
+
+    const profile = client.getUserProfile({ fields: ["avatar"] });
+    assert.deepEqual(harness.portMessages.at(-1), {
+      jsonrpc: "2.0",
+      id: "solo-profile",
+      method: "user.getProfile",
+      params: { fields: ["avatar"] },
+    });
+    respond(harness.fakePort, "solo-profile", {
+      avatar: { src: "https://play.example/avatar/self" },
+    });
+    assert.deepEqual(await profile, {
+      avatar: { src: "https://play.example/avatar/self" },
+    });
     client.destroy();
   } finally {
     globalThis.window = originalWindow;
@@ -401,7 +465,7 @@ test("Solo client initializes from its Manifest contract", async () => {
   }
 });
 
-test("Solo client is inert when the game opens directly", () => {
+test("Solo client is inert when the game opens directly", async () => {
   const sent = [];
   const fakeWindow = {
     postMessage(message) {
@@ -421,6 +485,10 @@ test("Solo client is inert when the game opens directly", () => {
   try {
     const client = createPlayweftSoloClient();
     assert.deepEqual(sent, []);
+    await assert.rejects(
+      client.getUserProfile({ fields: ["avatar"] }),
+      /not running inside Playweft/,
+    );
     client.destroy();
   } finally {
     globalThis.window = originalWindow;
