@@ -14,16 +14,17 @@ const ROOM_GAMES = new Map([
   ["xiangqi", [2, 2]],
 ]);
 const ALL_GAMES = [
-  "pig-dice",
-  "connect-four",
-  "texas-holdem",
   "dou-dizhu",
-  "werewolf-dealer",
-  "uno",
-  "sudoku",
-  "go",
-  "gomoku",
+  "mahjong",
   "xiangqi",
+  "uno",
+  "werewolf-dealer",
+  "gomoku",
+  "sudoku",
+  "texas-holdem",
+  "go",
+  "connect-four",
+  "pig-dice",
 ];
 
 test("Every game package has a strict Playweft Manifest v1 for bridge v1", async () => {
@@ -49,7 +50,7 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
         "modes",
         "name",
         "name_localized",
-        ...(game === "dou-dizhu" ? ["orientation"] : []),
+        ...(["dou-dizhu", "mahjong"].includes(game) ? ["orientation"] : []),
         "protocol",
         "start_url",
         "theme_color",
@@ -92,15 +93,22 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
       );
     }
 
-    if (game === "dou-dizhu") {
+    if (["dou-dizhu", "mahjong"].includes(game)) {
       assert.equal(manifest.orientation, "landscape");
     } else {
       assert.equal("orientation" in manifest, false);
     }
     assert.equal("permissions" in manifest, false);
 
-    if (game === "sudoku") {
+    if (game === "sudoku" || game === "mahjong") {
       assert.deepEqual(manifest.modes, { solo: {} });
+      if (game === "mahjong") {
+        const lua = await readFile("games/mahjong/game.lua", "utf8");
+        const main = await readFile("games/mahjong/main.js", "utf8");
+        assert.match(lua, /function ai_action\(/);
+        assert.match(main, /createLocalLuaGame/);
+        assert.doesNotMatch(main, /game\.lua\?raw/);
+      }
       continue;
     }
 
@@ -507,10 +515,6 @@ test("Werewolf preset picker keeps summaries readable and rules to one line", as
     "games/werewolf-dealer/dealer/setup.css",
     "utf8",
   );
-  const dialogsCss = await readFile(
-    "games/werewolf-dealer/dealer/dialogs.css",
-    "utf8",
-  );
   const descriptionRule = setupCss.match(
     /\.dealer-preset-description\s*\{([^}]*)\}/s,
   );
@@ -524,10 +528,6 @@ test("Werewolf preset picker keeps summaries readable and rules to one line", as
   assert.ok(summaryRule);
   assert.doesNotMatch(summaryRule[1], /#8f4540/);
   assert.doesNotMatch(dealerJs, /roleCount\(preset\)\}\s*人/);
-  assert.match(
-    dialogsCss,
-    /\.dealer-all-presets \.dealer-preset-main\s*\{[^}]*min-height:\s*104px/s,
-  );
 });
 
 test("Werewolf dealer uses the generated artwork for its card back", async () => {

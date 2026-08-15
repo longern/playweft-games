@@ -13,6 +13,7 @@ const games = [
   "go",
   "gomoku",
   "xiangqi",
+  "mahjong",
 ];
 
 const input = {

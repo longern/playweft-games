@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <defs>
+    <linearGradient id="table" x1="12" y1="7" x2="84" y2="91" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#146f63"/>
+      <stop offset="1" stop-color="#063d37"/>
+    </linearGradient>
+    <linearGradient id="tile" x1="36" y1="17" x2="62" y2="75" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fffdf3"/>
+      <stop offset="1" stop-color="#e7dfc8"/>
+    </linearGradient>
+    <filter id="shadow" x="-35%" y="-30%" width="180%" height="190%">
+      <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#001d19" flood-opacity=".5"/>
+    </filter>
+  </defs>
+  <rect width="96" height="96" fill="url(#table)"/>
+  <path d="M8 69C27 54 52 49 88 52v36H8Z" fill="#032f2b" opacity=".32"/>
+  <path d="M13 20h18M65 76h18" stroke="#e6c46d" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+  <g filter="url(#shadow)" transform="rotate(-3 48 47)">
+    <rect x="29" y="15" width="45" height="65" rx="7" fill="#17695f"/>
+    <path d="M29 70h45v5a7 7 0 0 1-7 7H36a7 7 0 0 1-7-7Z" fill="#0a4e47"/>
+    <rect x="24" y="10" width="46" height="65" rx="7" fill="url(#tile)"/>
+    <rect x="28" y="14" width="38" height="57" rx="4" fill="none" stroke="#cfc6aa" stroke-width="2"/>
+    <path fill="#bd3f36" d="M44 22h6v12h14v23H50v12h-6V57H30V34h14Zm-8 18v11h22V40Z"/>
+    <path d="M31 18h31" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".72"/>
+  </g>
+  <circle cx="79" cy="17" r="4" fill="#f2cf76"/>
+</svg>

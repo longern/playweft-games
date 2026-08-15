@@ -1,0 +1,37 @@
+{
+  "$schema": "https://play.longern.com/schemas/game-manifest-v1.json",
+  "manifest_version": 1,
+  "id": "/mahjong/",
+  "version": "0.1.0",
+  "protocol": {
+    "min": 1,
+    "max": 1
+  },
+  "start_url": "./",
+  "name": "Mahjong",
+  "name_localized": {
+    "zh-CN": "麻将"
+  },
+  "description": "Play a scored local riichi mahjong match against three AI opponents.",
+  "description_localized": {
+    "zh-CN": "在浏览器内运行 Lua 规则，与三名简单 AI 完成东风场或半庄日麻对局。"
+  },
+  "categories": [
+    "Table game"
+  ],
+  "icons": [
+    {
+      "src": "../mahjong.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "background_color": "#083f38",
+  "theme_color": "#0d675b",
+  "orientation": "landscape",
+  "help_url": "./help.html",
+  "modes": {
+    "solo": {}
+  }
+}

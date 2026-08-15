@@ -1,6 +1,6 @@
 # Playweft Games
 
-Nine lightweight multiplayer games and one standalone game for the sibling
+Nine lightweight multiplayer games and two standalone games for the sibling
 [`playweft`](../playweft) platform. They share one Vite build and expose
 independent, versioned Playweft game packages.
 
@@ -11,16 +11,17 @@ the Manifest before opening the game iframe.
 
 | Game | Players | Local entry | Production build |
 | --- | --- | --- | --- |
-| Pig Dice | 2 | `http://localhost:5174/pig-dice/` | `dist/pig-dice/index.html` |
-| Connect Four | 2 | `http://localhost:5174/connect-four/` | `dist/connect-four/index.html` |
-| Texas Hold'em | 2–6 | `http://localhost:5174/texas-holdem/` | `dist/texas-holdem/index.html` |
 | 斗地主 | 3 | `http://localhost:5174/dou-dizhu/` | `dist/dou-dizhu/index.html` |
-| Werewolf dealer | 6-12 | `http://localhost:5174/werewolf-dealer/` | `dist/werewolf-dealer/index.html` |
-| UNO | 2–4 | `http://localhost:5174/uno/` | `dist/uno/index.html` |
-| Sudoku | 1 | `http://localhost:5174/sudoku/` | `dist/sudoku/index.html` |
-| 围棋 | 1–2 | `http://localhost:5174/go/` | `dist/go/index.html` |
-| 五子棋 | 2 | `http://localhost:5174/gomoku/` | `dist/gomoku/index.html` |
+| 麻将 | 1 + 3 AI | `http://localhost:5174/mahjong/` | `dist/mahjong/index.html` |
 | 中国象棋 | 2 | `http://localhost:5174/xiangqi/` | `dist/xiangqi/index.html` |
+| UNO | 2–4 | `http://localhost:5174/uno/` | `dist/uno/index.html` |
+| Werewolf dealer | 6-12 | `http://localhost:5174/werewolf-dealer/` | `dist/werewolf-dealer/index.html` |
+| 五子棋 | 2 | `http://localhost:5174/gomoku/` | `dist/gomoku/index.html` |
+| Sudoku | 1 | `http://localhost:5174/sudoku/` | `dist/sudoku/index.html` |
+| Texas Hold'em | 2–6 | `http://localhost:5174/texas-holdem/` | `dist/texas-holdem/index.html` |
+| 围棋 | 1–2 | `http://localhost:5174/go/` | `dist/go/index.html` |
+| Connect Four | 2 | `http://localhost:5174/connect-four/` | `dist/connect-four/index.html` |
+| Pig Dice | 2 | `http://localhost:5174/pig-dice/` | `dist/pig-dice/index.html` |
 
 ## Run locally
 
@@ -44,7 +45,7 @@ use the platform-owned lobby; Texas Hold'em supports two to six seated players,
 斗地主 supports one local player with two computer opponents or exactly three
 room players, the Werewolf dealer supports six to twelve, and
 UNO supports two to four.
-围棋和中国象棋同时支持双人房间与单终端双方轮流行棋的 Solo 模式。
+围棋和中国象棋同时支持双人房间与单终端双方轮流行棋的 Solo 模式。麻将在浏览器内运行与房间协议一致的 Lua 规则，提供三名本地 AI，并支持东风场/半庄、连庄、立直、振听、役番符、宝牌、杠与抢杠、多家荣和、途中流局、包牌、延长赛和完整点数支付。麻将牌桌使用 PixiJS/WebGL 渲染，规则状态通过独立适配层驱动画面与交互。
 
 ## Verify and build
 
@@ -53,7 +54,7 @@ npm run check
 npm run build
 ```
 
-The generated `dist` directory is one static deployment with ten game
+The generated `dist` directory is one static deployment with eleven game
 packages. Each room package contains its `playweft.json`, client, help page and
 `game.lua`; Sudoku contains the same package metadata without a server entry.
 
