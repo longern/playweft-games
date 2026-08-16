@@ -6,13 +6,14 @@
     <meta name="theme-color" content="#083f38" />
     <meta
       name="description"
-      content="Playweft 本地麻将：浏览器内运行同一份 Lua 规则，与三名简单 AI 对局。"
+      content="Playweft 麻将：摸牌、鸣牌、立直和牌，来一场紧张刺激的日式麻将。"
     />
     <title>麻将 | Playweft</title>
     <script type="module" src="./main.js"></script>
   </head>
   <body>
     <main id="mahjong-app" class="mahjong-app" aria-busy="true">
+      <div id="mahjong-viewport" class="mahjong-viewport">
       <nav class="table-controls" aria-label="牌桌导航">
         <a class="table-control table-control-help" href="./help.html" aria-label="查看玩法">?</a>
       </nav>
@@ -58,6 +59,7 @@
             <span><strong data-name>墨池</strong><small data-detail>13 张</small></span>
           </article>
           <article id="player-bottom" class="player-station player-bottom">
+            <img class="platform-player-avatar" data-player-avatar alt="" hidden />
             <span class="wind-badge" data-wind>东</span>
             <span><strong data-name>你</strong><small data-detail>14 张</small></span>
           </article>
@@ -73,7 +75,7 @@
             </div>
             <div class="console-status">
               <strong id="turn-heading">正在载入规则</strong>
-              <span id="table-message">启动浏览器 Lua 引擎…</span>
+              <span id="table-message">正在准备牌桌…</span>
             </div>
           </section>
 
@@ -81,6 +83,7 @@
             <span id="result-kicker">本局结束</span>
             <strong id="result-title">自摸</strong>
             <p id="result-summary"></p>
+            <div id="result-hands" class="result-hands" aria-label="胡牌牌型"></div>
             <div id="result-yaku" class="result-yaku"></div>
             <button id="rematch-button" type="button">下一局</button>
           </section>
@@ -92,10 +95,9 @@
           <span id="action-hint">等待其他玩家</span>
           <div id="claim-actions" class="claim-actions"></div>
           <button id="pass-button" class="secondary-action" type="button" hidden>跳过</button>
-          <button id="abort-button" class="secondary-action" type="button" hidden>九种九牌</button>
+          <button id="abort-button" class="secondary-action" type="button" hidden>流局</button>
           <button id="riichi-button" class="gold-action" type="button" hidden>立直</button>
-          <button id="tsumo-button" class="gold-action" type="button" hidden>自摸</button>
-          <button id="discard-button" class="primary-action" type="button" disabled>打出</button>
+          <button id="tsumo-button" class="win-action" type="button" hidden>自摸</button>
           <span id="furiten-badge" class="furiten-badge" hidden>振听</span>
         </div>
         <div id="hand-bottom" class="own-hand" role="listbox" aria-label="你的手牌"></div>
@@ -103,9 +105,9 @@
 
       <section id="setup-panel" class="setup-panel" aria-label="选择对局长度">
         <div class="setup-card">
-          <span>月下雀席 · LOCAL RIICHI</span>
+          <span>月下雀席 · 四人日麻</span>
           <strong>入席，开一局</strong>
-          <p>同一套 Lua 规则驱动 AI、判定与点数结算。</p>
+          <p>摸牌、鸣牌、立直，向更高打点发起挑战。</p>
           <button type="button" data-match-type="east"><b>东风场</b><small>东一局至东四局</small></button>
           <button type="button" data-match-type="hanchan"><b>半庄战</b><small>东场与南场</small></button>
           <details class="rule-options">
@@ -125,8 +127,9 @@
       <section id="loading-panel" class="loading-panel" aria-live="polite" hidden>
         <span class="loading-mark">東</span>
         <strong>正在摆好牌桌</strong>
-        <p id="loading-message">加载 Lua 规则引擎…</p>
+        <p id="loading-message">正在洗牌并码好牌山…</p>
       </section>
+      </div>
     </main>
   </body>
 </html>

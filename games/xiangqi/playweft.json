@@ -12,9 +12,9 @@
   "name_localized": {
     "zh-CN": "中国象棋"
   },
-  "description": "Play locally or online, command seven kinds of pieces, and checkmate the opposing general.",
+  "description": "Command chariots, horses, and cannons to checkmate the opposing general.",
   "description_localized": {
-    "zh-CN": "支持本机轮流或双人房间对弈，以将死或困毙对方将帅取胜。"
+    "zh-CN": "调兵遣将，车马炮连环进攻，一步步将死对方。"
   },
   "categories": [
     "Strategy"

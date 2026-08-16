@@ -50,6 +50,9 @@ test("Mahjong deals one deterministic complete 136-tile set", async () => {
         seen[tile] = true
       end
     end
+    total = total + 1
+    if seen[first.drawnTile] then duplicate = true end
+    seen[first.drawnTile] = true
     result = {
       total = total,
       duplicate = duplicate,
@@ -65,7 +68,7 @@ test("Mahjong deals one deterministic complete 136-tile set", async () => {
   assert.equal(result.total, 136);
   assert.equal(result.duplicate, false);
   assert.equal(result.wall, 69);
-  assert.deepEqual(result.handCounts, [14, 13, 13, 13]);
+  assert.deepEqual(result.handCounts, [13, 13, 13, 13]);
   assert.equal(result.deterministic, true);
 });
 
@@ -78,11 +81,80 @@ test("Mahjong view reveals only the viewer's concealed hand", async () => {
   `);
 
   assert.equal(result.ownHand.length, 13);
-  assert.equal(result.handCounts.p1, 14);
+  assert.equal(result.handCounts.p1, 13);
   assert.equal(result.handCounts.p2, 13);
   assert.equal(result.drawnPlayerIndex, 1);
   assert.equal("hands" in result, false);
   assert.deepEqual(result.legalActions.claims, {});
+});
+
+test("Mahjong stores the current draw outside the fixed concealed rack", async () => {
+  const result = await runScenario(`
+    local base_rack = { 109,5,9,13,17,21,25,29,33,37,41,45,49 }
+    local harmless = { 1,5,9,13,17,21,25,29,33,37,41,45,49 }
+
+    local tedashi = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 73 } })
+    tedashi.hands.p1 = copy_array(base_rack)
+    tedashi.hands.p2, tedashi.hands.p3, tedashi.hands.p4 =
+      copy_array(harmless), copy_array(harmless), copy_array(harmless)
+    tedashi.turnIndex, tedashi.drawnTile = 1, 53
+    local tedashi_result = on_action(tedashi, { type = "discard", tileId = 109 }, { actor = { id = "p1" } })
+    tedashi = tedashi_result.state
+
+    local tsumogiri = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 74 } })
+    tsumogiri.hands.p1 = copy_array(base_rack)
+    tsumogiri.hands.p2, tsumogiri.hands.p3, tsumogiri.hands.p4 =
+      copy_array(harmless), copy_array(harmless), copy_array(harmless)
+    tsumogiri.turnIndex, tsumogiri.drawnTile = 1, 53
+    local before = table.concat(tsumogiri.hands.p1, ",")
+    local tsumogiri_result = on_action(tsumogiri, { type = "discard", tileId = 53 }, { actor = { id = "p1" } })
+    tsumogiri = tsumogiri_result.state
+
+    local function contains(hand, tile)
+      for _, candidate in ipairs(hand) do if candidate == tile then return true end end
+      return false
+    end
+    result = {
+      tedashiAccepted = tedashi_result.accepted,
+      tedashiRackCount = #tedashi.hands.p1,
+      tedashiIntegratedDraw = contains(tedashi.hands.p1, 53),
+      tedashiRemovedDiscard = not contains(tedashi.hands.p1, 109),
+      nextRackCount = #tedashi.hands.p2,
+      nextDrawSeparated = tedashi.turnIndex == 2 and tedashi.drawnTile > 0,
+      tsumogiriAccepted = tsumogiri_result.accepted,
+      tsumogiriRackUnchanged = before == table.concat(tsumogiri.hands.p1, ","),
+    }
+  `);
+
+  assert.deepEqual(result, {
+    tedashiAccepted: true,
+    tedashiRackCount: 13,
+    tedashiIntegratedDraw: true,
+    tedashiRemovedDiscard: true,
+    nextRackCount: 13,
+    nextDrawSeparated: true,
+    tsumogiriAccepted: true,
+    tsumogiriRackUnchanged: true,
+  });
+});
+
+test("Mahjong terminal view reveals tile faces and red-five identity", async () => {
+  const result = await runScenario(`
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 7 } })
+    state.phase, state.winningTile = "hand_ended", 17
+    state.hands.p2 = { 17, 18, 21 }
+    result = view(state, {}, {
+      viewer = { id = "p1", seat = 1, role = "player", isOwner = true }
+    }).state
+  `);
+
+  assert.deepEqual(result.revealedHands.p2, [
+    { type: 5, red: true },
+    { type: 5, red: false },
+    { type: 6, red: false },
+  ]);
+  assert.equal(result.winningTile, 5);
+  assert.equal(result.winningTileRed, true);
 });
 
 test("Mahjong chi options distinguish red fives without duplicating identical copies", async () => {
@@ -133,8 +205,9 @@ test("Mahjong recognizes standard, seven-pairs, and thirteen-orphans wins", asyn
       return tiles
     end
     function can_tsumo(types)
-      state.hands.p1 = ids(types)
-      state.lastDrawn = state.hands.p1[#state.hands.p1]
+      local hand = ids(types)
+      state.drawnTile = table.remove(hand)
+      state.hands.p1 = hand
       state.turnIndex = 1
       state.phase = "playing"
       return view(state, {}, { viewer = { id = "p1", seat = 1 } }).state.legalActions.canTsumo
@@ -196,10 +269,10 @@ test("Mahjong riichi costs 1000 points and own discards cause furiten", async ()
       end
       return tiles
     end
-    state.hands.p1 = ids({ 1,2,3, 4,5,6, 10,11,12, 19,20,21, 28, 9 })
-    state.lastDrawn = state.hands.p1[#state.hands.p1]
+    state.hands.p1 = ids({ 1,2,3, 4,5,6, 10,11,12, 19,20,21, 28 })
+    state.drawnTile = ids({ 9 })[1]
     state.turnIndex = 1
-    local declared = on_action(state, { type = "riichi", tileId = state.lastDrawn }, { actor = { id = "p1" } })
+    local declared = on_action(state, { type = "riichi", tileId = state.drawnTile }, { actor = { id = "p1" } })
     state = declared.state
     state.discards.p1[#state.discards.p1 + 1] = { tile = (28 - 1) * 4 + 1, claimed = false }
     local projected = view(state, {}, { viewer = { id = "p1", seat = 1 } }).state
@@ -230,9 +303,9 @@ test("Mahjong scores yaku, han and fu with conserved tsumo payments", async () =
       end
       return tiles
     end
-    state.hands.p1 = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21, 26,26, 22 })
+    state.hands.p1 = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21, 26,26 })
     state.deadWall[1] = 1
-    state.lastDrawn = state.hands.p1[#state.hands.p1]
+    state.drawnTile = ids({ 22 })[1]
     state.turnIndex = 1
     local applied = on_action(state, { type = "tsumo" }, { actor = { id = "p1" } })
     state = applied.state
@@ -283,8 +356,8 @@ test("Mahjong East match ends after East 4 while hanchan advances to South 1", a
         randomSeed = 88, settings = { matchType = match_type }
       } })
       state.handNumber, state.roundWind, state.dealerIndex = 4, 1, 1
-      state.hands.p2 = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21, 26,26, 22 })
-      state.lastDrawn = state.hands.p2[#state.hands.p2]
+      state.hands.p2 = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21, 26,26 })
+      state.drawnTile = ids({ 22 })[1]
       state.turnIndex = 2
       local applied = on_action(state, { type = "tsumo" }, { actor = { id = "p2" } })
       return applied.state
@@ -311,8 +384,8 @@ test("Mahjong East match ends after East 4 while hanchan advances to South 1", a
 test("Mahjong supports concealed kan and reveals an extra dora indicator", async () => {
   const result = await runScenario(`
     state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 314 } })
-    state.hands.p1 = { 1,2,3,4, 17,21,25, 41,45,49, 77,81,109,113 }
-    state.lastDrawn, state.turnIndex = 4, 1
+    state.hands.p1 = { 1,2,3, 17,21,25, 41,45,49, 77,81,109,113 }
+    state.drawnTile, state.turnIndex = 4, 1
     local applied = on_action(state, { type = "kan", kind = "ankan", tileType = 1 }, { actor = { id = "p1" } })
     state = applied.state
     state.deadWall[1] = 17
@@ -326,14 +399,14 @@ test("Mahjong supports concealed kan and reveals an extra dora indicator", async
       visualIndicators = #projected.doraIndicatorTiles,
       firstIndicatorType = projected.doraIndicatorTiles[1].type,
       firstIndicatorRed = projected.doraIndicatorTiles[1].red,
-      drew = state.lastDrawn > 0,
+      drew = state.drawnTile > 0,
     }
   `);
 
   assert.equal(result.accepted, true);
   assert.equal(result.meldKind, "ankan");
   assert.equal(result.kanCount, 1);
-  assert.equal(result.handCount, 11);
+  assert.equal(result.handCount, 10);
   assert.equal(result.indicators, 2);
   assert.equal(result.visualIndicators, 2);
   assert.equal(result.firstIndicatorType, 5);
@@ -353,8 +426,8 @@ test("Mahjong opens a robbing-kan window and scores chankan", async () => {
       return tiles
     end
     state.melds.p1 = { { kind = "pon", tiles = { 9,10,11 }, fromIndex = 4 } }
-    state.hands.p1 = { 12, 17,21,25, 41,45,49, 77,81,85, 109 }
-    state.lastDrawn, state.turnIndex = 12, 1
+    state.hands.p1 = { 17,21,25, 41,45,49, 77,81,85, 109 }
+    state.drawnTile, state.turnIndex = 12, 1
     state.hands.p2 = ids({ 1,2, 4,5,6, 10,11,12, 19,20,21, 28,28 })
     state.riichi.p2 = true
     local declared = on_action(state, { type = "kan", kind = "kakan", tileType = 3 }, { actor = { id = "p1" } })
@@ -397,9 +470,10 @@ test("Mahjong pays every ron winner on one discard", async () => {
     local waiting = { 1,2, 4,5,6, 10,11,12, 19,20,21, 28,28 }
     state.hands.p1, state.hands.p2 = ids(waiting), ids(waiting)
     state.riichi.p1, state.riichi.p2 = true, true
-    state.hands.p4 = ids({ 3,4,5, 7,8,9, 13,14,15, 22,23,24, 29, 3 })
-    state.turnIndex, state.lastDrawn = 4, state.hands.p4[#state.hands.p4]
-    local discarded = on_action(state, { type = "discard", tileId = state.lastDrawn }, { actor = { id = "p4" } })
+    local p4_hand = ids({ 3,4,5, 7,8,9, 13,14,15, 22,23,24, 29, 3 })
+    state.drawnTile = table.remove(p4_hand)
+    state.hands.p4, state.turnIndex = p4_hand, 4
+    local discarded = on_action(state, { type = "discard", tileId = state.drawnTile }, { actor = { id = "p4" } })
     state = discarded.state
     while state.phase == "claiming" do
       local claimant = state.claimants[state.claimIndex]
@@ -426,15 +500,20 @@ test("Mahjong pays every ron winner on one discard", async () => {
 test("Mahjong supports nine-terminals abortive draw and keeps the dealer", async () => {
   const result = await runScenario(`
     state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 999 } })
-    state.hands.p1 = { 1,33,37,69,73,105,109,113,117,121,125,129,133,134 }
-    state.lastDrawn, state.turnIndex = 134, 1
+    state.hands.p1 = { 1,33,37,69,73,105,109,113,117,121,125,129,133 }
+    state.drawnTile, state.turnIndex = 134, 1
     local legal = view(state, {}, { viewer = { id = "p1", seat = 1 } }).state.legalActions
     local applied = on_action(state, { type = "abort_nine" }, { actor = { id = "p1" } })
     state = applied.state
+    local visible = view(state, {}, { viewer = { id = "p2", seat = 2 } }).state
     result = {
       legal = legal.canAbortNine,
       accepted = applied.accepted,
       reason = state.abortiveReason,
+      abortivePlayerIndex = state.abortivePlayerIndex,
+      abortiveTile = state.abortiveTile,
+      visiblePlayerIndex = visible.abortivePlayerIndex,
+      visibleTile = visible.abortiveTile,
       nextDealer = state.nextDealerIndex,
       nextHonba = state.nextHonba,
     }
@@ -443,6 +522,10 @@ test("Mahjong supports nine-terminals abortive draw and keeps the dealer", async
   assert.equal(result.legal, true);
   assert.equal(result.accepted, true);
   assert.equal(result.reason, "九种九牌");
+  assert.equal(result.abortivePlayerIndex, 1);
+  assert.equal(result.abortiveTile, 134);
+  assert.equal(result.visiblePlayerIndex, 1);
+  assert.equal(result.visibleTile, 34);
   assert.equal(result.nextDealer, 1);
   assert.equal(result.nextHonba, 1);
 });
@@ -455,8 +538,8 @@ test("Mahjong applies yakuman responsibility payment and bankruptcy ending", asy
       { kind = "pon", tiles = { 129,130,131 }, fromIndex = 3 },
       { kind = "pon", tiles = { 133,134,135 }, fromIndex = 2 },
     }
-    state.hands.p1 = { 1,5,9,109,110 }
-    state.lastDrawn, state.turnIndex = 9, 1
+    state.hands.p1 = { 1,5,109,110 }
+    state.drawnTile, state.turnIndex = 9, 1
     state.pao.p1.daisangen = 2
     local applied = on_action(state, { type = "tsumo" }, { actor = { id = "p1" } })
     state = applied.state
@@ -482,8 +565,8 @@ test("Mahjong awards nagashi mangan instead of noten payments", async () => {
   const result = await runScenario(`
     state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 4242 } })
     state.wall = {}
-    state.hands.p1 = { 1,5,9,13,17,21,25,29,33,37,41,45,49,109 }
-    state.turnIndex, state.lastDrawn = 1, 109
+    state.hands.p1 = { 1,5,9,13,17,21,25,29,33,37,41,45,49 }
+    state.turnIndex, state.drawnTile = 1, 109
     local applied = on_action(state, { type = "discard", tileId = 109 }, { actor = { id = "p1" } })
     state = applied.state
     while state.phase == "claiming" do
@@ -514,8 +597,7 @@ test("Mahjong detects four-winds abortive draw after claims are passed", async (
     state.discards.p2 = { { tile = 110, claimed = false } }
     state.discards.p3 = { { tile = 111, claimed = false } }
     state.moveCount = 3
-    state.hands.p4[#state.hands.p4 + 1] = 112
-    state.turnIndex, state.lastDrawn = 4, 112
+    state.turnIndex, state.drawnTile = 4, 112
     local applied = on_action(state, { type = "discard", tileId = 112 }, { actor = { id = "p4" } })
     state = applied.state
     while state.phase == "claiming" do
@@ -541,8 +623,8 @@ test("Mahjong supports agari-yame and East-match extension", async () => {
       return tiles
     end
     function winning_hand(state, player_id, seat)
-      state.hands[player_id] = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21, 26,26, 22 })
-      state.lastDrawn = state.hands[player_id][#state.hands[player_id]]
+      state.hands[player_id] = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21, 26,26 })
+      state.drawnTile = ids({ 22 })[1]
       state.turnIndex = seat
     end
     yame = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 61, settings = { matchType = "east" } } })

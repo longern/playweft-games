@@ -194,6 +194,22 @@ local function remove_tile(hand, tile)
   return false
 end
 
+local function hand_with_drawn(state, player_id)
+  local hand = copy_array(state.hands[player_id])
+  if state.drawnTile and state.drawnTile > 0 and state.players[state.turnIndex] == player_id then
+    hand[#hand + 1] = state.drawnTile
+  end
+  return hand
+end
+
+local function remove_concealed_tile(state, player_id, tile)
+  if state.players[state.turnIndex] == player_id and state.drawnTile == tile then
+    state.drawnTile = 0
+    return true
+  end
+  return remove_tile(state.hands[player_id], tile)
+end
+
 local function tiles_of_type(hand, kind, maximum)
   local result = {}
   for _, tile in ipairs(hand) do
@@ -498,7 +514,8 @@ end
 local function score_hand(state, seat, winning_tile, method)
   local player_id = state.players[seat]
   local hand, melds = copy_array(state.hands[player_id]), state.melds[player_id]
-  if method == "ron" then hand[#hand + 1] = winning_tile end
+  if method == "ron" then hand[#hand + 1] = winning_tile
+  elseif state.drawnTile and state.drawnTile > 0 then hand[#hand + 1] = state.drawnTile end
   local special = special_score(state, seat, hand, melds, method)
   if special then return finalize_score(state, seat, hand, melds, special) end
   local best, winning_kind = nil, tile_type(winning_tile)
@@ -541,6 +558,7 @@ local function clear_hand_state(state)
     state.pao[player_id], state.kanByPlayer[player_id] = {}, 0
     state.kuikaeForbidden[player_id] = {}
   end
+  state.drawnTile = 0
 end
 
 local function draw_tile(state, seat, rinshan)
@@ -553,9 +571,7 @@ local function draw_tile(state, seat, rinshan)
   if not tile then return nil end
   local player_id = state.players[seat]
   state.tempFuriten[player_id] = false
-  state.hands[player_id][#state.hands[player_id] + 1] = tile
-  sort_hand(state.hands[player_id])
-  state.lastDrawn, state.rinshanWin = tile, rinshan == true
+  state.drawnTile, state.rinshanWin = tile, rinshan == true
   return tile
 end
 
@@ -574,9 +590,10 @@ local function deal(state)
   state.kanCount, state.callOccurred = 0, false
   state.pendingKan, state.pendingFourKans = nil, false
   state.claimants, state.claimResponses, state.claimIndex = {}, {}, 0
-  state.lastDiscard, state.lastDrawn, state.rinshanWin = nil, 0, false
+  state.lastDiscard, state.drawnTile, state.rinshanWin = nil, 0, false
   state.winner, state.winnerIndex, state.winType, state.winningTile = "", 0, "", 0
   state.winners, state.results, state.abortiveReason = {}, {}, ""
+  state.abortivePlayerIndex, state.abortiveTile = 0, 0
   state.draw, state.result, state.moveCount = false, nil, 0
   state.chankanWin = false
   state.turnIndex, state.phase = state.dealerIndex, "playing"
@@ -780,14 +797,16 @@ finish_exhaustive_draw = function(state)
     for seat = 1, 4 do deltas[seat] = tenpai[seat] and gain or -loss end
     for seat = 1, 4 do state.scores[seat] = state.scores[seat] + deltas[seat] end
   end
-  state.phase, state.draw, state.lastDrawn = "hand_ended", true, 0
+  state.phase, state.draw = "hand_ended", true
   state.result = { tenpai = tenpai, deltas = deltas, payment = count == 0 or count == 4 and "不听罚符 0点" or "不听罚符 3000点" }
   mark_next_hand(state, tenpai[state.dealerIndex], true)
 end
 
-finish_abortive_draw = function(state, reason)
-  state.phase, state.draw, state.lastDrawn = "hand_ended", true, 0
+finish_abortive_draw = function(state, reason, player_index)
+  state.phase, state.draw = "hand_ended", true
   state.abortiveReason = reason
+  state.abortivePlayerIndex = tonumber(player_index) or 0
+  state.abortiveTile = state.abortivePlayerIndex > 0 and state.drawnTile or 0
   state.result = { abortive = true, reason = reason, deltas = { 0, 0, 0, 0 }, payment = "途中流局" }
   mark_next_hand(state, true, true)
 end
@@ -854,14 +873,14 @@ local function same_kinds(left, right)
 end
 
 local function self_kan_options(state, player_id)
-  if state.lastDrawn == 0 or state.kanCount >= 4 or #state.wall == 0 then return {} end
-  local hand, options, counts = state.hands[player_id], {}, type_counts(state.hands[player_id])
+  if state.drawnTile == 0 or state.kanCount >= 4 or #state.wall == 0 then return {} end
+  local hand, options = hand_with_drawn(state, player_id), {}
+  local counts = type_counts(hand)
   for kind = 1, 34 do
     if counts[kind] == 4 then
       local allowed = true
       if state.riichi[player_id] then
-        local before = copy_array(hand)
-        remove_tile(before, state.lastDrawn)
+        local before = copy_array(state.hands[player_id])
         local after = copy_array(hand)
         for _ = 1, 4 do remove_tile(after, tiles_of_type(after, kind, 1)[1]) end
         local pseudo_melds = copy_array(state.melds[player_id])
@@ -912,7 +931,8 @@ end
 local function complete_pending_kan(state, events)
   local pending = state.pendingKan
   if not pending then return end
-  local hand, player_id = state.hands[pending.playerId], pending.playerId
+  local player_id = pending.playerId
+  local hand = hand_with_drawn(state, player_id)
   if pending.kind == "ankan" then
     for _, tile in ipairs(pending.tiles) do remove_tile(hand, tile) end
     state.melds[player_id][#state.melds[player_id] + 1] = {
@@ -925,6 +945,8 @@ local function complete_pending_kan(state, events)
     meld.tiles[#meld.tiles + 1] = pending.tile
     meld.addedTile = pending.tile
   end
+  sort_hand(hand)
+  state.hands[player_id], state.drawnTile = hand, 0
   state.pendingKan, state.phase, state.lastDiscard = nil, "playing", nil
   cancel_ippatsu(state)
   record_pao(state, player_id, pending.playerIndex)
@@ -960,7 +982,7 @@ local function begin_chankan(state, seat, tile, meld_index, kan_kind, kan_tiles)
 end
 
 local function apply_self_kan(state, action, actor_id, seat)
-  if state.phase ~= "playing" or state.turnIndex ~= seat or state.lastDrawn == 0 then return rejected("not_your_turn") end
+  if state.phase ~= "playing" or state.turnIndex ~= seat or state.drawnTile == 0 then return rejected("not_your_turn") end
   local selected
   for _, option in ipairs(self_kan_options(state, actor_id)) do
     if option.kind == action.kind and option.tileType == action.tileType then selected = option break end
@@ -968,7 +990,7 @@ local function apply_self_kan(state, action, actor_id, seat)
   if not selected then return rejected("kan_not_allowed") end
   local events = {}
   if selected.kind == "kakan" then
-    local tile = tiles_of_type(state.hands[actor_id], selected.tileType, 1)[1]
+    local tile = tiles_of_type(hand_with_drawn(state, actor_id), selected.tileType, 1)[1]
     if begin_chankan(state, seat, tile, selected.meldIndex, "kakan") then
       return accepted(state, { { type = "kan_declared", kind = "kakan", player = actor_id, playerIndex = seat } })
     end
@@ -977,7 +999,7 @@ local function apply_self_kan(state, action, actor_id, seat)
     complete_pending_kan(state, events)
     return accepted(state, events)
   end
-  local tiles = tiles_of_type(state.hands[actor_id], selected.tileType, 4)
+  local tiles = tiles_of_type(hand_with_drawn(state, actor_id), selected.tileType, 4)
   if begin_chankan(state, seat, tiles[1], 0, "ankan", tiles) then
     return accepted(state, { { type = "kan_declared", kind = "ankan", player = actor_id, playerIndex = seat } })
   end
@@ -1108,7 +1130,9 @@ local function resolve_claims(state, events)
       return
     end
     if not state.rules.multipleRon then ron_winners = { ron_winners[1] } end
-    if state.pendingKan then remove_tile(state.hands[state.pendingKan.playerId], state.pendingKan.tile) end
+    if state.pendingKan then
+      remove_concealed_tile(state, state.pendingKan.playerId, state.pendingKan.tile)
+    end
     settle_multiple_ron(state, ron_winners, discard.playerIndex, discard.tile)
     state.pendingKan, state.chankanWin = nil, false
     for _, claimant in ipairs(ron_winners) do
@@ -1132,7 +1156,7 @@ local function resolve_claims(state, events)
   state.kuikaeForbidden = state.kuikaeForbidden or {}
   state.kuikaeForbidden[claimant.playerId] = kuikae_forbidden_types(option)
   state.discards[state.players[discard.playerIndex]][discard.discardIndex].claimed = true
-  state.turnIndex, state.phase, state.lastDiscard, state.lastDrawn = claimant.playerIndex, "playing", nil, 0
+  state.turnIndex, state.phase, state.lastDiscard, state.drawnTile = claimant.playerIndex, "playing", nil, 0
   events[#events + 1] = { type = "claimed", kind = option.kind, player = claimant.playerId,
     playerIndex = claimant.playerIndex, fromIndex = discard.playerIndex, tile = discard.tile }
   record_pao(state, claimant.playerId, discard.playerIndex)
@@ -1141,11 +1165,24 @@ end
 
 local function perform_discard(state, tile_id, actor_id, seat, riichi_declared)
   local hand = state.hands[actor_id]
-  if state.riichi[actor_id] and not riichi_declared and tile_id ~= state.lastDrawn then return rejected("riichi_tsumogiri_required") end
+  local drawn = state.drawnTile or 0
+  if state.riichi[actor_id] and not riichi_declared and tile_id ~= drawn then return rejected("riichi_tsumogiri_required") end
   local forbidden = state.kuikaeForbidden and state.kuikaeForbidden[actor_id] or {}
   if forbidden[tile_type(tile_id)] then return rejected("kuikae_forbidden") end
-  if not remove_tile(hand, tile_id) then return rejected("tile_not_in_hand") end
-  if #hand % 3 ~= 1 then hand[#hand + 1] = tile_id; sort_hand(hand); return rejected("discard_not_allowed") end
+  local from_drawn = drawn and drawn > 0 and tile_id == drawn
+  local in_hand = false
+  for _, tile in ipairs(hand) do if tile == tile_id then in_hand = true break end end
+  if not from_drawn and not in_hand then return rejected("tile_not_in_hand") end
+  local next_count = #hand - (in_hand and 1 or 0) + (not from_drawn and drawn > 0 and 1 or 0)
+  if next_count % 3 ~= 1 then return rejected("discard_not_allowed") end
+  if from_drawn then
+    state.drawnTile = 0
+  else
+    remove_tile(hand, tile_id)
+    if drawn > 0 then hand[#hand + 1] = drawn end
+    sort_hand(hand)
+    state.drawnTile = 0
+  end
   state.kuikaeForbidden = state.kuikaeForbidden or {}
   state.kuikaeForbidden[actor_id] = {}
   state.discards[actor_id][#state.discards[actor_id] + 1] = {
@@ -1153,7 +1190,7 @@ local function perform_discard(state, tile_id, actor_id, seat, riichi_declared)
   }
   state.firstTurn[actor_id] = false
   if state.riichi[actor_id] and not riichi_declared then state.ippatsu[actor_id] = false end
-  state.moveCount, state.lastDrawn = state.moveCount + 1, 0
+  state.moveCount = state.moveCount + 1
   state.rinshanWin = false
   state.lastDiscard = { player = actor_id, playerIndex = seat, tile = tile_id,
     discardIndex = #state.discards[actor_id] }
@@ -1166,7 +1203,7 @@ end
 local function riichi_discards(state, player_id)
   if state.riichi[player_id] or #state.melds[player_id] > 0 or state.scores[player_index(state, player_id)] < 1000
     or #state.wall < 4 then return {} end
-  local hand, result = state.hands[player_id], {}
+  local hand, result = hand_with_drawn(state, player_id), {}
   for index, tile in ipairs(hand) do
     local candidate = copy_array(hand)
     table.remove(candidate, index)
@@ -1219,16 +1256,16 @@ end
 
 local function apply_tsumo(state, actor_id, seat)
   if state.phase ~= "playing" or state.turnIndex ~= seat then return rejected("not_your_turn") end
-  if state.lastDrawn == 0 then return rejected("draw_required") end
-  if not settle_win(state, seat, "tsumo", 0, state.lastDrawn) then return rejected("no_yaku") end
+  if state.drawnTile == 0 then return rejected("draw_required") end
+  if not settle_win(state, seat, "tsumo", 0, state.drawnTile) then return rejected("no_yaku") end
   return accepted(state, { { type = "won", method = "tsumo", player = actor_id,
     playerIndex = seat, tile = state.winningTile } })
 end
 
 local function can_abort_nine(state, player_id)
-  if not state.rules.abortiveDraws or state.callOccurred or not state.firstTurn[player_id] or state.lastDrawn == 0 then return false end
+  if not state.rules.abortiveDraws or state.callOccurred or not state.firstTurn[player_id] or state.drawnTile == 0 then return false end
   local distinct = {}
-  for _, tile in ipairs(state.hands[player_id]) do
+  for _, tile in ipairs(hand_with_drawn(state, player_id)) do
     local kind = tile_type(tile)
     if is_outside(kind) then distinct[kind] = true end
   end
@@ -1240,7 +1277,7 @@ local function apply_abort_nine(state, actor_id, seat)
   if state.phase ~= "playing" or state.turnIndex ~= seat or not can_abort_nine(state, actor_id) then
     return rejected("nine_terminals_not_allowed")
   end
-  finish_abortive_draw(state, "九种九牌")
+  finish_abortive_draw(state, "九种九牌", seat)
   return accepted(state, { { type = "abortive_draw", reason = "九种九牌", player = actor_id, playerIndex = seat } })
 end
 
@@ -1304,7 +1341,7 @@ local function legal_actions(state, viewer_id)
       legal.forbiddenDiscardTypes[#legal.forbiddenDiscardTypes + 1] = kind
     end
     table.sort(legal.forbiddenDiscardTypes)
-    legal.canTsumo = state.lastDrawn > 0 and score_hand(state, seat, state.lastDrawn, "tsumo") ~= nil
+    legal.canTsumo = state.drawnTile > 0 and score_hand(state, seat, state.drawnTile, "tsumo") ~= nil
     legal.riichiTiles = riichi_discards(state, viewer_id)
     legal.canRiichi = #legal.riichiTiles > 0
     legal.canAbortNine = can_abort_nine(state, viewer_id)
@@ -1374,7 +1411,11 @@ function view(state, events, context)
     hand_counts[player_id] = #(state.hands[player_id] or {})
     if state.phase == "hand_ended" then
       revealed[player_id] = {}
-      for _, tile in ipairs(state.hands[player_id]) do revealed[player_id][#revealed[player_id] + 1] = tile_type(tile) end
+      for _, tile in ipairs(state.hands[player_id]) do
+        revealed[player_id][#revealed[player_id] + 1] = {
+          type = tile_type(tile), red = RED_FIVES[tile] == true,
+        }
+      end
     end
   end
   local response_index = 0
@@ -1386,16 +1427,21 @@ function view(state, events, context)
     roundWind = state.roundWind, handNumber = state.handNumber, dealerIndex = state.dealerIndex,
     honba = state.honba, riichiSticks = state.riichiSticks, scores = state.scores,
     turnIndex = state.turnIndex, responseIndex = response_index, phase = state.phase,
-    drawnPlayerIndex = state.lastDrawn > 0 and state.turnIndex or 0,
+    drawnPlayerIndex = state.drawnTile > 0 and state.turnIndex or 0,
     wallCount = #state.wall, doraIndicators = indicators, doraIndicatorTiles = indicator_tiles,
     ownHand = own_hand,
     handCounts = hand_counts, discards = visible_discards(state), melds = visible_melds(state),
-    legalActions = legal_actions(state, viewer_id), lastDrawn = state.turnIndex == player_index(state, viewer_id) and state.lastDrawn or 0,
+    legalActions = legal_actions(state, viewer_id),
+    drawnTile = state.turnIndex == player_index(state, viewer_id) and state.drawnTile or 0,
     riichi = state.riichi, furiten = is_furiten(state, viewer_id), winner = state.winner,
     winnerIndex = state.winnerIndex, winType = state.winType,
     winningTile = state.winningTile > 0 and tile_type(state.winningTile) or 0,
+    winningTileRed = RED_FIVES[state.winningTile] == true,
     draw = state.draw, moveCount = state.moveCount, result = state.result,
     results = state.results, winners = state.winners, abortiveReason = state.abortiveReason,
+    abortivePlayerIndex = tonumber(state.abortivePlayerIndex) or 0,
+    abortiveTile = (tonumber(state.abortiveTile) or 0) > 0 and tile_type(state.abortiveTile) or 0,
+    abortiveTileRed = RED_FIVES[state.abortiveTile] == true,
     matchEnded = state.matchEnded, endReason = state.endReason, rules = state.rules,
     revealedHands = revealed,
   }, events = visible_events(events, viewer_id) }
@@ -1444,17 +1490,18 @@ function ai_action(state, actor_id)
     return { type = "pass" }
   end
   if state.phase ~= "playing" or state.turnIndex ~= seat then return nil end
-  if state.lastDrawn > 0 and score_hand(state, seat, state.lastDrawn, "tsumo") then return { type = "tsumo" } end
+  if state.drawnTile > 0 and score_hand(state, seat, state.drawnTile, "tsumo") then return { type = "tsumo" } end
   if can_abort_nine(state, actor_id) then return { type = "abort_nine" } end
   local kans = self_kan_options(state, actor_id)
   if #kans > 0 and (#state.wall + seat) % 3 == 0 then
     return { type = "kan", kind = kans[1].kind, tileType = kans[1].tileType }
   end
-  if state.riichi[actor_id] then return { type = "discard", tileId = state.lastDrawn } end
+  if state.riichi[actor_id] then return { type = "discard", tileId = state.drawnTile } end
   local riichi_tiles = riichi_discards(state, actor_id)
-  if #riichi_tiles > 0 then return { type = "riichi", tileId = choose_discard(state.hands[actor_id], riichi_tiles) } end
+  local concealed = hand_with_drawn(state, actor_id)
+  if #riichi_tiles > 0 then return { type = "riichi", tileId = choose_discard(concealed, riichi_tiles) } end
   return { type = "discard", tileId = choose_discard(
-    state.hands[actor_id], nil, state.kuikaeForbidden and state.kuikaeForbidden[actor_id]
+    concealed, nil, state.kuikaeForbidden and state.kuikaeForbidden[actor_id]
   ) }
 end
 

@@ -26,6 +26,7 @@ const ALL_GAMES = [
   "connect-four",
   "pig-dice",
 ];
+const CATALOGUE_TECHNICAL_COPY = /Lua|WebGL|Canvas|Three\.js|浏览器|规则引擎|协议|同步|简单 AI/i;
 
 test("Every game package has a strict Playweft Manifest v1 for bridge v1", async () => {
   const ids = new Set();
@@ -69,6 +70,16 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
     assert.equal(typeof manifest.name_localized["zh-CN"], "string");
     assert.equal(typeof manifest.description, "string");
     assert.equal(typeof manifest.description_localized["zh-CN"], "string");
+    assert.ok(manifest.description.length <= 100, `${game} English description is too long`);
+    assert.ok(
+      manifest.description_localized["zh-CN"].length <= 32,
+      `${game} Chinese description is too long`,
+    );
+    assert.doesNotMatch(
+      manifest.description_localized["zh-CN"],
+      CATALOGUE_TECHNICAL_COPY,
+      `${game} description should describe the play experience`,
+    );
     assert.ok(manifest.categories.length > 0);
     assert.equal(manifest.help_url, "./help.html");
     assert.equal(manifest.icons.length, 1);
@@ -135,6 +146,19 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
       /game\.lua\?raw/,
       `${game} client must not bundle the authoritative Lua source`,
     );
+  }
+});
+
+test("Home game introductions stay short and player-facing", async () => {
+  const home = await readFile("index.html", "utf8");
+  const descriptions = [...home.matchAll(
+    /<div class="game-card-content">[\s\S]*?<p>([^<]+)<\/p>/g,
+  )].map((match) => match[1].trim());
+
+  assert.equal(descriptions.length, ALL_GAMES.length);
+  for (const description of descriptions) {
+    assert.ok(description.length <= 32, `Home description is too long: ${description}`);
+    assert.doesNotMatch(description, CATALOGUE_TECHNICAL_COPY);
   }
 });
 

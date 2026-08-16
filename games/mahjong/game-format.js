@@ -40,29 +40,59 @@ export function isRedFive(tileId) {
   return RED_FIVE_IDS.has(Number(tileId));
 }
 
-export function splitDrawnTile(hand, lastDrawn) {
-  const tiles = [...asArray(hand)];
-  const drawnId = Number(lastDrawn);
-  const drawnIndex = drawnId ? tiles.indexOf(drawnId) : -1;
-  if (drawnIndex < 0) return { rack: tiles, drawn: null };
-  const [drawn] = tiles.splice(drawnIndex, 1);
-  return { rack: tiles, drawn };
+export function orderedHand(hand, drawnTile) {
+  const rack = [...asArray(hand)];
+  const drawn = Number(drawnTile) || 0;
+  return drawn ? [...rack, drawn] : rack;
 }
 
-export function orderedHand(hand, lastDrawn) {
-  const { rack, drawn } = splitDrawnTile(hand, lastDrawn);
-  return drawn == null ? rack : [...rack, drawn];
+export function exhaustiveDrawPresentation(state) {
+  if (state?.phase !== "hand_ended"
+    || state.draw !== true
+    || state.result?.abortive === true) {
+    return { revealed: [], covered: [] };
+  }
+  const tenpai = asArray(state.result?.tenpai);
+  const revealed = [];
+  const covered = [];
+  for (let seat = 1; seat <= 4; seat += 1) {
+    (tenpai[seat - 1] === true ? revealed : covered).push(seat);
+  }
+  return { revealed, covered };
+}
+
+export function splitRevealedHand(state, playerId, seat) {
+  const rack = asArray(state.revealedHands?.[playerId]).map((tile) =>
+    tile && typeof tile === "object"
+      ? { type: Number(tile.type), red: tile.red === true }
+      : { type: Number(tile), red: false });
+  const abortiveReveal = state.abortiveReason === "九种九牌"
+    && Number(state.abortivePlayerIndex) === Number(seat);
+  const drawnType = abortiveReveal
+    ? Number(state.abortiveTile)
+    : state.winType === "tsumo"
+      ? Number(state.winningTile)
+      : 0;
+  if (!drawnType) return { rack, drawn: null };
+  return {
+    rack,
+    drawn: {
+      type: drawnType,
+      red: abortiveReveal
+        ? state.abortiveTileRed === true
+        : state.winningTileRed === true,
+    },
+  };
 }
 
 export function opponentHandLayout(handCount, meldCount, hasDrawnTile) {
   const visibleCount = Math.max(0, Math.trunc(Number(handCount) || 0));
   const visibleMelds = Math.max(0, Math.min(4, Math.trunc(Number(meldCount) || 0)));
   const normalRackCapacity = 13 - visibleMelds * 3;
-  const hasDrawn = hasDrawnTile === true && visibleCount > normalRackCapacity;
-  const rackCapacity = hasDrawn ? normalRackCapacity : visibleCount;
+  const hasDrawn = hasDrawnTile === true;
   return {
-    rackCapacity,
-    rackCount: hasDrawn ? normalRackCapacity : visibleCount,
+    rackCapacity: hasDrawn ? normalRackCapacity : visibleCount,
+    rackCount: visibleCount,
     hasDrawn,
   };
 }
@@ -71,7 +101,7 @@ export function automaticRiichiDiscard(state, playerId) {
   const legal = state?.legalActions ?? {};
   if (!state?.riichi?.[playerId] || !legal.canDiscard) return 0;
   if (legal.canTsumo || legal.canAbortNine || asArray(legal.selfKans).length > 0) return 0;
-  return Number(state.lastDrawn) || 0;
+  return Number(state.drawnTile) || 0;
 }
 
 export function doraIndicatorSlots(state) {

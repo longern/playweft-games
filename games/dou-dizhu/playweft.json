@@ -12,9 +12,9 @@
   "name_localized": {
     "zh-CN": "斗地主"
   },
-  "description": "Bid for the landlord and be the first team to play every card.",
+  "description": "Bid for the landlord, outplay your rivals, and empty your hand first.",
   "description_localized": {
-    "zh-CN": "叫分定地主，灵活配合出牌，率先出完手牌获胜。"
+    "zh-CN": "叫分抢地主，配合队友或以一敌二，谁先出完谁赢。"
   },
   "categories": [
     "Card game"

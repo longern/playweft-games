@@ -40,27 +40,28 @@ export class ThreeTileFactory {
       TILE_BACK_EDGE_RADIUS,
     );
     this.shellMaterial = new MeshPhysicalMaterial({
-      color: new Color("#e9e3cf"),
-      roughness: 0.42,
+      color: new Color("#e9e9e6"),
+      roughness: 0.62,
       metalness: 0,
-      clearcoat: 0.32,
-      clearcoatRoughness: 0.36,
+      clearcoat: 0.12,
+      clearcoatRoughness: 0.58,
     });
     this.backMaterial = new MeshPhysicalMaterial({
-      color: new Color("#1b63b7"),
-      roughness: 0.32,
+      color: new Color("#1b569c"),
+      roughness: 0.4,
       metalness: 0,
-      clearcoat: 0.52,
-      clearcoatRoughness: 0.24,
+      clearcoat: 0.4,
+      clearcoatRoughness: 0.32,
     });
     this.faceMaterial = new MeshPhysicalMaterial({
       map: faceAtlas,
       transparent: true,
       alphaTest: 0.025,
-      roughness: 0.52,
+      color: new Color("#e7e7e4"),
+      roughness: 0.68,
       metalness: 0,
-      clearcoat: 0.18,
-      clearcoatRoughness: 0.5,
+      clearcoat: 0.08,
+      clearcoatRoughness: 0.62,
       polygonOffset: true,
       polygonOffsetFactor: -1,
     });

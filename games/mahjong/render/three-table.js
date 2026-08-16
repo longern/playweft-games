@@ -15,8 +15,8 @@ export const TABLE_GEOMETRY = Object.freeze({
   width: 28,
   depth: 25,
   centreZ: -1.5,
-  railWidth: 0.78,
-  railHeight: 0.5,
+  railWidth: 0.96,
+  railHeight: 0.58,
   baseHeight: 0.42,
 });
 
@@ -31,7 +31,12 @@ export const DEFAULT_TABLE_THEME = Object.freeze({
 });
 
 export class ThreeMahjongTable {
-  constructor({ anisotropy = 1, feltTexture, theme = DEFAULT_TABLE_THEME } = {}) {
+  constructor({
+    anisotropy = 1,
+    feltTexture,
+    feltBumpTexture = feltTexture,
+    theme = DEFAULT_TABLE_THEME,
+  } = {}) {
     this.group = new Group();
     this.group.name = "mahjong-table";
     this.geometries = [];
@@ -45,6 +50,13 @@ export class ThreeMahjongTable {
     feltTexture.wrapT = RepeatWrapping;
     feltTexture.repeat.set(1, 1);
     this.textures.push(feltTexture);
+    if (feltBumpTexture !== feltTexture) {
+      feltBumpTexture.anisotropy = anisotropy;
+      feltBumpTexture.wrapS = RepeatWrapping;
+      feltBumpTexture.wrapT = RepeatWrapping;
+      feltBumpTexture.repeat.set(2, 2);
+      this.textures.push(feltBumpTexture);
+    }
 
     const woodTexture = createWoodTexture(theme);
     woodTexture.anisotropy = anisotropy;
@@ -54,22 +66,24 @@ export class ThreeMahjongTable {
     this.textures.push(woodTexture);
 
     const feltMaterial = this.trackMaterial(new MeshPhysicalMaterial({
-      color: new Color("#ccd4ce"),
+      color: new Color("#edf2ec"),
       map: feltTexture,
-      bumpMap: feltTexture,
-      bumpScale: 0.012,
-      roughness: 0.96,
+      bumpMap: feltBumpTexture,
+      bumpScale: 0.009,
+      emissive: new Color("#104c40"),
+      emissiveIntensity: 0.34,
+      roughness: 0.93,
       metalness: 0,
-      clearcoat: 0.012,
+      clearcoat: 0.018,
       clearcoatRoughness: 0.94,
     }));
     const woodMaterial = this.trackMaterial(new MeshPhysicalMaterial({
       color: new Color("#ffffff"),
       map: woodTexture,
-      roughness: 0.43,
+      roughness: 0.36,
       metalness: 0,
-      clearcoat: 0.42,
-      clearcoatRoughness: 0.36,
+      clearcoat: 0.48,
+      clearcoatRoughness: 0.32,
     }));
     const baseMaterial = this.trackMaterial(new MeshPhysicalMaterial({
       color: new Color(theme.woodDark),
@@ -79,9 +93,9 @@ export class ThreeMahjongTable {
     }));
     const trimMaterial = this.trackMaterial(new MeshPhysicalMaterial({
       color: new Color(theme.trim),
-      roughness: 0.34,
-      metalness: 0.22,
-      clearcoat: 0.38,
+      roughness: 0.28,
+      metalness: 0.3,
+      clearcoat: 0.44,
     }));
 
     this.addBase(baseMaterial);

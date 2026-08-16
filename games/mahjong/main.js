@@ -3,15 +3,18 @@ import { createPlayweftSoloClient } from "../../src/playweft-solo-client.js";
 import {
   AI_DELAY_MS,
   AUTO_RIICHI_DISCARD_DELAY_MS,
+  HAND_END_PRESENTATION_DELAY_MS,
   HUMAN_ID,
   PLAYERS,
 } from "./constants.js";
 import { MahjongDomView } from "./dom-view.js";
+import { bindFixedViewport } from "./fixed-viewport.js";
 import {
   activeSeat,
   asArray,
   automaticRiichiDiscard,
   errorMessage,
+  exhaustiveDrawPresentation,
 } from "./game-format.js";
 import { MahjongThreeRenderer } from "./three-renderer.js";
 import "../../src/base.css";
@@ -21,8 +24,16 @@ let game;
 let state;
 let selectedTileId = 0;
 let aiTimer;
+let resultTimer;
+let resultRevealKey = "";
+let resultVisible = true;
 let playerName = "你";
 let destroyed = false;
+
+const releaseFixedViewport = bindFixedViewport(
+  document.querySelector("#mahjong-viewport"),
+  document.querySelector("#mahjong-app"),
+);
 
 const domView = new MahjongDomView({
   onAction: dispatch,
@@ -45,7 +56,6 @@ const visualRendererReady = visualRenderer.init().catch((error) => {
   showLoadingError("图形渲染器加载失败，请刷新页面重试");
 });
 
-elements.discard.addEventListener("click", discardSelected);
 elements.pass.addEventListener("click", () => dispatch({ type: "pass" }));
 elements.abort.addEventListener("click", () => dispatch({ type: "abort_nine" }));
 elements.tsumo.addEventListener("click", () => dispatch({ type: "tsumo" }));
@@ -63,6 +73,7 @@ const soloClient = createPlayweftSoloClient({
   onReady(context) {
     const name = context?.player?.name?.trim();
     if (name) playerName = name;
+    requestPlatformAvatar(context);
     elements.setup.hidden = false;
   },
   onError(message) {
@@ -72,11 +83,32 @@ const soloClient = createPlayweftSoloClient({
 
 if (window.parent === window) elements.setup.hidden = false;
 
+function requestPlatformAvatar(context) {
+  const initialSource = context?.player?.avatar?.src;
+  if (typeof initialSource === "string" && initialSource) {
+    domView.setPlayerAvatar("bottom", initialSource);
+  }
+  if (!asArray(context?.capabilities).includes("user.getProfile")) return;
+  void soloClient
+    .getUserProfile({ fields: ["avatar"] })
+    .then((profile) => {
+      const source = profile?.avatar?.src;
+      if (typeof source === "string" && source) {
+        domView.setPlayerAvatar("bottom", source);
+      } else if (!initialSource) {
+        domView.setPlayerAvatar("bottom", "");
+      }
+    })
+    .catch(() => {
+      if (!initialSource) domView.setPlayerAvatar("bottom", "");
+    });
+}
+
 async function initialize(matchType = "east") {
   if (game) return;
   elements.setup.hidden = true;
   elements.loading.hidden = false;
-  elements.loadingMessage.textContent = "加载 Lua 规则并初始化牌山…";
+  elements.loadingMessage.textContent = "正在洗牌并码好牌山…";
   try {
     await visualRendererReady;
     game = await createLocalLuaGame({
@@ -101,7 +133,7 @@ async function initialize(matchType = "east") {
     scheduleAi();
   } catch (error) {
     console.error(error);
-    showLoadingError("Lua 规则加载失败，请刷新页面重试");
+    showLoadingError("牌桌准备失败，请刷新页面重试");
   }
 }
 
@@ -163,12 +195,64 @@ function refresh() {
   const projection = game.view(HUMAN_ID);
   state = projection.state;
   const events = asArray(projection.events);
-  domView.render(state, events, selectedTileId, playerName);
+  const revealKey = handRevealKey(state);
+  const revealPlayerIndices = handRevealPlayerIndices(state);
+  const coveredPlayerIndices = exhaustiveDrawPresentation(state).covered;
+  if (!revealKey) {
+    window.clearTimeout(resultTimer);
+    resultRevealKey = "";
+    resultVisible = true;
+  } else if (revealKey !== resultRevealKey) {
+    resultRevealKey = revealKey;
+    resultVisible = false;
+    window.clearTimeout(resultTimer);
+    resultTimer = window.setTimeout(() => {
+      resultVisible = true;
+      refresh();
+    }, HAND_END_PRESENTATION_DELAY_MS);
+  }
+  domView.render(state, events, selectedTileId, playerName, { showResult: resultVisible });
   visualRenderer.render(
     state,
     events,
-    domView.visualUi(playerName, selectedTileId),
+    {
+      ...domView.visualUi(playerName, selectedTileId),
+      revealPlayerIndices,
+      coveredPlayerIndices,
+      animateHandReveal: Boolean(revealKey) && !resultVisible,
+      delayHandRevealForCallout: events.some((event) => event.type === "won"),
+    },
   );
+}
+
+function handRevealKey(current) {
+  if (current?.phase !== "hand_ended") return "";
+  if (current.abortiveReason === "九种九牌" && Number(current.abortivePlayerIndex) > 0) {
+    return `${current.moveCount}:nine-terminals:${current.abortivePlayerIndex}`;
+  }
+  const exhaustive = exhaustiveDrawPresentation(current);
+  if (exhaustive.revealed.length + exhaustive.covered.length > 0) {
+    return `${current.moveCount}:exhaustive-draw`;
+  }
+  if (current.draw || current.winType === "nagashi") return "";
+  const opponentWinners = asArray(current.winners).filter((id) => id !== HUMAN_ID);
+  if (!opponentWinners.length) return "";
+  return `${current.moveCount}:${current.winType}:${opponentWinners.join(",")}`;
+}
+
+function handRevealPlayerIndices(current) {
+  const exhaustive = exhaustiveDrawPresentation(current);
+  if (exhaustive.revealed.length + exhaustive.covered.length > 0) {
+    return exhaustive.revealed;
+  }
+  if (current?.abortiveReason === "九种九牌") {
+    const seat = Number(current.abortivePlayerIndex) || 0;
+    return seat > 0 ? [seat] : [];
+  }
+  return asArray(current?.winners)
+    .filter((id) => id !== HUMAN_ID)
+    .map((id) => asArray(current.players).indexOf(id) + 1)
+    .filter((seat) => seat > 0);
 }
 
 function selectTile(tileId) {
@@ -191,6 +275,8 @@ function declareRiichi() {
 
 function handlePageHide(event) {
   window.clearTimeout(aiTimer);
+  window.clearTimeout(resultTimer);
+  resultVisible = true;
   if (!event.persisted) destroy();
 }
 
@@ -201,6 +287,8 @@ function handlePageShow(event) {
 function handleVisibilityChange() {
   if (document.visibilityState === "hidden") {
     window.clearTimeout(aiTimer);
+    window.clearTimeout(resultTimer);
+    resultVisible = true;
     return;
   }
   resumeAfterSuspension();
@@ -211,6 +299,10 @@ function resumeAfterSuspension() {
   visualRenderer.resume();
   window.requestAnimationFrame(() => {
     if (destroyed) return;
+    if (state?.phase === "hand_ended") {
+      refresh();
+      return;
+    }
     visualRenderer.resume();
     scheduleAi();
   });
@@ -220,9 +312,11 @@ function destroy() {
   if (destroyed) return;
   destroyed = true;
   window.clearTimeout(aiTimer);
+  window.clearTimeout(resultTimer);
   window.removeEventListener("pagehide", handlePageHide);
   window.removeEventListener("pageshow", handlePageShow);
   document.removeEventListener("visibilitychange", handleVisibilityChange);
+  releaseFixedViewport();
   visualRenderer.destroy();
   game?.close();
   soloClient.destroy();

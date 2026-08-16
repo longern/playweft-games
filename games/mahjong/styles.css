@@ -1,10 +1,13 @@
 @font-face {
-  font-family: "Playweft Mahjong Shodo";
-  src: url("./assets/fonts/yuji-syuku-mahjong.woff2") format("woff2");
+  font-family: "Playweft Mahjong Xingshu";
+  src: url("./assets/fonts/bakudai-mahjong-ui.woff2") format("woff2");
   font-display: block;
   font-style: normal;
   font-weight: 400;
-  unicode-range: U+4E09, U+56DB, U+4EBA, U+6771, U+5357;
+  unicode-range:
+    U+4E09, U+4EBA, U+51FA, U+5357, U+5403, U+548C, U+56DB, U+5C40,
+    U+6253, U+6478, U+6760, U+6771, U+6D41, U+76F4, U+78B0, U+7ACB,
+    U+81EA, U+8DF3, U+8FC7;
 }
 
 :root {
@@ -13,8 +16,9 @@
   font-family: Inter, "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
   --gold: #eac369;
   --gold-bright: #ffe5a0;
-  --panel: rgba(3, 17, 16, 0.9);
-  --panel-border: rgba(233, 199, 118, 0.34);
+  --panel: rgba(3, 20, 19, 0.92);
+  --panel-border: rgba(233, 199, 118, 0.44);
+  --mahjong-action-right: 342px;
 }
 
 html,
@@ -25,7 +29,8 @@ body {
 }
 
 body {
-  background: #020908;
+  margin: 0;
+  background: #000;
 }
 
 button,
@@ -36,15 +41,28 @@ a {
 .mahjong-app {
   position: relative;
   width: 100%;
-  height: 100dvh;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+}
+
+.mahjong-viewport {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1280px;
+  height: 720px;
+  flex: 0 0 auto;
   overflow: hidden;
   background: #020908;
+  transform: translate(-50%, -50%) scale(var(--mahjong-viewport-scale, 1));
+  transform-origin: center;
 }
 
 .table-controls {
-  position: fixed;
+  position: absolute;
   z-index: 80;
-  inset: max(58px, calc(env(safe-area-inset-top) + 12px)) max(14px, env(safe-area-inset-right)) auto max(14px, env(safe-area-inset-left));
+  inset: 58px 14px auto 14px;
   display: flex;
   justify-content: flex-end;
   pointer-events: none;
@@ -55,10 +73,13 @@ a {
   width: 38px;
   height: 38px;
   place-items: center;
-  border: 1px solid rgba(245, 217, 145, 0.32);
+  border: 1px solid rgba(245, 217, 145, 0.46);
   border-radius: 50%;
-  background: rgba(2, 17, 16, 0.68);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  background:
+    linear-gradient(145deg, rgba(28, 62, 54, 0.88), rgba(2, 18, 17, 0.9));
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.34),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07);
   color: rgba(255, 246, 219, 0.86);
   font-family: Georgia, serif;
   font-size: 1.35rem;
@@ -75,10 +96,10 @@ a {
 }
 
 .table-status-stack {
-  position: fixed;
+  position: absolute;
   z-index: 45;
-  top: max(8px, env(safe-area-inset-top));
-  left: max(2.5vw, env(safe-area-inset-left));
+  top: 8px;
+  left: 32px;
   display: grid;
   justify-items: start;
   pointer-events: none;
@@ -88,20 +109,25 @@ a {
   display: grid;
   box-sizing: content-box;
   width: fit-content;
-  gap: 7px;
-  padding: 8px;
-  border: 1px solid rgba(235, 201, 118, 0.56);
-  border-radius: 9px;
-  background: linear-gradient(145deg, rgba(7, 29, 38, 0.96), rgba(3, 20, 22, 0.93));
-  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.22), inset 0 0 0 2px rgba(255, 255, 255, 0.035);
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(235, 201, 118, 0.62);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 18% 0, rgba(53, 112, 96, 0.2), transparent 45%),
+    linear-gradient(145deg, rgba(7, 31, 32, 0.97), rgba(2, 17, 18, 0.95));
+  box-shadow:
+    0 7px 18px rgba(0, 0, 0, 0.36),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.045),
+    inset 0 1px 0 rgba(255, 235, 183, 0.1);
   color: #f8edcf;
 }
 
 .match-type-label {
   margin: 7px 0 0 8px;
   color: #f2d58d;
-  font-family: "Playweft Mahjong Shodo", "FZKai-Z03", STKaiti, KaiTi, serif;
-  font-size: clamp(1.7rem, 3.2vw, 2.45rem);
+  font-family: "Playweft Mahjong Xingshu", "FZKai-Z03", STKaiti, KaiTi, serif;
+  font-size: 39px;
   font-weight: 400;
   letter-spacing: 0.08em;
   line-height: 0.95;
@@ -111,9 +137,9 @@ a {
 .dora-list {
   display: flex;
   width: max-content;
-  /* The 3D racks leave 0.035 units beside a 0.75-unit tile: ~1px at 22px. */
+  /* Match the narrow physical gap used by the 3D racks. */
   gap: 1px;
-  min-height: 33px;
+  min-height: 44px;
   align-items: flex-start;
 }
 
@@ -122,7 +148,7 @@ a {
   justify-content: space-between;
   gap: 8px;
   color: rgba(238, 240, 224, 0.78);
-  font-size: clamp(0.61rem, 1vw, 0.7rem);
+  font-size: 15px;
   font-weight: 650;
 }
 
@@ -134,12 +160,12 @@ a {
 .dora-list .mahjong-tile {
   display: block;
   box-sizing: border-box;
-  width: 22px;
-  height: 31px;
-  flex: 0 0 22px;
+  width: 30px;
+  height: 42px;
+  flex: 0 0 30px;
   border: 1px solid rgba(121, 116, 96, 0.72);
   border-radius: 3px;
-  background-color: #e9e3cf;
+  background-color: #e7e7e4;
   background-image: url("./assets/tiles/riichi-faces.webp");
   background-position:
     calc(var(--tile-column) * 100% / 7)
@@ -151,7 +177,7 @@ a {
 .dora-list .tile-back {
   position: relative;
   border-color: rgba(15, 65, 132, 0.9);
-  background-color: #1b63b7;
+  background-color: #1b569c;
   background-image: linear-gradient(
     145deg,
     rgba(255, 255, 255, 0.13),
@@ -169,7 +195,7 @@ a {
 }
 
 .dora-list .mahjong-tile > * {
-  position: fixed;
+  position: absolute;
   width: 1px;
   height: 1px;
   overflow: hidden;
@@ -188,10 +214,22 @@ a {
   position: absolute;
   inset: 0;
   overflow: hidden;
+  isolation: isolate;
   background:
-    radial-gradient(circle at 50% 28%, transparent 18%, rgba(0, 8, 8, 0.3) 86%),
-    linear-gradient(rgba(0, 13, 11, 0.25), rgba(0, 8, 8, 0.46)),
+    radial-gradient(ellipse at 50% 6%, rgba(215, 157, 84, 0.1), transparent 42%),
+    linear-gradient(90deg, rgba(14, 6, 3, 0.12), transparent 18% 82%, rgba(14, 6, 3, 0.12)),
     url("./assets/moonlit-table-v3.jpg") center / cover no-repeat;
+}
+
+.table-shell::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(2, 10, 9, 0.04), transparent 24% 76%, rgba(1, 7, 7, 0.12)),
+    radial-gradient(ellipse at center, transparent 52%, rgba(0, 5, 5, 0.18) 100%);
+  content: "";
+  pointer-events: none;
 }
 
 .table-rim {
@@ -215,6 +253,7 @@ a {
   display: block;
   width: 100%;
   height: 100%;
+  touch-action: none;
 }
 
 /* These nodes mirror the Three.js scene for screen readers and live announcements. */
@@ -223,7 +262,7 @@ a {
 .discard-river,
 .table-console,
 .own-hand {
-  position: fixed !important;
+  position: absolute !important;
   width: 1px !important;
   height: 1px !important;
   margin: -1px !important;
@@ -239,59 +278,102 @@ a {
   position: absolute;
   z-index: 43;
   display: grid;
-  width: clamp(76px, 8vw, 96px);
+  width: 104px;
   justify-items: center;
   color: #fff8e6;
-  filter: drop-shadow(0 8px 8px rgba(0, 0, 0, 0.34));
+  filter: drop-shadow(0 9px 10px rgba(0, 0, 0, 0.42));
   pointer-events: none;
 }
 
 .player-station::before {
-  width: clamp(50px, 5.8vw, 70px);
+  width: 78px;
   aspect-ratio: 1;
-  border: 2px solid rgba(224, 195, 119, 0.7);
-  border-radius: 10px;
+  border: 2px solid rgba(235, 207, 139, 0.82);
+  border-radius: 12px;
   background-image: url("./assets/player-portraits-v1.jpg");
   background-repeat: no-repeat;
   background-size: 200% 200%;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 0 0 2px rgba(3, 24, 22, 0.94),
+    0 0 0 3px rgba(222, 183, 91, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16);
   filter: brightness(1.1) saturate(1.04);
   content: "";
 }
 
 .player-station > span:not(.wind-badge) {
+  position: relative;
+  z-index: 2;
   display: grid;
   width: 100%;
   justify-items: center;
-  margin-top: 2px;
-  padding: 3px 5px;
-  border-radius: 3px;
-  background: rgba(2, 18, 17, 0.9);
+  margin-top: 5px;
+  padding: 5px 7px;
+  border: 1px solid rgba(222, 190, 111, 0.18);
+  border-radius: 7px;
+  background:
+    linear-gradient(180deg, rgba(8, 38, 34, 0.96), rgba(1, 17, 16, 0.94));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.055);
 }
 
-.player-station strong { font-size: clamp(0.62rem, 1vw, 0.76rem); }
-.player-station small { color: rgba(245, 239, 215, 0.64); font-size: clamp(0.5rem, 0.8vw, 0.61rem); }
+.player-station strong { font-size: 16px; }
+.player-station small { color: rgba(245, 239, 215, 0.64); font-size: 12px; }
 
 .wind-badge {
   position: absolute;
-  top: 3px;
-  right: 4px;
+  z-index: 2;
+  top: 1px;
+  right: 1px;
   display: grid;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   place-items: center;
-  border-radius: 6px;
-  background: #ead7a5;
+  border: 1px solid rgba(92, 62, 20, 0.42);
+  border-radius: 50%;
+  background: linear-gradient(145deg, #fff0bf, #cfad63);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.34);
   color: #46351e;
-  font-size: 0.68rem;
+  font-size: 13px;
   font-weight: 900;
 }
 
-.player-station.is-active::before { border-color: #ffe38c; box-shadow: 0 0 14px rgba(255, 205, 89, 0.48); }
-.player-bottom { bottom: 21%; left: 26%; }
-.player-right { top: 32%; right: 2.5%; }
-.player-top { top: 4%; right: 24%; }
-.player-left { top: 32%; left: 2.5%; }
+.player-station.is-active::before {
+  border-color: #ffe492;
+  box-shadow:
+    0 0 0 2px rgba(44, 29, 7, 0.9),
+    0 0 0 3px rgba(255, 223, 128, 0.52),
+    0 0 18px rgba(255, 201, 74, 0.48),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+.platform-player-avatar {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 50%;
+  width: 78px;
+  aspect-ratio: 1;
+  border: 2px solid rgba(235, 207, 139, 0.82);
+  border-radius: 12px;
+  background: #092725;
+  box-shadow:
+    0 0 0 2px rgba(3, 24, 22, 0.94),
+    0 0 0 3px rgba(222, 183, 91, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  object-fit: cover;
+  transform: translateX(-50%);
+}
+.player-station.is-active .platform-player-avatar {
+  border-color: #ffe38c;
+  box-shadow:
+    0 0 0 2px rgba(44, 29, 7, 0.9),
+    0 0 0 3px rgba(255, 223, 128, 0.52),
+    0 0 18px rgba(255, 201, 74, 0.48);
+}
+.platform-player-avatar[hidden] { display: none; }
+.player-bottom { bottom: 151px; left: 325px; }
+.player-right { top: 223px; right: 24px; }
+.player-top { top: 22px; right: 299px; }
+.player-left { top: 223px; left: 24px; }
 .player-bottom::before { background-position: 0 0; }
 .player-right::before { background-position: 100% 0; }
 .player-top::before { background-position: 0 100%; }
@@ -300,8 +382,8 @@ a {
 .player-dock {
   position: absolute;
   z-index: 55;
-  right: max(24px, env(safe-area-inset-right));
-  bottom: clamp(112px, 14vh, 142px);
+  right: var(--mahjong-action-right);
+  bottom: 128px;
   left: auto;
   display: flex;
   justify-content: flex-end;
@@ -310,8 +392,8 @@ a {
 
 .action-bar {
   display: flex;
-  min-height: clamp(30px, 5.5vh, 36px);
-  max-width: min(94vw, 960px);
+  min-height: 48px;
+  max-width: 960px;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
@@ -320,7 +402,8 @@ a {
 }
 
 #action-hint {
-  position: fixed;
+  position: absolute;
+  bottom: 116px;
   width: 1px;
   height: 1px;
   overflow: hidden;
@@ -350,7 +433,7 @@ a {
 }
 
 .claim-choice-layer {
-  position: fixed;
+  position: absolute;
   z-index: 84;
   inset: 0;
   background: transparent;
@@ -361,13 +444,13 @@ a {
 }
 
 .claim-choice-popover {
-  position: fixed;
+  position: absolute;
   z-index: 85;
-  right: max(24px, env(safe-area-inset-right));
-  bottom: clamp(154px, 21vh, 210px);
+  right: var(--mahjong-action-right);
+  bottom: 154px;
   display: grid;
   width: max-content;
-  max-width: min(350px, calc(100vw - 32px));
+  max-width: 350px;
   gap: 8px;
   padding: 10px;
   border: 1px solid rgba(239, 207, 132, 0.62);
@@ -425,25 +508,40 @@ a {
 }
 
 .tile-claim-choice > * {
-  position: fixed;
+  position: absolute;
   width: 1px;
   height: 1px;
   overflow: hidden;
   clip-path: inset(50%);
 }
 
-.action-bar button,
-.result-panel button {
-  min-width: clamp(58px, 10vh, 72px);
-  min-height: clamp(30px, 5.5vh, 36px);
-  padding: clamp(6px, 1.2vh, 8px) clamp(11px, 2vh, 15px);
+.action-bar button {
+  min-width: 88px;
+  min-height: 48px;
+  padding: 2px 20px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 999px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.045));
   box-shadow: 0 5px 14px rgba(0, 0, 0, 0.24);
   color: #f8f2df;
   cursor: pointer;
-  font-size: clamp(0.7rem, 1vw, 0.82rem);
+  font-family: "Playweft Mahjong Xingshu", "FZKai-Z03", STKaiti, KaiTi, serif;
+  font-size: 40px;
+  font-weight: 700;
+  font-synthesis: weight;
+  line-height: 1;
+  transition: transform 140ms ease, filter 140ms ease, border-color 140ms ease;
+}
+
+.result-panel button {
+  min-width: 80px;
+  min-height: 42px;
+  padding: 10px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.24);
+  cursor: pointer;
+  font-size: 15px;
   font-weight: 800;
   transition: transform 140ms ease, filter 140ms ease, border-color 140ms ease;
 }
@@ -459,23 +557,32 @@ a {
   cursor: default;
 }
 
-#discard-button:disabled {
-  display: none;
+#pass-button {
+  border-color: #62696c;
+  background: linear-gradient(145deg, #444a4d, #24282a);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.32), inset 0 1px #686f72;
+  color: #f2f3f3;
 }
 
-.action-bar .primary-action,
 .action-bar .claim-action {
   border-color: #e4c46f;
   background: linear-gradient(145deg, #f5db93, #bc8c39);
   color: #34250e;
 }
 
-.action-bar .gold-action,
-.action-bar .claim-ron {
+.action-bar .gold-action {
   border-color: #fff0b1;
   background: linear-gradient(145deg, #fff0ad, #dc9632);
   box-shadow: 0 0 20px rgba(241, 190, 74, 0.36);
   color: #482a08;
+}
+
+.action-bar .win-action,
+.action-bar .claim-ron {
+  border-color: rgba(224, 120, 126, 0.78);
+  background: linear-gradient(145deg, #8d2e38, #4b1119);
+  box-shadow: 0 0 18px rgba(133, 26, 37, 0.34);
+  color: #fff1ea;
 }
 
 .result-panel {
@@ -484,9 +591,9 @@ a {
   top: 50%;
   left: 50%;
   display: grid;
-  width: min(86%, 430px);
+  width: min(92%, 540px);
   justify-items: center;
-  padding: 30px 32px;
+  padding: 24px 26px;
   border: 1px solid rgba(255, 222, 144, 0.68);
   border-radius: 22px;
   background:
@@ -512,38 +619,159 @@ a {
 }
 
 .result-panel > strong {
-  margin-top: 8px;
+  margin-top: 6px;
   font-family: "Songti SC", "Noto Serif SC", serif;
-  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  font-size: 34px;
 }
 
 .result-panel p {
-  margin: 8px 0 19px;
+  margin: 5px 0 13px;
   color: rgba(255, 255, 255, 0.62);
   font-size: 0.8rem;
 }
 
-.result-yaku {
+.result-hands {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.result-hand {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.result-hand > strong {
+  color: rgba(241, 211, 139, 0.9);
+  font-size: 0.68rem;
+  text-align: left;
+}
+
+.result-hand-tiles {
   display: flex;
-  max-height: min(22vh, 150px);
-  flex-wrap: wrap;
+  min-width: 0;
+  align-items: flex-end;
   justify-content: center;
-  gap: 6px;
-  margin: -7px 0 18px;
+  gap: 1px;
+  overflow-x: auto;
+  padding: 14px 0 6px;
+}
+
+.tile-result {
+  display: block;
+  box-sizing: border-box;
+  width: 22px;
+  height: 31px;
+  flex: 0 0 22px;
+  border: 1px solid rgba(116, 114, 104, 0.75);
+  border-radius: 3px;
+  background-color: #e7e7e4;
+  background-image: url("./assets/tiles/riichi-faces.webp");
+  background-position:
+    calc(var(--tile-column) * 100% / 7)
+    calc(var(--tile-row) * 100% / 4);
+  background-size: 800% 500%;
+  box-shadow: 0 2px 0 #9ea1a0, 0 3px 5px rgba(0, 0, 0, 0.28);
+}
+
+.tile-result > * {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.tile-result.is-winning-tile {
+  margin-left: 6px;
+  border-color: rgba(218, 82, 82, 0.76);
+}
+
+.result-meld {
+  position: relative;
+  display: block;
+  width: var(--result-meld-width);
+  height: 31px;
+  flex: 0 0 var(--result-meld-width);
+  margin-left: 6px;
+}
+
+.result-meld.has-stacked-tile {
+  height: 42px;
+}
+
+.result-meld .tile-result {
+  position: absolute;
+  bottom: 0;
+  left: var(--result-meld-x);
+  transform: translateX(-50%);
+  transform-origin: center;
+}
+
+.result-meld .tile-result.is-sideways {
+  bottom: -4.5px;
+  transform: translateX(-50%) rotate(90deg);
+}
+
+.result-meld .tile-result.is-stacked {
+  bottom: 11px;
+  z-index: 2;
+}
+
+.result-meld .tile-result.is-sideways.is-stacked {
+  bottom: 6.5px;
+}
+
+.result-meld .tile-result.is-face-down {
+  border-color: rgba(15, 65, 132, 0.9);
+  background-color: #1b569c;
+  background-image: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.13),
+    transparent 44%,
+    rgba(3, 29, 73, 0.16)
+  );
+}
+
+.result-yaku {
+  display: grid;
+  width: 100%;
+  max-height: 170px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 8px;
+  margin: 0 0 16px;
   overflow: auto;
 }
 
 .result-yaku span {
-  padding: 4px 8px;
+  display: flex;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
+  border-radius: 7px;
   background: rgba(255, 255, 255, 0.07);
   color: rgba(255, 255, 255, 0.78);
   font-size: 0.67rem;
 }
 
-.result-yaku b {
-  width: 100%;
+.result-yaku span i {
+  overflow: hidden;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-yaku span b {
+  flex: 0 0 auto;
+  color: #f2d17d;
+}
+
+.result-yaku .result-delta {
+  grid-column: 1 / -1;
   margin-top: 5px;
   color: var(--gold);
   font-size: 0.7rem;
@@ -557,7 +785,7 @@ a {
 
 .setup-panel,
 .loading-panel {
-  position: fixed;
+  position: absolute;
   z-index: 110;
   inset: 0;
   display: grid;
@@ -580,7 +808,8 @@ a {
 .setup-card {
   position: relative;
   display: grid;
-  width: min(92vw, 440px);
+  width: 440px;
+  max-height: 690px;
   gap: 10px;
   padding: 31px;
   border: 1px solid rgba(242, 207, 124, 0.48);
@@ -729,30 +958,6 @@ a {
 .loading-panel.is-error .loading-mark {
   animation: none;
   filter: grayscale(0.7);
-}
-
-@media (max-height: 690px) {
-  .player-dock { bottom: 88px; }
-  #action-hint { bottom: 92px; }
-  .setup-card { max-height: calc(100vh - 30px); padding: 22px; overflow-y: auto; }
-}
-
-@media (max-height: 500px) {
-  .table-control { width: 34px; height: 34px; font-size: 1.1rem; }
-  .action-bar { gap: 6px; }
-  .claim-actions { gap: 5px; }
-}
-
-@media (max-width: 760px) {
-  .table-control { width: 34px; height: 34px; font-size: 1.15rem; }
-  .player-dock { right: 10px; }
-  .action-bar button { min-width: 55px; padding-right: 10px; padding-left: 10px; }
-}
-
-@media (orientation: portrait) {
-  .player-dock { bottom: 18%; }
-  #action-hint { bottom: calc(18% + 4px); }
-  .action-bar { max-width: calc(100vw - 16px); flex-wrap: wrap; }
 }
 
 @media (prefers-reduced-motion: reduce) {

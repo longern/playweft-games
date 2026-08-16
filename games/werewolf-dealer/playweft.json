@@ -12,9 +12,9 @@
   "name_localized": {
     "zh-CN": "狼人杀发牌器"
   },
-  "description": "Deal configurable secret-role presets locally on one phone or in an online room.",
+  "description": "Deal secret roles, debate, vote, and uncover the hidden werewolves.",
   "description_localized": {
-    "zh-CN": "支持单机或在线房间自选版型、配置身份池并分配隐藏角色。"
+    "zh-CN": "抽取隐藏身份，轮流发言投票，找出潜伏的狼人。"
   },
   "categories": [
     "Party"

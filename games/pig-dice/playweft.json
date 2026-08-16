@@ -12,9 +12,9 @@
   "name_localized": {
     "zh-CN": "贪心骰子"
   },
-  "description": "Roll, bank, and race to 50 without losing your turn total.",
+  "description": "Roll for points, bank them in time, and beware of losing the turn's haul.",
   "description_localized": {
-    "zh-CN": "掷骰累积分数，见好就收，率先到达 50 分。"
+    "zh-CN": "掷骰冲分，见好就收，小心一掷清零。"
   },
   "categories": [
     "Quick match"

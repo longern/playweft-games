@@ -12,9 +12,9 @@
   "name_localized": {
     "zh-CN": "麻将"
   },
-  "description": "Play a scored local riichi mahjong match against three AI opponents.",
+  "description": "Draw, call, declare riichi, and chase a winning hand in Japanese mahjong.",
   "description_localized": {
-    "zh-CN": "在浏览器内运行 Lua 规则，与三名简单 AI 完成东风场或半庄日麻对局。"
+    "zh-CN": "摸牌、鸣牌、立直和牌，来一场紧张刺激的日式麻将。"
   },
   "categories": [
     "Table game"

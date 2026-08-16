@@ -12,9 +12,9 @@
   "name_localized": {
     "zh-CN": "UNO"
   },
-  "description": "Match colours and numbers to empty your hand before everyone else.",
+  "description": "Match colours or numbers and use action cards to turn the game around.",
   "description_localized": {
-    "zh-CN": "匹配颜色或数字，善用功能牌，抢先打完所有手牌。"
+    "zh-CN": "颜色或数字对上就能出牌，功能牌随时让局势反转。"
   },
   "categories": [
     "Card game"

@@ -4,25 +4,39 @@ import { test } from "node:test";
 import { Euler, PerspectiveCamera, Vector3 } from "three";
 import {
   AUTO_RIICHI_DISCARD_DELAY_MS,
+  CLAIM_LABELS,
   DORA_INDICATOR_SLOT_COUNT,
+  HAND_END_PRESENTATION_DELAY_MS,
 } from "../games/mahjong/constants.js";
 import {
   automaticRiichiDiscard,
   claimPreviewTiles,
   doraIndicatorSlots,
+  exhaustiveDrawPresentation,
   opponentHandLayout,
   orderedHand,
   partitionClaimActions,
-  splitDrawnTile,
+  splitRevealedHand,
 } from "../games/mahjong/game-format.js";
 import {
+  fixedViewportScale,
+  MAHJONG_VIEWPORT,
+} from "../games/mahjong/fixed-viewport.js";
+import {
   handTransform,
+  MELD_GROUP_GAP,
+  MELD_HAND_CLEARANCE,
   MELD_SCALE,
   meldDisplayLayout,
+  meldRightExtension,
+  OPPONENT_MELD_HAND_CLEARANCE,
   meldTransform,
   ownHandOverlayTransform,
-  ownMeldOverlayTransform,
+  OWN_HAND_DRAG,
   OWN_HAND_LAYOUT,
+  PLAYFIELD_CENTRE_Z,
+  RIICHI_TILE_ACROSS_EXTRA,
+  RIVER_CORNER_GAP,
   riverTransform,
   SEAT_YAW,
   TILE_PHYSICAL_MM,
@@ -38,7 +52,54 @@ import {
   TILE_EDGE_RADIUS,
   TILE_EDGE_SEGMENTS,
 } from "../games/mahjong/render/three-tile-factory.js";
+import {
+  prepareTableConsoleContext,
+  TABLE_CONSOLE_LAYOUT,
+  TABLE_CONSOLE_SCORE_LAYOUT,
+} from "../games/mahjong/render/three-console.js";
+import {
+  ACTION_CALLOUT_DURATION_MS,
+  ACTION_CALLOUT_SIZE,
+  ACTION_CALLOUT_TARGETS,
+  actionCalloutDescriptor,
+  actionCalloutKey,
+} from "../games/mahjong/render/three-callout.js";
 import { TABLE_GEOMETRY } from "../games/mahjong/render/three-table.js";
+
+function projectedStandingTileBounds(position, index, camera, viewport) {
+  const transform = handTransform(position, index, 13);
+  const cos = Math.cos(transform.yaw);
+  const sin = Math.sin(transform.yaw);
+  const points = [];
+  for (const localX of [-TILE_SIZE.width / 2, TILE_SIZE.width / 2]) {
+    for (const localY of [-TILE_SIZE.height / 2, TILE_SIZE.height / 2]) {
+      for (const localZ of [-TILE_SIZE.depth / 2, TILE_SIZE.depth / 2]) {
+        const point = new Vector3(
+          transform.x + localX * cos + localZ * sin,
+          transform.y + localY,
+          transform.z - localX * sin + localZ * cos,
+        ).project(camera);
+        points.push({
+          x: (point.x + 1) * viewport.width / 2,
+          y: (1 - point.y) * viewport.height / 2,
+        });
+      }
+    }
+  }
+  return {
+    left: Math.min(...points.map((point) => point.x)),
+    right: Math.max(...points.map((point) => point.x)),
+    top: Math.min(...points.map((point) => point.y)),
+    bottom: Math.max(...points.map((point) => point.y)),
+  };
+}
+
+function rectanglesOverlap(left, right) {
+  return left.left < right.right
+    && left.right > right.left
+    && left.top < right.bottom
+    && left.bottom > right.top;
+}
 
 test("mahjong maps every standard and red-five face to the atlas", () => {
   assert.equal(TILE_FACE_NAMES.length, 37);
@@ -75,8 +136,8 @@ test("mahjong table is a perspective 3D surface that surrounds every tile zone",
     width: 28,
     depth: 25,
     centreZ: -1.5,
-    railWidth: 0.78,
-    railHeight: 0.5,
+    railWidth: 0.96,
+    railHeight: 0.58,
     baseHeight: 0.42,
   });
   const renderer = readFileSync(
@@ -85,9 +146,10 @@ test("mahjong table is a perspective 3D surface that surrounds every tile zone",
   );
   assert.match(renderer, /new ThreeMahjongTable/);
   assert.match(renderer, /CAMERA_POSITION = Object\.freeze\(\{ x: 0, y: 15\.558, z: 15\.908 \}\)/);
+  assert.match(renderer, /felt-skin-moonwave-v1\.jpg\?url/);
   assert.match(renderer, /felt-texture-v1\.jpg\?url/);
-  assert.match(renderer, /new SpotLight\(0xffedcf, 115, 46, 0\.93, 0\.74, 1\.35\)/);
-  assert.match(renderer, /new SpotLight\(0xffedcf, 60, 46, 0\.93, 0\.74, 1\.35\)/);
+  assert.match(renderer, /new SpotLight\(0xffedcf, 62, 46, 0\.96, 0\.86, 1\.35\)/);
+  assert.match(renderer, /new SpotLight\(0xffedcf, 28, 46, 0\.96, 0\.86, 1\.35\)/);
   assert.match(renderer, /overhead\.position\.set\(0, 16, -1\.5\)/);
   assert.match(renderer, /overhead\.target\.position\.set\(0, 0, -1\.5\)/);
   assert.doesNotMatch(renderer, /ShadowMaterial|addShadowReceiver/);
@@ -114,18 +176,32 @@ test("mahjong restores its canvas overlay after mobile suspension", () => {
   assert.match(main, /visualRenderer\.resume\(\)/);
   assert.match(renderer, /addEventListener\("webglcontextrestored", this\.onContextRestored\)/);
   assert.match(renderer, /this\.tableConsole\.restore\(this\.state, this\.ui\)/);
+  assert.match(renderer, /if \(viewportChanged && this\.ready && this\.state && this\.ui\)/);
+  assert.match(renderer, /this\.render\(this\.state, \[\], this\.ui\)/);
   assert.match(tableConsole, /restore\(state, ui\) \{[^}]*this\.texture\.needsUpdate = true/s);
+});
+
+test("mahjong rebuilds the table-console canvas transform before every redraw", () => {
+  const calls = [];
+  const context = {
+    clearRect(...args) {
+      calls.push(["clearRect", ...args]);
+    },
+    setTransform(...args) {
+      calls.push(["setTransform", ...args]);
+    },
+  };
+  prepareTableConsoleContext(context, { width: 1280, height: 1104 });
+  assert.deepEqual(calls, [
+    ["setTransform", 1, 0, 0, 1, 0, 0],
+    ["clearRect", 0, 0, 1280, 1104],
+    ["setTransform", 2, 0, 0, 2, 0, 0],
+  ]);
 });
 
 test("mahjong keeps the 13-tile rack stable and moves the drawn tile to the end", () => {
   const rack = [5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49, 53];
-  const handWithSortedDraw = [...rack.slice(0, 4), 18, ...rack.slice(4)];
-
-  assert.deepEqual(splitDrawnTile(handWithSortedDraw, 18), {
-    rack,
-    drawn: 18,
-  });
-  assert.deepEqual(orderedHand(handWithSortedDraw, 18), [...rack, 18]);
+  assert.deepEqual(orderedHand(rack, 18), [...rack, 18]);
 
   const firstRackTile = ownHandOverlayTransform(0, 1280, 588);
   const firstRackTileAfterDraw = ownHandOverlayTransform(0, 1280, 588, { drawn: false });
@@ -166,9 +242,8 @@ test("mahjong puts a post-call draw in the slot after the shortened rack", () =>
 
   const rackEnd = ownHandOverlayTransform(9, 1280, 720);
   const drawn = ownHandOverlayTransform(10, 1280, 720, { drawn: true });
-  const meld = ownMeldOverlayTransform(0, 1280, 720);
   assert.ok(drawn.x > rackEnd.x);
-  assert.ok(meld.x > drawn.x);
+  assert.doesNotMatch(renderer, /ownMeldOverlayTransform|addOwnMeldTile/);
 });
 
 test("mahjong preserves hand order when there is no current drawn tile", () => {
@@ -178,7 +253,7 @@ test("mahjong preserves hand order when there is no current drawn tile", () => {
 
 test("mahjong keeps opponent rack slots fixed while showing a separated drawn tile", () => {
   const idle = opponentHandLayout(13, 0, false);
-  const afterDraw = opponentHandLayout(14, 0, true);
+  const afterDraw = opponentHandLayout(13, 0, true);
   assert.deepEqual(idle, {
     rackCapacity: 13,
     rackCount: 13,
@@ -195,7 +270,7 @@ test("mahjong keeps opponent rack slots fixed while showing a separated drawn ti
       handTransform(position, 0, afterDraw.rackCapacity),
     );
   }
-  assert.deepEqual(opponentHandLayout(11, 1, true), {
+  assert.deepEqual(opponentHandLayout(10, 1, true), {
     rackCapacity: 10,
     rackCount: 10,
     hasDrawn: true,
@@ -205,7 +280,7 @@ test("mahjong keeps opponent rack slots fixed while showing a separated drawn ti
     rackCount: 11,
     hasDrawn: false,
   });
-  assert.deepEqual(opponentHandLayout(2, 4, true), {
+  assert.deepEqual(opponentHandLayout(1, 4, true), {
     rackCapacity: 1,
     rackCount: 1,
     hasDrawn: true,
@@ -263,14 +338,230 @@ test("mahjong groups every chi behind one action and previews only the two consu
   assert.match(view, /if \(event\.target === layer\) setOpen\(false\)/);
   assert.match(view, /if \(event\.key === "Escape"\) setOpen\(false\)/);
   assert.match(view, /createTile\(tile\.type, "claim-choice", tile\.red\)/);
-  assert.match(styles, /\.claim-choice-layer \{[^}]*position: fixed;[^}]*inset: 0;[^}]*background: transparent/s);
+  assert.match(styles, /\.claim-choice-layer \{[^}]*position: absolute;[^}]*inset: 0;[^}]*background: transparent/s);
   assert.match(styles, /\.claim-choice-popover \{/);
   assert.match(styles, /\.tile-claim-choice \{[^}]*width: 25px;[^}]*height: 35px/s);
 });
 
+test("mahjong keeps action labels compact and gives wins a dark-red treatment", () => {
+  const html = readFileSync(
+    new URL("../games/mahjong/index.html", import.meta.url),
+    "utf8",
+  );
+  const styles = readFileSync(
+    new URL("../games/mahjong/styles.css", import.meta.url),
+    "utf8",
+  );
+
+  assert.equal(CLAIM_LABELS.kan, "杠");
+  assert.equal(CLAIM_LABELS.ankan, "杠");
+  assert.equal(CLAIM_LABELS.kakan, "杠");
+  assert.equal(CLAIM_LABELS.ron, "和");
+  assert.match(html, /id="abort-button"[^>]*>流局<\/button>/);
+  assert.match(html, /id="tsumo-button" class="win-action"[^>]*>自摸<\/button>/);
+  assert.doesNotMatch(html, /id="discard-button"/);
+  assert.match(styles, /\.action-bar \{[^}]*min-height: 48px/s);
+  assert.match(styles, /\.action-bar button \{[^}]*min-width: 88px;[^}]*min-height: 48px;[^}]*padding: 2px 20px;[^}]*Playweft Mahjong Xingshu[^}]*font-size: 40px;[^}]*font-weight: 700;[^}]*font-synthesis: weight/s);
+  assert.ok(40 * fixedViewportScale(1280, 588) >= 26);
+  assert.match(styles, /\.action-bar \.win-action,\s*\.action-bar \.claim-ron \{[^}]*#8d2e38[^}]*#4b1119/s);
+  assert.match(styles, /#pass-button \{[^}]*background: linear-gradient\(145deg, #444a4d, #24282a\)/s);
+});
+
+test("mahjong shows oversized non-perspective callouts for claims, riichi, and wins", () => {
+  assert.deepEqual(
+    actionCalloutDescriptor({ type: "claimed", kind: "chi", playerIndex: 2 }),
+    { label: "吃", color: "#f1b84b", glow: "#ffd985", action: "chi", playerIndex: 2 },
+  );
+  assert.equal(
+    actionCalloutDescriptor({ type: "claim_declared", kind: "pon", playerIndex: 1 }),
+    null,
+  );
+  assert.equal(actionCalloutDescriptor({ type: "claimed", kind: "pon" }).label, "碰");
+  assert.equal(actionCalloutDescriptor({ type: "claimed", kind: "kan" }).label, "杠");
+  assert.equal(actionCalloutDescriptor({ type: "riichi", playerIndex: 4 }).label, "立直");
+  assert.equal(actionCalloutDescriptor({ type: "won", method: "ron" }).label, "和");
+  assert.equal(actionCalloutDescriptor({ type: "won", method: "tsumo" }).label, "自摸");
+  assert.equal(
+    actionCalloutKey(
+      { type: "claimed", kind: "pon", playerIndex: 3, fromIndex: 2, tile: 18 },
+      "1:2:24",
+    ),
+    "1:2:24:pon:3:2:18",
+  );
+  assert.ok(ACTION_CALLOUT_SIZE.fontSize >= 300);
+  assert.ok(ACTION_CALLOUT_SIZE.height >= 300);
+  assert.ok(ACTION_CALLOUT_DURATION_MS >= 700 && ACTION_CALLOUT_DURATION_MS <= 900);
+  assert.ok(ACTION_CALLOUT_TARGETS[1].y <= -160);
+  assert.ok(ACTION_CALLOUT_TARGETS[3].y >= 170);
+  assert.ok(ACTION_CALLOUT_TARGETS[2].x >= 350);
+  assert.ok(ACTION_CALLOUT_TARGETS[4].x <= -350);
+
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
+  );
+  const callout = readFileSync(
+    new URL("../games/mahjong/render/three-callout.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(renderer, /overlayScene\.add\(this\.actionCallout\.sprite\)/);
+  assert.match(renderer, /this\.actionCallout\.showLatest\(/);
+  assert.match(renderer, /delayHandRevealForCallout \? ACTION_CALLOUT_DURATION_MS \* 0\.64 : 0/);
+  assert.match(callout, /new CanvasTexture\(this\.canvas\)/);
+  assert.match(callout, /new Sprite\(this\.material\)/);
+  assert.match(callout, /Playweft Mahjong Xingshu/);
+});
+
+test("mahjong discards by dragging a hand tile above a fixed horizontal line", () => {
+  const html = readFileSync(
+    new URL("../games/mahjong/index.html", import.meta.url),
+    "utf8",
+  );
+  const main = readFileSync(
+    new URL("../games/mahjong/main.js", import.meta.url),
+    "utf8",
+  );
+  const view = readFileSync(
+    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    "utf8",
+  );
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
+  );
+  const styles = readFileSync(
+    new URL("../games/mahjong/styles.css", import.meta.url),
+    "utf8",
+  );
+  const hand = ownHandOverlayTransform(0, 1280, 720);
+  const handTop = 720 / 2 - hand.y - hand.tileHeight / 2;
+
+  assert.ok(OWN_HAND_DRAG.discardLineY < handTop - 60);
+  assert.ok(OWN_HAND_DRAG.activationDistance >= 6);
+  assert.ok(OWN_HAND_DRAG.guideWidth >= 800);
+  assert.doesNotMatch(html, /id="discard-button"/);
+  assert.doesNotMatch(main, /elements\.discard/);
+  assert.doesNotMatch(view, /elements\.discard/);
+  assert.match(view, /向上拖动手牌，越线后松手打出/);
+  assert.match(styles, /\.mahjong-three-canvas \{[^}]*touch-action: none/s);
+  assert.match(renderer, /addEventListener\("pointerdown", this\.onPointerDown\)/);
+  assert.match(renderer, /setPointerCapture\?\.\(event\.pointerId\)/);
+  assert.match(renderer, /this\.dragGuide\.visible = true/);
+  assert.match(renderer, /drag\.crossed = this\.viewport\.height \/ 2 - pointer\.y <= OWN_HAND_DRAG\.discardLineY/);
+  assert.match(renderer, /if \(crossed\) this\.callbacks\.onDiscardTile\(tileId\)/);
+});
+
+test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before results", () => {
+  const main = readFileSync(
+    new URL("../games/mahjong/main.js", import.meta.url),
+    "utf8",
+  );
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
+  );
+  const format = readFileSync(
+    new URL("../games/mahjong/game-format.js", import.meta.url),
+    "utf8",
+  );
+  const view = readFileSync(
+    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    "utf8",
+  );
+  const html = readFileSync(
+    new URL("../games/mahjong/index.html", import.meta.url),
+    "utf8",
+  );
+  const styles = readFileSync(
+    new URL("../games/mahjong/styles.css", import.meta.url),
+    "utf8",
+  );
+
+  assert.equal(HAND_END_PRESENTATION_DELAY_MS, 2400);
+  assert.match(main, /handRevealKey\(state\)/);
+  assert.match(main, /current\.abortiveReason === "九种九牌"/);
+  assert.match(main, /exhaustive-draw/);
+  assert.match(main, /revealPlayerIndices,/);
+  assert.match(main, /coveredPlayerIndices,/);
+  assert.match(main, /animateHandReveal: Boolean\(revealKey\) && !resultVisible/);
+  assert.match(renderer, /startHandReveal\(delay = 0\)/);
+  assert.match(renderer, /this\.revealTiles\.push\(\{ tile, delay: 0, covered \}\)/);
+  assert.doesNotMatch(renderer, /this\.revealTiles\.length \* 34/);
+  assert.match(renderer, /tile\.rotation\.x = \(covered \? 1 : -1\) \* Math\.PI \/ 2 \* eased/);
+  assert.match(format, /state\.abortiveReason === "九种九牌"/);
+  assert.match(format, /abortiveReveal\s*\? state\.abortiveTileRed/);
+  assert.match(renderer, /this\.addPresentedHand\(state, "bottom"/);
+  assert.match(html, /id="result-hands" class="result-hands"/);
+  assert.doesNotMatch(view, /你赢了/);
+  assert.match(styles, /\.result-yaku \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/s);
+  assert.match(styles, /\.tile-result\.is-winning-tile \{[^}]*margin-left: 6px/s);
+
+  assert.deepEqual(
+    exhaustiveDrawPresentation({
+      phase: "hand_ended",
+      draw: true,
+      result: { tenpai: [true, false, true, false] },
+    }),
+    { revealed: [1, 3], covered: [2, 4] },
+  );
+  assert.deepEqual(
+    exhaustiveDrawPresentation({
+      phase: "hand_ended",
+      draw: true,
+      result: { abortive: true, tenpai: [true, false, true, false] },
+    }),
+    { revealed: [], covered: [] },
+  );
+  assert.match(renderer, /concealed: covered/);
+  assert.match(renderer, /settlePresentedTile\(tile, covered\)/);
+});
+
+test("mahjong leaves a ron tile in the river while revealing only the winner's original hand", () => {
+  const rack = Array.from({ length: 13 }, (_, index) => ({
+    type: (index % 9) + 1,
+    red: false,
+  }));
+  const baseState = {
+    players: ["winner", "right", "top", "left"],
+    revealedHands: { winner: rack },
+    winners: ["winner"],
+    winningTile: 18,
+    winningTileRed: true,
+  };
+
+  assert.deepEqual(
+    splitRevealedHand({ ...baseState, winType: "ron" }, "winner", 1),
+    { rack, drawn: null },
+  );
+  assert.deepEqual(
+    splitRevealedHand({ ...baseState, winType: "tsumo" }, "winner", 1),
+    { rack, drawn: { type: 18, red: true } },
+  );
+});
+
+test("mahjong result melds preserve call direction and kan presentation", () => {
+  const view = readFileSync(
+    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    "utf8",
+  );
+  const styles = readFileSync(
+    new URL("../games/mahjong/styles.css", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(view, /meldDisplayLayout\(meld, winnerIndex\)/);
+  assert.match(view, /\.map\(\(meld\) => createResultMeld\(meld, winnerIndex\)\)\s*\.reverse\(\)/);
+  assert.match(view, /classList\.toggle\("is-sideways", entry\.sideways\)/);
+  assert.match(view, /classList\.toggle\("is-stacked", entry\.stackLevel > 0\)/);
+  assert.match(view, /classList\.toggle\("is-face-down", entry\.faceDown\)/);
+  assert.match(styles, /\.result-meld \.tile-result\.is-sideways \{[^}]*rotate\(90deg\)/s);
+  assert.match(styles, /\.result-meld \.tile-result\.is-stacked \{[^}]*bottom: 11px/s);
+  assert.match(styles, /\.result-meld \.tile-result\.is-face-down \{[^}]*#1b569c/s);
+});
+
 test("mahjong automatically tsumogiri after riichi only when discard is the sole action", () => {
   const state = {
-    lastDrawn: 73,
+    drawnTile: 73,
     riichi: { player: true },
     legalActions: {
       canDiscard: true,
@@ -294,6 +585,10 @@ test("mahjong automatically tsumogiri after riichi only when discard is the sole
 });
 
 test("mahjong uses one standing 3D tile transform for all four seats", () => {
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
+  );
   const bottom = handTransform("bottom", 0, 13);
   const right = handTransform("right", 0, 13);
   const top = handTransform("top", 0, 13);
@@ -339,7 +634,41 @@ test("mahjong uses one standing 3D tile transform for all four seats", () => {
   assert.ok(riverTransform("left", 6).x < riverTransform("left", 0).x);
   assert.equal(riverTransform("bottom", 0, true).yaw, SEAT_YAW.bottom + Math.PI / 2);
   assert.equal(riverTransform("right", 0, true).yaw, SEAT_YAW.right + Math.PI / 2);
-  assert.ok(meldTransform("bottom", 0).x > 5.5);
+  const riichiColumn = 1;
+  const rowStart = riverTransform("bottom", 6, false, { riichiColumn });
+  const sideways = riverTransform("bottom", 7, true, { riichiColumn });
+  const afterRiichi = riverTransform("bottom", 8, false, { riichiColumn });
+  assert.equal(rowStart.x, riverTransform("bottom", 6).x);
+  assert.ok(Math.abs(
+    sideways.x - riverTransform("bottom", 7).x - RIICHI_TILE_ACROSS_EXTRA / 2,
+  ) < 1e-9);
+  assert.ok(Math.abs(
+    afterRiichi.x - riverTransform("bottom", 8).x - RIICHI_TILE_ACROSS_EXTRA,
+  ) < 1e-9);
+  assert.match(renderer, /const riichiColumns = new Map\(\)/);
+  assert.match(renderer, /riichiColumn: riichiColumns\.get\(Math\.floor\(index \/ 6\)\) \?\? -1/);
+  assert.ok(Math.abs(
+    (riverTransform("bottom", 0).z + riverTransform("top", 0).z) / 2
+      - PLAYFIELD_CENTRE_Z,
+  ) < 1e-9);
+  assert.ok(Math.abs(
+    (riverTransform("right", 0).z + riverTransform("right", 5).z) / 2
+      - PLAYFIELD_CENTRE_Z,
+  ) < 1e-9);
+  const bottomRight = riverTransform("bottom", 5);
+  const rightBottom = riverTransform("right", 0);
+  assert.ok(Math.abs(
+    rightBottom.x - TILE_SIZE.height / 2
+      - (bottomRight.x + TILE_SIZE.width / 2)
+      - RIVER_CORNER_GAP,
+  ) < 1e-9);
+  assert.ok(Math.abs(
+    bottomRight.z - TILE_SIZE.height / 2
+      - (rightBottom.z + TILE_SIZE.width / 2)
+      - RIVER_CORNER_GAP,
+  ) < 1e-9);
+  assert.equal(TABLE_CONSOLE_LAYOUT.centreZ, PLAYFIELD_CENTRE_Z);
+  assert.ok(meldTransform("bottom", 0).x > 4.4);
   assert.ok(meldTransform("bottom", 0).z > 6.5);
   assert.ok(meldTransform("right", 0).x > 7.2);
   assert.ok(meldTransform("right", 0).z < -6);
@@ -353,27 +682,169 @@ test("mahjong uses one standing 3D tile transform for all four seats", () => {
   assert.ok(meldTransform("left", 1).z < meldTransform("left", 0).z);
 });
 
-test("mahjong keeps own melds to the right of a fixed draw slot", () => {
+test("mahjong keeps opponent racks inside commercial safe lanes", () => {
   const viewport = { width: 1280, height: 720 };
-  const rackLeft = ownHandOverlayTransform(0, viewport.width, viewport.height);
-  const rackLeftAfterCall = ownHandOverlayTransform(0, viewport.width, viewport.height);
-  const drawnAfterCall = ownHandOverlayTransform(10, viewport.width, viewport.height, {
+  const camera = new PerspectiveCamera(33, viewport.width / viewport.height, 0.1, 80);
+  camera.position.set(0, 15.558, 15.908);
+  camera.lookAt(0, 0.05, 0.4);
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+
+  const racks = Object.fromEntries(["top", "left", "right"].map((position) => [
+    position,
+    Array.from({ length: 13 }, (_, index) =>
+      projectedStandingTileBounds(position, index, camera, viewport)),
+  ]));
+  assert.ok(Math.min(...racks.top.map((tile) => tile.top)) >= 16);
+
+  const avatarZones = {
+    top: { left: 884, right: 974, top: 20, bottom: 130 },
+    left: { left: 30, right: 122, top: 220, bottom: 340 },
+    right: { left: 1158, right: 1250, top: 220, bottom: 340 },
+  };
+  for (const position of ["top", "left", "right"]) {
+    assert.equal(
+      racks[position].some((tile) => rectanglesOverlap(tile, avatarZones[position])),
+      false,
+      `${position} rack overlaps its player station`,
+    );
+  }
+});
+
+test("mahjong renders every meld in the perspective table scene", () => {
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(renderer, /ownMeldOverlayTransform|addOwnMeldTile/);
+  assert.match(renderer, /this\.layers\.melds\.add\(slot\)/);
+  assert.ok(meldTransform("bottom", 0).x > 5.2);
+  assert.ok(meldTransform("bottom", 0).x < 5.4);
+  assert.ok(meldTransform("bottom", 1).x < meldTransform("bottom", 0).x);
+});
+
+test("mahjong keeps full-size four-kan bands clear of the last hand and drawn tile", () => {
+  const seats = [1, 2, 3, 4];
+  const positions = ["bottom", "right", "top", "left"];
+
+  for (const seat of seats) {
+    const melds = Array.from({ length: 4 }, (_, group) => ({
+      kind: "kan",
+      tiles: [group + 1, group + 1, group + 1, group + 1],
+      fromIndex: ((seat + group) % 4) + 1,
+      calledTileIndex: group % 4,
+    }));
+    const rightExtension = meldRightExtension(melds, seat);
+    let offset = 0;
+    let priorEnd = -Infinity;
+    for (const meld of melds) {
+      const display = meldDisplayLayout(meld, seat);
+      const start = offset + Math.min(...display.entries.map((entry) => entry.along));
+      const end = offset + display.span;
+      assert.ok(start > priorEnd, `${positions[seat - 1]} kan groups overlap`);
+      priorEnd = end;
+      offset += display.span + MELD_GROUP_GAP;
+    }
+    const clearance = seat === 1
+      ? MELD_HAND_CLEARANCE
+      : OPPONENT_MELD_HAND_CLEARANCE;
+    const available = melds.length * 3 * (TILE_SIZE.width + 0.035) - clearance;
+    assert.ok(rightExtension > 0);
+    assert.ok(offset - MELD_GROUP_GAP - rightExtension <= available + 1e-5);
+  }
+
+  assert.ok(OPPONENT_MELD_HAND_CLEARANCE > MELD_HAND_CLEARANCE);
+
+  assert.deepEqual(opponentHandLayout(1, 4, false), {
+    rackCapacity: 1,
+    rackCount: 1,
+    hasDrawn: false,
+  });
+  assert.deepEqual(opponentHandLayout(1, 4, true), {
+    rackCapacity: 1,
+    rackCount: 1,
+    hasDrawn: true,
+  });
+
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(renderer, /const rightExtension = meldRightExtension\(melds, seat\)/);
+  assert.match(renderer, /alongOffset \+ entry\.along - rightExtension/);
+  assert.match(renderer, /slot\.scale\.setScalar\(MELD_SCALE\)/);
+});
+
+test("mahjong side melds extend the physical centre line of their racks", () => {
+  for (const position of ["left", "right"]) {
+    const rackStart = handTransform(position, 0, 13);
+    const rackEnd = handTransform(position, 12, 13);
+    const meldStart = meldTransform(position, 0);
+    assert.ok(Math.abs(meldStart.x - rackStart.x) < 1e-9);
+    assert.ok(Math.abs(meldStart.x - rackEnd.x) < 1e-9);
+  }
+});
+
+test("mahjong reserves a full local draw slot before the perspective meld band", () => {
+  const viewport = { width: 1280, height: 720 };
+  const camera = new PerspectiveCamera(33, viewport.width / viewport.height, 0.1, 80);
+  camera.position.set(0, 15.558, 15.908);
+  camera.lookAt(0, 0.05, 0.4);
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+
+  const drawSlot = ownHandOverlayTransform(10, viewport.width, viewport.height, {
     drawn: true,
   });
-  const firstMeld = ownMeldOverlayTransform(0, viewport.width, viewport.height);
-  const nextMeldTile = ownMeldOverlayTransform(
-    TILE_SIZE.width * MELD_SCALE + 0.035,
-    viewport.width,
-    viewport.height,
-  );
+  const drawSlotRight = viewport.width / 2 + drawSlot.x + drawSlot.tileWidth / 2;
+  const display = meldDisplayLayout({ kind: "ankan", tiles: [14, 14, 14, 14] }, 1);
+  const meldLeft = Math.min(...display.entries.map((entry) => {
+    const transform = meldTransform("bottom", entry.along, { absolute: true });
+    const extent = (entry.sideways ? TILE_SIZE.height : TILE_SIZE.width) * MELD_SCALE;
+    const projected = new Vector3(
+      transform.x - extent / 2,
+      transform.y,
+      transform.z,
+    ).project(camera);
+    return (projected.x + 1) * viewport.width / 2;
+  }));
 
-  assert.equal(rackLeft.x, rackLeftAfterCall.x);
-  assert.ok(firstMeld.x > drawnAfterCall.x);
-  assert.ok(nextMeldTile.x < firstMeld.x);
-  assert.equal(
-    firstMeld.y - TILE_SIZE.height * firstMeld.scaleY / 2,
-    -viewport.height / 2 + OWN_HAND_LAYOUT.bottomInset,
+  assert.ok(meldLeft - drawSlotRight > drawSlot.tileWidth * 0.8);
+});
+
+test("mahjong aligns the action rail with the downstream third river row", () => {
+  const viewport = { width: 1280, height: 720 };
+  const camera = new PerspectiveCamera(33, viewport.width / viewport.height, 0.1, 80);
+  camera.position.set(0, 15.558, 15.908);
+  camera.lookAt(0, 0.05, 0.4);
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+
+  const points = [];
+  for (let index = 12; index < 18; index += 1) {
+    const transform = riverTransform("right", index);
+    const rotation = new Euler(-Math.PI / 2, transform.yaw, 0, "XYZ");
+    for (const x of [-TILE_SIZE.width / 2, TILE_SIZE.width / 2]) {
+      for (const y of [-TILE_SIZE.height / 2, TILE_SIZE.height / 2]) {
+        const point = new Vector3(x, y, 0)
+          .applyEuler(rotation)
+          .add(new Vector3(transform.x, transform.y, transform.z))
+          .project(camera);
+        points.push((point.x + 1) * viewport.width / 2);
+      }
+    }
+  }
+  const downstreamRiverEdge = Math.max(...points);
+  const actionRailRightEdge = viewport.width - 342;
+  assert.ok(Math.abs(actionRailRightEdge - downstreamRiverEdge) < 8);
+
+  const styles = readFileSync(
+    new URL("../games/mahjong/styles.css", import.meta.url),
+    "utf8",
   );
+  assert.match(styles, /--mahjong-action-right: 342px/);
+  assert.match(styles, /\.player-dock \{[^}]*right: var\(--mahjong-action-right\);[^}]*bottom: 128px/s);
+  assert.match(styles, /\.claim-choice-popover \{[^}]*right: var\(--mahjong-action-right\)/s);
 });
 
 test("mahjong melds point the called tile toward its source and preserve call order", () => {
@@ -419,13 +890,14 @@ test("mahjong melds point the called tile toward its source and preserve call or
   assert.deepEqual(concealedKan.entries.map(({ faceDown }) => faceDown), [true, false, false, true]);
 });
 
-test("mahjong uses a full-viewport table without a top status bar", () => {
+test("mahjong uses one fixed 16:9 logical viewport without a top status bar", () => {
   const html = readFileSync(
     new URL("../games/mahjong/index.html", import.meta.url),
     "utf8",
   );
   assert.doesNotMatch(html, /mahjong-header/);
   assert.doesNotMatch(html, /table-control-back|返回游戏列表/);
+  assert.match(html, /id="mahjong-viewport" class="mahjong-viewport"/);
   assert.match(html, /class="table-controls"/);
   assert.match(html, /class="table-status-semantic"/);
   const main = readFileSync(
@@ -447,13 +919,26 @@ test("mahjong uses a full-viewport table without a top status bar", () => {
     new URL("../games/mahjong/styles.css", import.meta.url),
     "utf8",
   );
-  assert.match(
-    styles,
-    /\.table-controls \{[^}]*max\(58px, calc\(env\(safe-area-inset-top\) \+ 12px\)\)/s,
+  assert.match(styles, /\.mahjong-app \{[^}]*overflow: hidden;[^}]*background: #000/s);
+  assert.match(styles, /\.mahjong-viewport \{[^}]*top: 50%;[^}]*left: 50%;[^}]*width: 1280px;[^}]*height: 720px;[^}]*transform: translate\(-50%, -50%\) scale\(var\(--mahjong-viewport-scale, 1\)\)/s);
+  assert.match(styles, /\.table-controls \{[^}]*position: absolute;[^}]*inset: 58px 14px auto 14px/s);
+  assert.doesNotMatch(styles, /\b(?:vw|vh|dvh)\b|safe-area-inset/);
+  assert.equal(MAHJONG_VIEWPORT.width, 1280);
+  assert.equal(MAHJONG_VIEWPORT.height, 720);
+  assert.equal(fixedViewportScale(844, 390), 390 / 720);
+  assert.equal(fixedViewportScale(1920, 1080), 1.5);
+  assert.equal(fixedViewportScale(1024, 768), 0.8);
+
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
   );
+  assert.match(renderer, /new PerspectiveCamera\(33, MAHJONG_VIEWPORT\.aspect/);
+  assert.match(renderer, /const \{ width, height, aspect \} = MAHJONG_VIEWPORT/);
+  assert.doesNotMatch(renderer, /clientWidth|clientHeight|aspect < 1\.5/);
 });
 
-test("mahjong renders the table console as a non-perspective canvas overlay", () => {
+test("mahjong renders the centre console as a perspective tabletop component", () => {
   const consoleRenderer = readFileSync(
     new URL("../games/mahjong/render/three-console.js", import.meta.url),
     "utf8",
@@ -464,18 +949,50 @@ test("mahjong renders the table console as a non-perspective canvas overlay", ()
   );
 
   assert.match(consoleRenderer, /new CanvasTexture\(this\.canvas\)/);
-  assert.match(consoleRenderer, /new PlaneGeometry\(142, 92\)/);
+  assert.match(consoleRenderer, /new RoundedBoxGeometry\(/);
+  assert.match(consoleRenderer, /new PlaneGeometry\(width, depth\)/);
+  assert.match(consoleRenderer, /this\.mesh\.rotation\.x = -Math\.PI \/ 2/);
+  assert.match(consoleRenderer, /this\.texture\.anisotropy = anisotropy/);
   assert.match(consoleRenderer, /rotation: Math\.PI \/ 2/);
-  assert.match(consoleRenderer, /\{ x: 320, y: 64, rotation: 0 \}/);
-  assert.doesNotMatch(consoleRenderer, /\{ x: 320, y: 64, rotation: Math\.PI \}/);
+  assert.match(consoleRenderer, /y: edgeInset,[^}]*rotation: 0/s);
+  assert.doesNotMatch(consoleRenderer, /y: edgeInset,[^}]*rotation: Math\.PI/s);
   assert.match(consoleRenderer, /rotation: -Math\.PI \/ 2/);
   assert.doesNotMatch(consoleRenderer, /本场|供托/);
-  assert.match(renderer, /this\.overlayScene\.add\(this\.tableConsole\.mesh\)/);
-  assert.doesNotMatch(renderer, /this\.scene\.add\(this\.tableConsole\.mesh\)/);
+  assert.match(renderer, /this\.scene\.add\(this\.tableConsole\.group\)/);
+  assert.doesNotMatch(renderer, /this\.overlayScene\.add\(this\.tableConsole/);
+  assert.ok(Math.abs(TABLE_CONSOLE_LAYOUT.width / TILE_SIZE.width - 5.8) < 1e-9);
+  assert.ok(Math.abs(TABLE_CONSOLE_LAYOUT.depth / TILE_SIZE.width - 5) < 1e-9);
+});
+
+test("mahjong centre console reserves an equal edge band for four riichi sticks", () => {
+  const layout = TABLE_CONSOLE_SCORE_LAYOUT;
+  const outerMargin = layout.stickEdgeInset
+    - layout.stickHeight / 2
+    - layout.panelBorderInset;
+  const innerMargin = layout.edgeInset
+    - layout.scoreFontSize / 2
+    - layout.stickEdgeInset
+    - layout.stickHeight / 2;
+  assert.ok(outerMargin > 15 && outerMargin < 16);
+  assert.ok(innerMargin > 9 && innerMargin < 10);
+  assert.ok(Math.abs(layout.stickWidth / 84 - layout.stickHeight / 12) < 1e-9);
+  assert.ok(layout.stickWidth >= layout.scoreFontSize * 2.6);
+  assert.ok(layout.stickWidth <= layout.scoreFontSize * 2.9);
+  assert.equal(layout.stickDotRadius, 7.2);
+  assert.ok(layout.stickEdgeInset - layout.stickHeight / 2 > layout.panelBorderInset);
+
+  const consoleRenderer = readFileSync(
+    new URL("../games/mahjong/render/three-console.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(consoleRenderer, /state\.riichi\?\.\[playerId\] === true/);
+  assert.match(consoleRenderer, /drawRiichiStick\(/);
+  assert.match(consoleRenderer, /context\.arc\(0, 0, stickDotRadius/);
+  assert.match(consoleRenderer, /760\} \$\{scoreFontSize\}px "Roboto Slab"/);
 });
 
 test("mahjong centre console leaves every three-row river visible", () => {
-  const viewport = { width: 1280, height: 588 };
+  const viewport = { width: MAHJONG_VIEWPORT.width, height: MAHJONG_VIEWPORT.height };
   const camera = new PerspectiveCamera(33, viewport.width / viewport.height, 0.1, 80);
   camera.position.set(0, 15.558, 15.908);
   camera.lookAt(0, 0.05, 0.4);
@@ -483,12 +1000,32 @@ test("mahjong centre console leaves every three-row river visible", () => {
   assert.ok(Math.abs(downwardAngle - Math.PI / 4) < 0.0001);
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
+  const consolePoints = [];
+  for (const x of [-TABLE_CONSOLE_LAYOUT.width / 2, TABLE_CONSOLE_LAYOUT.width / 2]) {
+    for (const z of [
+      TABLE_CONSOLE_LAYOUT.centreZ - TABLE_CONSOLE_LAYOUT.depth / 2,
+      TABLE_CONSOLE_LAYOUT.centreZ + TABLE_CONSOLE_LAYOUT.depth / 2,
+    ]) {
+      const point = new Vector3(
+        x,
+        TABLE_CONSOLE_LAYOUT.height + 0.024,
+        z,
+      ).project(camera);
+      consolePoints.push({
+        x: (point.x + 1) * viewport.width / 2,
+        y: (1 - point.y) * viewport.height / 2,
+      });
+    }
+  }
   const consoleBounds = {
-    left: viewport.width / 2 - 71,
-    right: viewport.width / 2 + 71,
-    top: viewport.height / 2 - viewport.height * 0.03 - 46,
-    bottom: viewport.height / 2 - viewport.height * 0.03 + 46,
+    left: Math.min(...consolePoints.map((point) => point.x)),
+    right: Math.max(...consolePoints.map((point) => point.x)),
+    top: Math.min(...consolePoints.map((point) => point.y)),
+    bottom: Math.max(...consolePoints.map((point) => point.y)),
   };
+  assert.ok(consoleBounds.top < viewport.height / 2);
+  assert.ok(consoleBounds.bottom < viewport.height / 2);
+  assert.ok(viewport.height / 2 - consoleBounds.bottom < 30);
 
   for (const position of ["bottom", "right", "top", "left"]) {
     for (let index = 0; index < 18; index += 1) {
@@ -560,22 +1097,29 @@ test("mahjong renders a compact fixed five-slot dora rack", () => {
   assert.match(view, /is-revealed/);
   assert.match(view, /is-concealed/);
   assert.match(styles, /\.dora-list \.tile-back/);
-  assert.match(styles, /\.dora-list \.tile-back \{[^}]*background-color: #1b63b7/s);
+  assert.match(styles, /\.dora-list \.tile-back \{[^}]*background-color: #1b569c/s);
   assert.match(styles, /\.dora-list \.tile-back::before \{\s*content: none;/s);
-  assert.match(tileFactory, /backMaterial = new MeshPhysicalMaterial\(\{\s*color: new Color\("#1b63b7"\)/s);
-  assert.match(styles, /\.dora-list \.mahjong-tile \{[^}]*width: 22px/s);
-  assert.match(styles, /\.dora-list \.mahjong-tile \{[^}]*height: 31px/s);
+  assert.match(tileFactory, /backMaterial = new MeshPhysicalMaterial\(\{\s*color: new Color\("#1b569c"\)/s);
+  assert.match(styles, /\.dora-list \.mahjong-tile \{[^}]*width: 30px/s);
+  assert.match(styles, /\.dora-list \.mahjong-tile \{[^}]*height: 42px/s);
   assert.match(styles, /\.dora-list \{[^}]*gap: 1px/s);
   assert.match(styles, /\.table-status-semantic \{[^}]*width: fit-content/s);
   assert.match(styles, /\.dora-list \{[^}]*width: max-content/s);
-  assert.match(styles, /\.table-status-semantic \{[^}]*padding: 8px/s);
-  assert.match(styles, /@font-face \{[^}]*Playweft Mahjong Shodo[^}]*yuji-syuku-mahjong\.woff2/s);
-  assert.match(styles, /unicode-range: U\+4E09, U\+56DB, U\+4EBA, U\+6771, U\+5357/);
-  assert.match(styles, /\.match-type-label \{[^}]*Playweft Mahjong Shodo/s);
-  const titleFont = readFileSync(
-    new URL("../games/mahjong/assets/fonts/yuji-syuku-mahjong.woff2", import.meta.url),
+  assert.match(styles, /\.table-status-semantic \{[^}]*padding: 10px/s);
+  assert.match(styles, /@font-face \{[^}]*Playweft Mahjong Xingshu[^}]*bakudai-mahjong-ui\.woff2/s);
+  assert.match(styles, /unicode-range:[^}]*U\+4E09[^}]*U\+6771[^}]*U\+78B0[^}]*U\+8FC7/s);
+  assert.doesNotMatch(styles, /zhi-mang-xing-mahjong-fallback/);
+  assert.match(styles, /\.match-type-label \{[^}]*Playweft Mahjong Xingshu/s);
+  const interfaceFont = readFileSync(
+    new URL("../games/mahjong/assets/fonts/bakudai-mahjong-ui.woff2", import.meta.url),
   );
-  assert.ok(titleFont.byteLength > 1_000 && titleFont.byteLength < 8_000);
+  const interfaceFontNotice = readFileSync(
+    new URL("../games/mahjong/assets/fonts/BAKUDAI-FONT-NOTICE.txt", import.meta.url),
+    "utf8",
+  );
+  assert.ok(interfaceFont.byteLength > 1_000 && interfaceFont.byteLength < 10_000);
+  assert.match(interfaceFontNotice, /Bakudai Brush Font/);
+  assert.match(interfaceFontNotice, /SIL Open Font License 1\.1/);
   assert.match(view, /state\.matchType === "hanchan" \? "四人南" : "四人東"/);
 });
 
@@ -592,7 +1136,39 @@ test("mahjong player nameplates leave scoring to the centre console", () => {
   assert.match(view, /detail\.textContent = riichi \? "立直" : ""/);
   assert.match(view, /detail\.hidden = !riichi/);
   assert.doesNotMatch(view, /data-detail[^\n]*scores|scores[^\n]*data-detail/);
-  assert.match(styles, /\.player-right \{ top: 32%; right: 2\.5%; \}/);
-  assert.match(styles, /\.player-left \{ top: 32%; left: 2\.5%; \}/);
-  assert.match(styles, /\.player-bottom \{ bottom: 21%; left: 26%; \}/);
+  assert.match(styles, /\.player-right \{ top: 223px; right: 24px; \}/);
+  assert.match(styles, /\.player-left \{ top: 223px; left: 24px; \}/);
+  assert.match(styles, /\.player-bottom \{ bottom: 151px; left: 325px; \}/);
+  assert.match(styles, /\.player-top \{ top: 22px; right: 299px; \}/);
+  assert.match(styles, /\.player-station \{[^}]*width: 104px/s);
+  assert.match(styles, /\.player-station::before \{[^}]*width: 78px/s);
+  assert.match(styles, /\.player-station strong \{ font-size: 16px; \}/);
+});
+
+test("mahjong prefers the platform avatar for the local player", () => {
+  const html = readFileSync(
+    new URL("../games/mahjong/index.html", import.meta.url),
+    "utf8",
+  );
+  const main = readFileSync(
+    new URL("../games/mahjong/main.js", import.meta.url),
+    "utf8",
+  );
+  const view = readFileSync(
+    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    "utf8",
+  );
+  const styles = readFileSync(
+    new URL("../games/mahjong/styles.css", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(html, /id="player-bottom"[\s\S]*?data-player-avatar/);
+  assert.match(main, /capabilities\)\.includes\("user\.getProfile"\)/);
+  assert.match(main, /getUserProfile\(\{ fields: \["avatar"\] \}\)/);
+  assert.match(main, /const source = profile\?\.avatar\?\.src;/);
+  assert.match(main, /setPlayerAvatar\("bottom", source\)/);
+  assert.match(view, /image\.onload = \(\) =>/);
+  assert.match(view, /image\.onerror = \(\) =>/);
+  assert.match(styles, /\.platform-player-avatar \{[^}]*object-fit: cover/s);
 });

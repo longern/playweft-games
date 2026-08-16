@@ -12,9 +12,9 @@
   "name_localized": {
     "zh-CN": "围棋"
   },
-  "description": "Play locally or online, claiming territory and capturing stones.",
+  "description": "Place black and white stones, surround territory, and capture opposing groups.",
   "description_localized": {
-    "zh-CN": "支持本机轮流或双人房间对弈，围地、提子并通过计分决出胜负。"
+    "zh-CN": "黑白落子，围地提子，在方寸棋盘上步步较量。"
   },
   "categories": [
     "Strategy"

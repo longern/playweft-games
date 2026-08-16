@@ -12,9 +12,9 @@
   "name_localized": {
     "zh-CN": "数独"
   },
-  "description": "Solve a uniquely generated grid at your preferred difficulty.",
+  "description": "Choose a challenge and fill every row, column, and box.",
   "description_localized": {
-    "zh-CN": "选择难度，挑战一道拥有唯一解的数独。"
+    "zh-CN": "从简单到极难，填满每一行、每一列和每个九宫格。"
   },
   "categories": [
     "Puzzle"

@@ -14,6 +14,11 @@ import {
   tileFace,
   tileType,
 } from "./game-format.js";
+import {
+  MELD_SCALE,
+  meldDisplayLayout,
+  TILE_SIZE,
+} from "./render/three-layout.js";
 import { tileFaceFrameIndex } from "./render/tile-texture-map.js";
 
 export class MahjongDomView {
@@ -25,7 +30,7 @@ export class MahjongDomView {
     this.elements = collectElements();
   }
 
-  render(state, events, selectedTileId, playerName) {
+  render(state, events, selectedTileId, playerName, { showResult = true } = {}) {
     const { elements } = this;
     elements.message.classList.remove("is-error");
     const currentRound = roundLabel(state.roundWind, state.handNumber);
@@ -57,7 +62,7 @@ export class MahjongDomView {
     this.renderMelds(state);
     this.renderActions(state, selectedTileId);
     this.renderStatus(state, events, playerName);
-    this.renderResult(state, playerName);
+    this.renderResult(state, playerName, showResult);
   }
 
   renderSelection(state, selectedTileId, playerName) {
@@ -74,6 +79,32 @@ export class MahjongDomView {
       heading: this.elements.heading.textContent,
       message: this.elements.message.textContent,
     };
+  }
+
+  setPlayerAvatar(position, source) {
+    const image = this.elements.stations[position]?.querySelector("[data-player-avatar]");
+    if (!image) return;
+    const nextSource = typeof source === "string" && source ? source : "";
+    if (!nextSource) {
+      image.hidden = true;
+      image.removeAttribute("src");
+      delete image.dataset.source;
+      return;
+    }
+    if (image.dataset.source === nextSource) return;
+
+    image.hidden = true;
+    image.dataset.source = nextSource;
+    image.onload = () => {
+      if (image.dataset.source === nextSource) image.hidden = false;
+    };
+    image.onerror = () => {
+      if (image.dataset.source !== nextSource) return;
+      image.hidden = true;
+      image.removeAttribute("src");
+      delete image.dataset.source;
+    };
+    image.src = nextSource;
   }
 
   renderStations(state, playerName) {
@@ -106,7 +137,7 @@ export class MahjongDomView {
   }
 
   renderHands(state, selectedTileId) {
-    const hand = orderedHand(state.ownHand, state.lastDrawn);
+    const hand = orderedHand(state.ownHand, state.drawnTile);
     const forbiddenTypes = new Set(asArray(state.legalActions?.forbiddenDiscardTypes));
     this.elements.hand.replaceChildren(
       ...hand.map((tileId) => {
@@ -116,7 +147,7 @@ export class MahjongDomView {
         tile.setAttribute("role", "option");
         tile.setAttribute("aria-selected", String(tileId === selectedTileId));
         tile.classList.toggle("is-selected", tileId === selectedTileId);
-        tile.classList.toggle("is-drawn", tileId === Number(state.lastDrawn));
+        tile.classList.toggle("is-drawn", tileId === Number(state.drawnTile));
         tile.classList.toggle(
           "is-riichi-choice",
           asArray(state.legalActions?.riichiTiles).includes(tileId),
@@ -212,14 +243,10 @@ export class MahjongDomView {
     elements.riichi.hidden = !legal.canRiichi;
     elements.riichi.disabled = !asArray(legal.riichiTiles).includes(selectedTileId);
     elements.furiten.hidden = !state.furiten;
-    elements.discard.hidden = canClaim || legal.canTsumo;
-    elements.discard.disabled = !legal.canDiscard || selectedTileId === 0;
     elements.actionHint.textContent = canClaim
       ? "有人打出了你需要的牌"
       : legal.canDiscard
-        ? selectedTileId
-          ? "再次点击或按“打出”确认"
-          : "选择一张手牌"
+        ? "向上拖动手牌，越线后松手打出"
         : state.phase === "hand_ended"
           ? "本局已结束"
           : "等待其他玩家";
@@ -320,12 +347,14 @@ export class MahjongDomView {
     }
   }
 
-  renderResult(state, playerName) {
+  renderResult(state, playerName, showResult = true) {
     const { elements } = this;
     const ended = state.phase === "hand_ended";
-    elements.result.hidden = !ended;
+    elements.result.hidden = !ended || !showResult;
     if (!ended) return;
     if (state.draw) {
+      elements.resultHands.replaceChildren();
+      elements.resultHands.hidden = true;
       const abortive = Boolean(state.result?.abortive);
       elements.resultKicker.textContent = abortive ? "途中流局" : "牌山摸尽";
       elements.resultTitle.textContent = state.abortiveReason || "流局";
@@ -347,25 +376,101 @@ export class MahjongDomView {
       ? "自摸和牌"
       : state.winType === "nagashi" ? "流局满贯" : "荣和";
     elements.resultTitle.textContent = winnerNames.length > 1
-      ? `${winnerNames.join("、")} 和牌`
-      : state.winnerIndex === 1 ? "你赢了" : `${winnerName} 和牌`;
+      ? winnerNames.join("、")
+      : winnerName;
     const result = state.result ?? {};
     const value = result.limit || `${result.han ?? 0} 番 ${result.fu ?? 0} 符`;
     elements.resultSummary.textContent = `${value} · ${result.payment ?? "已结算"}`;
     const allResults = asArray(state.results).length ? asArray(state.results) : [result];
+    elements.resultHands.hidden = state.winType === "nagashi";
+    elements.resultHands.replaceChildren(
+      ...allResults.map((scored, scoreIndex) => createResultHand(
+        state,
+        Number(scored.winnerIndex) || state.players.indexOf(state.winners?.[scoreIndex]) + 1,
+        winnerNames[scoreIndex] || winnerName,
+        allResults.length > 1,
+      )),
+    );
     elements.resultYaku.replaceChildren(
       ...allResults.flatMap((scored, scoreIndex) => asArray(scored.yaku).map((yaku) => {
         const item = document.createElement("span");
         const prefix = allResults.length > 1 ? `${winnerNames[scoreIndex]}：` : "";
-        item.textContent = `${prefix}${yaku.name} ${yaku.han >= 13 ? "役满" : `${yaku.han}番`}`;
+        const name = document.createElement("i");
+        const value = document.createElement("b");
+        name.textContent = `${prefix}${yaku.name}`;
+        value.textContent = yaku.han >= 13 ? "役满" : `${yaku.han}番`;
+        item.append(name, value);
         return item;
       })),
     );
     const delta = document.createElement("b");
+    delta.className = "result-delta";
     delta.textContent = scoreDeltaSummary(state, playerName);
     elements.resultYaku.append(delta);
     elements.rematch.textContent = state.matchEnded ? "同规则再战" : "下一局";
   }
+}
+
+function createResultHand(state, winnerIndex, winnerName, showName) {
+  const playerId = state.players?.[winnerIndex - 1];
+  const row = document.createElement("section");
+  row.className = "result-hand";
+  if (showName) {
+    const label = document.createElement("strong");
+    label.textContent = winnerName;
+    row.append(label);
+  }
+
+  const tiles = document.createElement("div");
+  tiles.className = "result-hand-tiles";
+  const concealed = asArray(state.revealedHands?.[playerId]).map(normalizeRevealedTile);
+  const winning = Number(state.winningTile) > 0
+    ? { type: Number(state.winningTile), red: state.winningTileRed === true }
+    : null;
+  tiles.append(...concealed.map((tile) => createTile(tile.type, "result", tile.red)));
+  if (winning) {
+    const winningTile = createTile(winning.type, "result", winning.red);
+    winningTile.classList.add("is-winning-tile");
+    tiles.append(winningTile);
+  }
+  const resultMelds = asArray(state.melds?.[playerId])
+    .map((meld) => createResultMeld(meld, winnerIndex))
+    .reverse();
+  tiles.append(...resultMelds);
+  row.append(tiles);
+  return row;
+}
+
+function createResultMeld(meld, winnerIndex) {
+  const group = document.createElement("span");
+  group.className = "result-meld";
+  const display = meldDisplayLayout(meld, winnerIndex);
+  const normalExtent = TILE_SIZE.width * MELD_SCALE;
+  const pixelsPerUnit = 22 / normalExtent;
+  group.style.setProperty("--result-meld-width", `${display.span * pixelsPerUnit + 2}px`);
+  group.classList.toggle(
+    "has-stacked-tile",
+    display.entries.some((entry) => entry.stackLevel > 0),
+  );
+  for (const entry of display.entries) {
+    const tile = createTile(entry.type, "result", entry.red);
+    const centreFromRight = entry.along + normalExtent / 2;
+    const centreFromLeft = display.span - centreFromRight;
+    tile.style.setProperty("--result-meld-x", `${centreFromLeft * pixelsPerUnit + 1}px`);
+    tile.classList.toggle("is-sideways", entry.sideways);
+    tile.classList.toggle("is-stacked", entry.stackLevel > 0);
+    tile.classList.toggle("is-face-down", entry.faceDown);
+    if (entry.faceDown) tile.setAttribute("aria-label", "暗杠牌背");
+    group.append(tile);
+  }
+  return group;
+}
+
+function normalizeRevealedTile(tile) {
+  if (tile && typeof tile === "object") {
+    return { type: Number(tile.type), red: tile.red === true };
+  }
+  return { type: Number(tile), red: false };
 }
 
 function collectElements() {
@@ -390,13 +495,13 @@ function collectElements() {
     abort: document.querySelector("#abort-button"),
     tsumo: document.querySelector("#tsumo-button"),
     riichi: document.querySelector("#riichi-button"),
-    discard: document.querySelector("#discard-button"),
     furiten: document.querySelector("#furiten-badge"),
     hand: document.querySelector("#hand-bottom"),
     result: document.querySelector("#result-panel"),
     resultKicker: document.querySelector("#result-kicker"),
     resultTitle: document.querySelector("#result-title"),
     resultSummary: document.querySelector("#result-summary"),
+    resultHands: document.querySelector("#result-hands"),
     resultYaku: document.querySelector("#result-yaku"),
     rematch: document.querySelector("#rematch-button"),
     setup: document.querySelector("#setup-panel"),
