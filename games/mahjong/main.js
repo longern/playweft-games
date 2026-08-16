@@ -1,8 +1,10 @@
 import { createLocalLuaGame } from "../../src/local-lua-game.js";
 import { createPlayweftSoloClient } from "../../src/playweft-solo-client.js";
+import { X, createIcons } from "lucide";
 import {
   AI_DELAY_MS,
   AUTO_RIICHI_DISCARD_DELAY_MS,
+  HAND_INSERTION_DELAY_MS,
   HAND_END_PRESENTATION_DELAY_MS,
   HUMAN_ID,
   PLAYERS,
@@ -13,6 +15,7 @@ import {
   activeSeat,
   asArray,
   automaticRiichiDiscard,
+  deferredHandInsertion,
   errorMessage,
   exhaustiveDrawPresentation,
 } from "./game-format.js";
@@ -20,11 +23,18 @@ import { MahjongThreeRenderer } from "./three-renderer.js";
 import "../../src/base.css";
 import "./styles.css";
 
+createIcons({ icons: { X } });
+
 let game;
 let state;
 let selectedTileId = 0;
+let riichiMode = false;
+let selectionBeforeRiichi = 0;
 let aiTimer;
+let handInsertionTimer;
 let resultTimer;
+let handInsertion = null;
+let visibleEvents = [];
 let resultRevealKey = "";
 let resultVisible = true;
 let playerName = "你";
@@ -39,6 +49,7 @@ const domView = new MahjongDomView({
   onAction: dispatch,
   onSelectTile: selectTile,
   onDiscardTile(tileId) {
+    if (!state?.legalActions?.canDiscard) return;
     selectedTileId = tileId;
     discardSelected();
   },
@@ -47,6 +58,7 @@ const { elements } = domView;
 const visualRenderer = new MahjongThreeRenderer(elements.stage, {
   onSelectTile: selectTile,
   onDiscardTile(tileId) {
+    if (!state?.legalActions?.canDiscard) return;
     selectedTileId = tileId;
     discardSelected();
   },
@@ -59,7 +71,8 @@ const visualRendererReady = visualRenderer.init().catch((error) => {
 elements.pass.addEventListener("click", () => dispatch({ type: "pass" }));
 elements.abort.addEventListener("click", () => dispatch({ type: "abort_nine" }));
 elements.tsumo.addEventListener("click", () => dispatch({ type: "tsumo" }));
-elements.riichi.addEventListener("click", declareRiichi);
+elements.riichi.addEventListener("click", enterRiichiMode);
+elements.cancelRiichi.addEventListener("click", cancelRiichiMode);
 elements.rematch.addEventListener("click", () =>
   dispatch({ type: state.matchEnded ? "new_match" : "next_hand" }));
 for (const button of elements.setup.querySelectorAll("[data-match-type]")) {
@@ -151,8 +164,14 @@ function dispatch(action) {
     elements.message.classList.add("is-error");
     return;
   }
+  riichiMode = false;
+  selectionBeforeRiichi = 0;
   selectedTileId = 0;
-  refresh();
+  refresh({
+    ownDiscardedTile: action.type === "discard" || action.type === "riichi"
+      ? Number(action.tileId) || 0
+      : 0,
+  });
   scheduleAi();
 }
 
@@ -191,13 +210,18 @@ function scheduleAi() {
   aiTimer = window.setTimeout(runAiTurn, AI_DELAY_MS);
 }
 
-function refresh() {
+function refresh({ ownDiscardedTile = 0 } = {}) {
+  const previousState = state;
   const projection = game.view(HUMAN_ID);
   state = projection.state;
+  if (riichiMode && !state.legalActions?.canRiichi) {
+    riichiMode = false;
+    selectionBeforeRiichi = 0;
+  }
   const events = asArray(projection.events);
+  visibleEvents = events;
+  queueHandInsertion(previousState, events, ownDiscardedTile);
   const revealKey = handRevealKey(state);
-  const revealPlayerIndices = handRevealPlayerIndices(state);
-  const coveredPlayerIndices = exhaustiveDrawPresentation(state).covered;
   if (!revealKey) {
     window.clearTimeout(resultTimer);
     resultRevealKey = "";
@@ -211,19 +235,64 @@ function refresh() {
       refresh();
     }, HAND_END_PRESENTATION_DELAY_MS);
   }
-  domView.render(state, events, selectedTileId, playerName, { showResult: resultVisible });
+  renderCurrentState();
+}
+
+function renderCurrentState() {
+  const renderState = presentedState();
+  domView.render(renderState, visibleEvents, selectedTileId, playerName, {
+    showResult: resultVisible,
+    riichiMode,
+  });
   visualRenderer.render(
-    state,
-    events,
+    renderState,
+    visibleEvents,
     {
       ...domView.visualUi(playerName, selectedTileId),
-      revealPlayerIndices,
-      coveredPlayerIndices,
-      animateHandReveal: Boolean(revealKey) && !resultVisible,
-      delayHandRevealForCallout: events.some((event) => event.type === "won"),
+      riichiMode,
+      riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),
+      revealPlayerIndices: handRevealPlayerIndices(state),
+      coveredPlayerIndices: exhaustiveDrawPresentation(state).covered,
+      animateHandReveal: Boolean(handRevealKey(state)) && !resultVisible,
+      delayHandRevealForCallout: visibleEvents.some((event) => event.type === "won"),
+      deferredHandInsertionSeat: Number(handInsertion?.seat) || 0,
+      deferredHandInsertionIndex: Number(handInsertion?.rackIndex) || 0,
     },
   );
 }
+
+function presentedState() {
+  if (Number(handInsertion?.seat) !== 1) return state;
+  return {
+    ...state,
+    ownHand: handInsertion.ownHand,
+    drawnTile: handInsertion.drawnTile,
+  };
+}
+
+function queueHandInsertion(previousState, events, ownDiscardedTile = 0) {
+  const discard = asArray(events).find((event) =>
+    (event?.type === "discarded" || event?.type === "riichi")
+      && typeof event.fromDrawn === "boolean");
+  if (!discard) return;
+  const eventKey = [
+    Number(state?.moveCount) || 0,
+    discard.type,
+    Number(discard.playerIndex) || 0,
+    Number(discard.tile) || 0,
+    String(discard.fromDrawn),
+  ].join(":");
+  if (eventKey === queueHandInsertion.lastEventKey) return;
+  queueHandInsertion.lastEventKey = eventKey;
+  window.clearTimeout(handInsertionTimer);
+  handInsertion = deferredHandInsertion(previousState, events, { ownDiscardedTile });
+  if (!handInsertion) return;
+  handInsertionTimer = window.setTimeout(() => {
+    handInsertion = null;
+    renderCurrentState();
+  }, HAND_INSERTION_DELAY_MS);
+}
+queueHandInsertion.lastEventKey = "";
 
 function handRevealKey(current) {
   if (current?.phase !== "hand_ended") return "";
@@ -256,26 +325,63 @@ function handRevealPlayerIndices(current) {
 }
 
 function selectTile(tileId) {
-  if (!state?.legalActions?.canDiscard) return;
+  const renderState = presentedState();
+  const selectableTiles = orderedOwnTiles(renderState);
+  if (!selectableTiles.includes(Number(tileId)) || state?.phase === "hand_ended") return;
+  if (riichiMode
+    && !asArray(state?.legalActions?.riichiTiles).includes(Number(tileId))) return;
   selectedTileId = selectedTileId === tileId ? 0 : tileId;
-  const ui = domView.renderSelection(state, selectedTileId, playerName);
-  visualRenderer.render(state, [], ui);
+  const ui = domView.renderSelection(renderState, selectedTileId, playerName, { riichiMode });
+  visualRenderer.render(renderState, [], {
+    ...ui,
+    riichiMode,
+    riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),
+    deferredHandInsertionSeat: Number(handInsertion?.seat) || 0,
+    deferredHandInsertionIndex: Number(handInsertion?.rackIndex) || 0,
+  });
+}
+
+function orderedOwnTiles(current) {
+  return [
+    ...asArray(current?.ownHand).map(Number),
+    ...(Number(current?.drawnTile) > 0 ? [Number(current.drawnTile)] : []),
+  ];
 }
 
 function discardSelected() {
   if (!selectedTileId || !state?.legalActions?.canDiscard) return;
+  if (riichiMode) {
+    if (!asArray(state.legalActions.riichiTiles).includes(selectedTileId)) return;
+    dispatch({ type: "riichi", tileId: selectedTileId });
+    return;
+  }
   dispatch({ type: "discard", tileId: selectedTileId });
 }
 
-function declareRiichi() {
-  if (!selectedTileId
-    || !asArray(state?.legalActions?.riichiTiles).includes(selectedTileId)) return;
-  dispatch({ type: "riichi", tileId: selectedTileId });
+function enterRiichiMode() {
+  if (!state?.legalActions?.canRiichi
+    || !asArray(state.legalActions.riichiTiles).length) return;
+  selectionBeforeRiichi = selectedTileId;
+  selectedTileId = 0;
+  riichiMode = true;
+  renderCurrentState();
+}
+
+function cancelRiichiMode() {
+  if (!riichiMode) return;
+  riichiMode = false;
+  selectedTileId = orderedOwnTiles(presentedState()).includes(selectionBeforeRiichi)
+    ? selectionBeforeRiichi
+    : 0;
+  selectionBeforeRiichi = 0;
+  renderCurrentState();
 }
 
 function handlePageHide(event) {
   window.clearTimeout(aiTimer);
+  window.clearTimeout(handInsertionTimer);
   window.clearTimeout(resultTimer);
+  handInsertion = null;
   resultVisible = true;
   if (!event.persisted) destroy();
 }
@@ -287,7 +393,9 @@ function handlePageShow(event) {
 function handleVisibilityChange() {
   if (document.visibilityState === "hidden") {
     window.clearTimeout(aiTimer);
+    window.clearTimeout(handInsertionTimer);
     window.clearTimeout(resultTimer);
+    handInsertion = null;
     resultVisible = true;
     return;
   }
@@ -303,6 +411,7 @@ function resumeAfterSuspension() {
       refresh();
       return;
     }
+    renderCurrentState();
     visualRenderer.resume();
     scheduleAi();
   });
@@ -312,6 +421,7 @@ function destroy() {
   if (destroyed) return;
   destroyed = true;
   window.clearTimeout(aiTimer);
+  window.clearTimeout(handInsertionTimer);
   window.clearTimeout(resultTimer);
   window.removeEventListener("pagehide", handlePageHide);
   window.removeEventListener("pageshow", handlePageShow);

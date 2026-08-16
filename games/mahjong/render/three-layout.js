@@ -16,7 +16,7 @@ export const CONCEALED_RACK_CAPACITY = 13;
 // sits slightly beyond the geometric screen centre toward the opposite seat.
 export const PLAYFIELD_CENTRE_Z = -1.35;
 
-const HAND_TILE_GAP = 0.035;
+export const HAND_TILE_GAP = 0.035;
 const DRAWN_TILE_GAP = 0.24;
 
 export const OWN_HAND_LAYOUT = Object.freeze({
@@ -32,7 +32,6 @@ export const OWN_HAND_LAYOUT = Object.freeze({
 export const OWN_HAND_DRAG = Object.freeze({
   discardLineY: 552,
   activationDistance: 8,
-  guideWidth: 880,
 });
 
 export const SEAT_YAW = Object.freeze({
@@ -50,7 +49,7 @@ const HAND_ANCHORS = Object.freeze({
 });
 
 const RIVER_COLUMN_COUNT = 6;
-const RIVER_TILE_GAP = 0.055;
+export const RIVER_TILE_GAP = 0.055;
 const RIVER_ROW_GAP = 0.085;
 const RIVER_ACROSS_STEP = TILE_SIZE.width + RIVER_TILE_GAP;
 export const RIICHI_TILE_ACROSS_EXTRA = TILE_SIZE.height - TILE_SIZE.width;
@@ -266,9 +265,11 @@ export function meldRightExtension(melds, claimantSeat) {
   return Math.max(0, totalSpan - available);
 }
 
+const MELD_TILE_GAP = 0.035;
+
 function measureMeldEntries(entries) {
   const normalExtent = TILE_SIZE.width * MELD_SCALE;
-  const gap = 0.035;
+  const gap = MELD_TILE_GAP;
   let cursor = 0;
   for (const entry of entries) {
     const extent = (entry.sideways ? TILE_SIZE.height : TILE_SIZE.width) * MELD_SCALE;

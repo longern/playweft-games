@@ -2,6 +2,7 @@ import {
   Color,
   Group,
   Mesh,
+  MeshBasicMaterial,
   MeshPhysicalMaterial,
   PlaneGeometry,
   SRGBColorSpace,
@@ -65,10 +66,41 @@ export class ThreeTileFactory {
       polygonOffset: true,
       polygonOffsetFactor: -1,
     });
+    this.highlightGeometry = new PlaneGeometry(TILE_SIZE.width * 0.97, TILE_SIZE.height * 0.98);
+    this.matchHighlightMaterial = new MeshBasicMaterial({
+      color: new Color("#76dec4"),
+      transparent: true,
+      opacity: 0.32,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    this.doraWashGeometry = new PlaneGeometry(TILE_SIZE.width * 0.9, TILE_SIZE.height * 0.92);
+    this.doraWashMaterial = new MeshBasicMaterial({
+      color: new Color("#f1d27d"),
+      transparent: true,
+      opacity: 0.54,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    this.disabledWashMaterial = new MeshBasicMaterial({
+      color: new Color("#050807"),
+      transparent: true,
+      opacity: 0.52,
+      depthWrite: false,
+      toneMapped: false,
+    });
     this.faceGeometries = TILE_FACE_NAMES.map((_, index) => createFaceGeometry(index));
   }
 
-  create({ type = 0, red = false, concealed = false, tileId = 0 } = {}) {
+  create({
+    type = 0,
+    red = false,
+    concealed = false,
+    tileId = 0,
+    highlight = "",
+    dora = false,
+    dimmed = false,
+  } = {}) {
     const tile = new Group();
     tile.userData.tileId = Number(tileId) || 0;
     const shell = new Mesh(this.shellGeometry, this.shellMaterial);
@@ -85,11 +117,29 @@ export class ThreeTileFactory {
     tile.add(back);
 
     if (!concealed && type) {
+      if (highlight === "match") {
+        const glow = new Mesh(this.highlightGeometry, this.matchHighlightMaterial);
+        glow.position.z = TILE_SIZE.depth / 2 + 0.006;
+        glow.userData.tileRoot = tile;
+        tile.add(glow);
+      }
+      if (dora) {
+        const wash = new Mesh(this.doraWashGeometry, this.doraWashMaterial);
+        wash.position.z = TILE_SIZE.depth / 2 + 0.007;
+        wash.userData.tileRoot = tile;
+        tile.add(wash);
+      }
       const frame = tileFaceFrameIndex(type, red);
       const face = new Mesh(this.faceGeometries[frame], this.faceMaterial);
       face.position.z = TILE_SIZE.depth / 2 + 0.008;
       face.userData.tileRoot = tile;
       tile.add(face);
+      if (dimmed) {
+        const wash = new Mesh(this.highlightGeometry, this.disabledWashMaterial);
+        wash.position.z = TILE_SIZE.depth / 2 + 0.01;
+        wash.userData.tileRoot = tile;
+        tile.add(wash);
+      }
     }
     return tile;
   }
@@ -97,10 +147,15 @@ export class ThreeTileFactory {
   destroy() {
     this.shellGeometry.dispose();
     this.backGeometry.dispose();
+    this.highlightGeometry.dispose();
+    this.doraWashGeometry.dispose();
     for (const geometry of this.faceGeometries) geometry.dispose();
     this.shellMaterial.dispose();
     this.backMaterial.dispose();
     this.faceMaterial.dispose();
+    this.matchHighlightMaterial.dispose();
+    this.doraWashMaterial.dispose();
+    this.disabledWashMaterial.dispose();
     this.faceAtlas.dispose();
   }
 }

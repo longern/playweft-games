@@ -1,21 +1,25 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { Euler, PerspectiveCamera, Vector3 } from "three";
+import { Euler, PerspectiveCamera, Texture, Vector3 } from "three";
 import {
   AUTO_RIICHI_DISCARD_DELAY_MS,
   CLAIM_LABELS,
+  HAND_INSERTION_DELAY_MS,
   DORA_INDICATOR_SLOT_COUNT,
   HAND_END_PRESENTATION_DELAY_MS,
 } from "../games/mahjong/constants.js";
 import {
   automaticRiichiDiscard,
   claimPreviewTiles,
+  deferredHandInsertion,
   doraIndicatorSlots,
+  doraTypeCounts,
   exhaustiveDrawPresentation,
   opponentHandLayout,
   orderedHand,
   partitionClaimActions,
+  nextDoraType,
   splitRevealedHand,
 } from "../games/mahjong/game-format.js";
 import {
@@ -37,6 +41,7 @@ import {
   PLAYFIELD_CENTRE_Z,
   RIICHI_TILE_ACROSS_EXTRA,
   RIVER_CORNER_GAP,
+  RIVER_TILE_GAP,
   riverTransform,
   SEAT_YAW,
   TILE_PHYSICAL_MM,
@@ -51,6 +56,7 @@ import {
   TILE_BACK_EDGE_RADIUS,
   TILE_EDGE_RADIUS,
   TILE_EDGE_SEGMENTS,
+  ThreeTileFactory,
 } from "../games/mahjong/render/three-tile-factory.js";
 import {
   prepareTableConsoleContext,
@@ -65,6 +71,7 @@ import {
   actionCalloutKey,
 } from "../games/mahjong/render/three-callout.js";
 import { TABLE_GEOMETRY } from "../games/mahjong/render/three-table.js";
+import { planarTileJitter } from "../games/mahjong/render/three-tile-jitter.js";
 
 function projectedStandingTileBounds(position, index, camera, viewport) {
   const transform = handTransform(position, index, 13);
@@ -232,6 +239,55 @@ test("mahjong keeps the 13-tile rack stable and moves the drawn tile to the end"
   assert.ok(compactFirst.scale < firstRackTile.scale);
 });
 
+test("mahjong pauses before integrating a hand-discarded drawn tile", () => {
+  const previous = {
+    drawnPlayerIndex: 1,
+    ownHand: [5, 9, 13, 17],
+    drawnTile: 53,
+  };
+  assert.deepEqual(
+    deferredHandInsertion(previous, [{
+      type: "discarded",
+      playerIndex: 1,
+      tile: 4,
+      fromDrawn: false,
+    }], { ownDiscardedTile: 13 }),
+    { seat: 1, ownHand: [5, 9, 17], drawnTile: 53 },
+  );
+  assert.equal(deferredHandInsertion(previous, [{
+    type: "discarded",
+    playerIndex: 1,
+    tile: 53,
+    fromDrawn: true,
+  }]), null);
+  assert.deepEqual(deferredHandInsertion({
+    drawnPlayerIndex: 3,
+    players: ["p1", "p2", "p3", "p4"],
+    handCounts: { p3: 10 },
+  }, [{
+    type: "riichi",
+    playerIndex: 3,
+    tile: 23,
+    fromDrawn: false,
+  }], { random: () => 0.49 }), { seat: 3, rackIndex: 4 });
+  assert.ok(HAND_INSERTION_DELAY_MS >= 200 && HAND_INSERTION_DELAY_MS <= 350);
+
+  const main = readFileSync(
+    new URL("../games/mahjong/main.js", import.meta.url),
+    "utf8",
+  );
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(main, /queueHandInsertion\(previousState, events, ownDiscardedTile\)/);
+  assert.match(main, /window\.setTimeout\(\(\) => \{\s*handInsertion = null;\s*renderCurrentState\(\);\s*\}, HAND_INSERTION_DELAY_MS\)/s);
+  assert.match(renderer, /deferredHandInsertionSeat/);
+  assert.match(renderer, /deferredHandInsertionIndex/);
+  assert.match(renderer, /count - \(insertionDeferred \? 1 : 0\)/);
+  assert.match(renderer, /filter\(\(index\) => index !== deferredIndex\)/);
+});
+
 test("mahjong puts a post-call draw in the slot after the shortened rack", () => {
   const renderer = readFileSync(
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
@@ -308,6 +364,19 @@ test("mahjong keeps five fixed dora slots and preserves red-five artwork", () =>
   ]);
 });
 
+test("mahjong derives visible dora with suit, wind, and dragon wrapping", () => {
+  assert.equal(nextDoraType(9), 1);
+  assert.equal(nextDoraType(18), 10);
+  assert.equal(nextDoraType(27), 19);
+  assert.equal(nextDoraType(31), 28);
+  assert.equal(nextDoraType(34), 32);
+  assert.equal(nextDoraType(0), 0);
+  assert.deepEqual(
+    [...doraTypeCounts({ doraIndicators: [4, 4, 31, 34] })],
+    [[5, 2], [28, 1], [32, 1]],
+  );
+});
+
 test("mahjong groups every chi behind one action and previews only the two consumed tiles", () => {
   const claims = [
     { option: 1, kind: "ron", tileTypes: [] },
@@ -359,12 +428,48 @@ test("mahjong keeps action labels compact and gives wins a dark-red treatment", 
   assert.equal(CLAIM_LABELS.ron, "和");
   assert.match(html, /id="abort-button"[^>]*>流局<\/button>/);
   assert.match(html, /id="tsumo-button" class="win-action"[^>]*>自摸<\/button>/);
+  assert.match(
+    html,
+    /id="cancel-riichi-button"[\s\S]*?aria-label="取消立直"[\s\S]*?data-lucide="x"/,
+  );
   assert.doesNotMatch(html, /id="discard-button"/);
   assert.match(styles, /\.action-bar \{[^}]*min-height: 48px/s);
-  assert.match(styles, /\.action-bar button \{[^}]*min-width: 88px;[^}]*min-height: 48px;[^}]*padding: 2px 20px;[^}]*Playweft Mahjong Xingshu[^}]*font-size: 40px;[^}]*font-weight: 700;[^}]*font-synthesis: weight/s);
+  assert.match(styles, /\.action-bar button \{[^}]*min-width: 120px;[^}]*min-height: 48px;[^}]*padding: 2px 20px;[^}]*Playweft Mahjong Xingshu[^}]*font-size: 40px;[^}]*font-weight: 700;[^}]*font-synthesis: weight/s);
+  assert.match(styles, /\.action-bar \.riichi-cancel-action \{[^}]*width: 120px;[^}]*min-width: 120px/s);
   assert.ok(40 * fixedViewportScale(1280, 588) >= 26);
   assert.match(styles, /\.action-bar \.win-action,\s*\.action-bar \.claim-ron \{[^}]*#8d2e38[^}]*#4b1119/s);
   assert.match(styles, /#pass-button \{[^}]*background: linear-gradient\(145deg, #444a4d, #24282a\)/s);
+});
+
+test("mahjong uses a cancellable two-step riichi tile selection", () => {
+  const main = readFileSync(
+    new URL("../games/mahjong/main.js", import.meta.url),
+    "utf8",
+  );
+  const view = readFileSync(
+    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    "utf8",
+  );
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
+  );
+  const styles = readFileSync(
+    new URL("../games/mahjong/styles.css", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(main, /import \{ X, createIcons \} from "lucide"/);
+  assert.match(main, /elements\.riichi\.addEventListener\("click", enterRiichiMode\)/);
+  assert.match(main, /elements\.cancelRiichi\.addEventListener\("click", cancelRiichiMode\)/);
+  assert.match(main, /selectionBeforeRiichi = selectedTileId/);
+  assert.match(main, /orderedOwnTiles\(presentedState\(\)\)\.includes\(selectionBeforeRiichi\)/);
+  assert.match(main, /dispatch\(\{ type: "riichi", tileId: selectedTileId \}\)/);
+  assert.match(view, /elements\.cancelRiichi\.hidden = !riichiMode/);
+  assert.match(view, /elements\.actionHint\.textContent = "选择一张牌宣言立直"/);
+  assert.match(view, /"is-riichi-blocked", riichiMode && !riichiTiles\.has\(tileId\)/);
+  assert.match(renderer, /riichiMode && !riichiTiles\.has\(tileId\)/);
+  assert.match(styles, /\.action-bar \.riichi-cancel-action \{/);
 });
 
 test("mahjong shows oversized non-perspective callouts for claims, riichi, and wins", () => {
@@ -438,15 +543,14 @@ test("mahjong discards by dragging a hand tile above a fixed horizontal line", (
 
   assert.ok(OWN_HAND_DRAG.discardLineY < handTop - 60);
   assert.ok(OWN_HAND_DRAG.activationDistance >= 6);
-  assert.ok(OWN_HAND_DRAG.guideWidth >= 800);
   assert.doesNotMatch(html, /id="discard-button"/);
   assert.doesNotMatch(main, /elements\.discard/);
   assert.doesNotMatch(view, /elements\.discard/);
-  assert.match(view, /向上拖动手牌，越线后松手打出/);
+  assert.match(view, /向上拖动手牌，进入出牌区后松手打出/);
   assert.match(styles, /\.mahjong-three-canvas \{[^}]*touch-action: none/s);
   assert.match(renderer, /addEventListener\("pointerdown", this\.onPointerDown\)/);
   assert.match(renderer, /setPointerCapture\?\.\(event\.pointerId\)/);
-  assert.match(renderer, /this\.dragGuide\.visible = true/);
+  assert.doesNotMatch(renderer, /dragGuide|discard-drag-guide/);
   assert.match(renderer, /drag\.crossed = this\.viewport\.height \/ 2 - pointer\.y <= OWN_HAND_DRAG\.discardLineY/);
   assert.match(renderer, /if \(crossed\) this\.callbacks\.onDiscardTile\(tileId\)/);
 });
@@ -481,9 +585,9 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   assert.match(main, /handRevealKey\(state\)/);
   assert.match(main, /current\.abortiveReason === "九种九牌"/);
   assert.match(main, /exhaustive-draw/);
-  assert.match(main, /revealPlayerIndices,/);
-  assert.match(main, /coveredPlayerIndices,/);
-  assert.match(main, /animateHandReveal: Boolean\(revealKey\) && !resultVisible/);
+  assert.match(main, /revealPlayerIndices: handRevealPlayerIndices\(state\)/);
+  assert.match(main, /coveredPlayerIndices: exhaustiveDrawPresentation\(state\)\.covered/);
+  assert.match(main, /animateHandReveal: Boolean\(handRevealKey\(state\)\) && !resultVisible/);
   assert.match(renderer, /startHandReveal\(delay = 0\)/);
   assert.match(renderer, /this\.revealTiles\.push\(\{ tile, delay: 0, covered \}\)/);
   assert.doesNotMatch(renderer, /this\.revealTiles\.length \* 34/);
@@ -502,7 +606,7 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
       draw: true,
       result: { tenpai: [true, false, true, false] },
     }),
-    { revealed: [1, 3], covered: [2, 4] },
+    { revealed: [3], covered: [2, 4] },
   );
   assert.deepEqual(
     exhaustiveDrawPresentation({
@@ -550,7 +654,7 @@ test("mahjong result melds preserve call direction and kan presentation", () => 
   );
 
   assert.match(view, /meldDisplayLayout\(meld, winnerIndex\)/);
-  assert.match(view, /\.map\(\(meld\) => createResultMeld\(meld, winnerIndex\)\)\s*\.reverse\(\)/);
+  assert.match(view, /\.map\(\(meld\) => createResultMeld\(meld, winnerIndex, doraCounts\)\)\s*\.reverse\(\)/);
   assert.match(view, /classList\.toggle\("is-sideways", entry\.sideways\)/);
   assert.match(view, /classList\.toggle\("is-stacked", entry\.stackLevel > 0\)/);
   assert.match(view, /classList\.toggle\("is-face-down", entry\.faceDown\)/);
@@ -709,6 +813,145 @@ test("mahjong keeps opponent racks inside commercial safe lanes", () => {
       `${position} rack overlaps its player station`,
     );
   }
+});
+
+test("mahjong gives only river tiles stable bounded planar variation", () => {
+  const footprint = { width: TILE_SIZE.width, height: TILE_SIZE.height };
+  const first = planarTileJitter("1:river:0:8", RIVER_TILE_GAP, footprint);
+  assert.deepEqual(
+    planarTileJitter("1:river:0:8", RIVER_TILE_GAP, footprint),
+    first,
+  );
+  assert.notDeepEqual(
+    planarTileJitter("1:river:1:8", RIVER_TILE_GAP, footprint),
+    first,
+  );
+
+  const samples = Array.from({ length: 256 }, (_, index) =>
+    planarTileJitter(`river:${index}`, RIVER_TILE_GAP, footprint));
+  for (const sample of samples) {
+    assert.ok(sample.edgeDisplacement <= RIVER_TILE_GAP / 2 + 1e-12);
+    assert.ok(Math.abs(sample.yaw) <= 0.04 + 1e-12);
+  }
+  assert.ok(samples.some((sample) => sample.along < 0));
+  assert.ok(samples.some((sample) => sample.along > 0));
+  assert.ok(samples.some((sample) => sample.across < 0));
+  assert.ok(samples.some((sample) => sample.across > 0));
+  assert.ok(samples.some((sample) => sample.yaw < 0));
+  assert.ok(samples.some((sample) => sample.yaw > 0));
+
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
+  );
+  const riverSection = renderer.slice(
+    renderer.indexOf("  drawRivers(state) {"),
+    renderer.indexOf("  drawMelds(state) {"),
+  );
+  const meldSection = renderer.slice(
+    renderer.indexOf("  drawMelds(state) {"),
+    renderer.indexOf("  handlePointerDown(event) {"),
+  );
+  assert.match(riverSection, /planarTileJitter\(/);
+  assert.match(riverSection, /applyPlanarJitter\(/);
+  assert.doesNotMatch(meldSection, /planarTileJitter|applyPlanarJitter/);
+});
+
+test("mahjong highlights matching visible tile types without adding count text", () => {
+  const factory = new ThreeTileFactory(new Texture());
+  const selected = factory.create({ type: 5, tileId: 17 });
+  const matchingRedFive = factory.create({ type: 5, red: true, highlight: "match" });
+  const ordinaryDora = factory.create({ type: 5, dora: true });
+  const plainRedFive = factory.create({ type: 5, red: true });
+  const doubleDoraRedFive = factory.create({ type: 5, red: true, dora: true });
+  const disabledRiichiTile = factory.create({ type: 5, dimmed: true });
+  const concealed = factory.create({ type: 5, concealed: true, highlight: "match" });
+  assert.equal(selected.children.some(
+    (child) => child.material === factory.matchHighlightMaterial,
+  ), false);
+  assert.ok(matchingRedFive.children.some(
+    (child) => child.material === factory.matchHighlightMaterial,
+  ));
+  assert.equal(factory.matchHighlightMaterial.transparent, true);
+  assert.ok(factory.matchHighlightMaterial.opacity >= 0.3);
+  assert.ok(factory.matchHighlightMaterial.opacity <= 0.35);
+  assert.equal(concealed.children.some(
+    (child) => child.material === factory.matchHighlightMaterial,
+  ), false);
+  assert.equal(plainRedFive.children.some(
+    (child) => child.material === factory.doraWashMaterial,
+  ), false);
+  assert.ok(ordinaryDora.children.some(
+    (child) => child.material === factory.doraWashMaterial,
+  ));
+  assert.ok(factory.doraWashMaterial.opacity >= 0.5);
+  assert.ok(factory.doraWashMaterial.opacity <= 0.58);
+  assert.ok(doubleDoraRedFive.children.some(
+    (child) => child.material === factory.doraWashMaterial,
+  ));
+  assert.ok(disabledRiichiTile.children.some(
+    (child) => child.material === factory.disabledWashMaterial,
+  ));
+  assert.equal(factory.disabledWashMaterial.transparent, true);
+  assert.equal(factory.disabledWashMaterial.opacity, 0.52);
+  factory.destroy();
+
+  const html = readFileSync(
+    new URL("../games/mahjong/index.html", import.meta.url),
+    "utf8",
+  );
+  const view = readFileSync(
+    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    "utf8",
+  );
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
+  );
+  const styles = readFileSync(
+    new URL("../games/mahjong/styles.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(view, /renderTypeHighlights\(selectedTileId\)/);
+  assert.match(view, /tile\.classList\.toggle\("is-type-match"/);
+  assert.match(renderer, /this\.highlightedType === tileType\(tileId\) \? "match"/);
+  assert.match(renderer, /this\.highlightedType === Number\(discard\.type\) \? "match"/);
+  assert.match(renderer, /this\.highlightedType === Number\(entry\.type\)/);
+  assert.match(renderer, /this\.doraCounts = doraTypeCounts\(state\)/);
+  assert.match(renderer, /dora: this\.doraCounts\.has\(tileType\(tileId\)\)/);
+  assert.match(renderer, /dora: this\.doraCounts\.has\(Number\(discard\.type\)\)/);
+  assert.match(renderer, /dora: !entry\.faceDown && this\.doraCounts\.has/);
+  assert.match(styles, /\.dora-list \.mahjong-tile\.is-type-match/);
+  assert.match(styles, /\.mahjong-tile\.is-dora/);
+  assert.doesNotMatch(html, /visible-tile-count|已见|未见/);
+  assert.doesNotMatch(view, /visibleTileTypeCount|已见|未见/);
+});
+
+test("mahjong lets players inspect their hand outside their discard turn", () => {
+  const main = readFileSync(
+    new URL("../games/mahjong/main.js", import.meta.url),
+    "utf8",
+  );
+  const view = readFileSync(
+    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    "utf8",
+  );
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
+  );
+  const selection = main.slice(
+    main.indexOf("function selectTile(tileId)"),
+    main.indexOf("function discardSelected()"),
+  );
+  assert.match(selection, /orderedOwnTiles\(renderState\)/);
+  assert.match(selection, /state\?\.phase === "hand_ended"/);
+  assert.doesNotMatch(selection, /canDiscard/);
+  assert.doesNotMatch(view, /tile\.disabled = !state\.legalActions\?\.canDiscard/);
+  assert.match(view, /aria-disabled/);
+  assert.match(renderer, /this\.pickableTiles\.push\(tile\)/);
+  assert.doesNotMatch(renderer, /handlePointerUp\(event\) \{[^}]*if \(!this\.state\?\.legalActions\?\.canDiscard\) return/s);
+  assert.match(renderer, /discardable\s*&&\s*this\.state\?\.legalActions\?\.canDiscard/);
 });
 
 test("mahjong renders every meld in the perspective table scene", () => {
@@ -978,7 +1221,8 @@ test("mahjong centre console reserves an equal edge band for four riichi sticks"
   assert.ok(Math.abs(layout.stickWidth / 84 - layout.stickHeight / 12) < 1e-9);
   assert.ok(layout.stickWidth >= layout.scoreFontSize * 2.6);
   assert.ok(layout.stickWidth <= layout.scoreFontSize * 2.9);
-  assert.equal(layout.stickDotRadius, 7.2);
+  assert.equal(layout.scoreFontSize, 64);
+  assert.equal(layout.stickDotRadius, 8.85);
   assert.ok(layout.stickEdgeInset - layout.stickHeight / 2 > layout.panelBorderInset);
 
   const consoleRenderer = readFileSync(
@@ -1124,6 +1368,10 @@ test("mahjong renders a compact fixed five-slot dora rack", () => {
 });
 
 test("mahjong player nameplates leave scoring to the centre console", () => {
+  const html = readFileSync(
+    new URL("../games/mahjong/index.html", import.meta.url),
+    "utf8",
+  );
   const view = readFileSync(
     new URL("../games/mahjong/dom-view.js", import.meta.url),
     "utf8",
@@ -1133,8 +1381,9 @@ test("mahjong player nameplates leave scoring to the centre console", () => {
     "utf8",
   );
 
-  assert.match(view, /detail\.textContent = riichi \? "立直" : ""/);
-  assert.match(view, /detail\.hidden = !riichi/);
+  assert.doesNotMatch(html, /data-detail/);
+  assert.doesNotMatch(view, /detail\.textContent|detail\.hidden/);
+  assert.doesNotMatch(view, /riichi \? "立直"/);
   assert.doesNotMatch(view, /data-detail[^\n]*scores|scores[^\n]*data-detail/);
   assert.match(styles, /\.player-right \{ top: 223px; right: 24px; \}/);
   assert.match(styles, /\.player-left \{ top: 223px; left: 24px; \}/);

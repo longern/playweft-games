@@ -4,6 +4,7 @@ import {
   asArray,
   claimPreviewTiles,
   doraIndicatorSlots,
+  doraTypeCounts,
   eventMessage,
   isRedFive,
   orderedHand,
@@ -30,8 +31,15 @@ export class MahjongDomView {
     this.elements = collectElements();
   }
 
-  render(state, events, selectedTileId, playerName, { showResult = true } = {}) {
+  render(
+    state,
+    events,
+    selectedTileId,
+    playerName,
+    { showResult = true, riichiMode = false } = {},
+  ) {
     const { elements } = this;
+    this.doraCounts = doraTypeCounts(state);
     elements.message.classList.remove("is-error");
     const currentRound = roundLabel(state.roundWind, state.handNumber);
     elements.consoleRound.textContent = currentRound;
@@ -56,19 +64,30 @@ export class MahjongDomView {
       }
       return tile;
     }));
+    this.renderTypeHighlights(selectedTileId);
     this.renderStations(state, playerName);
-    this.renderHands(state, selectedTileId);
+    this.riichiMode = riichiMode;
+    this.renderHands(state, selectedTileId, riichiMode);
     this.renderRivers(state, events);
     this.renderMelds(state);
-    this.renderActions(state, selectedTileId);
+    this.renderActions(state, selectedTileId, riichiMode);
     this.renderStatus(state, events, playerName);
     this.renderResult(state, playerName, showResult);
   }
 
-  renderSelection(state, selectedTileId, playerName) {
-    this.renderHands(state, selectedTileId);
-    this.renderActions(state, selectedTileId);
+  renderSelection(state, selectedTileId, playerName, { riichiMode = false } = {}) {
+    this.riichiMode = riichiMode;
+    this.renderHands(state, selectedTileId, riichiMode);
+    this.renderActions(state, selectedTileId, riichiMode);
+    this.renderTypeHighlights(selectedTileId);
     return this.visualUi(playerName, selectedTileId);
+  }
+
+  renderTypeHighlights(selectedTileId) {
+    const selectedType = selectedTileId ? tileType(selectedTileId) : 0;
+    for (const tile of this.elements.dora.querySelectorAll("[data-type]")) {
+      tile.classList.toggle("is-type-match", Number(tile.dataset.type) === selectedType);
+    }
   }
 
   visualUi(playerName, selectedTileId) {
@@ -115,10 +134,6 @@ export class MahjongDomView {
       const name = state.playerNames?.[seat - 1] || PLAYERS[seat - 1].name;
       station.querySelector("[data-name]").textContent = seat === 1 ? playerName : name;
       station.querySelector("[data-wind]").textContent = seatWind(state, seat);
-      const detail = station.querySelector("[data-detail]");
-      const riichi = state.riichi?.[playerId] === true;
-      detail.textContent = riichi ? "立直" : "";
-      detail.hidden = !riichi;
       const consoleScore = this.elements.consoleScores[seat - 1];
       consoleScore.textContent = String(Number(state.scores?.[seat - 1] ?? 0));
       consoleScore.classList.toggle(
@@ -136,9 +151,10 @@ export class MahjongDomView {
     });
   }
 
-  renderHands(state, selectedTileId) {
+  renderHands(state, selectedTileId, riichiMode = false) {
     const hand = orderedHand(state.ownHand, state.drawnTile);
     const forbiddenTypes = new Set(asArray(state.legalActions?.forbiddenDiscardTypes));
+    const riichiTiles = new Set(asArray(state.legalActions?.riichiTiles).map(Number));
     this.elements.hand.replaceChildren(
       ...hand.map((tileId) => {
         const tile = createTile(tileType(tileId), "hand", isRedFive(tileId));
@@ -147,14 +163,29 @@ export class MahjongDomView {
         tile.setAttribute("role", "option");
         tile.setAttribute("aria-selected", String(tileId === selectedTileId));
         tile.classList.toggle("is-selected", tileId === selectedTileId);
+        tile.classList.toggle(
+          "is-type-match",
+          tileId !== selectedTileId
+            && selectedTileId > 0
+            && tileType(tileId) === tileType(selectedTileId),
+        );
         tile.classList.toggle("is-drawn", tileId === Number(state.drawnTile));
         tile.classList.toggle(
           "is-riichi-choice",
-          asArray(state.legalActions?.riichiTiles).includes(tileId),
+          riichiMode && riichiTiles.has(tileId),
         );
-        tile.disabled = !state.legalActions?.canDiscard || forbiddenTypes.has(tileType(tileId));
+        tile.classList.toggle("is-riichi-blocked", riichiMode && !riichiTiles.has(tileId));
+        const discardable = state.legalActions?.canDiscard
+          && !forbiddenTypes.has(tileType(tileId))
+          && (!riichiMode || riichiTiles.has(tileId));
+        tile.setAttribute(
+          "aria-disabled",
+          String(!discardable),
+        );
         tile.addEventListener("click", () => this.onSelectTile(tileId));
-        tile.addEventListener("dblclick", () => this.onDiscardTile(tileId));
+        if (discardable) {
+          tile.addEventListener("dblclick", () => this.onDiscardTile(tileId));
+        }
         return tile;
       }),
     );
@@ -206,10 +237,20 @@ export class MahjongDomView {
     }
   }
 
-  renderActions(state, selectedTileId) {
+  renderActions(state, selectedTileId, riichiMode = false) {
     const legal = state.legalActions ?? {};
     const { elements } = this;
     elements.claims.replaceChildren();
+    elements.cancelRiichi.hidden = !riichiMode;
+    if (riichiMode) {
+      elements.pass.hidden = true;
+      elements.abort.hidden = true;
+      elements.tsumo.hidden = true;
+      elements.riichi.hidden = true;
+      elements.furiten.hidden = true;
+      elements.actionHint.textContent = "选择一张牌宣言立直";
+      return;
+    }
     const claims = asArray(legal.claims);
     const { chi: chiClaims, immediate: immediateClaims } = partitionClaimActions(claims);
     for (const claim of immediateClaims) {
@@ -241,12 +282,12 @@ export class MahjongDomView {
     elements.abort.hidden = !legal.canAbortNine;
     elements.tsumo.hidden = !legal.canTsumo;
     elements.riichi.hidden = !legal.canRiichi;
-    elements.riichi.disabled = !asArray(legal.riichiTiles).includes(selectedTileId);
+    elements.riichi.disabled = false;
     elements.furiten.hidden = !state.furiten;
     elements.actionHint.textContent = canClaim
       ? "有人打出了你需要的牌"
       : legal.canDiscard
-        ? "向上拖动手牌，越线后松手打出"
+        ? "向上拖动手牌，进入出牌区后松手打出"
         : state.phase === "hand_ended"
           ? "本局已结束"
           : "等待其他玩家";
@@ -293,6 +334,7 @@ export class MahjongDomView {
       );
       choice.append(...preview.map((tile) => {
         const element = createTile(tile.type, "claim-choice", tile.red);
+        markDora(element, tile.type, this.doraCounts);
         element.setAttribute("aria-hidden", "true");
         return element;
       }));
@@ -389,6 +431,7 @@ export class MahjongDomView {
         Number(scored.winnerIndex) || state.players.indexOf(state.winners?.[scoreIndex]) + 1,
         winnerNames[scoreIndex] || winnerName,
         allResults.length > 1,
+        this.doraCounts,
       )),
     );
     elements.resultYaku.replaceChildren(
@@ -411,7 +454,7 @@ export class MahjongDomView {
   }
 }
 
-function createResultHand(state, winnerIndex, winnerName, showName) {
+function createResultHand(state, winnerIndex, winnerName, showName, doraCounts) {
   const playerId = state.players?.[winnerIndex - 1];
   const row = document.createElement("section");
   row.className = "result-hand";
@@ -427,21 +470,26 @@ function createResultHand(state, winnerIndex, winnerName, showName) {
   const winning = Number(state.winningTile) > 0
     ? { type: Number(state.winningTile), red: state.winningTileRed === true }
     : null;
-  tiles.append(...concealed.map((tile) => createTile(tile.type, "result", tile.red)));
+  tiles.append(...concealed.map((tile) => {
+    const element = createTile(tile.type, "result", tile.red);
+    markDora(element, tile.type, doraCounts);
+    return element;
+  }));
   if (winning) {
     const winningTile = createTile(winning.type, "result", winning.red);
+    markDora(winningTile, winning.type, doraCounts);
     winningTile.classList.add("is-winning-tile");
     tiles.append(winningTile);
   }
   const resultMelds = asArray(state.melds?.[playerId])
-    .map((meld) => createResultMeld(meld, winnerIndex))
+    .map((meld) => createResultMeld(meld, winnerIndex, doraCounts))
     .reverse();
   tiles.append(...resultMelds);
   row.append(tiles);
   return row;
 }
 
-function createResultMeld(meld, winnerIndex) {
+function createResultMeld(meld, winnerIndex, doraCounts) {
   const group = document.createElement("span");
   group.className = "result-meld";
   const display = meldDisplayLayout(meld, winnerIndex);
@@ -454,6 +502,7 @@ function createResultMeld(meld, winnerIndex) {
   );
   for (const entry of display.entries) {
     const tile = createTile(entry.type, "result", entry.red);
+    if (!entry.faceDown) markDora(tile, entry.type, doraCounts);
     const centreFromRight = entry.along + normalExtent / 2;
     const centreFromLeft = display.span - centreFromRight;
     tile.style.setProperty("--result-meld-x", `${centreFromLeft * pixelsPerUnit + 1}px`);
@@ -495,6 +544,7 @@ function collectElements() {
     abort: document.querySelector("#abort-button"),
     tsumo: document.querySelector("#tsumo-button"),
     riichi: document.querySelector("#riichi-button"),
+    cancelRiichi: document.querySelector("#cancel-riichi-button"),
     furiten: document.querySelector("#furiten-badge"),
     hand: document.querySelector("#hand-bottom"),
     result: document.querySelector("#result-panel"),
@@ -548,4 +598,8 @@ function createTileBack() {
   tile.className = "mahjong-tile tile-back";
   tile.setAttribute("aria-hidden", "true");
   return tile;
+}
+
+function markDora(tile, type, doraCounts) {
+  tile.classList.toggle("is-dora", doraCounts?.has(Number(type)) === true);
 }

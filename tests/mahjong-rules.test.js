@@ -100,6 +100,9 @@ test("Mahjong stores the current draw outside the fixed concealed rack", async (
     tedashi.turnIndex, tedashi.drawnTile = 1, 53
     local tedashi_result = on_action(tedashi, { type = "discard", tileId = 109 }, { actor = { id = "p1" } })
     tedashi = tedashi_result.state
+    local opponent_projection = view(tedashi, tedashi_result.events, {
+      viewer = { id = "p2", seat = 2, role = "player", isOwner = false }
+    })
 
     local tsumogiri = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 74 } })
     tsumogiri.hands.p1 = copy_array(base_rack)
@@ -116,24 +119,36 @@ test("Mahjong stores the current draw outside the fixed concealed rack", async (
     end
     result = {
       tedashiAccepted = tedashi_result.accepted,
+      tedashiFromDrawn = tedashi_result.events[1].fromDrawn,
+      projectedDiscardType = opponent_projection.events[1].tile,
+      projectedFromDrawn = opponent_projection.events[1].fromDrawn,
+      projectedTileIdHidden = opponent_projection.events[1].tileId == nil,
+      projectedHandIndexHidden = opponent_projection.events[1].handIndex == nil,
       tedashiRackCount = #tedashi.hands.p1,
       tedashiIntegratedDraw = contains(tedashi.hands.p1, 53),
       tedashiRemovedDiscard = not contains(tedashi.hands.p1, 109),
       nextRackCount = #tedashi.hands.p2,
       nextDrawSeparated = tedashi.turnIndex == 2 and tedashi.drawnTile > 0,
       tsumogiriAccepted = tsumogiri_result.accepted,
+      tsumogiriFromDrawn = tsumogiri_result.events[1].fromDrawn,
       tsumogiriRackUnchanged = before == table.concat(tsumogiri.hands.p1, ","),
     }
   `);
 
   assert.deepEqual(result, {
     tedashiAccepted: true,
+    tedashiFromDrawn: false,
+    projectedDiscardType: 28,
+    projectedFromDrawn: false,
+    projectedTileIdHidden: true,
+    projectedHandIndexHidden: true,
     tedashiRackCount: 13,
     tedashiIntegratedDraw: true,
     tedashiRemovedDiscard: true,
     nextRackCount: 13,
     nextDrawSeparated: true,
     tsumogiriAccepted: true,
+    tsumogiriFromDrawn: true,
     tsumogiriRackUnchanged: true,
   });
 });

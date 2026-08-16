@@ -1195,7 +1195,7 @@ local function perform_discard(state, tile_id, actor_id, seat, riichi_declared)
   state.lastDiscard = { player = actor_id, playerIndex = seat, tile = tile_id,
     discardIndex = #state.discards[actor_id] }
   local events = { { type = riichi_declared and "riichi" or "discarded", player = actor_id,
-    playerIndex = seat, tile = tile_id } }
+    playerIndex = seat, tile = tile_id, fromDrawn = from_drawn } }
   if not begin_claims(state, seat, tile_id) then advance_after_discard(state, seat, events) end
   return accepted(state, events)
 end

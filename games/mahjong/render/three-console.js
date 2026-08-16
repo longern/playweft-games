@@ -19,12 +19,12 @@ const PANEL_BORDER_INSET = 16;
 
 export const TABLE_CONSOLE_SCORE_LAYOUT = Object.freeze({
   panelBorderInset: PANEL_BORDER_INSET,
-  edgeInset: 88,
-  scoreFontSize: 52,
-  stickEdgeInset: 42,
-  stickWidth: 144,
-  stickHeight: 144 / 7,
-  stickDotRadius: 7.2,
+  edgeInset: 99,
+  scoreFontSize: 64,
+  stickEdgeInset: 44.5,
+  stickWidth: 177,
+  stickHeight: 177 / 7,
+  stickDotRadius: 8.85,
 });
 
 export function prepareTableConsoleContext(context, canvas) {

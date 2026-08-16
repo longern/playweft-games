@@ -46,6 +46,32 @@ export function orderedHand(hand, drawnTile) {
   return drawn ? [...rack, drawn] : rack;
 }
 
+export function deferredHandInsertion(previousState, events, {
+  ownDiscardedTile = 0,
+  random = Math.random,
+} = {}) {
+  const discard = asArray(events).find((event) =>
+    (event?.type === "discarded" || event?.type === "riichi")
+      && event.fromDrawn === false);
+  const seat = Number(discard?.playerIndex) || 0;
+  if (!seat || Number(previousState?.drawnPlayerIndex) !== seat) return null;
+  if (seat !== 1) {
+    const playerId = asArray(previousState?.players)[seat - 1];
+    const rackCount = Math.max(0, Number(previousState?.handCounts?.[playerId]) || 0);
+    if (!rackCount) return null;
+    const randomValue = Math.max(0, Math.min(0.999999, Number(random()) || 0));
+    return { seat, rackIndex: Math.floor(randomValue * rackCount) };
+  }
+
+  const drawnTile = Number(previousState?.drawnTile) || 0;
+  const discardedTile = Number(ownDiscardedTile) || 0;
+  const ownHand = asArray(previousState?.ownHand).map(Number);
+  const discardIndex = ownHand.indexOf(discardedTile);
+  if (!drawnTile || discardIndex < 0) return null;
+  ownHand.splice(discardIndex, 1);
+  return { seat, ownHand, drawnTile };
+}
+
 export function exhaustiveDrawPresentation(state) {
   if (state?.phase !== "hand_ended"
     || state.draw !== true
@@ -55,7 +81,9 @@ export function exhaustiveDrawPresentation(state) {
   const tenpai = asArray(state.result?.tenpai);
   const revealed = [];
   const covered = [];
-  for (let seat = 1; seat <= 4; seat += 1) {
+  // The local hand is already face-up in the HUD, so only opponents need the
+  // exhaustive-draw reveal/cover presentation.
+  for (let seat = 2; seat <= 4; seat += 1) {
     (tenpai[seat - 1] === true ? revealed : covered).push(seat);
   }
   return { revealed, covered };
@@ -117,6 +145,30 @@ export function doraIndicatorSlots(state) {
     { length: DORA_INDICATOR_SLOT_COUNT },
     (_, index) => indicators[index] ?? null,
   );
+}
+
+export function nextDoraType(indicatorType) {
+  const type = Number(indicatorType) || 0;
+  if (type >= 1 && type <= 27) {
+    const first = Math.floor((type - 1) / 9) * 9 + 1;
+    return first + ((type - first + 1) % 9);
+  }
+  if (type >= 28 && type <= 31) return 28 + ((type - 28 + 1) % 4);
+  if (type >= 32 && type <= 34) return 32 + ((type - 32 + 1) % 3);
+  return 0;
+}
+
+export function doraTypeCounts(state) {
+  const canonical = asArray(state?.doraIndicators).map(Number).filter(Boolean);
+  const indicators = canonical.length
+    ? canonical
+    : doraIndicatorSlots(state).filter(Boolean).map((indicator) => Number(indicator.type));
+  const counts = new Map();
+  for (const indicator of indicators) {
+    const type = nextDoraType(indicator);
+    if (type) counts.set(type, (counts.get(type) || 0) + 1);
+  }
+  return counts;
 }
 
 export function tileFace(type) {
