@@ -630,11 +630,13 @@ local function mark_next_hand(state, dealer_repeats, was_draw)
   local extension_stage = state.roundWind > limit
   if not state.matchEnded and dealer_repeats and state.rules.agariYame
     and not (state.result and state.result.abortive)
-    and (scheduled_final or extension_stage) and top_seat == state.dealerIndex and top_score >= 30000 then
+    and (scheduled_final or (extension_stage and not was_draw))
+    and top_seat == state.dealerIndex and top_score >= 30000 then
     state.matchEnded, state.endReason = true, "庄家止和"
   end
   if not state.matchEnded and not dealer_repeats and (scheduled_final or extension_stage) then
-    if not state.rules.extensions or top_score >= 30000 then
+    local reached_target = top_score >= 30000 and (scheduled_final or not was_draw)
+    if not state.rules.extensions or reached_target then
       state.matchEnded, state.endReason = true, "对局结束"
     elseif state.roundWind >= limit + 1 and state.handNumber == 4 then
       state.matchEnded, state.endReason = true, "延长赛结束"

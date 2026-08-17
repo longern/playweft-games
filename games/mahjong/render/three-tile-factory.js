@@ -13,6 +13,7 @@ import { TILE_SIZE } from "./three-layout.js";
 
 const ATLAS_COLUMNS = 8;
 const ATLAS_ROWS = 5;
+const DISABLED_WASH_RENDER_ORDER = 10;
 export const BACK_LAYER_DEPTH_RATIO = 0.36;
 export const TILE_EDGE_SEGMENTS = 7;
 // About 2 mm on a 28 mm parlor tile: clearly rounded at game-camera distance
@@ -143,6 +144,11 @@ export class ThreeTileFactory {
       tile.add(face);
       if (dimmed) {
         const wash = new Mesh(this.disabledGeometry, this.disabledWashMaterial);
+        // Transparent objects are otherwise sorted by their object origins. The
+        // face plane sits in front of this rounded box's origin, so it can be
+        // painted after the wash even though the box surface is physically
+        // closer to the camera. Force the full-tile wash to be composited last.
+        wash.renderOrder = DISABLED_WASH_RENDER_ORDER;
         wash.userData.tileRoot = tile;
         tile.add(wash);
       }

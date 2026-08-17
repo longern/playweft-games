@@ -672,6 +672,66 @@ test("Mahjong supports agari-yame and East-match extension", async () => {
   assert.equal(result.extensionHand, 1);
 });
 
+test("Mahjong extension draws ignore target score until the forced final hand", async () => {
+  const result = await runScenario(`
+    function extension_state(match_type, wind, hand, scores)
+      local state = setup({ players = ${PLAYER_TABLE}, match = {
+        randomSeed = 71,
+        settings = { matchType = match_type }
+      } })
+      state.roundWind, state.handNumber, state.dealerIndex = wind, hand, 1
+      state.scores = scores
+      state.result = { tenpai = { false, false, false, false } }
+      return state
+    end
+
+    south_draw = extension_state("east", 2, 1, { 32000, 24000, 23000, 21000 })
+    mark_next_hand(south_draw, false, true)
+    west_draw = extension_state("hanchan", 3, 1, { 32000, 24000, 23000, 21000 })
+    mark_next_hand(west_draw, false, true)
+
+    south_tenpai = extension_state("east", 2, 1, { 32000, 24000, 23000, 21000 })
+    mark_next_hand(south_tenpai, true, true)
+    south_win = extension_state("east", 2, 1, { 32000, 24000, 23000, 21000 })
+    mark_next_hand(south_win, false, false)
+
+    south_four = extension_state("east", 2, 4, { 26000, 25000, 25000, 24000 })
+    mark_next_hand(south_four, false, true)
+    west_four = extension_state("hanchan", 3, 4, { 26000, 25000, 25000, 24000 })
+    mark_next_hand(west_four, false, true)
+    south_four_repeat = extension_state("east", 2, 4, { 32000, 24000, 23000, 21000 })
+    mark_next_hand(south_four_repeat, true, true)
+
+    result = {
+      southDrawEnded = south_draw.matchEnded,
+      southNextHand = south_draw.nextHandNumber,
+      westDrawEnded = west_draw.matchEnded,
+      westNextHand = west_draw.nextHandNumber,
+      tenpaiEnded = south_tenpai.matchEnded,
+      tenpaiNextHand = south_tenpai.nextHandNumber,
+      winEnded = south_win.matchEnded,
+      southFourEnded = south_four.matchEnded,
+      southFourReason = south_four.endReason,
+      westFourEnded = west_four.matchEnded,
+      westFourReason = west_four.endReason,
+      southFourRepeatEnded = south_four_repeat.matchEnded,
+    }
+  `);
+
+  assert.equal(result.southDrawEnded, false);
+  assert.equal(result.southNextHand, 2);
+  assert.equal(result.westDrawEnded, false);
+  assert.equal(result.westNextHand, 2);
+  assert.equal(result.tenpaiEnded, false);
+  assert.equal(result.tenpaiNextHand, 1);
+  assert.equal(result.winEnded, true);
+  assert.equal(result.southFourEnded, true);
+  assert.equal(result.southFourReason, "延长赛结束");
+  assert.equal(result.westFourEnded, true);
+  assert.equal(result.westFourReason, "延长赛结束");
+  assert.equal(result.southFourRepeatEnded, false);
+});
+
 test("Mahjong forbids genbutsu and suji kuikae immediately after a call", async () => {
   const result = await runScenario(`
     function ids(types)

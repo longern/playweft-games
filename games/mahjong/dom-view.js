@@ -17,6 +17,7 @@ import {
   tileType,
 } from "./game-format.js";
 import {
+  MELD_SIDEWAYS_BOTTOM_INSET,
   MELD_SCALE,
   meldDisplayLayout,
   TILE_SIZE,
@@ -24,6 +25,7 @@ import {
 import { tileFaceFrameIndex } from "./render/tile-texture-map.js";
 
 const RESULT_TILE_WIDTH_PX = 33;
+const RESULT_TILE_HEIGHT_PX = 47;
 
 export class MahjongDomView {
   constructor({ onAction, onSelectTile, onDiscardTile }) {
@@ -165,7 +167,10 @@ export class MahjongDomView {
       const name = state.playerNames?.[seat - 1] || PLAYERS[seat - 1].name;
       station.querySelector("[data-name]").textContent =
         seat === 1 ? playerName : name;
-      station.querySelector("[data-wind]").textContent = seatWind(state, seat);
+      const wind = seatWind(state, seat);
+      const windBadge = station.querySelector("[data-wind]");
+      windBadge.textContent = wind;
+      windBadge.classList.toggle("is-east", wind === "东");
       const consoleScore = this.elements.consoleScores[seat - 1];
       consoleScore.textContent = String(Number(state.scores?.[seat - 1] ?? 0));
       consoleScore.classList.toggle(
@@ -468,7 +473,9 @@ export class MahjongDomView {
       elements.resultKicker.textContent = abortive ? "途中流局" : "牌山摸尽";
       elements.resultTitle.textContent = state.abortiveReason || "流局";
       elements.resultSummary.textContent = `${state.result?.payment ?? "不听罚符结算"}。${state.matchEnded ? state.endReason || "对局结束。" : "准备下一局。"}`;
-      elements.resultYaku.textContent = scoreDeltaSummary(state, playerName);
+      elements.resultYaku.replaceChildren();
+      elements.resultYaku.hidden = true;
+      elements.resultDelta.textContent = scoreDeltaSummary(state, playerName);
       elements.rematch.textContent = state.matchEnded ? "同规则再战" : "下一局";
       return;
     }
@@ -522,6 +529,7 @@ export class MahjongDomView {
         ),
       ),
     );
+    elements.resultYaku.hidden = false;
     elements.resultYaku.replaceChildren(
       ...allResults.flatMap((scored, scoreIndex) =>
         asArray(scored.yaku).map((yaku) => {
@@ -537,10 +545,7 @@ export class MahjongDomView {
         }),
       ),
     );
-    const delta = document.createElement("b");
-    delta.className = "result-delta";
-    delta.textContent = scoreDeltaSummary(state, playerName);
-    elements.resultYaku.append(delta);
+    elements.resultDelta.textContent = scoreDeltaSummary(state, playerName);
     elements.rematch.textContent = state.matchEnded ? "同规则再战" : "下一局";
   }
 }
@@ -601,10 +606,13 @@ function createResultMeld(meld, winnerIndex, doraCounts) {
     "--result-meld-width",
     `${display.span * pixelsPerUnit + 3}px`,
   );
-  group.classList.toggle(
-    "has-stacked-tile",
-    display.entries.some((entry) => entry.stackLevel > 0),
-  );
+  const resultMeldHeight = display.entries.reduce((height, entry) => {
+    const baseInward = entry.sideways ? MELD_SIDEWAYS_BOTTOM_INSET : 0;
+    const inward = (entry.inward - baseInward) * pixelsPerUnit;
+    const tileHeight = entry.sideways ? RESULT_TILE_WIDTH_PX : RESULT_TILE_HEIGHT_PX;
+    return Math.max(height, inward + tileHeight);
+  }, RESULT_TILE_HEIGHT_PX);
+  group.style.setProperty("--result-meld-height", `${resultMeldHeight}px`);
   for (const entry of display.entries) {
     const tile = createTile(entry.type, "result", entry.red);
     if (!entry.faceDown) markDora(tile, entry.type, doraCounts);
@@ -614,8 +622,12 @@ function createResultMeld(meld, winnerIndex, doraCounts) {
       "--result-meld-x",
       `${centreFromLeft * pixelsPerUnit + 1.5}px`,
     );
+    const baseInward = entry.sideways ? MELD_SIDEWAYS_BOTTOM_INSET : 0;
+    tile.style.setProperty(
+      "--result-meld-inward",
+      `${(entry.inward - baseInward) * pixelsPerUnit}px`,
+    );
     tile.classList.toggle("is-sideways", entry.sideways);
-    tile.classList.toggle("is-stacked", entry.stackLevel > 0);
     tile.classList.toggle("is-face-down", entry.faceDown);
     if (entry.faceDown) tile.setAttribute("aria-label", "暗杠牌背");
     group.append(tile);
@@ -666,6 +678,7 @@ function collectElements() {
     resultTotal: document.querySelector("#result-total"),
     resultHands: document.querySelector("#result-hands"),
     resultYaku: document.querySelector("#result-yaku"),
+    resultDelta: document.querySelector("#result-delta"),
     rematch: document.querySelector("#rematch-button"),
     setup: document.querySelector("#setup-panel"),
     opponentHands: {

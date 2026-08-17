@@ -203,8 +203,8 @@
 }
 
 .action-bar .claim-pon {
-  border-color: #82add7;
-  background: linear-gradient(145deg, #669bd0, #345f8d);
+  border-color: #779fc8;
+  background: linear-gradient(145deg, #5d90c3, #2e557f);
   color: #f8fbff;
 }
 
@@ -263,4 +263,3 @@
   box-shadow: 0 0 18px rgba(133, 26, 37, 0.34);
   color: #fff5f3;
 }
-

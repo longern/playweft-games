@@ -11,6 +11,10 @@ export const MELD_SCALE = 0.78;
 export const MELD_GROUP_GAP = 0.075;
 export const MELD_HAND_CLEARANCE = 0.14;
 export const OPPONENT_MELD_HAND_CLEARANCE = 0.42;
+export const MELD_TILE_GAP = 0.035;
+export const MELD_SIDEWAYS_BOTTOM_INSET =
+  (TILE_SIZE.width - TILE_SIZE.height) * MELD_SCALE / 2;
+export const MELD_KAKAN_INWARD_STEP = TILE_SIZE.width * MELD_SCALE + MELD_TILE_GAP;
 export const CONCEALED_RACK_CAPACITY = 13;
 // Perspective makes the near half visually denser, so the interactive centre
 // sits slightly beyond the geometric screen centre toward the opposite seat.
@@ -34,6 +38,16 @@ export const OWN_HAND_DRAG = Object.freeze({
   activationDistance: 8,
 });
 
+export function presentedTileHingeTransform(covered = false) {
+  const fallDirection = covered ? 1 : -1;
+  return {
+    pivotZ: fallDirection * TILE_SIZE.depth / 2,
+    tileY: TILE_SIZE.height / 2,
+    tileZ: -fallDirection * TILE_SIZE.depth / 2,
+    restingRotationX: fallDirection * Math.PI / 2,
+  };
+}
+
 export const SEAT_YAW = Object.freeze({
   bottom: 0,
   right: Math.PI / 2,
@@ -43,9 +57,9 @@ export const SEAT_YAW = Object.freeze({
 
 const HAND_ANCHORS = Object.freeze({
   bottom: { x: 0, z: 7.45 },
-  right: { x: 8.4, z: -0.5 },
+  right: { x: 8.4, z: PLAYFIELD_CENTRE_Z },
   top: { x: 0, z: -9.75 },
-  left: { x: -8.4, z: -0.5 },
+  left: { x: -8.4, z: PLAYFIELD_CENTRE_Z },
 });
 
 const RIVER_COLUMN_COUNT = 6;
@@ -128,8 +142,7 @@ export function riverTransform(
 ) {
   const anchor = RIVER_ANCHORS[position];
   if (!anchor) throw new RangeError(`Invalid mahjong seat: ${position}`);
-  const column = index % RIVER_COLUMN_COUNT;
-  const row = Math.floor(index / RIVER_COLUMN_COUNT);
+  const { column, row } = riverGridPosition(index);
   const riichiColumn = Number.isInteger(suppliedRiichiColumn)
     ? suppliedRiichiColumn
     : riichi ? column : -1;
@@ -155,10 +168,19 @@ export function riverTransform(
   };
 }
 
+export function riverGridPosition(index) {
+  const normalizedIndex = Math.max(0, Math.trunc(Number(index) || 0));
+  const row = Math.min(2, Math.floor(normalizedIndex / RIVER_COLUMN_COUNT));
+  const column = row === 2
+    ? normalizedIndex - RIVER_COLUMN_COUNT * 2
+    : normalizedIndex % RIVER_COLUMN_COUNT;
+  return { column, row };
+}
+
 export function meldTransform(
   position,
   offset,
-  { absolute = false } = {},
+  { absolute = false, inwardOffset = 0 } = {},
 ) {
   const anchor = HAND_ANCHORS[position];
   if (!anchor) throw new RangeError(`Invalid mahjong seat: ${position}`);
@@ -181,7 +203,8 @@ export function meldTransform(
   const rackLaneInset = TILE_SIZE.depth / 2
     + TILE_SIZE.height * MELD_SCALE / 2
     + 0.08;
-  const inward = position === "left" || position === "right" ? 0 : rackLaneInset;
+  const laneInward = position === "left" || position === "right" ? 0 : rackLaneInset;
+  const inward = laneInward + (Number(inwardOffset) || 0);
   const fromRight = meldRightCentre + hudAlignment - along;
   return {
     x: anchor.x + fromRight * cos - inward * sin,
@@ -200,7 +223,7 @@ export function meldDisplayLayout(meld, claimantSeat) {
     sourceIndex,
     sideways: false,
     faceDown: false,
-    stackLevel: 0,
+    inward: 0,
   }));
 
   if (meld?.kind === "ankan") {
@@ -227,13 +250,14 @@ export function meldDisplayLayout(meld, claimantSeat) {
     entries.length + 1,
   );
   called.sideways = true;
+  called.inward = MELD_SIDEWAYS_BOTTOM_INSET;
   entries.splice(markerIndex, 0, called);
   const measured = measureMeldEntries(entries);
 
   if (added) {
     added.sideways = true;
-    added.stackLevel = 1;
     added.along = called.along;
+    added.inward = called.inward + MELD_KAKAN_INWARD_STEP;
     measured.entries.push(added);
   }
   return measured;
@@ -264,8 +288,6 @@ export function meldRightExtension(melds, claimantSeat) {
   );
   return Math.max(0, totalSpan - available);
 }
-
-const MELD_TILE_GAP = 0.035;
 
 function measureMeldEntries(entries) {
   const normalExtent = TILE_SIZE.width * MELD_SCALE;

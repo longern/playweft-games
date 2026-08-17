@@ -115,13 +115,9 @@
   position: relative;
   display: block;
   width: var(--result-meld-width);
-  height: 47px;
+  height: var(--result-meld-height, 47px);
   flex: 0 0 var(--result-meld-width);
   margin-left: 9px;
-}
-
-.result-meld.has-stacked-tile {
-  height: 63px;
 }
 
 .result-meld .tile-result {
@@ -133,17 +129,8 @@
 }
 
 .result-meld .tile-result.is-sideways {
-  bottom: -6.75px;
+  bottom: calc(-6.75px + var(--result-meld-inward, 0px));
   transform: translateX(-50%) rotate(90deg);
-}
-
-.result-meld .tile-result.is-stacked {
-  bottom: 16.5px;
-  z-index: 2;
-}
-
-.result-meld .tile-result.is-sideways.is-stacked {
-  bottom: 9.75px;
 }
 
 .result-meld .tile-result.is-face-down {
@@ -160,50 +147,55 @@
 .result-yaku {
   display: grid;
   width: 100%;
-  max-height: 170px;
+  height: 188px;
+  max-height: 188px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
   gap: 5px 8px;
-  margin: 0 0 16px;
+  margin: 0 0 8px;
   overflow: auto;
 }
 
 .result-yaku span {
-  display: flex;
+  display: grid;
   min-width: 0;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 5px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.07);
+  min-height: 33.6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  column-gap: 12px;
+  padding: 5px 0;
   color: rgba(255, 255, 255, 0.78);
-  font-size: 14.7px;
+  font-size: 18px;
+  line-height: 1.2;
 }
 
 .result-yaku span i {
   overflow: hidden;
   font-style: normal;
+  text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .result-yaku span b {
-  flex: 0 0 auto;
   color: #f2d17d;
+  text-align: left;
 }
 
-.result-yaku .result-delta {
-  grid-column: 1 / -1;
-  margin-top: 5px;
+.result-delta {
+  display: block;
+  width: 100%;
+  margin: 0 0 16px;
   color: var(--gold);
-  font-size: 0.7rem;
+  font-size: 14.7px;
+  text-align: center;
 }
 
 .result-footer {
   display: flex;
   width: 100%;
   min-height: 42px;
-  align-items: center;
+  align-items: flex-end;
   justify-content: flex-end;
   gap: 16px;
 }
@@ -217,6 +209,8 @@
 }
 
 .result-total {
+  display: inline-flex;
+  align-items: flex-end;
   color: #fff;
   font-family: "Roboto Slab", ui-monospace, monospace;
   font-size: 42px;
@@ -237,4 +231,3 @@
   background: linear-gradient(145deg, #efd487, #b98938);
   color: #34240d;
 }
-

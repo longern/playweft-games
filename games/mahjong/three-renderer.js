@@ -37,7 +37,9 @@ import {
   meldTransform,
   ownHandOverlayTransform,
   OWN_HAND_DRAG,
+  presentedTileHingeTransform,
   RIVER_TILE_GAP,
+  riverGridPosition,
   riverTransform,
   TILE_SIZE,
 } from "./render/three-layout.js";
@@ -362,14 +364,18 @@ export class MahjongThreeRenderer {
       concealed: covered,
       dora: !covered && this.doraCounts.has(Number(tileInfo.type)),
     });
-    slot.add(tile);
+    const hingeTransform = presentedTileHingeTransform(covered);
+    const hinge = new Group();
+    hinge.position.z = hingeTransform.pivotZ;
+    tile.position.set(0, hingeTransform.tileY, hingeTransform.tileZ);
+    hinge.add(tile);
+    slot.add(hinge);
     this.layers.hands.add(slot);
     if (animate) {
-      tile.position.y = TILE_SIZE.height / 2;
-      this.revealTiles.push({ tile, delay: 0, covered });
+      this.revealTiles.push({ hinge, delay: 0, covered });
       return;
     }
-    settlePresentedTile(tile, covered);
+    settlePresentedTile(hinge, covered);
   }
 
   startHandReveal(delay = 0) {
@@ -377,13 +383,11 @@ export class MahjongThreeRenderer {
     const duration = 480;
     const tick = (now) => {
       let running = false;
-      for (const { tile, delay, covered } of this.revealTiles) {
+      for (const { hinge, delay, covered } of this.revealTiles) {
         const progress = Math.max(0, Math.min(1, (now - startedAt - delay) / duration));
         const eased = 1 - (1 - progress) ** 3;
-        tile.rotation.x = (covered ? 1 : -1) * Math.PI / 2 * eased;
-        tile.position.y = TILE_SIZE.height / 2
-          + (TILE_SIZE.depth / 2 - TILE_SIZE.height / 2) * eased;
-        tile.position.z = -0.3 * eased;
+        const { restingRotationX } = presentedTileHingeTransform(covered);
+        hinge.rotation.x = restingRotationX * eased;
         if (progress < 1) running = true;
       }
       this.drawFrame();
@@ -435,13 +439,15 @@ export class MahjongThreeRenderer {
       const riichiColumns = new Map();
       river.forEach((discard, index) => {
         if (discard.riichi === true && !discard.claimed) {
-          riichiColumns.set(Math.floor(index / 6), index % 6);
+          const { column, row } = riverGridPosition(index);
+          riichiColumns.set(row, column);
         }
       });
       river.forEach((discard, index) => {
         if (discard.claimed) return;
+        const { row } = riverGridPosition(index);
         const transform = riverTransform(position, index, discard.riichi === true, {
-          riichiColumn: riichiColumns.get(Math.floor(index / 6)) ?? -1,
+          riichiColumn: riichiColumns.get(row) ?? -1,
         });
         const slot = new Group();
         slot.position.set(transform.x, transform.y, transform.z);
@@ -480,12 +486,12 @@ export class MahjongThreeRenderer {
           const transform = meldTransform(
             position,
             alongOffset + entry.along - rightExtension,
-            { absolute: true },
+            { absolute: true, inwardOffset: entry.inward },
           );
           const slot = new Group();
           slot.position.set(
             transform.x,
-            transform.y + entry.stackLevel * TILE_SIZE.depth * MELD_SCALE,
+            transform.y,
             transform.z,
           );
           slot.rotation.y = transform.yaw + (entry.sideways ? Math.PI / 2 : 0);
@@ -685,10 +691,8 @@ function applyPlanarJitter(slot, yaw, jitter) {
   slot.rotation.y += jitter.yaw;
 }
 
-function settlePresentedTile(tile, covered = false) {
-  tile.rotation.x = (covered ? 1 : -1) * Math.PI / 2;
-  tile.position.y = TILE_SIZE.depth / 2;
-  tile.position.z = -0.3;
+function settlePresentedTile(hinge, covered = false) {
+  hinge.rotation.x = presentedTileHingeTransform(covered).restingRotationX;
 }
 
 function applyStandingTransform(tile, transform) {
