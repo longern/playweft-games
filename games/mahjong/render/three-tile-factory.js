@@ -13,6 +13,7 @@ import { TILE_SIZE } from "./three-layout.js";
 
 const ATLAS_COLUMNS = 8;
 const ATLAS_ROWS = 5;
+const DORA_WASH_RENDER_ORDER = 5;
 const DISABLED_WASH_RENDER_ORDER = 10;
 export const BACK_LAYER_DEPTH_RATIO = 0.36;
 export const TILE_EDGE_SEGMENTS = 7;
@@ -137,17 +138,21 @@ export class ThreeTileFactory {
       glow.userData.tileRoot = tile;
       tile.userData.matchHighlight = glow;
       tile.add(glow);
-      if (dora) {
-        const wash = new Mesh(this.doraWashGeometry, this.doraWashMaterial);
-        wash.position.z = TILE_SIZE.depth / 2 + 0.007;
-        wash.userData.tileRoot = tile;
-        tile.add(wash);
-      }
       const frame = tileFaceFrameIndex(type, red);
       const face = new Mesh(this.faceGeometries[frame], this.faceMaterial);
       face.position.z = TILE_SIZE.depth / 2 + 0.008;
       face.userData.tileRoot = tile;
       tile.add(face);
+      if (dora) {
+        const wash = new Mesh(this.doraWashGeometry, this.doraWashMaterial);
+        // The gold tint must be composited over both the white face and its
+        // printed artwork. Leaving it behind the atlas only colors transparent
+        // gaps and makes the symbols look completely unmarked.
+        wash.position.z = TILE_SIZE.depth / 2 + 0.01;
+        wash.renderOrder = DORA_WASH_RENDER_ORDER;
+        wash.userData.tileRoot = tile;
+        tile.add(wash);
+      }
       if (dimmed) {
         const wash = new Mesh(this.disabledGeometry, this.disabledWashMaterial);
         // Transparent objects are otherwise sorted by their object origins. The

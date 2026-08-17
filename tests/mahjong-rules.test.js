@@ -485,6 +485,7 @@ test("Mahjong scores yaku, han and fu with conserved tsumo payments", async () =
     state.deadWall[1] = 1
     state.drawnTile = ids({ 22 })[1]
     state.turnIndex = 1
+    state.firstTurn.p1 = false
     local applied = on_action(state, { type = "tsumo" }, { actor = { id = "p1" } })
     state = applied.state
     local names = {}
@@ -593,6 +594,81 @@ test("Mahjong supports concealed kan and reveals an extra dora indicator", async
   assert.equal(result.firstIndicatorType, 5);
   assert.equal(result.firstIndicatorRed, true);
   assert.equal(result.drew, true);
+});
+
+test("Mahjong concealed kan preserves riichi and closed-hand wins", async () => {
+  const result = await runScenario(`
+    function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+
+    local riichi_state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 315 } })
+    local riichi_tiles = ids({ 1,1,1,1, 2,3, 5,6,7, 10,11,12, 28,28 })
+    riichi_state.drawnTile = table.remove(riichi_tiles)
+    riichi_state.hands.p1, riichi_state.turnIndex = riichi_tiles, 1
+    riichi_state.rinshan[#riichi_state.rinshan] = (9 - 1) * 4 + 1
+    local riichi_kan = on_action(
+      riichi_state,
+      { type = "kan", kind = "ankan", tileType = 1 },
+      { actor = { id = "p1" } }
+    )
+    riichi_state = riichi_kan.state
+    local riichi_draw = riichi_state.drawnTile
+    local riichi_legal = legal_actions(riichi_state, "p1")
+    local declared = on_action(
+      riichi_state,
+      { type = "riichi", tileId = riichi_draw },
+      { actor = { id = "p1" } }
+    )
+
+    local win_state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 316 } })
+    local win_tiles = ids({ 1,1,1,1, 2,3,4, 5,6,7, 10,11, 28,28 })
+    win_state.drawnTile = table.remove(win_tiles)
+    win_state.hands.p1, win_state.turnIndex = win_tiles, 1
+    win_state.rinshan[#win_state.rinshan] = (12 - 1) * 4 + 1
+    local win_kan = on_action(
+      win_state,
+      { type = "kan", kind = "ankan", tileType = 1 },
+      { actor = { id = "p1" } }
+    )
+    win_state = win_kan.state
+    -- This represents the same closed hand on a later ordinary draw; without
+    -- menzen-tsumo it deliberately has no other yaku.
+    win_state.rinshanWin = false
+    local can_tsumo = legal_actions(win_state, "p1").canTsumo
+    local won = on_action(win_state, { type = "tsumo" }, { actor = { id = "p1" } })
+    local menzen_tsumo = false
+    if won.state.result then
+      for _, yaku in ipairs(won.state.result.yaku) do
+        if yaku.name == "门前清自摸和" then menzen_tsumo = true end
+      end
+    end
+
+    result = {
+      kanAccepted = riichi_kan.accepted and win_kan.accepted,
+      canRiichi = riichi_legal.canRiichi,
+      riichiAccepted = declared.accepted,
+      riichiDeclared = declared.state.riichi.p1,
+      canTsumo = can_tsumo,
+      tsumoAccepted = won.accepted,
+      menzenTsumo = menzen_tsumo,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    kanAccepted: true,
+    canRiichi: true,
+    riichiAccepted: true,
+    riichiDeclared: true,
+    canTsumo: true,
+    tsumoAccepted: true,
+    menzenTsumo: true,
+  });
 });
 
 test("Mahjong opens a robbing-kan window and scores chankan", async () => {
@@ -850,6 +926,7 @@ test("Mahjong supports agari-yame and East-match extension", async () => {
       state.hands[player_id] = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21, 26,26 })
       state.drawnTile = ids({ 22 })[1]
       state.turnIndex = seat
+      state.firstTurn[player_id] = false
     end
     yame = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 61, settings = { matchType = "east" } } })
     yame.handNumber, yame.scores[1] = 4, 31000
@@ -986,4 +1063,261 @@ test("Mahjong forbids genbutsu and suji kuikae immediately after a call", async 
   assert.equal(result.aiAvoided, true);
   assert.equal(result.ponGenbutsu, true);
   assert.equal(result.calledTileIndex, 0);
+});
+
+test("Mahjong voids a riichi declaration when its declaration tile is ronned", async () => {
+  const result = await runScenario(`
+    function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 801 } })
+    local declarer = ids({ 1,2,3, 4,5,6, 10,11,12, 19,20,21, 28,28 })
+    state.drawnTile = table.remove(declarer)
+    state.hands.p1, state.turnIndex = declarer, 1
+    state.hands.p2 = ids({ 1,2, 4,5,6, 10,11,12, 19,20,21, 32,32 })
+    state.riichi.p2 = true
+    state.riichiSticks = 2
+    local declared = on_action(state, { type = "riichi", tileId = 9 }, { actor = { id = "p1" } })
+    state = declared.state
+    while state.phase == "claiming" do
+      local claimant = state.claimants[state.claimIndex]
+      local action = { type = "pass" }
+      for index, option in ipairs(claimant.options) do
+        if claimant.playerId == "p2" and option.kind == "ron" then action = { type = "claim", option = index } end
+      end
+      state = on_action(state, action, { actor = { id = claimant.playerId } }).state
+    end
+    result = {
+      accepted = declared.accepted,
+      declarerRiichi = state.riichi.p1,
+      marker = state.discards.p1[1].riichi,
+      awardedSticks = state.result.riichiAward,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    accepted: true,
+    declarerRiichi: false,
+    marker: false,
+    awardedSticks: 2000,
+  });
+});
+
+test("Mahjong rejects post-riichi okuri-kan and impossible fifth-copy waits", async () => {
+  const result = await runScenario(`
+    function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 802 } })
+    state.hands.p1 = ids({ 1,1,1,1, 2,3, 5,6,7, 10,11,12, 28 })
+    state.drawnTile, state.turnIndex, state.riichi.p1 = ids({ 29 })[1], 1, true
+    local kans = self_kan_options(state, "p1")
+    local sent_kan = false
+    for _, option in ipairs(kans) do if option.kind == "ankan" and option.tileType == 1 then sent_kan = true end end
+
+    local melds = { { kind = "pon", tiles = { 1,2,3 }, fromIndex = 2 } }
+    local waits = waiting_types(ids({ 1, 2,3,4, 5,6,7, 10,11,12 }), melds)
+    local fifth_copy = false
+    for _, kind in ipairs(waits) do if kind == 1 then fifth_copy = true end end
+    result = { sentKan = sent_kan, fifthCopyWait = fifth_copy }
+  `);
+
+  assert.deepEqual(result, { sentKan: false, fifthCopyWait: false });
+});
+
+test("Mahjong tracks no-yaku and declined-ron temporary furiten correctly", async () => {
+  const result = await runScenario(`
+    function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+
+    no_yaku = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 803 } })
+    no_yaku.hands.p3 = ids({ 1,2, 4,5,6, 10,11,12, 25,26,27, 28,28 })
+    begin_claims(no_yaku, 1, 9)
+    local no_yaku_furiten = no_yaku.tempFuriten.p3
+
+    called = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 804 } })
+    called.melds.p2 = { { kind = "pon", tiles = { 125,126,127 }, fromIndex = 3 } }
+    called.hands.p2 = ids({ 1,1, 2,3,4, 5,6,7, 28,28 })
+    called.hands.p3 = ids({ 2,3,4,5,6,7,8,9,10,11,12,29,30 })
+    called.hands.p4 = ids({ 2,3,4,5,6,7,8,9,10,11,12,30,31 })
+    called.discards.p1 = { { tile = 4, claimed = false } }
+    called.lastDiscard = { player = "p1", playerIndex = 1, tile = 4, discardIndex = 1 }
+    begin_claims(called, 1, 4)
+    local claimant = called.claimants[called.claimIndex]
+    local pon_index = 0
+    for index, option in ipairs(claimant.options) do if option.kind == "pon" then pon_index = index end end
+    called = on_action(called, { type = "claim", option = pon_index }, { actor = { id = "p2" } }).state
+    local furiten_after_call = called.tempFuriten.p2
+    local discarded = on_action(called, { type = "discard", tileId = 5 }, { actor = { id = "p2" } })
+    result = {
+      noYakuFuriten = no_yaku_furiten,
+      furitenAfterDecliningRon = furiten_after_call,
+      discardAccepted = discarded.accepted,
+      clearedAfterCalledTurn = not discarded.state.tempFuriten.p2,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    noYakuFuriten: true,
+    furitenAfterDecliningRon: true,
+    discardAccepted: true,
+    clearedAfterCalledTurn: true,
+  });
+});
+
+test("Mahjong blocks last-discard calls and keeps last-tile yaku exclusive", async () => {
+  const result = await runScenario(`
+    function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 805 } })
+    state.wall = {}
+    state.hands.p2 = ids({ 2,3, 5,6,8,9, 11,12,14,15,20,24,29 })
+    local options = claim_options(state, 2, 1, 1)
+    local group_call = false
+    for _, option in ipairs(options) do if option.kind ~= "ron" then group_call = true end end
+
+    state.hands.p1 = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21, 26,26 })
+    state.drawnTile, state.turnIndex = ids({ 22 })[1], 1
+    state.firstTurn.p1, state.rinshanWin = false, true
+    local rinshan = score_hand(state, 1, state.drawnTile, "tsumo")
+    local rinshan_names = {}
+    for _, yaku in ipairs(rinshan.yaku) do rinshan_names[yaku.name] = true end
+
+    state.hands.p2 = ids({ 1,1, 2,2, 3,3, 10,10, 11,11, 19,19, 28 })
+    state.rinshanWin, state.chankanWin, state.firstTurn.p2 = false, false, false
+    local houtei = score_hand(state, 2, ids({ 28 })[1], "ron")
+    local houtei_names = {}
+    for _, yaku in ipairs(houtei.yaku) do houtei_names[yaku.name] = true end
+    state.chankanWin = true
+    local chankan = score_hand(state, 2, ids({ 28 })[1], "ron")
+    local chankan_names = {}
+    for _, yaku in ipairs(chankan.yaku) do chankan_names[yaku.name] = true end
+    result = {
+      groupCall = group_call,
+      rinshan = rinshan_names["岭上开花"] == true,
+      rinshanHaitei = rinshan_names["海底摸月"] == true,
+      chiitoiHoutei = houtei_names["河底捞鱼"] == true,
+      chiitoiChankan = chankan_names["抢杠"] == true,
+      chankanHoutei = chankan_names["河底捞鱼"] == true,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    groupCall: false,
+    rinshan: true,
+    rinshanHaitei: false,
+    chiitoiHoutei: true,
+    chiitoiChankan: true,
+    chankanHoutei: false,
+  });
+});
+
+test("Mahjong scores first-turn, nine-gates, and seven-pairs yakuman cleanly", async () => {
+  const result = await runScenario(`
+    function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+    function names(score)
+      local result = {}
+      for _, yaku in ipairs(score.yaku or {}) do result[yaku.name] = true end
+      return result
+    end
+    heaven = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 806 } })
+    heaven.hands.p1 = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21, 26,26 })
+    heaven.drawnTile, heaven.turnIndex = ids({ 22 })[1], 1
+    local heaven_score = score_hand(heaven, 1, heaven.drawnTile, "tsumo")
+
+    earth = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 807 } })
+    earth.hands.p2 = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21, 26,26 })
+    earth.drawnTile, earth.turnIndex = ids({ 22 })[1], 2
+    local earth_score = score_hand(earth, 2, earth.drawnTile, "tsumo")
+
+    gates = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 808 } })
+    gates.hands.p1 = ids({ 1,1,1,2,3,4,5,6,7,8,9,9,9 })
+    gates.drawnTile, gates.turnIndex, gates.firstTurn.p1 = ids({ 5 })[1], 1, false
+    local gates_score = score_hand(gates, 1, gates.drawnTile, "tsumo")
+
+    honors = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 809 } })
+    honors.hands.p2 = ids({ 28,28,29,29,30,30,31,31,32,32,33,33,34 })
+    honors.firstTurn.p2 = false
+    local honors_score = score_hand(honors, 2, ids({ 34 })[1], "ron")
+    local heaven_names, earth_names = names(heaven_score), names(earth_score)
+    local gates_names, honors_names = names(gates_score), names(honors_score)
+    result = {
+      heaven = heaven_names["天和"] == true,
+      earth = earth_names["地和"] == true,
+      gates = gates_names["九莲宝灯"] == true,
+      gatesOnlyYakuman = #gates_score.yaku == 1,
+      honors = honors_names["字一色"] == true,
+      honorsOnlyYakuman = #honors_score.yaku == 1,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    heaven: true,
+    earth: true,
+    gates: true,
+    gatesOnlyYakuman: true,
+    honors: true,
+    honorsOnlyYakuman: true,
+  });
+});
+
+test("Mahjong applies pao only to the liable yakuman and leaves honba to the discarder", async () => {
+  const result = await runScenario(`
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 810 } })
+    state.honba = 1
+    state.pao.p1.daisangen = 2
+    local score = {
+      yakuman = 2, han = 26, base = 16000,
+      yaku = { { name = "大三元", han = 13 }, { name = "字一色", han = 13 } },
+    }
+    local ron = score_payment_deltas(state, score, 1, "ron", 3)
+    local tsumo_score = {
+      yakuman = 2, han = 26, base = 16000,
+      yaku = { { name = "大三元", han = 13 }, { name = "字一色", han = 13 } },
+    }
+    local tsumo = score_payment_deltas(state, tsumo_score, 1, "tsumo", 0)
+    result = {
+      ronLiable = ron[2], ronDiscarder = ron[3], ronWinner = ron[1],
+      tsumoLiable = tsumo[2], tsumoOtherA = tsumo[3], tsumoOtherB = tsumo[4], tsumoWinner = tsumo[1],
+    }
+  `);
+
+  assert.deepEqual(result, {
+    ronLiable: -24000,
+    ronDiscarder: -72300,
+    ronWinner: 96300,
+    tsumoLiable: -64100,
+    tsumoOtherA: -16100,
+    tsumoOtherB: -16100,
+    tsumoWinner: 96300,
+  });
 });

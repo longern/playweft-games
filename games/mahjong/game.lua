@@ -175,10 +175,26 @@ local function is_structural_win(tiles, melds)
     or #standard_decompositions(tiles, melds) > 0
 end
 
+local function is_closed_hand(melds)
+  for _, meld in ipairs(melds or {}) do
+    if meld.kind ~= "ankan" then return false end
+  end
+  return true
+end
+
 local function waiting_types(hand, melds)
-  local result, counts = {}, type_counts(hand)
+  local result, counts, locked_counts = {}, type_counts(hand), type_counts(hand)
+  for _, meld in ipairs(melds or {}) do
+    for _, tile in ipairs(meld.tiles or {}) do
+      local kind = tile_type(tile)
+      locked_counts[kind] = locked_counts[kind] + 1
+    end
+  end
   for kind = 1, 34 do
-    if counts[kind] < 4 then
+    -- A wait may be exhausted in the wall or other players' hands and still
+    -- count as tenpai, but it may never require a fifth physical copy already
+    -- locked in this player's concealed hand and fixed groups.
+    if locked_counts[kind] < 4 then
       local candidate = copy_array(hand)
       candidate[#candidate + 1] = (kind - 1) * 4 + 1
       if is_structural_win(candidate, melds) then result[#result + 1] = kind end
@@ -245,6 +261,53 @@ local function add_yaku(yaku, name, han)
   return han
 end
 
+local function add_situational_yaku(state, player_id, yaku, han, method)
+  if state.doubleRiichi[player_id] then han = han + add_yaku(yaku, "两立直", 2)
+  elseif state.riichi[player_id] then han = han + add_yaku(yaku, "立直", 1) end
+  if state.ippatsu[player_id] then han = han + add_yaku(yaku, "一发", 1) end
+  if method == "tsumo" and is_closed_hand(state.melds[player_id]) then
+    han = han + add_yaku(yaku, "门前清自摸和", 1)
+  end
+  if state.rinshanWin then han = han + add_yaku(yaku, "岭上开花", 1) end
+  if state.chankanWin then han = han + add_yaku(yaku, "抢杠", 1) end
+  if #state.wall == 0 then
+    if method == "tsumo" and not state.rinshanWin then
+      han = han + add_yaku(yaku, "海底摸月", 1)
+    elseif method == "ron" and not state.chankanWin then
+      han = han + add_yaku(yaku, "河底捞鱼", 1)
+    end
+  end
+  return han
+end
+
+local function add_first_turn_yakuman(state, seat, method, yaku)
+  if method ~= "tsumo" or state.callOccurred then return 0 end
+  local player_id = state.players[seat]
+  if not state.firstTurn[player_id] or #(state.melds[player_id] or {}) > 0 then return 0 end
+  if seat == state.dealerIndex then add_yaku(yaku, "天和", 13)
+  else add_yaku(yaku, "地和", 13) end
+  return 1
+end
+
+local function is_nine_gates(hand, melds)
+  if #(melds or {}) ~= 0 or #hand ~= 14 then return false end
+  local counts, suit
+  counts = type_counts(hand)
+  for kind = 1, 34 do
+    if counts[kind] > 0 then
+      if is_honor(kind) then return false end
+      local candidate_suit = math.floor((kind - 1) / 9)
+      if suit == nil then suit = candidate_suit
+      elseif suit ~= candidate_suit then return false end
+    end
+  end
+  if suit == nil then return false end
+  local base = suit * 9
+  if counts[base + 1] < 3 or counts[base + 9] < 3 then return false end
+  for rank = 2, 8 do if counts[base + rank] < 1 then return false end end
+  return true
+end
+
 local function indicator_types(state, ura)
   local result = {}
   local offset = ura and 2 or 1
@@ -307,14 +370,14 @@ local function full_groups(decomposition, melds)
     groups[#groups + 1] = {
       kind = meld.kind == "chi" and "sequence"
         or ((meld.kind == "kan" or meld.kind == "ankan" or meld.kind == "kakan") and "quad" or "triplet"),
-      tile = tile_type(meld.tiles[1]), open = true,
+      tile = tile_type(meld.tiles[1]), open = meld.kind ~= "ankan",
     }
   end
   return groups
 end
 
 local function evaluate_standard(state, seat, hand, melds, decomposition, method, winning_kind, win_group)
-  local closed = #melds == 0
+  local closed = is_closed_hand(melds)
   local groups = full_groups(decomposition, melds)
   local yaku, han, yakuman = {}, 0, 0
   local player_id = state.players[seat]
@@ -322,15 +385,9 @@ local function evaluate_standard(state, seat, hand, melds, decomposition, method
   local round_wind = 27 + state.roundWind
   local wait = win_group == 0 and "tanki" or wait_kind(decomposition.groups[win_group], winning_kind)
 
-  if state.doubleRiichi[player_id] then han = han + add_yaku(yaku, "两立直", 2)
-  elseif state.riichi[player_id] then han = han + add_yaku(yaku, "立直", 1) end
-  if state.ippatsu[player_id] then han = han + add_yaku(yaku, "一发", 1) end
-  if closed and method == "tsumo" then han = han + add_yaku(yaku, "门前清自摸和", 1) end
-  if state.rinshanWin then han = han + add_yaku(yaku, "岭上开花", 1) end
-  if state.chankanWin then han = han + add_yaku(yaku, "抢杠", 1) end
-  if #state.wall == 0 then
-    han = han + add_yaku(yaku, method == "tsumo" and "海底摸月" or "河底捞鱼", 1)
-  end
+  yakuman = yakuman + add_first_turn_yakuman(state, seat, method, yaku)
+  if is_nine_gates(hand, melds) then yakuman = yakuman + 1; add_yaku(yaku, "九莲宝灯", 13) end
+  han = add_situational_yaku(state, player_id, yaku, han, method)
 
   local all_ids = all_tile_ids(hand, melds)
   local simple = true
@@ -413,10 +470,13 @@ local function evaluate_standard(state, seat, hand, melds, decomposition, method
     end
   end
 
-  local has_honor, suits = false, {}
+  local has_honor, has_terminal, suits = false, false, {}
   for _, tile in ipairs(all_ids) do
     local kind = tile_type(tile)
-    if is_honor(kind) then has_honor = true else suits[math.floor((kind - 1) / 9)] = true end
+    if is_honor(kind) then has_honor = true else
+      suits[math.floor((kind - 1) / 9)] = true
+      if is_terminal(kind) then has_terminal = true end
+    end
   end
   local suit_count = 0
   for _ in pairs(suits) do suit_count = suit_count + 1 end
@@ -425,7 +485,8 @@ local function evaluate_standard(state, seat, hand, melds, decomposition, method
     else han = han + add_yaku(yaku, "清一色", closed and 6 or 5) end
   end
   if outside_groups then
-    if #sequences == 0 then han = han + add_yaku(yaku, "混老头", 2)
+    if #sequences == 0 then
+      if has_honor and has_terminal then han = han + add_yaku(yaku, "混老头", 2) end
     elseif has_honor then han = han + add_yaku(yaku, "混全带幺九", closed and 2 or 1)
     else han = han + add_yaku(yaku, "纯全带幺九", closed and 3 or 2) end
   end
@@ -464,6 +525,11 @@ end
 
 local function finalize_score(state, seat, hand, melds, evaluation)
   if evaluation.yakuman > 0 then
+    local yakuman_yaku = {}
+    for _, entry in ipairs(evaluation.yaku or {}) do
+      if entry.han >= 13 then yakuman_yaku[#yakuman_yaku + 1] = entry end
+    end
+    evaluation.yaku = yakuman_yaku
     evaluation.han = evaluation.yakuman * 13
     evaluation.base = 8000 * evaluation.yakuman
     evaluation.limit = evaluation.yakuman > 1 and (tostring(evaluation.yakuman) .. "倍役满") or "役满"
@@ -486,29 +552,34 @@ end
 local function special_score(state, seat, hand, melds, method)
   local player_id, yaku, han = state.players[seat], {}, 0
   if is_thirteen_orphans(hand, melds) then
-    return { yaku = { { name = "国士无双", han = 13 } }, han = 13, fu = 0, yakuman = 1 }
+    local yakuman = add_first_turn_yakuman(state, seat, method, yaku)
+    add_yaku(yaku, "国士无双", 13)
+    return { yaku = yaku, han = 13, fu = 0, yakuman = yakuman + 1 }
   end
   if not is_seven_pairs(hand, melds) then return nil end
-  if state.doubleRiichi[player_id] then han = han + add_yaku(yaku, "两立直", 2)
-  elseif state.riichi[player_id] then han = han + add_yaku(yaku, "立直", 1) end
-  if state.ippatsu[player_id] then han = han + add_yaku(yaku, "一发", 1) end
-  if method == "tsumo" then han = han + add_yaku(yaku, "门前清自摸和", 1) end
+  local yakuman = add_first_turn_yakuman(state, seat, method, yaku)
+  han = add_situational_yaku(state, player_id, yaku, han, method)
   han = han + add_yaku(yaku, "七对子", 2)
   local all_ids, simple, outside = all_tile_ids(hand, melds), true, true
-  local has_honor, suits = false, {}
+  local has_honor, has_terminal, all_honors, suits = false, false, true, {}
   for _, tile in ipairs(all_ids) do
     local kind = tile_type(tile)
     if is_outside(kind) then simple = false else outside = false end
-    if is_honor(kind) then has_honor = true else suits[math.floor((kind - 1) / 9)] = true end
+    if is_honor(kind) then has_honor = true else
+      all_honors = false
+      suits[math.floor((kind - 1) / 9)] = true
+      if is_terminal(kind) then has_terminal = true end
+    end
   end
+  if all_honors then yakuman = yakuman + 1; add_yaku(yaku, "字一色", 13) end
   if simple then han = han + add_yaku(yaku, "断幺九", 1) end
-  if outside then han = han + add_yaku(yaku, "混老头", 2) end
+  if outside and has_honor and has_terminal then han = han + add_yaku(yaku, "混老头", 2) end
   local suit_count = 0 for _ in pairs(suits) do suit_count = suit_count + 1 end
   if suit_count == 1 then
     if has_honor then han = han + add_yaku(yaku, "混一色", 3)
     else han = han + add_yaku(yaku, "清一色", 6) end
   end
-  return { yaku = yaku, han = han, fu = 25, yakuman = 0 }
+  return { yaku = yaku, han = han, fu = 25, yakuman = yakuman }
 end
 
 local function score_hand(state, seat, winning_tile, method)
@@ -655,60 +726,114 @@ local function mark_next_hand(state, dealer_repeats, was_draw)
   end
 end
 
-local function pao_seat_for_score(state, player_id, score)
-  if not state.rules.pao then return nil end
-  local liabilities = state.pao[player_id] or {}
+local function pao_liabilities_for_score(state, player_id, score)
+  if not state.rules.pao or not score or (score.yakuman or 0) == 0 then return {} end
+  local recorded, result, by_seat = state.pao[player_id] or {}, {}, {}
+  local keys = { ["大三元"] = "daisangen", ["大四喜"] = "daisuushii", ["四杠子"] = "suukantsu" }
   for _, yaku in ipairs(score.yaku or {}) do
-    if yaku.name == "大三元" and liabilities.daisangen then return liabilities.daisangen end
-    if yaku.name == "大四喜" and liabilities.daisuushii then return liabilities.daisuushii end
-    if yaku.name == "四杠子" and liabilities.suukantsu then return liabilities.suukantsu end
+    local seat = recorded[keys[yaku.name]]
+    if seat then
+      local units = math.max(1, math.floor((yaku.han or 13) / 13))
+      if by_seat[seat] then by_seat[seat].units = by_seat[seat].units + units
+      else
+        local entry = { seat = seat, units = units }
+        by_seat[seat], result[#result + 1] = entry, entry
+      end
+    end
   end
-  return nil
+  return result
 end
 
-local function base_payment_total(score, dealer_win, method, pao_seat)
-  if method == "ron" or pao_seat then
+local function base_payment_total(score, dealer_win, method)
+  if method == "ron" then
     return round_up_100(score.base * (dealer_win and 6 or 4))
   end
   if dealer_win then return round_up_100(score.base * 2) * 3 end
   return round_up_100(score.base * 2) + round_up_100(score.base) * 2
 end
 
+local function add_payment(deltas, winner, payer, amount)
+  if amount <= 0 then return end
+  deltas[payer], deltas[winner] = deltas[payer] - amount, deltas[winner] + amount
+end
+
+local function add_tsumo_base_payments(state, deltas, winner, base)
+  local dealer_win = winner == state.dealerIndex
+  for payer = 1, 4 do
+    if payer ~= winner then
+      local multiplier = dealer_win and 2 or (payer == state.dealerIndex and 2 or 1)
+      add_payment(deltas, winner, payer, round_up_100(base * multiplier))
+    end
+  end
+end
+
+local function score_payment_deltas(state, score, seat, method, from_seat)
+  local deltas, dealer_win = { 0, 0, 0, 0 }, seat == state.dealerIndex
+  local liabilities = pao_liabilities_for_score(state, state.players[seat], score)
+  local liable_units = 0
+  for _, liability in ipairs(liabilities) do liable_units = liable_units + liability.units end
+  liable_units = math.min(score.yakuman or 0, liable_units)
+
+  if method == "ron" then
+    if liable_units > 0 then
+      local unit_value = dealer_win and 48000 or 32000
+      local applied = 0
+      for _, liability in ipairs(liabilities) do
+        local units = math.min(liability.units, liable_units - applied)
+        if units > 0 then
+          local amount = unit_value * units
+          if liability.seat == from_seat then add_payment(deltas, seat, from_seat, amount)
+          else
+            add_payment(deltas, seat, liability.seat, amount / 2)
+            add_payment(deltas, seat, from_seat, amount / 2)
+          end
+          applied = applied + units
+        end
+      end
+      local ordinary_units = math.max(0, (score.yakuman or 0) - applied)
+      add_payment(deltas, seat, from_seat, unit_value * ordinary_units)
+      -- Honba is never split with the liable player on a ron win.
+      add_payment(deltas, seat, from_seat, state.honba * 300)
+    else
+      local amount = round_up_100(score.base * (dealer_win and 6 or 4)) + state.honba * 300
+      add_payment(deltas, seat, from_seat, amount)
+    end
+  elseif liable_units > 0 then
+    local unit_value, applied = dealer_win and 48000 or 32000, 0
+    for _, liability in ipairs(liabilities) do
+      local units = math.min(liability.units, liable_units - applied)
+      if units > 0 then
+        add_payment(deltas, seat, liability.seat, unit_value * units)
+        applied = applied + units
+      end
+    end
+    local ordinary_units = math.max(0, (score.yakuman or 0) - applied)
+    if ordinary_units > 0 then add_tsumo_base_payments(state, deltas, seat, 8000 * ordinary_units) end
+    if ordinary_units == 0 and #liabilities == 1 then
+      add_payment(deltas, seat, liabilities[1].seat, state.honba * 300)
+    else
+      for payer = 1, 4 do if payer ~= seat then add_payment(deltas, seat, payer, state.honba * 100) end end
+    end
+  else
+    add_tsumo_base_payments(state, deltas, seat, score.base)
+    for payer = 1, 4 do if payer ~= seat then add_payment(deltas, seat, payer, state.honba * 100) end end
+  end
+
+  score.paoSeat, score.paoSeats = 0, {}
+  for _, liability in ipairs(liabilities) do
+    if score.paoSeat == 0 then score.paoSeat = liability.seat end
+    score.paoSeats[#score.paoSeats + 1] = liability.seat
+  end
+  score.basePaymentTotal = base_payment_total(score, dealer_win, method)
+  score.payment = tostring(deltas[seat]) .. "点"
+  return deltas
+end
+
 local function settle_win(state, seat, method, from_seat, winning_tile)
   local score = score_hand(state, seat, winning_tile, method)
   if not score then return nil end
-  local deltas = { 0, 0, 0, 0 }
+  local deltas = score_payment_deltas(state, score, seat, method, from_seat)
   local dealer_win = seat == state.dealerIndex
-  local pao_seat = pao_seat_for_score(state, state.players[seat], score)
-  score.paoSeat = pao_seat or 0
-  score.basePaymentTotal = base_payment_total(score, dealer_win, method, pao_seat)
-  if method == "ron" then
-    local amount = round_up_100(score.base * (dealer_win and 6 or 4)) + state.honba * 300
-    if pao_seat and pao_seat ~= from_seat then
-      local liability = math.floor(amount / 200) * 100
-      deltas[pao_seat], deltas[from_seat] = -liability, -(amount - liability)
-    else deltas[from_seat] = -amount end
-    deltas[seat] = amount
-    score.payment = tostring(amount) .. "点"
-  else
-    local parts = {}
-    if pao_seat then
-      local amount = round_up_100(score.base * (dealer_win and 6 or 4)) + state.honba * 300
-      deltas[pao_seat], deltas[seat] = -amount, amount
-      parts[1] = amount
-    else
-      for payer = 1, 4 do
-        if payer ~= seat then
-          local multiplier = dealer_win and 2 or (payer == state.dealerIndex and 2 or 1)
-          local amount = round_up_100(score.base * multiplier) + state.honba * 100
-          deltas[payer], deltas[seat] = -amount, deltas[seat] + amount
-          parts[#parts + 1] = amount
-        end
-      end
-    end
-    score.payment = dealer_win and (tostring(parts[1]) .. "点∀")
-      or (tostring(round_up_100(score.base)) .. "/" .. tostring(round_up_100(score.base * 2)) .. "点")
-  end
   if state.riichiSticks > 0 then
     deltas[seat] = deltas[seat] + state.riichiSticks * 1000
     score.riichiAward = state.riichiSticks * 1000
@@ -730,16 +855,9 @@ local function settle_multiple_ron(state, winners, from_seat, winning_tile)
     local seat = winner.playerIndex
     local score = score_hand(state, seat, winning_tile, "ron")
     if score then
-      local amount = round_up_100(score.base * (seat == state.dealerIndex and 6 or 4)) + state.honba * 300
-      local pao_seat = pao_seat_for_score(state, state.players[seat], score)
-      score.basePaymentTotal = base_payment_total(score, seat == state.dealerIndex, "ron", pao_seat)
-      if pao_seat and pao_seat ~= from_seat then
-        local liability = math.floor(amount / 200) * 100
-        total_deltas[pao_seat] = total_deltas[pao_seat] - liability
-        total_deltas[from_seat] = total_deltas[from_seat] - (amount - liability)
-      else total_deltas[from_seat] = total_deltas[from_seat] - amount end
-      total_deltas[seat] = total_deltas[seat] + amount
-      score.payment, score.paoSeat, score.winnerIndex = tostring(amount) .. "点", pao_seat or 0, seat
+      local deltas = score_payment_deltas(state, score, seat, "ron", from_seat)
+      for index = 1, 4 do total_deltas[index] = total_deltas[index] + deltas[index] end
+      score.winnerIndex = seat
       results[#results + 1], winner_ids[#winner_ids + 1] = score, state.players[seat]
       if seat == state.dealerIndex then dealer_won = true end
     end
@@ -895,12 +1013,19 @@ local function self_kan_options(state, player_id)
     if counts[kind] == 4 then
       local allowed = true
       if state.riichi[player_id] then
-        local before = copy_array(state.hands[player_id])
-        local after = copy_array(hand)
-        for _ = 1, 4 do remove_tile(after, tiles_of_type(after, kind, 1)[1]) end
-        local pseudo_melds = copy_array(state.melds[player_id])
-        pseudo_melds[#pseudo_melds + 1] = { kind = "ankan", tiles = {} }
-        allowed = same_kinds(waiting_types(before, state.melds[player_id]), waiting_types(after, pseudo_melds))
+        -- After riichi, a concealed quad must be completed by this turn's
+        -- drawn tile.  Quadding four tiles that were already in the rack is
+        -- the prohibited "okuri-kan" (送杠).
+        allowed = tile_type(state.drawnTile) == kind
+        if allowed then
+          local before = copy_array(state.hands[player_id])
+          local after = copy_array(hand)
+          local kan_tiles = tiles_of_type(after, kind, 4)
+          for _, tile in ipairs(kan_tiles) do remove_tile(after, tile) end
+          local pseudo_melds = copy_array(state.melds[player_id])
+          pseudo_melds[#pseudo_melds + 1] = { kind = "ankan", tiles = kan_tiles }
+          allowed = same_kinds(waiting_types(before, state.melds[player_id]), waiting_types(after, pseudo_melds))
+        end
       end
       if allowed then options[#options + 1] = { kind = "ankan", tileType = kind } end
     end
@@ -1024,13 +1149,22 @@ local function apply_self_kan(state, action, actor_id, seat)
   return accepted(state, events)
 end
 
+local function structural_ron_available(state, seat, tile)
+  local player_id = state.players[seat]
+  local candidate = copy_array(state.hands[player_id])
+  candidate[#candidate + 1] = tile
+  return is_structural_win(candidate, state.melds[player_id])
+end
+
 local function claim_options(state, seat, discarder, tile)
   local player_id, options = state.players[seat], {}
   local hand, kind = state.hands[player_id], tile_type(tile)
-  if not is_furiten(state, player_id) and score_hand(state, seat, tile, "ron") then
+  local ron_opportunity = not is_furiten(state, player_id)
+    and structural_ron_available(state, seat, tile)
+  if ron_opportunity and score_hand(state, seat, tile, "ron") then
     options[#options + 1] = { kind = "ron", tileIds = {} }
   end
-  if state.riichi[player_id] then return options end
+  if state.riichi[player_id] or #state.wall == 0 then return options, ron_opportunity end
   local same = tiles_of_type(hand, kind, 3)
   if #same >= 3 and #state.wall > 0 and state.kanCount < 4 then
     options[#options + 1] = { kind = "kan", tileIds = { same[1], same[2], same[3] } }
@@ -1039,18 +1173,25 @@ local function claim_options(state, seat, discarder, tile)
   if seat == (discarder % PLAYER_COUNT) + 1 then
     for _, option in ipairs(chi_options(hand, kind)) do options[#options + 1] = option end
   end
-  return options
+  return options, ron_opportunity
 end
 
 local function begin_claims(state, discarder, tile)
   state.claimants, state.claimResponses, state.claimIndex = {}, {}, 0
   for distance = 1, 3 do
     local seat = ((discarder - 1 + distance) % 4) + 1
-    local options = claim_options(state, seat, discarder, tile)
+    local options, ron_opportunity = claim_options(state, seat, discarder, tile)
     if #options > 0 then
       state.claimants[#state.claimants + 1] = {
-        playerId = state.players[seat], playerIndex = seat, distance = distance, options = options,
+        playerId = state.players[seat], playerIndex = seat, distance = distance,
+        options = options, ronOpportunity = ron_opportunity,
       }
+    elseif ron_opportunity then
+      -- Completing a structurally valid hand without a yaku is still a
+      -- missed ron opportunity and therefore creates temporary furiten.
+      local player_id = state.players[seat]
+      if state.riichi[player_id] then state.riichiFuriten[player_id] = true
+      else state.tempFuriten[player_id] = true end
     end
   end
   if #state.claimants > 0 then state.phase, state.claimIndex = "claiming", 1 return true end
@@ -1120,6 +1261,16 @@ cancel_ippatsu = function(state)
   for _, player_id in ipairs(state.players) do state.ippatsu[player_id] = false end
 end
 
+local function rollback_ronned_riichi_declaration(state, discard)
+  if not discard or not discard.riichiDeclaration then return end
+  local player_id, seat = discard.player, discard.playerIndex
+  state.scores[seat] = state.scores[seat] + 1000
+  state.riichiSticks = math.max(0, state.riichiSticks - 1)
+  state.riichi[player_id], state.doubleRiichi[player_id], state.ippatsu[player_id] = false, false, false
+  local entry = state.discards[player_id][discard.discardIndex]
+  if entry then entry.riichi = false end
+end
+
 local function resolve_claims(state, events)
   local winner
   local ron_winners = {}
@@ -1138,6 +1289,7 @@ local function resolve_claims(state, events)
   local discard = state.lastDiscard
   if #ron_winners > 0 then
     table.sort(ron_winners, function(a, b) return a.distance < b.distance end)
+    rollback_ronned_riichi_declaration(state, discard)
     if state.rules.tripleRonAbort and #ron_winners == 3 then
       state.pendingKan, state.chankanWin = nil, false
       finish_abortive_draw(state, "三家和")
@@ -1205,6 +1357,9 @@ local function perform_discard(state, tile_id, actor_id, seat, riichi_declared)
   end
   state.kuikaeForbidden = state.kuikaeForbidden or {}
   state.kuikaeForbidden[actor_id] = {}
+  -- A player's own turn has now completed. This also clears temporary
+  -- furiten when that turn began by calling rather than drawing.
+  state.tempFuriten[actor_id] = false
   local replace_riichi_marker = state.riichiMarkerPending
     and state.riichiMarkerPending[actor_id] == true
   state.discards[actor_id][#state.discards[actor_id] + 1] = {
@@ -1217,7 +1372,7 @@ local function perform_discard(state, tile_id, actor_id, seat, riichi_declared)
   state.moveCount = state.moveCount + 1
   state.rinshanWin = false
   state.lastDiscard = { player = actor_id, playerIndex = seat, tile = tile_id,
-    discardIndex = #state.discards[actor_id] }
+    discardIndex = #state.discards[actor_id], riichiDeclaration = riichi_declared == true }
   local events = { { type = riichi_declared and "riichi" or "discarded", player = actor_id,
     playerIndex = seat, tile = tile_id, fromDrawn = from_drawn } }
   if not begin_claims(state, seat, tile_id) then advance_after_discard(state, seat, events) end
@@ -1225,7 +1380,8 @@ local function perform_discard(state, tile_id, actor_id, seat, riichi_declared)
 end
 
 local function riichi_discards(state, player_id)
-  if state.riichi[player_id] or #state.melds[player_id] > 0 or state.scores[player_index(state, player_id)] < 1000
+  if state.riichi[player_id] or not is_closed_hand(state.melds[player_id])
+    or state.scores[player_index(state, player_id)] < 1000
     or #state.wall < 4 then return {} end
   local hand, result = hand_with_drawn(state, player_id), {}
   for index, tile in ipairs(hand) do
@@ -1244,7 +1400,12 @@ local function apply_riichi(state, action, actor_id, seat)
   state.scores[seat], state.riichiSticks = state.scores[seat] - 1000, state.riichiSticks + 1
   state.riichi[actor_id], state.ippatsu[actor_id] = true, true
   state.doubleRiichi[actor_id] = state.firstTurn[actor_id] and not state.callOccurred
-  return perform_discard(state, action.tileId, actor_id, seat, true)
+  local result = perform_discard(state, action.tileId, actor_id, seat, true)
+  if not result.accepted then
+    state.scores[seat], state.riichiSticks = state.scores[seat] + 1000, math.max(0, state.riichiSticks - 1)
+    state.riichi[actor_id], state.doubleRiichi[actor_id], state.ippatsu[actor_id] = false, false, false
+  end
+  return result
 end
 
 local function apply_discard(state, action, actor_id, seat)
@@ -1263,12 +1424,10 @@ local function apply_claim_response(state, action, actor_id)
     option = tonumber(action.option) or 0
     if option % 1 ~= 0 or option < 1 or option > #claimant.options then return rejected("invalid_claim") end
   elseif action.type ~= "pass" then return rejected("claim_response_required") end
-  if option == 0 then
-    local passed_ron = false
-    for _, candidate in ipairs(claimant.options) do if candidate.kind == "ron" then passed_ron = true end end
-    if passed_ron then
+  local selected = option > 0 and claimant.options[option] or nil
+  local declined_ron = claimant.ronOpportunity == true and (not selected or selected.kind ~= "ron")
+  if declined_ron then
       if state.riichi[actor_id] then state.riichiFuriten[actor_id] = true else state.tempFuriten[actor_id] = true end
-    end
   end
   state.claimResponses[#state.claimResponses + 1] = { claimant = state.claimIndex, option = option }
   local events = { { type = option == 0 and "claim_passed" or "claim_declared",
@@ -1523,8 +1682,9 @@ local function estimated_hand_value(state, seat, hand, melds)
   local counts = type_counts(hand)
   local ids = all_tile_ids(hand, melds)
   local dora = count_dora(state, hand, melds, false)
+  local closed = is_closed_hand(melds)
   local value, natural = dora, 0
-  if #(melds or {}) == 0 then value = value + 0.85 end
+  if closed then value = value + 0.85 end
   local all_simple, suits, has_honor = true, {}, false
   for _, tile in ipairs(ids) do
     local kind = tile_type(tile)
@@ -1548,8 +1708,8 @@ local function estimated_hand_value(state, seat, hand, melds)
   end
   local suit_count = 0 for _ in pairs(suits) do suit_count = suit_count + 1 end
   if suit_count == 1 and #ids >= 10 then
-    local amount = has_honor and (#(melds or {}) == 0 and 3 or 2)
-      or (#(melds or {}) == 0 and 6 or 5)
+    local amount = has_honor and (closed and 3 or 2)
+      or (closed and 6 or 5)
     value, natural = value + amount, natural + amount
   end
   return value, natural

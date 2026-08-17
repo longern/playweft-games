@@ -1402,11 +1402,16 @@ test("mahjong highlights matching visible tile types without adding count text",
     ),
     false,
   );
-  assert.ok(
-    ordinaryDora.children.some(
-      (child) => child.material === factory.doraWashMaterial,
-    ),
+  const doraWash = ordinaryDora.children.find(
+    (child) => child.material === factory.doraWashMaterial,
   );
+  const doraFace = ordinaryDora.children.find(
+    (child) => child.material === factory.faceMaterial,
+  );
+  assert.ok(doraWash);
+  assert.ok(doraFace);
+  assert.ok(doraWash.position.z > doraFace.position.z);
+  assert.ok(doraWash.renderOrder > doraFace.renderOrder);
   assert.ok(factory.doraWashMaterial.opacity >= 0.5);
   assert.ok(factory.doraWashMaterial.opacity <= 0.58);
   assert.ok(
