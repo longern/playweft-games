@@ -994,6 +994,24 @@ local function chi_options(hand, discarded_type)
   return options
 end
 
+local function pon_options(hand, kind)
+  local normal, red = {}, nil
+  for _, tile in ipairs(hand) do
+    if tile_type(tile) == kind then
+      if RED_FIVES[tile] then red = red or tile
+      else normal[#normal + 1] = tile end
+    end
+  end
+  local options = {}
+  if #normal >= 2 then
+    options[#options + 1] = { kind = "pon", tileIds = { normal[1], normal[2] } }
+  end
+  if #normal >= 1 and red then
+    options[#options + 1] = { kind = "pon", tileIds = { normal[1], red } }
+  end
+  return options
+end
+
 local function same_kinds(left, right)
   if #left ~= #right then return false end
   local seen = {}
@@ -1169,7 +1187,9 @@ local function claim_options(state, seat, discarder, tile)
   if #same >= 3 and #state.wall > 0 and state.kanCount < 4 then
     options[#options + 1] = { kind = "kan", tileIds = { same[1], same[2], same[3] } }
   end
-  if #same >= 2 then options[#options + 1] = { kind = "pon", tileIds = { same[1], same[2] } } end
+  if #same >= 2 then
+    for _, option in ipairs(pon_options(hand, kind)) do options[#options + 1] = option end
+  end
   if seat == (discarder % PLAYER_COUNT) + 1 then
     for _, option in ipairs(chi_options(hand, kind)) do options[#options + 1] = option end
   end

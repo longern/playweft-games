@@ -604,10 +604,8 @@ test("mahjong groups every chi behind one action and previews only the two consu
     { option: 3, kind: "chi", tileTypes: [5, 6], red: [false, false] },
   ];
   const grouped = partitionClaimActions(claims);
-  assert.deepEqual(
-    grouped.immediate.map(({ kind }) => kind),
-    ["ron"],
-  );
+  assert.deepEqual(grouped.immediate.map(({ kind }) => kind), ["ron"]);
+  assert.deepEqual(grouped.pon, []);
   assert.deepEqual(
     grouped.chi.map(({ option }) => option),
     [2, 3],
@@ -621,12 +619,17 @@ test("mahjong groups every chi behind one action and previews only the two consu
     new URL("../games/mahjong/dom-view.js", import.meta.url),
     "utf8",
   );
+  const styles = readMahjongStyles();
   assert.match(
     view,
-    /if \(chiClaims\.length > 0\) \{\s*elements\.claims\.append\(this\.createChiAction\(chiClaims\)\)/s,
+    /if \(chiClaims\.length > 0\) \{\s*elements\.claims\.append\(this\.createGroupedClaimAction\(chiClaims, "chi"\)\)/s,
   );
   assert.match(view, /if \(claims\.length === 1\)/);
+  assert.match(view, /createGroupedClaimAction\(claims, kind\)/);
   assert.match(view, /picker\.className = "claim-choice-popover"/);
+  assert.match(view, /picker\.setAttribute\("role", "dialog"\)/);
+  assert.match(view, /picker\.setAttribute\("aria-modal", "true"\)/);
+  assert.doesNotMatch(view, /heading\.textContent = "选择吃法"/);
   assert.match(
     view,
     /--claim-choice-columns",\s*String\(Math\.min\(3, claims\.length\)\)/,
@@ -635,6 +638,22 @@ test("mahjong groups every chi behind one action and previews only the two consu
   assert.match(view, /if \(event\.target === layer\) setOpen\(false\)/);
   assert.match(view, /if \(event\.key === "Escape"\) setOpen\(false\)/);
   assert.match(view, /createTile\(tile\.type, "claim-choice", tile\.red\)/);
+  assert.match(
+    styles,
+    /\.claim-choice-layer\s*\{[^}]*position: fixed;[^}]*inset: 0;[^}]*background: transparent;/s,
+  );
+  assert.match(
+    styles,
+    /\.claim-choice-popover\s*\{[^}]*position: absolute;[^}]*right: auto;[^}]*bottom: 128px;[^}]*left: 50%;[^}]*transform: translateX\(-50%\);/s,
+  );
+  assert.match(
+    styles,
+    /\.action-bar \.claim-choice\s*\{[^}]*border-color: transparent;[^}]*background: transparent;[^}]*box-shadow: none;/s,
+  );
+  assert.match(
+    styles,
+    /\.tile-claim-choice\s*\{[^}]*width: 48px;[^}]*height: 67px;/s,
+  );
 });
 
 test("mahjong keeps action buttons in a fixed player-facing order", () => {
@@ -651,7 +670,8 @@ test("mahjong keeps action buttons in a fixed player-facing order", () => {
         { kind: "chi", option: 1 },
         { kind: "chi", option: 2 },
       ],
-      immediate: [{ kind: "pon" }, { kind: "kan" }, { kind: "ron" }],
+      pon: [{ kind: "pon" }],
+      immediate: [{ kind: "kan" }, { kind: "ron" }],
     },
   );
 
@@ -660,12 +680,19 @@ test("mahjong keeps action buttons in a fixed player-facing order", () => {
     "utf8",
   );
   const chiPosition = view.indexOf(
-    "elements.claims.append(this.createChiAction(chiClaims))",
+    'elements.claims.append(this.createGroupedClaimAction(chiClaims, "chi"))',
+  );
+  const ponPosition = view.indexOf(
+    'elements.claims.append(this.createGroupedClaimAction(ponClaims, "pon"))',
   );
   const immediatePosition = view.indexOf(
     "for (const claim of immediateClaims)",
   );
-  assert.ok(chiPosition > 0 && chiPosition < immediatePosition);
+  assert.ok(
+    chiPosition > 0
+      && chiPosition < ponPosition
+      && ponPosition < immediatePosition,
+  );
   assert.match(
     view,
     /this\.elements\.actionBar\.append\(\s*this\.elements\.abort,\s*this\.elements\.claims,\s*this\.elements\.riichi,\s*this\.elements\.tsumo,\s*this\.elements\.pass,\s*this\.elements\.cancelRiichi,/s,

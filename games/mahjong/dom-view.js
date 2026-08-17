@@ -330,10 +330,13 @@ export class MahjongDomView {
       return;
     }
     const claims = asArray(legal.claims);
-    const { chi: chiClaims, immediate: immediateClaims } =
+    const { chi: chiClaims, pon: ponClaims, immediate: immediateClaims } =
       partitionClaimActions(claims);
     if (chiClaims.length > 0) {
-      elements.claims.append(this.createChiAction(chiClaims));
+      elements.claims.append(this.createGroupedClaimAction(chiClaims, "chi"));
+    }
+    if (ponClaims.length > 0) {
+      elements.claims.append(this.createGroupedClaimAction(ponClaims, "pon"));
     }
     for (const claim of immediateClaims) {
       const button = document.createElement("button");
@@ -375,13 +378,14 @@ export class MahjongDomView {
           : "等待其他玩家";
   }
 
-  createChiAction(claims) {
+  createGroupedClaimAction(claims, kind) {
     const group = document.createElement("div");
     group.className = "claim-action-group";
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "claim-action claim-chi";
-    button.textContent = CLAIM_LABELS.chi;
+    button.className = `claim-action claim-${kind}`;
+    const label = CLAIM_LABELS[kind] ?? kind;
+    button.textContent = label;
     group.append(button);
 
     if (claims.length === 1) {
@@ -396,13 +400,11 @@ export class MahjongDomView {
     layer.hidden = true;
     layer.tabIndex = -1;
     const picker = document.createElement("div");
-    picker.id = "chi-choice-popover";
+    picker.id = `${kind}-choice-popover`;
     picker.className = "claim-choice-popover";
     picker.setAttribute("role", "dialog");
-    picker.setAttribute("aria-label", "选择吃法");
+    picker.setAttribute("aria-label", `选择${label}法`);
     picker.setAttribute("aria-modal", "true");
-    const heading = document.createElement("strong");
-    heading.textContent = "选择吃法";
     const list = document.createElement("div");
     list.className = "claim-choice-list";
     list.style.setProperty(
@@ -416,7 +418,7 @@ export class MahjongDomView {
       const preview = claimPreviewTiles(claim);
       choice.setAttribute(
         "aria-label",
-        `吃：${preview.map((tile) => `${tile.red ? "赤" : ""}${tileFace(tile.type).label}`).join("、")}`,
+        `${label}：${preview.map((tile) => `${tile.red ? "赤" : ""}${tileFace(tile.type).label}`).join("、")}`,
       );
       choice.append(
         ...preview.map((tile) => {
@@ -431,7 +433,7 @@ export class MahjongDomView {
       );
       list.append(choice);
     }
-    picker.append(heading, list);
+    picker.append(list);
     layer.append(picker);
     group.append(layer);
     button.setAttribute("aria-haspopup", "dialog");

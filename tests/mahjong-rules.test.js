@@ -235,6 +235,30 @@ test("Mahjong chi options distinguish red fives without duplicating identical co
   assert.deepEqual(result.redFiveTypes, [3, 5]);
 });
 
+test("Mahjong pon options let players keep or use a red five", async () => {
+  const result = await runScenario(`
+    local options = pon_options({ 17, 18, 19, 25, 29 }, 5)
+    local state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 11 } })
+    state.hands.p2 = { 17, 18, 19, 25, 29 }
+    state.phase, state.claimIndex = "claiming", 1
+    state.claimants = { { playerId = "p2", playerIndex = 2, options = options } }
+    local projected = legal_actions(state, "p2").claims
+    result = {
+      count = #options,
+      ids = { options[1].tileIds, options[2].tileIds },
+      projectedCount = #projected,
+      withoutRed = projected[1].red,
+      withRed = projected[2].red,
+    }
+  `);
+
+  assert.equal(result.count, 2);
+  assert.deepEqual(result.ids, [[18, 19], [18, 17]]);
+  assert.equal(result.projectedCount, 2);
+  assert.deepEqual(result.withoutRed, [false, false]);
+  assert.deepEqual(result.withRed, [false, true]);
+});
+
 test("Mahjong moves the riichi river marker to the next discard when the declaration tile is called", async () => {
   const result = await runScenario(`
     state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 17 } })

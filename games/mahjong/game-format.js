@@ -19,15 +19,18 @@ export function riverDisplayEntries(river) {
 
 export function partitionClaimActions(claims) {
   const chi = [];
+  const pon = [];
   const immediate = [];
   for (const claim of asArray(claims)) {
-    (claim?.kind === "chi" ? chi : immediate).push(claim);
+    if (claim?.kind === "chi") chi.push(claim);
+    else if (claim?.kind === "pon") pon.push(claim);
+    else immediate.push(claim);
   }
-  const priority = { pon: 0, kan: 1, ron: 2 };
+  const priority = { kan: 0, ron: 1 };
   immediate.sort((left, right) =>
     (priority[left?.kind] ?? Number.MAX_SAFE_INTEGER)
       - (priority[right?.kind] ?? Number.MAX_SAFE_INTEGER));
-  return { chi, immediate };
+  return { chi, pon, immediate };
 }
 
 export function claimPreviewTiles(claim) {
