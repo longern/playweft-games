@@ -52,6 +52,7 @@ import {
 import { ThreeTileFactory } from "./render/three-tile-factory.js";
 import { ThreeTableConsole } from "./render/three-console.js";
 import { ThreeMahjongTable } from "./render/three-table.js";
+import { ThreeAnimationController } from "./render/three-animation-controller.js";
 import {
   HAND_REVEAL_FALL_DURATION_MS,
   OWN_DRAW_ENTRY_DURATION_MS,
@@ -75,20 +76,21 @@ export class MahjongThreeRenderer {
     this.raycaster = new Raycaster();
     this.pickableTiles = [];
     this.revealTiles = [];
-    this.animationFrame = 0;
-    this.ownDrawAnimationFrame = 0;
     this.ownDrawAnimation = null;
-    this.ownTileMotionFrame = 0;
     this.ownTileMotions = [];
     this.ownTileRecords = new Map();
     this.activeOwnTileIds = new Set();
     this.highlightableTiles = new Set();
-    this.lastOwnDrawEntryKey = "";
     this.dragState = null;
     this.lastTap = { tileId: 0, time: 0 };
     this.contextLost = false;
     this.destroyed = false;
     this.appearanceVersion = 0;
+    this.animations = new ThreeAnimationController(() => {
+      if (!this.renderer || this.destroyed) return;
+      this.renderer.shadowMap.needsUpdate = true;
+      this.drawFrame();
+    });
   }
 
   async init() {
@@ -140,7 +142,7 @@ export class MahjongThreeRenderer {
     this.overlayCamera.lookAt(0, 0, 0);
     this.ownHandLayer = new Group();
     this.overlayScene.add(this.ownHandLayer);
-    this.actionCallout = new ThreeActionCallout(() => this.drawFrame());
+    this.actionCallout = new ThreeActionCallout(this.animations);
     this.overlayScene.add(this.actionCallout.sprite);
 
     this.tableConsole = new ThreeTableConsole({
@@ -304,10 +306,19 @@ export class MahjongThreeRenderer {
     this.pendingRender = null;
     this.cancelDrag(false);
     const drawEntryKey = ownDrawEntryKey(state);
-    this.animateOwnDrawEntry = Boolean(
-      this.state && drawEntryKey && drawEntryKey !== this.lastOwnDrawEntryKey,
+    const newDrawEntry = this.animations.claim(
+      "own-draw-entry",
+      drawEntryKey,
     );
-    this.lastOwnDrawEntryKey = drawEntryKey;
+    this.animateOwnDrawEntry = Boolean(this.state && newDrawEntry);
+    if (!drawEntryKey) this.animations.resetKey("own-draw-entry");
+    const handRevealKey = String(ui.handRevealKey || "");
+    this.animateHandReveal = this.animations.claim(
+      "hand-reveal",
+      handRevealKey,
+      ui.animateHandReveal,
+    );
+    if (!handRevealKey) this.animations.resetKey("hand-reveal");
     this.state = state;
     this.ui = ui;
     this.highlightedType =
@@ -332,13 +343,13 @@ export class MahjongThreeRenderer {
     this.drawMelds(state);
     this.actionCallout.showLatest(
       events,
-      `${state.roundWind}:${state.handNumber}:${state.moveCount}`,
+      `${state.roundWind}:${state.handNumber}:${state.honba}:${state.moveCount}`,
     );
     this.renderer.shadowMap.needsUpdate = true;
     this.drawFrame();
     if (this.pendingOwnDrawEntryTile) this.startOwnDrawEntry();
     if (this.ownTileMotions.length) this.startOwnTileMotion();
-    if (ui.animateHandReveal && this.revealTiles.length) {
+    if (this.animateHandReveal && this.revealTiles.length) {
       this.startHandReveal(
         ui.delayHandRevealForCallout ? ACTION_CALLOUT_DURATION_MS : 0,
       );
@@ -405,7 +416,7 @@ export class MahjongThreeRenderer {
     const coveredSeats = new Set(
       asArray(this.ui?.coveredPlayerIndices).map(Number),
     );
-    const animateReveal = this.ui?.animateHandReveal === true;
+    const animateReveal = this.animateHandReveal === true;
     const forbiddenTypes = new Set(
       asArray(state.legalActions?.forbiddenDiscardTypes),
     );
@@ -565,31 +576,22 @@ export class MahjongThreeRenderer {
   }
 
   startHandReveal(delay = 0) {
-    const startedAt = performance.now() + delay;
-    const tick = (now) => {
-      let running = false;
-      for (const { hinge, delay, covered } of this.revealTiles) {
-        const progress = Math.max(
-          0,
-          Math.min(1, (now - startedAt - delay) / HAND_REVEAL_FALL_DURATION_MS),
-        );
-        const eased = handRevealFallProgress(progress);
-        const { restingRotationX } = presentedTileHingeTransform(covered);
-        hinge.rotation.x = restingRotationX * eased;
-        if (progress < 1) running = true;
-      }
-      this.renderer.shadowMap.needsUpdate = true;
-      this.drawFrame();
-      if (running) this.animationFrame = window.requestAnimationFrame(tick);
-      else this.animationFrame = 0;
-    };
-    this.animationFrame = window.requestAnimationFrame(tick);
+    this.animations.play({
+      id: "hand-reveal",
+      delay,
+      duration: HAND_REVEAL_FALL_DURATION_MS,
+      update: (progress) => {
+        for (const { hinge, covered } of this.revealTiles) {
+          const eased = handRevealFallProgress(progress);
+          const { restingRotationX } = presentedTileHingeTransform(covered);
+          hinge.rotation.x = restingRotationX * eased;
+        }
+      },
+    });
   }
 
   cancelHandReveal() {
-    if (!this.animationFrame) return;
-    window.cancelAnimationFrame(this.animationFrame);
-    this.animationFrame = 0;
+    this.animations.cancel("hand-reveal");
   }
 
   addOwnTile(
@@ -671,34 +673,25 @@ export class MahjongThreeRenderer {
   startOwnTileMotion() {
     const motions = this.ownTileMotions;
     if (!motions.length) return;
-    const startedAt = performance.now();
-    const tick = (now) => {
-      if (this.ownTileMotions !== motions) return;
-      const progress = Math.max(
-        0,
-        Math.min(1, (now - startedAt) / OWN_TILE_SELECTION_DURATION_MS),
-      );
-      const eased = ownTileSelectionProgress(progress);
-      for (const motion of motions) {
-        motion.tile.position.y =
-          motion.fromY + (motion.targetY - motion.fromY) * eased;
-      }
-      this.drawFrame();
-      if (progress < 1) {
-        this.ownTileMotionFrame = window.requestAnimationFrame(tick);
-        return;
-      }
-      this.ownTileMotionFrame = 0;
-      this.ownTileMotions = [];
-    };
-    this.ownTileMotionFrame = window.requestAnimationFrame(tick);
+    this.animations.play({
+      id: "own-tile-motion",
+      duration: OWN_TILE_SELECTION_DURATION_MS,
+      update: (progress) => {
+        if (this.ownTileMotions !== motions) return;
+        const eased = ownTileSelectionProgress(progress);
+        for (const motion of motions) {
+          motion.tile.position.y =
+            motion.fromY + (motion.targetY - motion.fromY) * eased;
+        }
+      },
+      complete: () => {
+        if (this.ownTileMotions === motions) this.ownTileMotions = [];
+      },
+    });
   }
 
   cancelOwnTileMotion() {
-    if (this.ownTileMotionFrame) {
-      window.cancelAnimationFrame(this.ownTileMotionFrame);
-      this.ownTileMotionFrame = 0;
-    }
+    this.animations.cancel("own-tile-motion");
     this.ownTileMotions = [];
   }
 
@@ -714,34 +707,23 @@ export class MahjongThreeRenderer {
     const animation = this.pendingOwnDrawEntryTile;
     this.pendingOwnDrawEntryTile = null;
     if (!animation) return;
-    const startedAt = performance.now();
     this.ownDrawAnimation = animation;
-    const tick = (now) => {
-      if (this.ownDrawAnimation !== animation) return;
-      const progress = Math.max(
-        0,
-        Math.min(1, (now - startedAt) / OWN_DRAW_ENTRY_DURATION_MS),
-      );
-      const eased = ownDrawEntryProgress(progress);
-      animation.tile.position.y =
-        animation.targetY + animation.tile.userData.lift * (1 - eased);
-      setFadedTileOpacity(animation.materials, eased);
-      this.drawFrame();
-      if (progress < 1) {
-        this.ownDrawAnimationFrame = window.requestAnimationFrame(tick);
-        return;
-      }
-      this.ownDrawAnimationFrame = 0;
-      this.finishOwnDrawEntry(animation);
-    };
-    this.ownDrawAnimationFrame = window.requestAnimationFrame(tick);
+    this.animations.play({
+      id: "own-draw-entry",
+      duration: OWN_DRAW_ENTRY_DURATION_MS,
+      update: (progress) => {
+        if (this.ownDrawAnimation !== animation) return;
+        const eased = ownDrawEntryProgress(progress);
+        animation.tile.position.y =
+          animation.targetY + animation.tile.userData.lift * (1 - eased);
+        setFadedTileOpacity(animation.materials, eased);
+      },
+      complete: () => this.finishOwnDrawEntry(animation),
+    });
   }
 
   cancelOwnDrawEntry() {
-    if (this.ownDrawAnimationFrame) {
-      window.cancelAnimationFrame(this.ownDrawAnimationFrame);
-      this.ownDrawAnimationFrame = 0;
-    }
+    this.animations.cancel("own-draw-entry");
     if (this.ownDrawAnimation) this.finishOwnDrawEntry(this.ownDrawAnimation);
   }
 
@@ -1077,6 +1059,7 @@ export class MahjongThreeRenderer {
     );
     this.tileFactory?.destroy();
     this.actionCallout?.destroy();
+    this.animations.destroy();
     this.tableConsole?.destroy();
     this.table?.destroy();
     this.renderer?.dispose();

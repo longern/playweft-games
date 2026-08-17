@@ -87,6 +87,8 @@ import {
 } from "../games/mahjong/render/three-callout.js";
 import { TABLE_GEOMETRY } from "../games/mahjong/render/three-table.js";
 import { planarTileJitter } from "../games/mahjong/render/three-tile-jitter.js";
+import { ThreeAnimationController } from "../games/mahjong/render/three-animation-controller.js";
+import { MahjongPresentationController } from "../games/mahjong/presentation-controller.js";
 
 const MAHJONG_STYLE_MODULES = [
   "table.css",
@@ -386,21 +388,9 @@ test("mahjong pauses before integrating a hand-discarded drawn tile", () => {
   );
   assert.ok(HAND_INSERTION_DELAY_MS >= 200 && HAND_INSERTION_DELAY_MS <= 350);
 
-  const main = readFileSync(
-    new URL("../games/mahjong/main.js", import.meta.url),
-    "utf8",
-  );
   const renderer = readFileSync(
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
     "utf8",
-  );
-  assert.match(
-    main,
-    /queueHandInsertion\(previousState, events, ownDiscardedTile\)/,
-  );
-  assert.match(
-    main,
-    /window\.setTimeout\(\(\) => \{\s*handInsertion = null;\s*renderCurrentState\(\);\s*\}, HAND_INSERTION_DELAY_MS\)/s,
   );
   assert.match(renderer, /deferredHandInsertionSeat/);
   assert.match(renderer, /deferredHandInsertionIndex/);
@@ -411,6 +401,52 @@ test("mahjong pauses before integrating a hand-discarded drawn tile", () => {
   assert.match(renderer, /rack\.length \+ \(ownInsertionDeferred \? 1 : 0\)/);
   assert.match(renderer, /count - \(insertionDeferred \? 1 : 0\)/);
   assert.match(renderer, /filter\(\(index\) => index !== deferredIndex\)/);
+});
+
+test("mahjong presentation scheduling cancels insertion before terminal reveal", () => {
+  let nextTimer = 0;
+  const timers = new Map();
+  const schedule = (callback, delay) => {
+    const id = ++nextTimer;
+    timers.set(id, { callback, delay, cancelled: false });
+    return id;
+  };
+  const cancel = (id) => {
+    const timer = timers.get(id);
+    if (timer) timer.cancelled = true;
+  };
+  let insertionReady = 0;
+  let resultReady = 0;
+  const presentation = new MahjongPresentationController(
+    {
+      onHandInsertionReady: () => insertionReady += 1,
+      onResultReady: () => resultReady += 1,
+    },
+    { schedule, cancel },
+  );
+
+  assert.equal(
+    presentation.scheduleHandInsertion(
+      "10:discarded:1:13:false",
+      { seat: 1, rackIndex: 2 },
+      HAND_INSERTION_DELAY_MS,
+    ),
+    true,
+  );
+  const insertionTimer = presentation.handInsertionTimer;
+  presentation.cancelHandInsertion();
+  assert.equal(timers.get(insertionTimer).cancelled, true);
+  assert.equal(presentation.handInsertion, null);
+  assert.equal(insertionReady, 0);
+
+  presentation.syncResult("10:exhaustive-draw", HAND_END_PRESENTATION_DELAY_MS);
+  const resultTimer = presentation.resultTimer;
+  assert.equal(presentation.resultVisible, false);
+  presentation.syncResult("10:exhaustive-draw", HAND_END_PRESENTATION_DELAY_MS);
+  assert.equal(presentation.resultTimer, resultTimer);
+  timers.get(resultTimer).callback();
+  assert.equal(presentation.resultVisible, true);
+  assert.equal(resultReady, 1);
 });
 
 test("mahjong puts a post-call draw in the slot after the shortened rack", () => {
@@ -852,7 +888,7 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   );
   assert.match(
     main,
-    /revealedPlayerIndices\.length \+ coveredPlayerIndices\.length > 0 &&\s*!resultVisible/s,
+    /revealedPlayerIndices\.length \+ coveredPlayerIndices\.length > 0 &&\s*!presentation\.resultVisible/s,
   );
   assert.match(
     main,
@@ -917,6 +953,22 @@ test("mahjong moves the local terminal hand onto a bottom-safe perspective row",
   const eighth = presentedHandTransform("bottom", 7, 13);
   assert.equal(eighth.x, 0);
   assert.equal(eighth.z, LOCAL_REVEALED_HAND_Z);
+  const camera = new PerspectiveCamera(33, MAHJONG_VIEWPORT.aspect, 0.1, 80);
+  camera.position.set(0, 15.558, 15.908);
+  camera.lookAt(0, 0.05, 0.4);
+  camera.updateMatrixWorld();
+  camera.updateProjectionMatrix();
+  const projected = new Vector3(0, TILE_SIZE.height / 2, eighth.z)
+    .project(camera);
+  const projectedY = (1 - projected.y) * MAHJONG_VIEWPORT.height / 2;
+  const overlay = ownHandOverlayTransform(
+    7,
+    MAHJONG_VIEWPORT.width,
+    MAHJONG_VIEWPORT.height,
+  );
+  const overlayY = MAHJONG_VIEWPORT.height / 2 - overlay.y;
+  assert.ok(overlayY - projectedY > 6);
+  assert.ok(overlayY - projectedY < 12);
   assert.equal(
     presentedHandTransform("bottom", 7, 13, { covered: true }).z,
     LOCAL_COVERED_HAND_Z,
@@ -960,6 +1012,62 @@ test("mahjong hand reveal combines a sustained push with gravity and hand brakin
   assert.ok(gravityAssistedSpeed > earlySpeed);
   assert.ok(contactSpeed > 0);
   assert.ok(contactSpeed < gravityAssistedSpeed);
+});
+
+test("mahjong animation controller shares one frame loop and deduplicates events", () => {
+  let now = 0;
+  let nextFrame = 0;
+  let pendingFrame = null;
+  let frameDraws = 0;
+  const samples = { reveal: [], callout: [] };
+  const animations = new ThreeAnimationController(
+    () => frameDraws += 1,
+    {
+      now: () => now,
+      requestFrame(callback) {
+        pendingFrame = callback;
+        return ++nextFrame;
+      },
+      cancelFrame() {
+        pendingFrame = null;
+      },
+    },
+  );
+  const advance = (time) => {
+    const callback = pendingFrame;
+    pendingFrame = null;
+    now = time;
+    callback(time);
+  };
+
+  assert.equal(animations.claim("hand-reveal", "draw:42"), true);
+  assert.equal(animations.claim("hand-reveal", "draw:42"), false);
+  animations.play({
+    id: "hand-reveal",
+    duration: 100,
+    update: (progress) => samples.reveal.push(progress),
+  });
+  animations.play({
+    id: "action-callout",
+    duration: 200,
+    update: (progress) => samples.callout.push(progress),
+  });
+  assert.equal(nextFrame, 1);
+
+  advance(50);
+  assert.deepEqual(samples.reveal, [0.5]);
+  assert.deepEqual(samples.callout, [0.25]);
+  assert.equal(frameDraws, 1);
+  advance(100);
+  assert.equal(animations.has("hand-reveal"), false);
+  assert.equal(animations.has("action-callout"), true);
+  advance(200);
+  assert.equal(animations.has("action-callout"), false);
+  assert.equal(pendingFrame, null);
+
+  animations.resetKey("hand-reveal");
+  assert.equal(animations.claim("hand-reveal", "draw:42"), true);
+  animations.destroy();
 });
 
 test("mahjong gives a newly drawn local tile a short falling fade-in", () => {

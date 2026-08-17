@@ -22,7 +22,10 @@ export const PLAYFIELD_CENTRE_Z = -1.35;
 
 export const HAND_TILE_GAP = 0.035;
 const DRAWN_TILE_GAP = 0.24;
-export const LOCAL_REVEALED_HAND_Z = 6.65;
+// The HUD rack centre projects to y=668.5 on the logical canvas. At z=6.8 the
+// perspective row projects to y=659.2, keeping the terminal reveal's one-time
+// placement shift near 9px instead of the previous 18.7px.
+export const LOCAL_REVEALED_HAND_Z = 6.8;
 export const LOCAL_COVERED_HAND_Z = 6.3;
 
 export const OWN_HAND_LAYOUT = Object.freeze({

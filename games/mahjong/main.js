@@ -21,6 +21,7 @@ import {
   exhaustiveDrawPresentation,
 } from "./game-format.js";
 import { MahjongThreeRenderer } from "./three-renderer.js";
+import { MahjongPresentationController } from "./presentation-controller.js";
 import { createMahjongSettingsDialog } from "./settings-dialog.js";
 import {
   activateMahjongAssetPack,
@@ -45,12 +46,7 @@ let selectedTileId = 0;
 let riichiMode = false;
 let selectionBeforeRiichi = 0;
 let aiTimer;
-let handInsertionTimer;
-let resultTimer;
-let handInsertion = null;
 let visibleEvents = [];
-let resultRevealKey = "";
-let resultVisible = true;
 let playerName = "你";
 let hasPlatformName = false;
 let destroyed = false;
@@ -104,6 +100,10 @@ const visualRenderer = new MahjongThreeRenderer(elements.stage, {
     });
     if (action) dispatch(action);
   },
+});
+const presentation = new MahjongPresentationController({
+  onHandInsertionReady: renderCurrentState,
+  onResultReady: refresh,
 });
 const visualRendererReady = visualRenderer.init().catch((error) => {
   console.error("Mahjong renderer failed", error);
@@ -718,19 +718,7 @@ function refresh({ ownDiscardedTile = 0 } = {}) {
   playRoleVoices(events);
   queueHandInsertion(previousState, events, ownDiscardedTile);
   const revealKey = handEndPresentationKey(state);
-  if (!revealKey) {
-    window.clearTimeout(resultTimer);
-    resultRevealKey = "";
-    resultVisible = true;
-  } else if (revealKey !== resultRevealKey) {
-    resultRevealKey = revealKey;
-    resultVisible = false;
-    window.clearTimeout(resultTimer);
-    resultTimer = window.setTimeout(() => {
-      resultVisible = true;
-      refresh();
-    }, handEndPresentationDelay(state));
-  }
+  presentation.syncResult(revealKey, handEndPresentationDelay(state));
   renderCurrentState();
 }
 
@@ -739,7 +727,7 @@ function renderCurrentState() {
   const revealedPlayerIndices = handRevealPlayerIndices(state);
   const coveredPlayerIndices = handCoveredPlayerIndices(state);
   domView.render(renderState, visibleEvents, selectedTileId, playerName, {
-    showResult: resultVisible,
+    showResult: presentation.resultVisible,
     riichiMode,
     defaultNames: getMahjongDefaultNames(),
     playerNameIsAuthoritative: hasPlatformName,
@@ -751,27 +739,37 @@ function renderCurrentState() {
     riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),
     revealPlayerIndices: revealedPlayerIndices,
     coveredPlayerIndices,
+    handRevealKey: handEndPresentationKey(state),
     animateHandReveal:
       revealedPlayerIndices.length + coveredPlayerIndices.length > 0 &&
-      !resultVisible,
+      !presentation.resultVisible,
     delayHandRevealForCallout: visibleEvents.some(
       (event) => event.type === "won",
     ),
-    deferredHandInsertionSeat: Number(handInsertion?.seat) || 0,
-    deferredHandInsertionIndex: Number(handInsertion?.rackIndex) || 0,
+    deferredHandInsertionSeat:
+      Number(presentation.handInsertion?.seat) || 0,
+    deferredHandInsertionIndex:
+      Number(presentation.handInsertion?.rackIndex) || 0,
   });
 }
 
 function presentedState() {
-  if (Number(handInsertion?.seat) !== 1) return state;
+  if (Number(presentation.handInsertion?.seat) !== 1) return state;
   return {
     ...state,
-    ownHand: handInsertion.ownHand,
-    drawnTile: handInsertion.drawnTile,
+    ownHand: presentation.handInsertion.ownHand,
+    drawnTile: presentation.handInsertion.drawnTile,
   };
 }
 
 function queueHandInsertion(previousState, events, ownDiscardedTile = 0) {
+  // A last hand-cut discard can end the hand while its delayed rack insertion
+  // is still pending. Do not let that timer rebuild the presented hands and
+  // restart their reveal/cover animation partway through.
+  if (state?.phase === "hand_ended") {
+    presentation.cancelHandInsertion();
+    return;
+  }
   const discard = asArray(events).find(
     (event) =>
       (event?.type === "discarded" || event?.type === "riichi") &&
@@ -779,25 +777,24 @@ function queueHandInsertion(previousState, events, ownDiscardedTile = 0) {
   );
   if (!discard) return;
   const eventKey = [
+    Number(state?.roundWind) || 0,
+    Number(state?.handNumber) || 0,
+    Number(state?.honba) || 0,
     Number(state?.moveCount) || 0,
     discard.type,
     Number(discard.playerIndex) || 0,
     Number(discard.tile) || 0,
     String(discard.fromDrawn),
   ].join(":");
-  if (eventKey === queueHandInsertion.lastEventKey) return;
-  queueHandInsertion.lastEventKey = eventKey;
-  window.clearTimeout(handInsertionTimer);
-  handInsertion = deferredHandInsertion(previousState, events, {
+  const insertion = deferredHandInsertion(previousState, events, {
     ownDiscardedTile,
   });
-  if (!handInsertion) return;
-  handInsertionTimer = window.setTimeout(() => {
-    handInsertion = null;
-    renderCurrentState();
-  }, HAND_INSERTION_DELAY_MS);
+  presentation.scheduleHandInsertion(
+    eventKey,
+    insertion,
+    HAND_INSERTION_DELAY_MS,
+  );
 }
-queueHandInsertion.lastEventKey = "";
 
 function handEndPresentationKey(current) {
   if (current?.phase !== "hand_ended") return "";
@@ -864,8 +861,10 @@ function selectTile(tileId) {
     ...ui,
     riichiMode,
     riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),
-    deferredHandInsertionSeat: Number(handInsertion?.seat) || 0,
-    deferredHandInsertionIndex: Number(handInsertion?.rackIndex) || 0,
+    deferredHandInsertionSeat:
+      Number(presentation.handInsertion?.seat) || 0,
+    deferredHandInsertionIndex:
+      Number(presentation.handInsertion?.rackIndex) || 0,
   });
 }
 
@@ -914,10 +913,7 @@ function cancelRiichiMode() {
 function handlePageHide(event) {
   matchMusic.pause();
   window.clearTimeout(aiTimer);
-  window.clearTimeout(handInsertionTimer);
-  window.clearTimeout(resultTimer);
-  handInsertion = null;
-  resultVisible = true;
+  presentation.suspend();
   if (!event.persisted) destroy();
 }
 
@@ -929,10 +925,7 @@ function handleVisibilityChange() {
   if (document.visibilityState === "hidden") {
     matchMusic.pause();
     window.clearTimeout(aiTimer);
-    window.clearTimeout(handInsertionTimer);
-    window.clearTimeout(resultTimer);
-    handInsertion = null;
-    resultVisible = true;
+    presentation.suspend();
     return;
   }
   resumeAfterSuspension();
@@ -958,8 +951,7 @@ function destroy() {
   if (destroyed) return;
   destroyed = true;
   window.clearTimeout(aiTimer);
-  window.clearTimeout(handInsertionTimer);
-  window.clearTimeout(resultTimer);
+  presentation.destroy();
   matchMusic.pause();
   matchMusic.removeAttribute("src");
   window.removeEventListener("pagehide", handlePageHide);

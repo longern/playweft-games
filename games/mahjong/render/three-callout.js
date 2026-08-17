@@ -72,8 +72,8 @@ export function actionCalloutKey(event, scope = "") {
 }
 
 export class ThreeActionCallout {
-  constructor(drawFrame) {
-    this.drawFrame = drawFrame;
+  constructor(animations) {
+    this.animations = animations;
     this.canvas = document.createElement("canvas");
     this.canvas.width = TEXTURE_WIDTH;
     this.canvas.height = TEXTURE_HEIGHT;
@@ -92,8 +92,6 @@ export class ThreeActionCallout {
     this.sprite.position.z = 800;
     this.sprite.renderOrder = 1000;
     this.sprite.visible = false;
-    this.frame = 0;
-    this.lastKey = "";
   }
 
   showLatest(events, scope = "") {
@@ -102,8 +100,7 @@ export class ThreeActionCallout {
       .find((candidate) => actionCalloutDescriptor(candidate));
     if (!event) return;
     const key = actionCalloutKey(event, scope);
-    if (!key || key === this.lastKey) return;
-    this.lastKey = key;
+    if (!this.animations.claim("action-callout", key)) return;
     this.show(actionCalloutDescriptor(event));
   }
 
@@ -116,48 +113,43 @@ export class ThreeActionCallout {
     const origin = SEAT_ORIGINS[descriptor.playerIndex] ?? SEAT_ORIGINS[1];
     const target = ACTION_CALLOUT_TARGETS[descriptor.playerIndex]
       ?? ACTION_CALLOUT_TARGETS[1];
-    const startedAt = performance.now();
+    this.animations.play({
+      id: "action-callout",
+      duration: ACTION_CALLOUT_DURATION_MS,
+      update: (progress) => {
+        const entering = Math.min(1, progress / ENTRY_PORTION);
+        const entryEase = easeOutBack(entering);
+        const exiting = progress <= EXIT_PORTION
+          ? 0
+          : (progress - EXIT_PORTION) / (1 - EXIT_PORTION);
+        const travel = (1 - entering) ** 3;
+        const impactJitter = entering >= 1 && exiting === 0
+          ? Math.sin(progress * 92) * (1 - progress) * 3
+          : 0;
+        const scale = entering < 1
+          ? 0.42 + 0.58 * entryEase
+          : 1 + 0.13 * exiting;
 
-    const tick = (now) => {
-      const progress = Math.min(1, (now - startedAt) / ACTION_CALLOUT_DURATION_MS);
-      const entering = Math.min(1, progress / ENTRY_PORTION);
-      const entryEase = easeOutBack(entering);
-      const exiting = progress <= EXIT_PORTION
-        ? 0
-        : (progress - EXIT_PORTION) / (1 - EXIT_PORTION);
-      const travel = (1 - entering) ** 3;
-      const impactJitter = entering >= 1 && exiting === 0
-        ? Math.sin(progress * 92) * (1 - progress) * 3
-        : 0;
-      const scale = entering < 1
-        ? 0.42 + 0.58 * entryEase
-        : 1 + 0.13 * exiting;
-
-      this.sprite.position.x = target.x + origin.x * 310 * travel + impactJitter;
-      this.sprite.position.y = target.y + origin.y * 235 * travel;
-      this.sprite.scale.set(
-        ACTION_CALLOUT_SIZE.width * scale,
-        ACTION_CALLOUT_SIZE.height * scale,
-        1,
-      );
-      this.material.rotation = origin.x * -0.055 * travel;
-      this.material.opacity = Math.min(1, entering * 3) * (1 - exiting ** 2);
-      this.drawFrame();
-
-      if (progress < 1) {
-        this.frame = window.requestAnimationFrame(tick);
-      } else {
-        this.frame = 0;
+        this.sprite.position.x =
+          target.x + origin.x * 310 * travel + impactJitter;
+        this.sprite.position.y = target.y + origin.y * 235 * travel;
+        this.sprite.scale.set(
+          ACTION_CALLOUT_SIZE.width * scale,
+          ACTION_CALLOUT_SIZE.height * scale,
+          1,
+        );
+        this.material.rotation = origin.x * -0.055 * travel;
+        this.material.opacity =
+          Math.min(1, entering * 3) * (1 - exiting ** 2);
+      },
+      complete: () => {
         this.sprite.visible = false;
-        this.drawFrame();
-      }
-    };
-    this.frame = window.requestAnimationFrame(tick);
+      },
+    });
   }
 
   cancel() {
-    if (this.frame) window.cancelAnimationFrame(this.frame);
-    this.frame = 0;
+    this.animations.cancel("action-callout");
     this.sprite.visible = false;
   }
 
