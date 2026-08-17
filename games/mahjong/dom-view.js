@@ -50,7 +50,12 @@ export class MahjongDomView {
     events,
     selectedTileId,
     playerName,
-    { showResult = true, riichiMode = false } = {},
+    {
+      showResult = true,
+      riichiMode = false,
+      defaultNames = {},
+      playerNameIsAuthoritative = false,
+    } = {},
   ) {
     const { elements } = this;
     this.doraCounts = doraTypeCounts(state);
@@ -88,7 +93,12 @@ export class MahjongDomView {
       }),
     );
     this.renderTypeHighlights(selectedTileId);
-    this.renderStations(state, playerName);
+    this.renderStations(
+      state,
+      playerName,
+      defaultNames,
+      playerNameIsAuthoritative,
+    );
     this.riichiMode = riichiMode;
     this.renderHands(state, selectedTileId, riichiMode);
     this.renderRivers(state, events);
@@ -105,10 +115,24 @@ export class MahjongDomView {
     { riichiMode = false } = {},
   ) {
     this.riichiMode = riichiMode;
-    this.renderHands(state, selectedTileId, riichiMode);
-    this.renderActions(state, selectedTileId, riichiMode);
+    this.updateHandSelection(selectedTileId);
     this.renderTypeHighlights(selectedTileId);
     return this.visualUi(playerName, selectedTileId);
+  }
+
+  updateHandSelection(selectedTileId) {
+    const selectedType = selectedTileId ? tileType(selectedTileId) : 0;
+    for (const tile of this.elements.hand.querySelectorAll("[data-tile-id]")) {
+      const tileId = Number(tile.dataset.tileId) || 0;
+      tile.setAttribute("aria-selected", String(tileId === selectedTileId));
+      tile.classList.toggle("is-selected", tileId === selectedTileId);
+      tile.classList.toggle(
+        "is-type-match",
+        tileId !== selectedTileId &&
+          selectedType > 0 &&
+          tileType(tileId) === selectedType,
+      );
+    }
   }
 
   renderTypeHighlights(selectedTileId) {
@@ -159,14 +183,23 @@ export class MahjongDomView {
     image.src = nextSource;
   }
 
-  renderStations(state, playerName) {
+  renderStations(
+    state,
+    playerName,
+    defaultNames = {},
+    playerNameIsAuthoritative = false,
+  ) {
     POSITIONS.forEach((position, index) => {
       const seat = index + 1;
       const station = this.elements.stations[position];
       const playerId = state.players[seat - 1];
-      const name = state.playerNames?.[seat - 1] || PLAYERS[seat - 1].name;
+      const stateName = state.playerNames?.[seat - 1];
+      const fallbackName = defaultNames[portraitSlotForPosition(position)];
+      const name = stateName && stateName !== PLAYERS[seat - 1].name
+        ? stateName
+        : fallbackName || stateName || PLAYERS[seat - 1].name || "玩家";
       station.querySelector("[data-name]").textContent =
-        seat === 1 ? playerName : name;
+        seat === 1 && playerNameIsAuthoritative ? playerName : name;
       const wind = seatWind(state, seat);
       const windBadge = station.querySelector("[data-wind]");
       windBadge.textContent = wind;
@@ -744,4 +777,10 @@ function createTileBack() {
 
 function markDora(tile, type, doraCounts) {
   tile.classList.toggle("is-dora", doraCounts?.has(Number(type)) === true);
+}
+
+function portraitSlotForPosition(position) {
+  return { bottom: "self", right: "right", top: "opposite", left: "left" }[
+    position
+  ];
 }

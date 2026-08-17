@@ -8,7 +8,6 @@ import {
   HAND_INSERTION_DELAY_MS,
   DORA_INDICATOR_SLOT_COUNT,
   HAND_END_PRESENTATION_DELAY_MS,
-  LOCAL_WIN_PRESENTATION_DELAY_MS,
 } from "../games/mahjong/constants.js";
 import {
   automaticRiichiDiscard,
@@ -39,11 +38,14 @@ import {
   meldDisplayLayout,
   meldRightExtension,
   OPPONENT_MELD_HAND_CLEARANCE,
+  LOCAL_COVERED_HAND_Z,
+  LOCAL_REVEALED_HAND_Z,
   meldTransform,
   ownHandOverlayTransform,
   OWN_HAND_DRAG,
   OWN_HAND_LAYOUT,
   PLAYFIELD_CENTRE_Z,
+  presentedHandTransform,
   presentedTileHingeTransform,
   RIICHI_TILE_ACROSS_EXTRA,
   RIVER_CORNER_GAP,
@@ -57,9 +59,11 @@ import {
 import {
   HAND_REVEAL_FALL_DURATION_MS,
   OWN_DRAW_ENTRY_DURATION_MS,
+  OWN_TILE_SELECTION_DURATION_MS,
   handRevealFallProgress,
   ownDrawEntryKey,
   ownDrawEntryProgress,
+  ownTileSelectionProgress,
 } from "../games/mahjong/render/three-motion.js";
 import {
   TILE_FACE_NAMES,
@@ -293,11 +297,16 @@ test("mahjong keeps the 13-tile rack stable and moves the drawn tile to the end"
   assert.equal(firstRackTile.scale, drawnTile.scale);
   assert.equal(firstRackTile.scaleX, drawnTile.scaleX);
   assert.equal(firstRackTile.scaleY, drawnTile.scaleY);
+  assert.ok(Math.abs(firstRackTile.lift / firstRackTile.tileHeight - 0.18) < 1e-12);
   const safeWidth = Math.min(1280, 588 * OWN_HAND_LAYOUT.safeAspect);
   const handLeft = firstRackTile.x - firstRackTile.tileWidth / 2;
   const handRight = drawnTile.x + drawnTile.tileWidth / 2;
   assert.ok(Math.abs(handRight - handLeft - safeWidth * 0.64) < 1e-9);
-  assert.ok(Math.abs((handLeft + handRight) / 2 + safeWidth * 0.055) < 1e-9);
+  assert.equal(
+    ownHandOverlayTransform(OWN_HAND_LAYOUT.initialCentreTileIndex, 1280, 588)
+      .x,
+    0,
+  );
   assert.ok(firstRackTile.tileHeight < 76);
   assert.ok(firstRackTile.tileHeight > 68);
   assert.equal(
@@ -313,6 +322,10 @@ test("mahjong keeps the 13-tile rack stable and moves the drawn tile to the end"
     compactDrawn.tileWidth / 2 -
     (compactFirst.x - compactFirst.tileWidth / 2);
   assert.ok(Math.abs(compactWidth - compactSafeWidth * 0.64) < 1e-9);
+  assert.equal(
+    ownHandOverlayTransform(OWN_HAND_LAYOUT.initialCentreTileIndex, 853, 392).x,
+    0,
+  );
   assert.ok(compactFirst.scale < firstRackTile.scale);
 });
 
@@ -335,7 +348,12 @@ test("mahjong pauses before integrating a hand-discarded drawn tile", () => {
       ],
       { ownDiscardedTile: 13 },
     ),
-    { seat: 1, ownHand: [5, 9, 17], drawnTile: 53 },
+    {
+      seat: 1,
+      ownHand: [5, 9, 17],
+      drawnTile: 53,
+      rackIndex: 2,
+    },
   );
   assert.equal(
     deferredHandInsertion(previous, [
@@ -387,6 +405,11 @@ test("mahjong pauses before integrating a hand-discarded drawn tile", () => {
   );
   assert.match(renderer, /deferredHandInsertionSeat/);
   assert.match(renderer, /deferredHandInsertionIndex/);
+  assert.match(
+    renderer,
+    /ownInsertionDeferred\s*&&\s*index >= deferredOwnRackIndex\s*\? index \+ 1/s,
+  );
+  assert.match(renderer, /rack\.length \+ \(ownInsertionDeferred \? 1 : 0\)/);
   assert.match(renderer, /count - \(insertionDeferred \? 1 : 0\)/);
   assert.match(renderer, /filter\(\(index\) => index !== deferredIndex\)/);
 });
@@ -396,7 +419,10 @@ test("mahjong puts a post-call draw in the slot after the shortened rack", () =>
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
     "utf8",
   );
-  assert.match(renderer, /this\.addOwnTile\(\s*drawn,\s*rack\.length,/s);
+  assert.match(
+    renderer,
+    /this\.addOwnTile\(\s*drawn,\s*rack\.length \+ \(ownInsertionDeferred \? 1 : 0\),/s,
+  );
   assert.doesNotMatch(renderer, /this\.addOwnTile\(\s*drawn,\s*13,/s);
 
   const rackEnd = ownHandOverlayTransform(9, 1280, 720);
@@ -807,30 +833,34 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     "utf8",
   );
   assert.equal(HAND_END_PRESENTATION_DELAY_MS, 2700);
-  assert.equal(LOCAL_WIN_PRESENTATION_DELAY_MS, 1000);
-  assert.ok(LOCAL_WIN_PRESENTATION_DELAY_MS > ACTION_CALLOUT_DURATION_MS);
+  assert.ok(HAND_END_PRESENTATION_DELAY_MS > ACTION_CALLOUT_DURATION_MS);
   assert.match(main, /handEndPresentationKey\(state\)/);
   assert.match(main, /const winners = asArray\(current\.winners\)/);
   assert.match(
     main,
-    /return asArray\(current\?\.winners\)\s*\.filter\(\(id\) => id !== HUMAN_ID\)\s*\.map\(\(id\) => asArray\(current\.players\)\.indexOf\(id\) \+ 1\)/s,
+    /return asArray\(current\?\.winners\)\s*\.map\(\(id\) => asArray\(current\.players\)\.indexOf\(id\) \+ 1\)/s,
   );
   assert.match(main, /handEndPresentationDelay\(state\)/);
   assert.match(
     main,
-    /localWin && !opponentWin\s*\? LOCAL_WIN_PRESENTATION_DELAY_MS/s,
+    /return current\?\.phase === "hand_ended"\s*\? HAND_END_PRESENTATION_DELAY_MS\s*:\s*0/s,
   );
   assert.match(main, /current\.abortiveReason === "九种九牌"/);
   assert.match(main, /exhaustive-draw/);
-  assert.match(main, /revealPlayerIndices: handRevealPlayerIndices\(state\)/);
+  assert.match(main, /revealPlayerIndices: revealedPlayerIndices/);
   assert.match(
     main,
-    /coveredPlayerIndices: exhaustiveDrawPresentation\(state\)\.covered/,
+    /coveredPlayerIndices,/,
   );
   assert.match(
     main,
-    /animateHandReveal:\s*handRevealPlayerIndices\(state\)\.length > 0 && !resultVisible/s,
+    /revealedPlayerIndices\.length \+ coveredPlayerIndices\.length > 0 &&\s*!resultVisible/s,
   );
+  assert.match(
+    main,
+    /function handCoveredPlayerIndices\(current\) \{[\s\S]*?return exhaustive\.covered;[\s\S]*?return \[\];\s*\}/,
+  );
+  assert.doesNotMatch(main, /!winners\.has\(playerId\)/);
   assert.match(renderer, /startHandReveal\(delay = 0\)/);
   assert.match(
     renderer,
@@ -871,7 +901,7 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
       draw: true,
       result: { tenpai: [true, false, true, false] },
     }),
-    { revealed: [3], covered: [2, 4] },
+    { revealed: [1, 3], covered: [2, 4] },
   );
   assert.deepEqual(
     exhaustiveDrawPresentation({
@@ -883,6 +913,20 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   );
   assert.match(renderer, /concealed: covered/);
   assert.match(renderer, /settlePresentedTile\(hinge, covered\)/);
+});
+
+test("mahjong moves the local terminal hand onto a bottom-safe perspective row", () => {
+  const eighth = presentedHandTransform("bottom", 7, 13);
+  assert.equal(eighth.x, 0);
+  assert.equal(eighth.z, LOCAL_REVEALED_HAND_Z);
+  assert.equal(
+    presentedHandTransform("bottom", 7, 13, { covered: true }).z,
+    LOCAL_COVERED_HAND_Z,
+  );
+  assert.deepEqual(
+    presentedHandTransform("top", 7, 13),
+    handTransform("top", 7, 13),
+  );
 });
 
 test("mahjong hand reveal rotates around a table-contact edge", () => {
@@ -936,14 +980,8 @@ test("mahjong gives a newly drawn local tile a short falling fade-in", () => {
     legalActions: { canDiscard: true },
   };
   assert.equal(ownDrawEntryKey(state), "1:2:17:42");
-  assert.equal(
-    ownDrawEntryKey({ ...state, drawnTile: 0 }),
-    "",
-  );
-  assert.equal(
-    ownDrawEntryKey({ ...state, phase: "hand_ended" }),
-    "",
-  );
+  assert.equal(ownDrawEntryKey({ ...state, drawnTile: 0 }), "");
+  assert.equal(ownDrawEntryKey({ ...state, phase: "hand_ended" }), "");
 
   const renderer = readFileSync(
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
@@ -951,6 +989,49 @@ test("mahjong gives a newly drawn local tile a short falling fade-in", () => {
   );
   assert.match(renderer, /tile\.position\.y \+= tile\.userData\.lift/);
   assert.match(renderer, /cloneTileMaterialsForFade\(tile\)/);
+});
+
+test("mahjong reuses local tile meshes for a quick interruptible selection lift", () => {
+  assert.equal(OWN_TILE_SELECTION_DURATION_MS, 120);
+  assert.equal(ownTileSelectionProgress(0), 0);
+  assert.equal(ownTileSelectionProgress(0.5), 0.875);
+  assert.equal(ownTileSelectionProgress(1), 1);
+
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
+  );
+  const main = readFileSync(
+    new URL("../games/mahjong/main.js", import.meta.url),
+    "utf8",
+  );
+  const view = readFileSync(
+    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    "utf8",
+  );
+  const selection = main.slice(
+    main.indexOf("function selectTile(tileId)"),
+    main.indexOf("function discardSelected()"),
+  );
+  const selectionUpdate = renderer.slice(
+    renderer.indexOf("  updateSelection(ui) {"),
+    renderer.indexOf("  drawHands(state, selectedTileId) {"),
+  );
+  const domSelection = view.slice(
+    view.indexOf("  renderSelection("),
+    view.indexOf("  renderTypeHighlights(selectedTileId) {"),
+  );
+  assert.match(renderer, /this\.ownTileRecords = new Map\(\)/);
+  assert.match(renderer, /this\.ownTileRecords\.get\(Number\(tileId\)\)/);
+  assert.doesNotMatch(renderer, /clearGroup\(this\.ownHandLayer\)/);
+  assert.match(renderer, /this\.startOwnTileMotion\(\)/);
+  assert.match(selection, /visualRenderer\.updateSelection\(/);
+  assert.doesNotMatch(selection, /visualRenderer\.render\(/);
+  assert.doesNotMatch(selectionUpdate, /clearGroup|drawRivers|drawMelds/);
+  assert.match(selectionUpdate, /this\.updateTypeHighlights\(\)/);
+  assert.match(renderer, /this\.renderer\.shadowMap\.autoUpdate = false/);
+  assert.match(domSelection, /this\.updateHandSelection\(selectedTileId\)/);
+  assert.doesNotMatch(domSelection, /this\.renderHands|this\.renderActions/);
 });
 
 test("mahjong result total shows base win payments without counters or sticks", () => {
@@ -1301,15 +1382,16 @@ test("mahjong highlights matching visible tile types without adding count text",
     highlight: "match",
   });
   assert.equal(
-    selected.children.some(
+    selected.children.find(
       (child) => child.material === factory.matchHighlightMaterial,
-    ),
+    )?.visible,
     false,
   );
-  assert.ok(
-    matchingRedFive.children.some(
+  assert.equal(
+    matchingRedFive.children.find(
       (child) => child.material === factory.matchHighlightMaterial,
-    ),
+    )?.visible,
+    true,
   );
   assert.equal(factory.matchHighlightMaterial.transparent, true);
   assert.ok(factory.matchHighlightMaterial.opacity >= 0.3);
@@ -1430,8 +1512,10 @@ test("mahjong renders every meld in the perspective table scene", () => {
   );
   assert.doesNotMatch(renderer, /ownMeldOverlayTransform|addOwnMeldTile/);
   assert.match(renderer, /this\.layers\.melds\.add\(slot\)/);
-  assert.ok(meldTransform("bottom", 0).x > 5.2);
-  assert.ok(meldTransform("bottom", 0).x < 5.4);
+  assert.ok(
+    meldTransform("bottom", 0).x >
+      handTransform("bottom", 13, 13, { drawn: true }).x,
+  );
   assert.ok(meldTransform("bottom", 1).x < meldTransform("bottom", 0).x);
 });
 
@@ -1755,7 +1839,10 @@ test("mahjong settings dialog combines operation controls and themed help", () =
   assert.match(main, /Cog, X, createIcons/);
   assert.match(main, /settingsDialog\.doubleClickTsumogiriEnabled/);
   assert.match(main, /settingsDialog\.doubleClickPassEnabled/);
-  assert.match(main, /passAvailable: !elements\.pass\.hidden && !elements\.pass\.disabled/);
+  assert.match(
+    main,
+    /passAvailable: !elements\.pass\.hidden && !elements\.pass\.disabled/,
+  );
   assert.match(renderer, /addEventListener\("dblclick", this\.onDoubleClick\)/);
   assert.match(
     renderer,

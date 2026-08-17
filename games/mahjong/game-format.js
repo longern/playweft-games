@@ -94,7 +94,7 @@ export function deferredHandInsertion(previousState, events, {
   const discardIndex = ownHand.indexOf(discardedTile);
   if (!drawnTile || discardIndex < 0) return null;
   ownHand.splice(discardIndex, 1);
-  return { seat, ownHand, drawnTile };
+  return { seat, ownHand, drawnTile, rackIndex: discardIndex };
 }
 
 export function exhaustiveDrawPresentation(state) {
@@ -106,9 +106,7 @@ export function exhaustiveDrawPresentation(state) {
   const tenpai = asArray(state.result?.tenpai);
   const revealed = [];
   const covered = [];
-  // The local hand is already face-up in the HUD, so only opponents need the
-  // exhaustive-draw reveal/cover presentation.
-  for (let seat = 2; seat <= 4; seat += 1) {
+  for (let seat = 1; seat <= 4; seat += 1) {
     (tenpai[seat - 1] === true ? revealed : covered).push(seat);
   }
   return { revealed, covered };

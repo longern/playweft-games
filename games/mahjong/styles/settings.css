@@ -150,6 +150,89 @@
   line-height: 1.2;
 }
 
+.settings-visual-panel {
+  padding: 28px 34px;
+  overflow: auto;
+}
+
+.settings-visual-intro,
+.settings-pack-feedback {
+  margin: 0;
+}
+
+.settings-visual-intro {
+  max-width: 600px;
+  color: rgba(238, 240, 225, 0.72);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.settings-visual-intro code { color: #ffe4a0; font-size: 0.92em; }
+
+.settings-pack-manifest { margin-top: 10px; color: rgba(238, 240, 225, 0.72); font-size: 14px; }
+.settings-pack-manifest summary { color: #d9e7d6; cursor: pointer; }
+.settings-pack-manifest pre { margin: 7px 0 0; padding: 8px; border: 1px solid rgba(231, 198, 116, 0.18); border-radius: 6px; background: rgba(0, 14, 15, 0.54); color: #d8eee1; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+.settings-pack-name {
+  display: grid;
+  gap: 7px;
+  margin-top: 18px;
+  color: #fff2cc;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.settings-pack-name input {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid rgba(231, 198, 116, 0.36);
+  border-radius: 7px;
+  outline: 0;
+  background: rgba(0, 14, 15, 0.68);
+  color: #fff8e6;
+  font: inherit;
+}
+
+.settings-pack-upload {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 16px;
+  border: 1px dashed rgba(231, 198, 116, 0.56);
+  border-radius: 9px;
+  background: rgba(42, 86, 72, 0.16);
+  color: #ffe4a0;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.settings-pack-upload input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+.settings-pack-feedback { min-height: 1.4em; margin-top: 10px; color: #b9d9cb; font-size: 14px; }
+
+.settings-pack-list {
+  display: grid;
+  gap: 1px;
+  margin: 8px 0 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(231, 198, 116, 0.24);
+  border-radius: 8px;
+  list-style: none;
+}
+
+.settings-pack-list li { display: flex; min-height: 50px; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; background: rgba(1, 15, 16, 0.5); }
+.settings-pack-list li.is-active { background: rgba(47, 102, 81, 0.24); }
+.settings-pack-list li > span:first-child { display: grid; min-width: 0; gap: 2px; }
+.settings-pack-list strong { color: #fff2cc; font-size: 15px; }
+.settings-pack-list small { overflow: hidden; color: rgba(238, 240, 225, 0.56); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.settings-pack-actions { display: inline-flex; flex: 0 0 auto; gap: 6px; align-items: center; }
+.settings-pack-actions em { color: #a8e0c7; font-size: 13px; font-style: normal; font-weight: 700; }
+.settings-pack-actions button { padding: 4px 7px; border: 1px solid rgba(231, 198, 116, 0.32); border-radius: 5px; background: rgba(255, 255, 255, 0.04); color: #ffe4a0; font-size: 12px; cursor: pointer; }
+.settings-pack-actions button[data-pack-action="delete"] { color: #efada4; }
+
 .settings-option input {
   width: 22px;
   height: 22px;

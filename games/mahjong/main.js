@@ -7,7 +7,6 @@ import {
   HAND_INSERTION_DELAY_MS,
   HAND_END_PRESENTATION_DELAY_MS,
   HUMAN_ID,
-  LOCAL_WIN_PRESENTATION_DELAY_MS,
   PLAYERS,
 } from "./constants.js";
 import { MahjongDomView } from "./dom-view.js";
@@ -23,6 +22,15 @@ import {
 } from "./game-format.js";
 import { MahjongThreeRenderer } from "./three-renderer.js";
 import { createMahjongSettingsDialog } from "./settings-dialog.js";
+import {
+  activateMahjongAssetPack,
+  createMahjongAssetPack,
+  deleteMahjongAssetPack,
+  getMahjongAssetUrl,
+  getMahjongDefaultNames,
+  initializeMahjongAssetPacks,
+  listMahjongAssetPacks,
+} from "./asset-packs.js";
 import "../../src/base.css";
 import "./styles.css";
 
@@ -41,7 +49,9 @@ let visibleEvents = [];
 let resultRevealKey = "";
 let resultVisible = true;
 let playerName = "你";
+let hasPlatformName = false;
 let destroyed = false;
+let hasPlatformAvatar = false;
 
 const releaseFixedViewport = bindFixedViewport(
   document.querySelector("#mahjong-viewport"),
@@ -91,6 +101,67 @@ const visualRendererReady = visualRenderer.init().catch((error) => {
   console.error("Mahjong renderer failed", error);
   showLoadingError("图形渲染器加载失败，请刷新页面重试");
 });
+const visualPackElements = {
+  name: document.querySelector("#settings-pack-name"),
+  upload: document.querySelector("#settings-pack-upload"),
+  feedback: document.querySelector("#settings-pack-feedback"),
+  list: document.querySelector("#settings-pack-list"),
+};
+let visualPacks = [];
+const assetPacksReady = initializeMahjongAssetPacks().catch(() => new Map());
+
+void Promise.all([visualRendererReady, assetPacksReady]).then(() =>
+  applyVisualPack(),
+);
+void refreshVisualPacks();
+visualPackElements.upload.addEventListener("change", async () => {
+  const files = [...visualPackElements.upload.files];
+  visualPackElements.upload.value = "";
+  if (!files.length) return;
+  visualPackElements.feedback.textContent = "正在保存素材包…";
+  try {
+    visualPacks = await createMahjongAssetPack(
+      files,
+      visualPackElements.name.value,
+    );
+    visualPackElements.name.value = "";
+    renderVisualPacks();
+    visualPackElements.feedback.textContent = "已导入并启用素材包。";
+  } catch (error) {
+    visualPackElements.feedback.textContent =
+      error instanceof Error ? error.message : "导入素材包失败";
+  }
+});
+visualPackElements.list.addEventListener("click", async (event) => {
+  const button = event.target.closest("button");
+  const id = button?.dataset.packId;
+  const action = button?.dataset.packAction;
+  if (!id || !action) return;
+  if (
+    action === "delete" &&
+    !window.confirm("删除这个麻将素材包？此操作无法恢复。")
+  )
+    return;
+  visualPackElements.feedback.textContent =
+    action === "delete" ? "正在删除…" : "正在切换…";
+  try {
+    visualPacks =
+      action === "delete"
+        ? await deleteMahjongAssetPack(id)
+        : await activateMahjongAssetPack(id);
+    renderVisualPacks();
+    visualPackElements.feedback.textContent =
+      action === "delete" ? "已删除素材包。" : "已启用素材包。";
+  } catch {
+    visualPackElements.feedback.textContent =
+      action === "delete" ? "删除素材包失败" : "切换素材包失败";
+  }
+});
+window.addEventListener("mahjong:asset-pack-changed", () => {
+  void applyVisualPack();
+  applyPackAvatars(state);
+  if (state) renderCurrentState();
+});
 
 elements.pass.addEventListener("click", () => dispatch({ type: "pass" }));
 elements.abort.addEventListener("click", () =>
@@ -115,7 +186,10 @@ document.addEventListener("visibilitychange", handleVisibilityChange);
 const soloClient = createPlayweftSoloClient({
   onReady(context) {
     const name = context?.player?.name?.trim();
-    if (name) playerName = name;
+    if (name) {
+      playerName = name;
+      hasPlatformName = true;
+    }
     requestPlatformAvatar(context);
     elements.setup.hidden = false;
   },
@@ -129,7 +203,10 @@ if (window.parent === window) elements.setup.hidden = false;
 function requestPlatformAvatar(context) {
   const initialSource = context?.player?.avatar?.src;
   if (typeof initialSource === "string" && initialSource) {
+    hasPlatformAvatar = true;
     domView.setPlayerAvatar("bottom", initialSource);
+  } else {
+    applyPackAvatars(state);
   }
   if (!asArray(context?.capabilities).includes("user.getProfile")) return;
   void soloClient
@@ -137,14 +214,85 @@ function requestPlatformAvatar(context) {
     .then((profile) => {
       const source = profile?.avatar?.src;
       if (typeof source === "string" && source) {
+        hasPlatformAvatar = true;
         domView.setPlayerAvatar("bottom", source);
       } else if (!initialSource) {
-        domView.setPlayerAvatar("bottom", "");
+        applyPackAvatars(state);
       }
     })
     .catch(() => {
-      if (!initialSource) domView.setPlayerAvatar("bottom", "");
+      if (!initialSource)
+        applyPackAvatars(state);
     });
+}
+
+function applyPackAvatars() {
+  const portraitSlotByPosition = {
+    bottom: "self",
+    right: "right",
+    top: "opposite",
+    left: "left",
+  };
+  for (const [position, portraitSlot] of Object.entries(portraitSlotByPosition)) {
+    if (position === "bottom" && hasPlatformAvatar) continue;
+    const source = getMahjongAssetUrl(`portrait-${portraitSlot}`) ||
+      (position === "bottom" ? getMahjongAssetUrl("avatar") : "");
+    domView.setPlayerAvatar(position, source);
+  }
+}
+
+async function applyVisualPack() {
+  await visualRendererReady;
+  await visualRenderer.setAppearance({
+    tablecloth: getMahjongAssetUrl("tablecloth"),
+    tileBack: getMahjongAssetUrl("tile-back"),
+  });
+}
+
+async function refreshVisualPacks() {
+  try {
+    await assetPacksReady;
+    visualPacks = await listMahjongAssetPacks();
+    renderVisualPacks();
+  } catch {
+    visualPackElements.feedback.textContent = "当前浏览器未开放本机素材存储。";
+  }
+}
+
+function renderVisualPacks() {
+  visualPackElements.list.replaceChildren(
+    ...visualPacks.map((pack) => {
+      const item = document.createElement("li");
+      item.classList.toggle("is-active", pack.active);
+      const details = document.createElement("span");
+      const title = document.createElement("strong");
+      title.textContent = pack.name;
+      const summary = document.createElement("small");
+      summary.textContent = pack.assetNames.join(" · ");
+      details.append(title, summary);
+      const actions = document.createElement("span");
+      actions.className = "settings-pack-actions";
+      if (pack.active) {
+        const active = document.createElement("em");
+        active.textContent = "使用中";
+        actions.append(active);
+      } else {
+        actions.append(createVisualPackButton("启用", "activate", pack.id));
+      }
+      actions.append(createVisualPackButton("删除", "delete", pack.id));
+      item.append(details, actions);
+      return item;
+    }),
+  );
+}
+
+function createVisualPackButton(label, action, id) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.dataset.packAction = action;
+  button.dataset.packId = id;
+  button.textContent = label;
+  return button;
 }
 
 async function initialize(matchType = "east") {
@@ -273,18 +421,24 @@ function refresh({ ownDiscardedTile = 0 } = {}) {
 
 function renderCurrentState() {
   const renderState = presentedState();
+  const revealedPlayerIndices = handRevealPlayerIndices(state);
+  const coveredPlayerIndices = handCoveredPlayerIndices(state);
   domView.render(renderState, visibleEvents, selectedTileId, playerName, {
     showResult: resultVisible,
     riichiMode,
+    defaultNames: getMahjongDefaultNames(),
+    playerNameIsAuthoritative: hasPlatformName,
   });
+  applyPackAvatars(renderState);
   visualRenderer.render(renderState, visibleEvents, {
     ...domView.visualUi(playerName, selectedTileId),
     riichiMode,
     riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),
-    revealPlayerIndices: handRevealPlayerIndices(state),
-    coveredPlayerIndices: exhaustiveDrawPresentation(state).covered,
+    revealPlayerIndices: revealedPlayerIndices,
+    coveredPlayerIndices,
     animateHandReveal:
-      handRevealPlayerIndices(state).length > 0 && !resultVisible,
+      revealedPlayerIndices.length + coveredPlayerIndices.length > 0 &&
+      !resultVisible,
     delayHandRevealForCallout: visibleEvents.some(
       (event) => event.type === "won",
     ),
@@ -349,12 +503,7 @@ function handEndPresentationKey(current) {
 }
 
 function handEndPresentationDelay(current) {
-  const winners = asArray(current?.winners);
-  const localWin = winners.includes(HUMAN_ID);
-  const opponentWin = winners.some((id) => id !== HUMAN_ID);
-  return localWin && !opponentWin
-    ? LOCAL_WIN_PRESENTATION_DELAY_MS
-    : HAND_END_PRESENTATION_DELAY_MS;
+  return current?.phase === "hand_ended" ? HAND_END_PRESENTATION_DELAY_MS : 0;
 }
 
 function handRevealPlayerIndices(current) {
@@ -367,9 +516,16 @@ function handRevealPlayerIndices(current) {
     return seat > 0 ? [seat] : [];
   }
   return asArray(current?.winners)
-    .filter((id) => id !== HUMAN_ID)
     .map((id) => asArray(current.players).indexOf(id) + 1)
     .filter((seat) => seat > 0);
+}
+
+function handCoveredPlayerIndices(current) {
+  const exhaustive = exhaustiveDrawPresentation(current);
+  if (exhaustive.revealed.length + exhaustive.covered.length > 0) {
+    return exhaustive.covered;
+  }
+  return [];
 }
 
 function selectTile(tileId) {
@@ -389,7 +545,7 @@ function selectTile(tileId) {
   const ui = domView.renderSelection(renderState, selectedTileId, playerName, {
     riichiMode,
   });
-  visualRenderer.render(renderState, [], {
+  visualRenderer.updateSelection({
     ...ui,
     riichiMode,
     riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),

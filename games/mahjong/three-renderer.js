@@ -37,6 +37,7 @@ import {
   meldTransform,
   ownHandOverlayTransform,
   OWN_HAND_DRAG,
+  presentedHandTransform,
   presentedTileHingeTransform,
   RIVER_TILE_GAP,
   riverGridPosition,
@@ -54,9 +55,11 @@ import { ThreeMahjongTable } from "./render/three-table.js";
 import {
   HAND_REVEAL_FALL_DURATION_MS,
   OWN_DRAW_ENTRY_DURATION_MS,
+  OWN_TILE_SELECTION_DURATION_MS,
   handRevealFallProgress,
   ownDrawEntryKey,
   ownDrawEntryProgress,
+  ownTileSelectionProgress,
 } from "./render/three-motion.js";
 
 const CAMERA_TARGET = Object.freeze({ x: 0, y: 0.05, z: 0.4 });
@@ -75,11 +78,17 @@ export class MahjongThreeRenderer {
     this.animationFrame = 0;
     this.ownDrawAnimationFrame = 0;
     this.ownDrawAnimation = null;
+    this.ownTileMotionFrame = 0;
+    this.ownTileMotions = [];
+    this.ownTileRecords = new Map();
+    this.activeOwnTileIds = new Set();
+    this.highlightableTiles = new Set();
     this.lastOwnDrawEntryKey = "";
     this.dragState = null;
     this.lastTap = { tileId: 0, time: 0 };
     this.contextLost = false;
     this.destroyed = false;
+    this.appearanceVersion = 0;
   }
 
   async init() {
@@ -94,6 +103,8 @@ export class MahjongThreeRenderer {
     this.renderer.toneMappingExposure = 0.97;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFShadowMap;
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
     this.renderer.autoClear = false;
     this.renderer.domElement.className = "mahjong-three-canvas";
     this.renderer.domElement.setAttribute("aria-hidden", "true");
@@ -204,6 +215,25 @@ export class MahjongThreeRenderer {
     else this.drawFrame();
   }
 
+  async setAppearance({ tablecloth = "", tileBack = "" } = {}) {
+    if (!this.ready) return;
+    const version = ++this.appearanceVersion;
+    const loader = new TextureLoader();
+    const [felt, back] = await Promise.all([
+      tablecloth ? loader.loadAsync(tablecloth) : null,
+      tileBack ? loader.loadAsync(tileBack) : null,
+    ]);
+    if (version !== this.appearanceVersion || this.destroyed) {
+      felt?.dispose();
+      back?.dispose();
+      return;
+    }
+    this.table.setFeltTexture(felt);
+    this.tileFactory.setBackTexture(back);
+    this.renderer.shadowMap.needsUpdate = true;
+    this.drawFrame();
+  }
+
   addLighting() {
     this.scene.add(
       new HemisphereLight(0xfff2d8, 0x416d62, 1.62),
@@ -286,26 +316,84 @@ export class MahjongThreeRenderer {
     this.pickableTiles.length = 0;
     this.cancelHandReveal();
     this.cancelOwnDrawEntry();
+    this.cancelOwnTileMotion();
     this.pendingOwnDrawEntryTile = null;
     this.revealTiles.length = 0;
-    this.setHoveredTile(null);
+    // Keep the mesh's current height when a selection transition is
+    // interrupted; reconciliation below uses it as the next animation origin.
+    this.hoveredTile = null;
     Object.values(this.layers).forEach(clearGroup);
-    clearGroup(this.ownHandLayer);
+    this.activeOwnTileIds.clear();
+    this.highlightableTiles.clear();
     this.tableConsole.update(state, ui);
     this.drawHands(state, ui.selectedTileId);
+    this.pruneOwnTiles();
     this.drawRivers(state);
     this.drawMelds(state);
     this.actionCallout.showLatest(
       events,
       `${state.roundWind}:${state.handNumber}:${state.moveCount}`,
     );
+    this.renderer.shadowMap.needsUpdate = true;
     this.drawFrame();
     if (this.pendingOwnDrawEntryTile) this.startOwnDrawEntry();
+    if (this.ownTileMotions.length) this.startOwnTileMotion();
     if (ui.animateHandReveal && this.revealTiles.length) {
       this.startHandReveal(
         ui.delayHandRevealForCallout ? ACTION_CALLOUT_DURATION_MS : 0,
       );
     }
+  }
+
+  updateSelection(ui) {
+    if (!this.ready || !this.state) {
+      if (this.pendingRender) {
+        this.pendingRender[2] = { ...this.pendingRender[2], ...ui };
+      }
+      return;
+    }
+    this.ui = { ...this.ui, ...ui };
+    this.highlightedType =
+      Number(this.ui.selectedTileId) > 0
+        ? tileType(this.ui.selectedTileId)
+        : 0;
+    this.hoveredTile = null;
+    this.cancelOwnTileMotion();
+    for (const [tileId, { tile }] of this.ownTileRecords) {
+      const targetY =
+        tile.userData.baseY +
+        (Number(tileId) === Number(this.ui.selectedTileId)
+          ? tile.userData.lift
+          : 0);
+      if (Math.abs(tile.position.y - targetY) > 0.01) {
+        this.ownTileMotions.push({
+          tile,
+          fromY: tile.position.y,
+          targetY,
+        });
+      }
+    }
+    this.updateTypeHighlights();
+    this.drawFrame();
+    if (this.ownTileMotions.length) this.startOwnTileMotion();
+  }
+
+  updateTypeHighlights() {
+    const selectedTileId = Number(this.ui?.selectedTileId) || 0;
+    for (const tile of this.highlightableTiles) {
+      this.tileFactory.setMatchHighlight(
+        tile,
+        this.highlightedType > 0 &&
+          Number(tile.userData.type) === this.highlightedType &&
+          Number(tile.userData.tileId) !== selectedTileId,
+      );
+    }
+  }
+
+  createTile(options) {
+    const tile = this.tileFactory.create(options);
+    if (tile.userData.matchHighlight) this.highlightableTiles.add(tile);
+    return tile;
   }
 
   drawHands(state, selectedTileId) {
@@ -325,6 +413,15 @@ export class MahjongThreeRenderer {
     const riichiTiles = new Set(
       asArray(this.ui?.riichiCandidateTiles).map(Number),
     );
+    const ownInsertionDeferred =
+      Number(this.ui?.deferredHandInsertionSeat) === 1;
+    const deferredOwnRackIndex = Math.max(
+      0,
+      Math.min(
+        rack.length,
+        Number(this.ui?.deferredHandInsertionIndex) || 0,
+      ),
+    );
     if (revealSeats.has(1) || coveredSeats.has(1)) {
       this.addPresentedHand(state, "bottom", state.players[0], 1, {
         covered: coveredSeats.has(1),
@@ -332,9 +429,13 @@ export class MahjongThreeRenderer {
       });
     } else {
       rack.forEach((tileId, index) => {
+        const slotIndex =
+          ownInsertionDeferred && index >= deferredOwnRackIndex
+            ? index + 1
+            : index;
         this.addOwnTile(
           tileId,
-          index,
+          slotIndex,
           false,
           selectedTileId,
           !forbiddenTypes.has(tileType(tileId)) &&
@@ -345,7 +446,7 @@ export class MahjongThreeRenderer {
       if (drawn != null) {
         this.addOwnTile(
           drawn,
-          rack.length,
+          rack.length + (ownInsertionDeferred ? 1 : 0),
           true,
           selectedTileId,
           !forbiddenTypes.has(tileType(drawn)) &&
@@ -395,7 +496,7 @@ export class MahjongThreeRenderer {
         : Array.from({ length: layout.rackCount }, (_, index) => index);
       for (const index of rackSlots) {
         const transform = handTransform(position, index, layout.rackCapacity);
-        const tile = this.tileFactory.create({ concealed: true });
+        const tile = this.createTile({ concealed: true });
         applyStandingTransform(tile, transform);
         this.layers.hands.add(tile);
       }
@@ -406,7 +507,7 @@ export class MahjongThreeRenderer {
           layout.rackCapacity,
           { drawn: true },
         );
-        const tile = this.tileFactory.create({ concealed: true });
+        const tile = this.createTile({ concealed: true });
         applyStandingTransform(tile, transform);
         this.layers.hands.add(tile);
       }
@@ -436,11 +537,14 @@ export class MahjongThreeRenderer {
     drawn,
     { covered, animate },
   ) {
-    const transform = handTransform(position, index, index, { drawn });
+    const transform = presentedHandTransform(position, index, index, {
+      drawn,
+      covered,
+    });
     const slot = new Group();
     slot.position.set(transform.x, 0, transform.z);
     slot.rotation.y = transform.yaw;
-    const tile = this.tileFactory.create({
+    const tile = this.createTile({
       type: tileInfo.type,
       red: tileInfo.red,
       concealed: covered,
@@ -474,6 +578,7 @@ export class MahjongThreeRenderer {
         hinge.rotation.x = restingRotationX * eased;
         if (progress < 1) running = true;
       }
+      this.renderer.shadowMap.needsUpdate = true;
       this.drawFrame();
       if (running) this.animationFrame = window.requestAnimationFrame(tick);
       else this.animationFrame = 0;
@@ -502,7 +607,7 @@ export class MahjongThreeRenderer {
       this.viewport.height,
       { drawn },
     );
-    const tile = this.tileFactory.create({
+    const visualState = {
       type: tileType(tileId),
       red: isRedFive(tileId),
       tileId,
@@ -514,19 +619,87 @@ export class MahjongThreeRenderer {
             : "",
       dora: this.doraCounts.has(tileType(tileId)),
       dimmed,
-    });
-    tile.position.set(transform.x, transform.y, transform.z);
+    };
+    const visualKey = JSON.stringify({ ...visualState, highlight: undefined });
+    const previousRecord = this.ownTileRecords.get(Number(tileId));
+    const previousY = previousRecord?.tile.position.y;
+    let record = previousRecord;
+    if (!record || record.visualKey !== visualKey) {
+      const tile = this.createTile(visualState);
+      if (record) this.ownHandLayer.remove(record.tile);
+      this.ownHandLayer.add(tile);
+      record = { tile, visualKey };
+      this.ownTileRecords.set(Number(tileId), record);
+    }
+    const { tile } = record;
+    this.highlightableTiles.add(tile);
+    this.tileFactory.setMatchHighlight(tile, visualState.highlight === "match");
+    const targetY =
+      transform.y +
+      (Number(tileId) === Number(selectedTileId) ? transform.lift : 0);
+    tile.position.set(
+      transform.x,
+      previousY ?? targetY,
+      transform.z,
+    );
     tile.rotation.x = transform.tilt;
     tile.scale.set(transform.scaleX, transform.scaleY, transform.scaleZ);
     tile.userData.baseX = transform.x;
     tile.userData.baseY = transform.y;
     tile.userData.lift = transform.lift;
     tile.userData.discardable = discardable;
-    tile.position.y +=
-      Number(tileId) === Number(selectedTileId) ? tile.userData.lift : 0;
-    this.ownHandLayer.add(tile);
+    this.activeOwnTileIds.add(Number(tileId));
     this.pickableTiles.push(tile);
-    if (animateEntry) this.prepareOwnDrawEntry(tile);
+    if (animateEntry && !previousRecord) {
+      tile.position.y = targetY;
+      this.prepareOwnDrawEntry(tile);
+    } else if (previousY != null && Math.abs(previousY - targetY) > 0.01) {
+      this.ownTileMotions.push({ tile, fromY: previousY, targetY });
+    } else {
+      tile.position.y = targetY;
+    }
+  }
+
+  pruneOwnTiles() {
+    for (const [tileId, record] of this.ownTileRecords) {
+      if (this.activeOwnTileIds.has(tileId)) continue;
+      this.ownHandLayer.remove(record.tile);
+      this.ownTileRecords.delete(tileId);
+    }
+  }
+
+  startOwnTileMotion() {
+    const motions = this.ownTileMotions;
+    if (!motions.length) return;
+    const startedAt = performance.now();
+    const tick = (now) => {
+      if (this.ownTileMotions !== motions) return;
+      const progress = Math.max(
+        0,
+        Math.min(1, (now - startedAt) / OWN_TILE_SELECTION_DURATION_MS),
+      );
+      const eased = ownTileSelectionProgress(progress);
+      for (const motion of motions) {
+        motion.tile.position.y =
+          motion.fromY + (motion.targetY - motion.fromY) * eased;
+      }
+      this.drawFrame();
+      if (progress < 1) {
+        this.ownTileMotionFrame = window.requestAnimationFrame(tick);
+        return;
+      }
+      this.ownTileMotionFrame = 0;
+      this.ownTileMotions = [];
+    };
+    this.ownTileMotionFrame = window.requestAnimationFrame(tick);
+  }
+
+  cancelOwnTileMotion() {
+    if (this.ownTileMotionFrame) {
+      window.cancelAnimationFrame(this.ownTileMotionFrame);
+      this.ownTileMotionFrame = 0;
+    }
+    this.ownTileMotions = [];
   }
 
   prepareOwnDrawEntry(tile) {
@@ -612,7 +785,7 @@ export class MahjongThreeRenderer {
             { width: TILE_SIZE.width, height: TILE_SIZE.height },
           ),
         );
-        const tile = this.tileFactory.create({
+        const tile = this.createTile({
           type: discard.type,
           red: discard.red === true,
           highlight:
@@ -644,7 +817,7 @@ export class MahjongThreeRenderer {
           slot.position.set(transform.x, transform.y, transform.z);
           slot.rotation.y = transform.yaw + (entry.sideways ? Math.PI / 2 : 0);
           slot.scale.setScalar(MELD_SCALE);
-          const tile = this.tileFactory.create({
+          const tile = this.createTile({
             type: entry.type,
             red: entry.red,
             concealed: entry.faceDown,
@@ -858,6 +1031,7 @@ export class MahjongThreeRenderer {
   resume() {
     if (!this.ready || this.contextLost || this.destroyed) return;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.5));
+    this.renderer.shadowMap.needsUpdate = true;
     this.tableConsole.restore(this.state, this.ui);
     this.resize();
   }
@@ -867,6 +1041,7 @@ export class MahjongThreeRenderer {
     this.destroyed = true;
     this.cancelHandReveal();
     this.cancelOwnDrawEntry();
+    this.cancelOwnTileMotion();
     this.cancelDrag(false);
     this.renderer?.domElement.removeEventListener(
       "pointerdown",

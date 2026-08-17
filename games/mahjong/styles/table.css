@@ -261,6 +261,19 @@ a {
     url("../assets/moonlit-table-v3.jpg") center / cover no-repeat;
 }
 
+:root[data-mahjong-has-background] .table-shell {
+  background-image:
+    linear-gradient(rgba(2, 10, 9, 0.18), rgba(2, 10, 9, 0.32)),
+    var(--mahjong-background-image) !important;
+}
+
+:root[data-mahjong-has-tile-back] .dora-list .tile-back,
+:root[data-mahjong-has-tile-back] .result-meld .tile-result.is-face-down {
+  background-image: var(--mahjong-tile-back-image) !important;
+  background-position: center;
+  background-size: cover;
+}
+
 .table-shell::after {
   position: absolute;
   z-index: 2;

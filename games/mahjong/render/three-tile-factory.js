@@ -55,6 +55,8 @@ export class ThreeTileFactory {
       clearcoat: 0.4,
       clearcoatRoughness: 0.32,
     });
+    this.defaultBackColor = this.backMaterial.color.clone();
+    this.customBackTexture = null;
     this.faceMaterial = new MeshPhysicalMaterial({
       map: faceAtlas,
       transparent: true,
@@ -111,6 +113,7 @@ export class ThreeTileFactory {
   } = {}) {
     const tile = new Group();
     tile.userData.tileId = Number(tileId) || 0;
+    tile.userData.type = Number(type) || 0;
     const shell = new Mesh(this.shellGeometry, this.shellMaterial);
     shell.castShadow = true;
     shell.receiveShadow = true;
@@ -125,12 +128,15 @@ export class ThreeTileFactory {
     tile.add(back);
 
     if (!concealed && type) {
-      if (highlight === "match") {
-        const glow = new Mesh(this.highlightGeometry, this.matchHighlightMaterial);
-        glow.position.z = TILE_SIZE.depth / 2 + 0.006;
-        glow.userData.tileRoot = tile;
-        tile.add(glow);
-      }
+      const glow = new Mesh(
+        this.highlightGeometry,
+        this.matchHighlightMaterial,
+      );
+      glow.position.z = TILE_SIZE.depth / 2 + 0.006;
+      glow.visible = highlight === "match";
+      glow.userData.tileRoot = tile;
+      tile.userData.matchHighlight = glow;
+      tile.add(glow);
       if (dora) {
         const wash = new Mesh(this.doraWashGeometry, this.doraWashMaterial);
         wash.position.z = TILE_SIZE.depth / 2 + 0.007;
@@ -156,6 +162,29 @@ export class ThreeTileFactory {
     return tile;
   }
 
+  setMatchHighlight(tile, visible) {
+    if (tile?.userData?.matchHighlight) {
+      tile.userData.matchHighlight.visible = visible === true;
+    }
+  }
+
+  setBackTexture(texture) {
+    if (this.customBackTexture && this.customBackTexture !== texture) {
+      this.customBackTexture.dispose();
+    }
+    this.customBackTexture = texture ?? null;
+    if (texture) {
+      texture.colorSpace = SRGBColorSpace;
+      texture.anisotropy = 8;
+      this.backMaterial.map = texture;
+      this.backMaterial.color.set("#ffffff");
+    } else {
+      this.backMaterial.map = null;
+      this.backMaterial.color.copy(this.defaultBackColor);
+    }
+    this.backMaterial.needsUpdate = true;
+  }
+
   destroy() {
     this.shellGeometry.dispose();
     this.backGeometry.dispose();
@@ -170,6 +199,7 @@ export class ThreeTileFactory {
     this.doraWashMaterial.dispose();
     this.disabledWashMaterial.dispose();
     this.faceAtlas.dispose();
+    this.customBackTexture?.dispose();
   }
 }
 

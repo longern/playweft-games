@@ -77,6 +77,9 @@ export class ThreeMahjongTable {
       clearcoat: 0.018,
       clearcoatRoughness: 0.94,
     }));
+    this.feltMaterial = feltMaterial;
+    this.defaultFeltTexture = feltTexture;
+    this.customFeltTexture = null;
     const woodMaterial = this.trackMaterial(new MeshPhysicalMaterial({
       color: new Color("#ffffff"),
       map: woodTexture,
@@ -209,11 +212,30 @@ export class ThreeMahjongTable {
     return material;
   }
 
+  setFeltTexture(texture) {
+    if (this.customFeltTexture && this.customFeltTexture !== texture) {
+      this.customFeltTexture.dispose();
+    }
+    this.customFeltTexture = texture ?? null;
+    const next = texture ?? this.defaultFeltTexture;
+    if (texture) {
+      texture.colorSpace = SRGBColorSpace;
+      texture.anisotropy = this.defaultFeltTexture.anisotropy;
+      texture.wrapS = RepeatWrapping;
+      texture.wrapT = RepeatWrapping;
+      texture.repeat.set(1, 1);
+    }
+    this.feltMaterial.map = next;
+    this.feltMaterial.bumpMap = next;
+    this.feltMaterial.needsUpdate = true;
+  }
+
   destroy() {
     this.group.remove(...this.group.children);
     this.geometries.forEach((geometry) => geometry.dispose());
     this.materials.forEach((material) => material.dispose());
     this.textures.forEach((texture) => texture.dispose());
+    this.customFeltTexture?.dispose();
   }
 }
 

@@ -22,11 +22,13 @@ export const PLAYFIELD_CENTRE_Z = -1.35;
 
 export const HAND_TILE_GAP = 0.035;
 const DRAWN_TILE_GAP = 0.24;
+export const LOCAL_REVEALED_HAND_Z = 6.65;
+export const LOCAL_COVERED_HAND_Z = 6.3;
 
 export const OWN_HAND_LAYOUT = Object.freeze({
   safeAspect: 16 / 9,
   occupiedWidthRatio: 0.64,
-  centreOffsetRatio: 0.055,
+  initialCentreTileIndex: 7,
   hudTileAspect: 0.66,
   regularGapRatio: 0.0015,
   drawnGapRatio: 0.009,
@@ -102,6 +104,25 @@ export function handTransform(position, index, _rackCapacity, { drawn = false } 
   };
 }
 
+export function presentedHandTransform(
+  position,
+  index,
+  rackCapacity,
+  { drawn = false, covered = false } = {},
+) {
+  const transform = handTransform(position, index, rackCapacity, { drawn });
+  if (position !== "bottom") return transform;
+  // The local interactive hand is an orthographic overlay whose eighth tile
+  // sits on the table centreline. Preserve that alignment when it moves into
+  // the perspective scene, while pulling the row inward far enough that a
+  // face-down fall only clips a narrow physical edge at the bottom of frame.
+  return {
+    ...transform,
+    x: transform.x - (TILE_SIZE.width + HAND_TILE_GAP),
+    z: covered ? LOCAL_COVERED_HAND_Z : LOCAL_REVEALED_HAND_Z,
+  };
+}
+
 export function ownHandOverlayTransform(index, viewportWidth, viewportHeight, { drawn = false } = {}) {
   const width = Math.max(1, Number(viewportWidth) || 1);
   const height = Math.max(1, Number(viewportHeight) || 1);
@@ -112,8 +133,12 @@ export function ownHandOverlayTransform(index, viewportWidth, viewportHeight, { 
   const tileWidth = (occupiedWidth - regularGap * 12 - drawnGap) / 14;
   const tileHeight = tileWidth / OWN_HAND_LAYOUT.hudTileAspect;
   const step = tileWidth + regularGap;
-  const centreX = -safeWidth * OWN_HAND_LAYOUT.centreOffsetRatio;
-  const firstCenter = centreX - occupiedWidth / 2 + tileWidth / 2;
+  const centreX = 0;
+  // Derive the fixed left anchor once from the initial rack: its eighth tile
+  // aligns with the table-console centre. Every later layout still starts at
+  // this same first-tile position, so draws and calls only alter the right edge.
+  const firstCenter =
+    centreX - OWN_HAND_LAYOUT.initialCentreTileIndex * step;
   const drawnOffset = drawn ? drawnGap - regularGap : 0;
   const scaleX = tileWidth / TILE_SIZE.width;
   const scaleY = tileHeight / TILE_SIZE.height;
@@ -129,7 +154,7 @@ export function ownHandOverlayTransform(index, viewportWidth, viewportHeight, { 
     tileHeight,
     occupiedWidth,
     centreX,
-    lift: tileHeight * 0.25,
+    lift: tileHeight * 0.18,
     tilt: 0.065,
   };
 }
@@ -196,7 +221,7 @@ export function meldTransform(
   // The local hand is a narrower orthographic HUD rack. Align its 3D meld band
   // after the virtual draw slot, with enough clearance that the empty slot is
   // still legible after a call and at common phone aspect ratios.
-  const hudAlignment = position === "bottom" ? -0.55 : 0;
+  const hudAlignment = position === "bottom" ? 0.45 : 0;
   // Side-seat calls extend the physical centre line of their concealed rack.
   // The near and opposite seats retain a separate inner lane because the local
   // rack is an orthographic HUD and the opposite rack needs its face kept clear.
