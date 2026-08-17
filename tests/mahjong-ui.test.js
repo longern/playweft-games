@@ -1827,6 +1827,8 @@ test("mahjong settings dialog combines operation controls and themed help", () =
     html,
     /<iframe[^>]*title="麻将玩法帮助"[^>]*src="\.\/help\.html"/,
   );
+  assert.doesNotMatch(helpHtml, /\.\.\/\.\.\/src\/help\.css/);
+  assert.match(helpHtml, /\.\/styles\/help\.css/);
   assert.match(dialog, /DOUBLE_CLICK_TSUMOGIRI_KEY/);
   assert.match(dialog, /DOUBLE_CLICK_PASS_KEY/);
   assert.match(dialog, /window\.localStorage\.setItem/);

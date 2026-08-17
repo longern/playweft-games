@@ -388,18 +388,18 @@ a {
 .wind-badge {
   position: absolute;
   z-index: 2;
-  top: 1px;
+  top: -8px;
   right: 1px;
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   place-items: center;
   border: 0;
   border-radius: 50%;
   background: linear-gradient(145deg, #fff0bf, #cfad63);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.34);
   color: #46351e;
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 900;
 }
 

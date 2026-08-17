@@ -49,7 +49,7 @@
           </div>
           <div id="settings-visual-panel" class="settings-tab-panel settings-visual-panel" role="tabpanel"
             aria-labelledby="settings-visual-tab" data-settings-panel="visual" hidden>
-            <p class="settings-visual-intro">素材仅保存在本机。四张肖像是本地视角装饰：自己、右手边、对家、左手边；它们不关联玩家名称或联机身份。</p>
+            <p class="settings-visual-intro">素材仅保存在本机。四家角色对应本地视角：自己、右手边、对家、左手边；它们不关联玩家名称或联机身份。</p>
             <details class="settings-pack-manifest">
               <summary>查看 theme.json 示例</summary>
               <pre>{
@@ -70,12 +70,32 @@
     ],
     "tileBacks": [
       { "id": "cloud", "file": "tiles/cloud.webp", "label": "祥云" }
+    ],
+    "music": [
+      { "id": "night-wind", "file": "music/night-wind.ogg", "label": "夜风" }
+    ],
+    "voices": [
+      {
+        "character": "fox",
+        "lines": {
+          "chi": "voices/fox/chi.ogg",
+          "pon": "voices/fox/pon.ogg",
+          "kan": "voices/fox/kan.ogg",
+          "riichi": "voices/fox/riichi.ogg",
+          "ron": "voices/fox/ron.ogg",
+          "tsumo": "voices/fox/tsumo.ogg"
+        },
+        "yaku": {
+          "tanyao": "voices/fox/tanyao.ogg",
+          "iipeikou": "voices/fox/iipeikou.ogg"
+        }
+      }
     ]
   },
   "defaults": {
     "appearance": {
       "portraits": { "self": "fox", "right": "wolf", "opposite": "leopard", "left": "fox" },
-      "tablecloth": "felt", "background": "night", "tileBack": "cloud"
+      "tablecloth": "felt", "background": "night", "tileBack": "cloud", "music": "night-wind", "voice": true
     },
     "names": {
       "self": "我",

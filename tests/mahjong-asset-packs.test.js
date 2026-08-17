@@ -28,12 +28,21 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
         tablecloths: [{ id: "felt", file: "felt.png", label: "绒面" }],
         backgrounds: [],
         tileBacks: [],
+        music: [{ id: "night", file: "music/night.ogg", label: "夜风" }],
+        voices: [{
+          character: "fox",
+          lines: { chi: "voices/fox/chi.ogg" },
+          yaku: { tanyao: "voices/fox/tanyao.ogg" },
+        }],
       },
-      defaults: { appearance: { portraits: { right: "wolf" } } },
+      defaults: { appearance: { portraits: { right: "wolf" }, music: "night" } },
     })),
     "moonlit/portraits/fox.png": new Uint8Array([137, 80, 78, 71]),
     "moonlit/portraits/wolf.png": new Uint8Array([137, 80, 78, 71]),
     "moonlit/felt.png": new Uint8Array([137, 80, 78, 71]),
+    "moonlit/music/night.ogg": new Uint8Array([79, 103, 103, 83]),
+    "moonlit/voices/fox/chi.ogg": new Uint8Array([79, 103, 103, 83]),
+    "moonlit/voices/fox/tanyao.ogg": new Uint8Array([79, 103, 103, 83]),
   });
   const files = await unpackMahjongAssetPack({
     name: "moonlit.zip",
@@ -44,12 +53,17 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
   assert.equal(manifest.catalog.portraits.length, 2);
   assert.equal(manifest.catalog.portraits[0].fileName, "moonlit/portraits/fox.png");
   assert.equal(manifest.catalog.tablecloths[0].fileName, "moonlit/felt.png");
+  assert.equal(manifest.catalog.music[0].fileName, "moonlit/music/night.ogg");
+  assert.equal(manifest.catalog.voices[0].lines.chi, "moonlit/voices/fox/chi.ogg");
+  assert.equal(manifest.catalog.voices[0].yaku.tanyao, "moonlit/voices/fox/tanyao.ogg");
+  assert.equal(files.find((file) => file.name.endsWith("night.ogg"))?.type, "audio/ogg");
   assert.deepEqual(manifest.appearance.portraits, {
     self: "fox",
     right: "wolf",
     opposite: "fox",
     left: "fox",
   });
+  assert.equal(manifest.appearance.music, "night");
 });
 
 test("mahjong asset packs reject the former object-shaped catalog", async () => {
@@ -79,6 +93,8 @@ test("appearance independently selects each local seat and falls back to availab
     tablecloths: [{ id: "felt" }],
     backgrounds: [{ id: "night" }],
     tileBacks: [{ id: "cloud" }],
+    music: [{ id: "dawn" }],
+    voices: [],
   };
   assert.deepEqual(
     normaliseAppearance({
@@ -86,12 +102,16 @@ test("appearance independently selects each local seat and falls back to availab
       tablecloth: "felt",
       background: "missing",
       tileBack: "cloud",
+      music: "dawn",
+      voice: false,
     }, catalog),
     {
       portraits: { self: "cat", right: "wolf", opposite: "fox", left: "fox" },
       tablecloth: "felt",
       background: "night",
       tileBack: "cloud",
+      music: "dawn",
+      voice: false,
     },
   );
 });
@@ -107,5 +127,6 @@ test("mahjong settings exposes its visual-pack tab and appearance choices", () =
   assert.match(page, /accept="\.zip,application\/zip,application\/x-zip-compressed"/);
   assert.doesNotMatch(page, /id="settings-pack-upload"[^>]*multiple/);
   assert.match(main, /configureMahjongAssetPackAppearance/);
+  assert.match(main, /角色语音/);
   assert.match(main, /name: "默认主题"/);
 });

@@ -32,6 +32,7 @@ import {
   getMahjongDefaultNames,
   initializeMahjongAssetPacks,
   listMahjongAssetPacks,
+  MAHJONG_YAKU_VOICE_KEYS,
 } from "./asset-packs.js";
 import "../../src/base.css";
 import "./styles.css";
@@ -54,6 +55,11 @@ let playerName = "你";
 let hasPlatformName = false;
 let destroyed = false;
 let hasPlatformAvatar = false;
+const matchMusic = new Audio();
+matchMusic.loop = true;
+matchMusic.preload = "metadata";
+let musicNeedsGesture = false;
+let voicedEventKey = "";
 
 const releaseFixedViewport = bindFixedViewport(
   document.querySelector("#mahjong-viewport"),
@@ -170,12 +176,17 @@ visualPackElements.appearance.addEventListener("change", async (event) => {
   const key = select.dataset.appearanceKey;
   if (key.startsWith("portrait:")) {
     appearance.portraits[key.slice("portrait:".length)] = select.value;
+  } else if (key === "voice") {
+    appearance.voice = select.value === "on";
   } else {
     appearance[key] = select.value;
   }
   visualPackElements.feedback.textContent = "正在应用画面配置…";
   try {
-    visualPacks = await configureMahjongAssetPackAppearance(activePack.id, appearance);
+    visualPacks = await configureMahjongAssetPackAppearance(
+      activePack.id,
+      appearance,
+    );
     renderVisualPacks();
     visualPackElements.feedback.textContent = "已应用画面配置。";
   } catch (error) {
@@ -185,9 +196,13 @@ visualPackElements.appearance.addEventListener("change", async (event) => {
 });
 window.addEventListener("mahjong:asset-pack-changed", () => {
   void applyVisualPack();
+  syncMatchMusic();
   applyPackAvatars(state);
   if (state) renderCurrentState();
 });
+for (const eventName of ["pointerdown", "keydown"]) {
+  document.addEventListener(eventName, resumeMatchMusic, { passive: true });
+}
 
 elements.pass.addEventListener("click", () => dispatch({ type: "pass" }));
 elements.abort.addEventListener("click", () =>
@@ -247,8 +262,7 @@ function requestPlatformAvatar(context) {
       }
     })
     .catch(() => {
-      if (!initialSource)
-        applyPackAvatars(state);
+      if (!initialSource) applyPackAvatars(state);
     });
 }
 
@@ -259,7 +273,9 @@ function applyPackAvatars() {
     top: "opposite",
     left: "left",
   };
-  for (const [position, portraitSlot] of Object.entries(portraitSlotByPosition)) {
+  for (const [position, portraitSlot] of Object.entries(
+    portraitSlotByPosition,
+  )) {
     if (position === "bottom" && hasPlatformAvatar) continue;
     const source = getMahjongAssetUrl(`portrait-${portraitSlot}`);
     domView.setPlayerAvatar(position, source);
@@ -271,6 +287,127 @@ async function applyVisualPack() {
   await visualRenderer.setAppearance({
     tablecloth: getMahjongAssetUrl("tablecloth"),
     tileBack: getMahjongAssetUrl("tile-back"),
+  });
+}
+
+function syncMatchMusic({ start = Boolean(game) } = {}) {
+  const source = getMahjongAssetUrl("music");
+  if (!start || !source) {
+    matchMusic.pause();
+    matchMusic.removeAttribute("src");
+    matchMusic.load();
+    musicNeedsGesture = false;
+    return;
+  }
+  if (matchMusic.src !== source) {
+    matchMusic.pause();
+    matchMusic.src = source;
+  }
+  void matchMusic.play().then(
+    () => {
+      musicNeedsGesture = false;
+    },
+    () => {
+      musicNeedsGesture = true;
+    },
+  );
+}
+
+function resumeMatchMusic() {
+  if (musicNeedsGesture) syncMatchMusic();
+}
+
+function playRoleVoices(events) {
+  const voiceEvents = events.filter((event) => voiceCueForEvent(event));
+  if (!voiceEvents.length) return;
+  const key = [
+    Number(state?.moveCount) || 0,
+    ...voiceEvents.map(
+      (event) =>
+        `${event.type}:${event.kind ?? event.method ?? ""}:${event.playerIndex}`,
+    ),
+  ].join("|");
+  if (key === voicedEventKey) return;
+  voicedEventKey = key;
+  for (const event of voiceEvents) {
+    const cue = voiceCueForEvent(event);
+    if (event.type === "won") {
+      const yakuCues = winningYakuVoiceCues(event.playerIndex);
+      playRoleVoiceSequence(event.playerIndex, [cue, ...yakuCues]);
+    } else {
+      playRoleVoice(event.playerIndex, cue);
+    }
+  }
+}
+
+function winningYakuVoiceCues(playerIndex) {
+  const score = asArray(state?.results).find(
+    (result) => Number(result?.winnerIndex) === Number(playerIndex),
+  );
+  return asArray(score?.yaku)
+    .map((yaku) => MAHJONG_YAKU_VOICE_KEYS[yaku?.name])
+    .map((cue) => cue && `yaku:${cue}`)
+    .filter(Boolean);
+}
+
+function voiceCueForEvent(event) {
+  if (event?.type === "claimed") {
+    return ["chi", "pon", "kan"].includes(event.kind) ||
+      ["ankan", "kakan"].includes(event.kind)
+      ? event.kind === "ankan" || event.kind === "kakan"
+        ? "kan"
+        : event.kind
+      : "";
+  }
+  if (event?.type === "riichi") return "riichi";
+  if (event?.type === "won") return event.method === "tsumo" ? "tsumo" : "ron";
+  return "";
+}
+
+function playRoleVoice(playerIndex, cue, delay = 0) {
+  const position =
+    ["", "self", "right", "opposite", "left"][Number(playerIndex)] ?? "";
+  const source = position && getMahjongAssetUrl(`voice-${position}:${cue}`);
+  if (!source) return;
+  window.setTimeout(() => {
+    const audio = new Audio(source);
+    audio.preload = "auto";
+    audio.addEventListener("ended", () => audio.remove(), { once: true });
+    audio.addEventListener("error", () => audio.remove(), { once: true });
+    void audio.play().catch(() => audio.remove());
+  }, delay);
+}
+
+function playRoleVoiceSequence(playerIndex, cues) {
+  const sources = cues
+    .map((cue) => getRoleVoiceSource(playerIndex, cue))
+    .filter(Boolean);
+  if (!sources.length) return;
+  void sources.reduce(
+    (sequence, source) => sequence.then(() => playVoiceSource(source)),
+    Promise.resolve(),
+  );
+}
+
+function getRoleVoiceSource(playerIndex, cue) {
+  const position =
+    ["", "self", "right", "opposite", "left"][Number(playerIndex)] ?? "";
+  const isYaku = cue.startsWith("yaku:");
+  const slot = `voice-${position}:${isYaku ? "yaku:" : ""}${isYaku ? cue.slice(5) : cue}`;
+  return position ? getMahjongAssetUrl(slot) : "";
+}
+
+function playVoiceSource(source) {
+  return new Promise((resolve) => {
+    const audio = new Audio(source);
+    const finish = () => {
+      audio.remove();
+      resolve();
+    };
+    audio.preload = "auto";
+    audio.addEventListener("ended", finish, { once: true });
+    audio.addEventListener("error", finish, { once: true });
+    void audio.play().catch(finish);
   });
 }
 
@@ -342,7 +479,7 @@ function renderVisualPackAppearance() {
   const portraitGroup = document.createElement("fieldset");
   portraitGroup.className = "settings-pack-choice-group";
   const portraitLegend = document.createElement("legend");
-  portraitLegend.textContent = "四家主题肖像";
+  portraitLegend.textContent = "四家角色";
   portraitGroup.append(portraitLegend);
   for (const [position, label] of Object.entries(portraitLabels)) {
     portraitGroup.append(
@@ -367,20 +504,67 @@ function renderVisualPackAppearance() {
     ["牌背", "tileBack", catalog.tileBacks, pack.appearance.tileBack],
   ];
   for (const [label, key, options, selected] of surfaces) {
-    if (options.length) surfaceGroup.append(createAppearanceSelect(label, key, options, selected));
+    if (options.length)
+      surfaceGroup.append(
+        createAppearanceSelect(label, key, options, selected),
+      );
   }
   if (surfaceGroup.childElementCount > 1) controls.append(surfaceGroup);
+  if (catalog.music.length || catalog.voices.length) {
+    const soundGroup = document.createElement("fieldset");
+    soundGroup.className = "settings-pack-choice-group";
+    const soundLegend = document.createElement("legend");
+    soundLegend.textContent = "声音";
+    soundGroup.append(soundLegend);
+    if (catalog.music.length)
+      soundGroup.append(
+        createAppearanceSelect(
+          "对局音乐",
+          "music",
+          catalog.music,
+          pack.appearance.music,
+          "不播放",
+        ),
+      );
+    if (catalog.voices.length)
+      soundGroup.append(
+        createAppearanceSelect(
+          "角色语音",
+          "voice",
+          [
+            { id: "on", label: "播放" },
+            { id: "off", label: "不播放" },
+          ],
+          pack.appearance.voice ? "on" : "off",
+        ),
+      );
+    controls.append(soundGroup);
+  }
   visualPackElements.appearance.replaceChildren(controls);
-  visualPackElements.appearance.hidden = !visualPackElements.appearance.childElementCount;
+  visualPackElements.appearance.hidden =
+    !visualPackElements.appearance.childElementCount;
 }
 
-function createAppearanceSelect(label, key, options, selected) {
+function createAppearanceSelect(
+  label,
+  key,
+  options,
+  selected,
+  emptyLabel = "",
+) {
   const row = document.createElement("label");
   row.className = "settings-pack-choice";
   const text = document.createElement("span");
   text.textContent = label;
   const select = document.createElement("select");
   select.dataset.appearanceKey = key;
+  if (emptyLabel) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = emptyLabel;
+    option.selected = !selected;
+    select.append(option);
+  }
   for (const option of options) {
     const element = document.createElement("option");
     element.value = option.id;
@@ -403,6 +587,7 @@ function createVisualPackButton(label, action, id = "") {
 
 async function initialize(matchType = "east") {
   if (game) return;
+  syncMatchMusic({ start: true });
   elements.setup.hidden = true;
   elements.loading.hidden = false;
   elements.loadingMessage.textContent = "正在洗牌并码好牌山…";
@@ -530,6 +715,7 @@ function refresh({ ownDiscardedTile = 0 } = {}) {
   }
   const events = asArray(projection.events);
   visibleEvents = events;
+  playRoleVoices(events);
   queueHandInsertion(previousState, events, ownDiscardedTile);
   const revealKey = handEndPresentationKey(state);
   if (!revealKey) {
@@ -726,6 +912,7 @@ function cancelRiichiMode() {
 }
 
 function handlePageHide(event) {
+  matchMusic.pause();
   window.clearTimeout(aiTimer);
   window.clearTimeout(handInsertionTimer);
   window.clearTimeout(resultTimer);
@@ -740,6 +927,7 @@ function handlePageShow(event) {
 
 function handleVisibilityChange() {
   if (document.visibilityState === "hidden") {
+    matchMusic.pause();
     window.clearTimeout(aiTimer);
     window.clearTimeout(handInsertionTimer);
     window.clearTimeout(resultTimer);
@@ -752,6 +940,7 @@ function handleVisibilityChange() {
 
 function resumeAfterSuspension() {
   if (destroyed) return;
+  syncMatchMusic();
   visualRenderer.resume();
   window.requestAnimationFrame(() => {
     if (destroyed) return;
@@ -771,6 +960,8 @@ function destroy() {
   window.clearTimeout(aiTimer);
   window.clearTimeout(handInsertionTimer);
   window.clearTimeout(resultTimer);
+  matchMusic.pause();
+  matchMusic.removeAttribute("src");
   window.removeEventListener("pagehide", handlePageHide);
   window.removeEventListener("pageshow", handlePageShow);
   document.removeEventListener("visibilitychange", handleVisibilityChange);

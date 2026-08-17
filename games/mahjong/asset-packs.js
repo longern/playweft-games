@@ -6,7 +6,58 @@ const ASSETS = "assets";
 const MAX_FILE_SIZE = 12 * 1024 * 1024;
 const MAX_ARCHIVE_SIZE = 48 * 1024 * 1024;
 const PORTRAIT_POSITIONS = ["self", "right", "opposite", "left"];
-const CATALOG_GROUPS = ["portraits", "tablecloths", "backgrounds", "tileBacks"];
+const CATALOG_GROUPS = [
+  "portraits",
+  "tablecloths",
+  "backgrounds",
+  "tileBacks",
+  "music",
+];
+const VOICE_CUES = ["chi", "pon", "kan", "riichi", "ron", "tsumo"];
+export const MAHJONG_YAKU_VOICE_KEYS = Object.freeze({
+  两立直: "double-riichi",
+  立直: "riichi",
+  一发: "ippatsu",
+  门前清自摸和: "menzen-tsumo",
+  岭上开花: "rinshan",
+  抢杠: "chankan",
+  海底摸月: "haitei",
+  河底捞鱼: "houtei",
+  断幺九: "tanyao",
+  平和: "pinfu",
+  二杯口: "ryanpeikou",
+  一杯口: "iipeikou",
+  白: "haku",
+  发: "hatsu",
+  中: "chun",
+  自风: "seat-wind",
+  场风: "round-wind",
+  大三元: "daisangen",
+  大四喜: "daisuushii",
+  小四喜: "shousuushii",
+  小三元: "shousangen",
+  对对和: "toitoi",
+  三暗刻: "sanankou",
+  四暗刻: "suuankou",
+  三杠子: "sankantsu",
+  四杠子: "suukantsu",
+  三色同顺: "sanshoku-doujun",
+  一气通贯: "ittsuu",
+  三色同刻: "sanshoku-doukou",
+  混一色: "honitsu",
+  清一色: "chinitsu",
+  混老头: "honroutou",
+  混全带幺九: "chanta",
+  纯全带幺九: "junchan",
+  字一色: "tsuuiisou",
+  清老头: "chinroutou",
+  绿一色: "ryuuiisou",
+  国士无双: "kokushi",
+  七对子: "chiitoitsu",
+  宝牌: "dora",
+  流局满贯: "nagashi-mangan",
+});
+const YAKU_VOICE_KEYS = new Set(Object.values(MAHJONG_YAKU_VOICE_KEYS));
 
 export const MAHJONG_ASSET_SLOTS = Object.freeze({
   "portrait-self": "自己",
@@ -16,6 +67,7 @@ export const MAHJONG_ASSET_SLOTS = Object.freeze({
   background: "牌桌背景",
   tablecloth: "桌布",
   "tile-back": "牌背",
+  music: "对局音乐",
 });
 
 let databasePromise;
@@ -77,13 +129,17 @@ export async function createMahjongAssetPack(archive) {
   for (const { group, id, fileName } of catalogAssets(manifest.catalog)) {
     const file = [...files].find((candidate) => candidate.name === fileName);
     if (!file) throw new Error(`theme.json 引用了不存在的素材：${fileName}`);
-    if (!file.type.startsWith("image/"))
-      throw new Error(`${fileName} 不是图片文件`);
+    const expectedType =
+      group === "music" || group === "voices" ? "audio/" : "image/";
+    if (!file.type.startsWith(expectedType))
+      throw new Error(
+        `${fileName} 不是${expectedType === "audio/" ? "音频" : "图片"}文件`,
+      );
     if (file.size > MAX_FILE_SIZE)
       throw new Error(`${fileName} 超过 12 MB 限制`);
     selected.set(assetStorageSlot(group, id), file);
   }
-  if (!selected.size) throw new Error("素材包未找到可导入的图片素材");
+  if (!selected.size) throw new Error("素材包未找到可导入素材");
 
   const database = await openDatabase();
   const transaction = database.transaction([PACKS, ASSETS], "readwrite");
@@ -164,7 +220,9 @@ export async function configureMahjongAssetPackAppearance(id, appearance) {
   const transaction = database.transaction(PACKS, "readwrite");
   const packStore = transaction.objectStore(PACKS);
   const packs = await requestPromise(packStore.getAll());
-  const pack = packs.find((candidate) => candidate.id === id && candidate.active);
+  const pack = packs.find(
+    (candidate) => candidate.id === id && candidate.active,
+  );
   if (!pack) throw new Error("请先启用这个素材包");
   const catalog = catalogForPack(pack);
   packStore.put({
@@ -235,7 +293,7 @@ async function readActivePack() {
     ...pack,
     catalog,
     appearance,
-    assets: resolveAppearanceAssets(stored, appearance),
+    assets: resolveAppearanceAssets(stored, appearance, catalog),
   };
 }
 
@@ -247,12 +305,13 @@ function applyActiveAssets(assets, defaultNames = {}) {
     defaultNames && typeof defaultNames === "object" ? defaultNames : {};
   const root = document.documentElement;
   for (const [slot, record] of assets) {
-    root.removeAttribute(`data-mahjong-has-${slot}`);
-    root.style.removeProperty(`--mahjong-${slot}-image`);
     if (!record?.blob) continue;
     const url = URL.createObjectURL(record.blob);
     objectUrls.set(slot, url);
     activeAssets.set(slot, { ...record, url });
+    if (!(slot in MAHJONG_ASSET_SLOTS)) continue;
+    root.removeAttribute(`data-mahjong-has-${slot}`);
+    root.style.removeProperty(`--mahjong-${slot}-image`);
     root.style.setProperty(`--mahjong-${slot}-image`, `url("${url}")`);
     root.setAttribute(`data-mahjong-has-${slot}`, "");
   }
@@ -305,7 +364,24 @@ export async function readMahjongAssetPackManifest(files) {
     const catalog = catalogFromManifest(assets);
     for (const group of CATALOG_GROUPS) {
       for (const entry of catalog[group]) {
-        entry.fileName = resolveManifestAssetPath(manifestFile.name, entry.fileName);
+        entry.fileName = resolveManifestAssetPath(
+          manifestFile.name,
+          entry.fileName,
+        );
+      }
+    }
+    for (const voiceSet of catalog.voices) {
+      for (const [cue, fileName] of Object.entries(voiceSet.lines)) {
+        voiceSet.lines[cue] = resolveManifestAssetPath(
+          manifestFile.name,
+          fileName,
+        );
+      }
+      for (const [cue, fileName] of Object.entries(voiceSet.yaku ?? {})) {
+        voiceSet.yaku[cue] = resolveManifestAssetPath(
+          manifestFile.name,
+          fileName,
+        );
       }
     }
     const names = value.defaults?.names;
@@ -333,11 +409,18 @@ export async function readMahjongAssetPackManifest(files) {
 }
 
 function emptyCatalog() {
-  return Object.fromEntries(CATALOG_GROUPS.map((group) => [group, []]));
+  return {
+    ...Object.fromEntries(CATALOG_GROUPS.map((group) => [group, []])),
+    voices: [],
+  };
 }
 
 function catalogFromManifest(assets) {
-  if (Object.keys(assets).some((key) => !CATALOG_GROUPS.includes(key))) {
+  if (
+    Object.keys(assets).some(
+      (key) => !CATALOG_GROUPS.includes(key) && key !== "voices",
+    )
+  ) {
     throw new Error("素材目录包含未知分类");
   }
   const catalog = emptyCatalog();
@@ -345,8 +428,62 @@ function catalogFromManifest(assets) {
   addCatalogEntries(catalog.tablecloths, assets.tablecloths);
   addCatalogEntries(catalog.backgrounds, assets.backgrounds);
   addCatalogEntries(catalog.tileBacks, assets.tileBacks);
+  addCatalogEntries(catalog.music, assets.music);
+  addVoiceSets(catalog.voices, assets.voices, catalog.portraits);
   if (!catalogAssets(catalog).length) throw new Error("素材包未声明可用素材");
   return catalog;
+}
+
+function addVoiceSets(target, voiceSets, portraits) {
+  if (voiceSets === undefined) return;
+  if (!Array.isArray(voiceSets)) throw new Error("角色语音目录必须是数组");
+  for (const voiceSet of voiceSets) {
+    const characterId = String(voiceSet?.character || "").trim();
+    const lines = voiceSet?.lines ?? {};
+    const yaku = voiceSet?.yaku;
+    if (
+      !/^[a-z][a-z0-9-]{0,31}$/.test(characterId) ||
+      !portraits.some((portrait) => portrait.id === characterId) ||
+      typeof lines !== "object" ||
+      Array.isArray(lines) ||
+      (yaku !== undefined &&
+        (!yaku || typeof yaku !== "object" || Array.isArray(yaku)))
+    ) {
+      throw new Error("角色语音条目无效");
+    }
+    if (target.some((entry) => entry.characterId === characterId)) {
+      throw new Error("角色语音中存在重复角色");
+    }
+    const normalisedLines = {};
+    for (const [cue, fileName] of Object.entries(lines)) {
+      if (
+        !VOICE_CUES.includes(cue) ||
+        typeof fileName !== "string" ||
+        !fileName.trim()
+      ) {
+        throw new Error("角色语音台词无效");
+      }
+      normalisedLines[cue] = fileName.trim();
+    }
+    const normalisedYaku = {};
+    for (const [cue, fileName] of Object.entries(yaku ?? {})) {
+      if (
+        !YAKU_VOICE_KEYS.has(cue) ||
+        typeof fileName !== "string" ||
+        !fileName.trim()
+      ) {
+        throw new Error("角色报番台词无效");
+      }
+      normalisedYaku[cue] = fileName.trim();
+    }
+    if (
+      !Object.keys(normalisedLines).length &&
+      !Object.keys(normalisedYaku).length
+    ) {
+      throw new Error("角色语音至少需要一条台词");
+    }
+    target.push({ characterId, lines: normalisedLines, yaku: normalisedYaku });
+  }
 }
 
 function addCatalogEntries(target, entries) {
@@ -378,13 +515,29 @@ function addCatalogEntries(target, entries) {
 }
 
 function catalogAssets(catalog) {
-  return CATALOG_GROUPS.flatMap((group) =>
-    (catalog?.[group] ?? []).map((entry) => ({
-      group,
-      id: entry.id,
-      fileName: entry.fileName,
-    })),
-  );
+  return [
+    ...CATALOG_GROUPS.flatMap((group) =>
+      (catalog?.[group] ?? []).map((entry) => ({
+        group,
+        id: entry.id,
+        fileName: entry.fileName,
+      })),
+    ),
+    ...(catalog?.voices ?? []).flatMap((voiceSet) =>
+      Object.entries(voiceSet.lines).map(([cue, fileName]) => ({
+        group: "voices",
+        id: `${voiceSet.characterId}:${cue}`,
+        fileName,
+      })),
+    ),
+    ...(catalog?.voices ?? []).flatMap((voiceSet) =>
+      Object.entries(voiceSet.yaku ?? {}).map(([cue, fileName]) => ({
+        group: "voices",
+        id: `${voiceSet.characterId}:yaku:${cue}`,
+        fileName,
+      })),
+    ),
+  ];
 }
 
 function assetStorageSlot(group, id) {
@@ -392,22 +545,28 @@ function assetStorageSlot(group, id) {
 }
 
 function catalogForPack(pack) {
-  if (!pack?.catalog || !CATALOG_GROUPS.every((group) => Array.isArray(pack.catalog[group]))) {
+  if (
+    !pack?.catalog ||
+    !CATALOG_GROUPS.every((group) => Array.isArray(pack.catalog[group])) ||
+    !Array.isArray(pack.catalog.voices)
+  ) {
     throw new Error("素材包缺少素材目录");
   }
   return pack.catalog;
 }
 
 export function normaliseAppearance(appearance, catalog) {
-  const choices = appearance && typeof appearance === "object" ? appearance : {};
-  const portraits = choices.portraits && typeof choices.portraits === "object"
-    ? choices.portraits
-    : {};
+  const choices =
+    appearance && typeof appearance === "object" ? appearance : {};
+  const portraits =
+    choices.portraits && typeof choices.portraits === "object"
+      ? choices.portraits
+      : {};
   const pick = (group, requested) => {
     const entries = catalog?.[group] ?? [];
     return entries.some((entry) => entry.id === requested)
       ? requested
-      : entries[0]?.id ?? "";
+      : (entries[0]?.id ?? "");
   };
   return {
     portraits: Object.fromEntries(
@@ -419,20 +578,44 @@ export function normaliseAppearance(appearance, catalog) {
     tablecloth: pick("tablecloths", choices.tablecloth),
     background: pick("backgrounds", choices.background),
     tileBack: pick("tileBacks", choices.tileBack),
+    music: choices.music === "" ? "" : pick("music", choices.music),
+    voice: choices.voice !== false,
   };
 }
 
-function resolveAppearanceAssets(stored, appearance) {
+function resolveAppearanceAssets(stored, appearance, catalog) {
   const resolved = new Map();
   for (const position of PORTRAIT_POSITIONS) {
     const id = appearance.portraits[position];
     const record = stored.get(assetStorageSlot("portraits", id));
     if (record) resolved.set(`portrait-${position}`, record);
   }
+  if (appearance.voice) {
+    const voicesByCharacter = new Map(
+      catalog.voices.map((voiceSet) => [voiceSet.characterId, voiceSet]),
+    );
+    for (const position of PORTRAIT_POSITIONS) {
+      const voiceSet = voicesByCharacter.get(appearance.portraits[position]);
+      if (!voiceSet) continue;
+      for (const [cue] of Object.entries(voiceSet.lines)) {
+        const record = stored.get(
+          assetStorageSlot("voices", `${voiceSet.characterId}:${cue}`),
+        );
+        if (record) resolved.set(`voice-${position}:${cue}`, record);
+      }
+      for (const [cue] of Object.entries(voiceSet.yaku ?? {})) {
+        const record = stored.get(
+          assetStorageSlot("voices", `${voiceSet.characterId}:yaku:${cue}`),
+        );
+        if (record) resolved.set(`voice-${position}:yaku:${cue}`, record);
+      }
+    }
+  }
   const staticSelections = [
     ["tablecloth", "tablecloths", appearance.tablecloth],
     ["background", "backgrounds", appearance.background],
     ["tile-back", "tileBacks", appearance.tileBack],
+    ["music", "music", appearance.music],
   ];
   for (const [slot, group, id] of staticSelections) {
     const record = stored.get(assetStorageSlot(group, id));
@@ -446,7 +629,9 @@ function resolveManifestAssetPath(manifestPath, assetPath) {
   if (
     supplied.startsWith("/") ||
     supplied.includes("\\") ||
-    supplied.split("/").some((segment) => !segment || segment === "." || segment === "..")
+    supplied
+      .split("/")
+      .some((segment) => !segment || segment === "." || segment === "..")
   ) {
     throw new Error("素材文件路径无效");
   }
@@ -464,6 +649,12 @@ function fileMimeType(name) {
       webp: "image/webp",
       gif: "image/gif",
       avif: "image/avif",
+      mp3: "audio/mpeg",
+      ogg: "audio/ogg",
+      opus: "audio/ogg",
+      wav: "audio/wav",
+      m4a: "audio/mp4",
+      aac: "audio/aac",
       json: "application/json",
     }[extension] ?? "application/octet-stream"
   );
