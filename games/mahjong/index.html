@@ -15,14 +15,13 @@
   <main id="mahjong-app" class="mahjong-app" aria-busy="true">
     <div id="mahjong-viewport" class="mahjong-viewport">
       <nav class="table-controls" aria-label="牌桌导航">
-        <button id="settings-button" class="table-control table-control-settings" type="button"
-          aria-label="打开设置" aria-haspopup="dialog" aria-expanded="false">
+        <button id="settings-button" class="table-control table-control-settings" type="button" aria-label="打开设置"
+          aria-haspopup="dialog" aria-expanded="false">
           <i data-lucide="cog" aria-hidden="true"></i>
         </button>
       </nav>
 
-      <section id="settings-dialog" class="settings-dialog" role="dialog" aria-modal="true"
-        aria-label="牌桌设置" hidden>
+      <section id="settings-dialog" class="settings-dialog" role="dialog" aria-modal="true" aria-label="牌桌设置" hidden>
         <div class="settings-dialog-card" tabindex="-1">
           <header class="settings-dialog-header">
             <div class="settings-tabs" role="tablist" aria-label="设置内容">
@@ -37,8 +36,8 @@
               <i data-lucide="x" aria-hidden="true"></i>
             </button>
           </header>
-          <div id="settings-operation-panel" class="settings-tab-panel settings-operation-panel"
-            role="tabpanel" aria-labelledby="settings-operation-tab" data-settings-panel="operation">
+          <div id="settings-operation-panel" class="settings-tab-panel settings-operation-panel" role="tabpanel"
+            aria-labelledby="settings-operation-tab" data-settings-panel="operation">
             <label class="settings-option" for="double-click-tsumogiri-setting">
               <input id="double-click-tsumogiri-setting" type="checkbox" />
               <strong>双击空白处摸切</strong>
@@ -57,17 +56,27 @@
   "schemaVersion": 1,
   "name": "月下雀席",
   "assets": {
-    "portraits": {
-      "self": "self.webp",
-      "right": "right.webp",
-      "opposite": "opposite.webp",
-      "left": "left.webp"
-    },
-    "tablecloth": "tablecloth.webp",
-    "background": "background.webp",
-    "tileBack": "tile-back.webp"
+    "portraits": [
+      { "id": "fox", "file": "portraits/fox.webp", "label": "赤狐" },
+      { "id": "wolf", "file": "portraits/wolf.webp", "label": "灰狼" },
+      { "id": "leopard", "file": "portraits/leopard.webp", "label": "雪豹" }
+    ],
+    "tablecloths": [
+      { "id": "felt", "file": "table/felt.webp", "label": "深绿绒面" },
+      { "id": "brocade", "file": "table/brocade.webp", "label": "锦缎" }
+    ],
+    "backgrounds": [
+      { "id": "night", "file": "backgrounds/night.webp", "label": "夜景" }
+    ],
+    "tileBacks": [
+      { "id": "cloud", "file": "tiles/cloud.webp", "label": "祥云" }
+    ]
   },
   "defaults": {
+    "appearance": {
+      "portraits": { "self": "fox", "right": "wolf", "opposite": "leopard", "left": "fox" },
+      "tablecloth": "felt", "background": "night", "tileBack": "cloud"
+    },
     "names": {
       "self": "我",
       "right": "右家",
@@ -77,15 +86,13 @@
   }
 }</pre>
             </details>
-            <label class="settings-pack-name" for="settings-pack-name">素材包名称
-              <input id="settings-pack-name" type="text" maxlength="40" placeholder="例如：水墨牌桌" />
-            </label>
             <label class="settings-pack-upload" for="settings-pack-upload">
-              <span>导入素材包</span>
-              <input id="settings-pack-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,application/json,.json" multiple />
+              <span>选择 .zip 素材包</span>
+              <input id="settings-pack-upload" type="file" accept=".zip,application/zip,application/x-zip-compressed" />
             </label>
             <p id="settings-pack-feedback" class="settings-pack-feedback" role="status" aria-live="polite"></p>
             <ul id="settings-pack-list" class="settings-pack-list" aria-label="素材包列表"></ul>
+            <div id="settings-pack-appearance" class="settings-pack-appearance" hidden></div>
           </div>
           <div id="settings-help-panel" class="settings-tab-panel settings-help-panel" role="tabpanel"
             aria-labelledby="settings-help-tab" data-settings-panel="help" hidden>

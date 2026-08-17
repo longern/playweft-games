@@ -111,7 +111,6 @@
     rgba(238, 198, 105, 0.17),
     rgba(255, 255, 255, 0.08)
   );
-  transform: translateY(-1px);
 }
 
 .setup-card > button:hover::after {

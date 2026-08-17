@@ -195,9 +195,10 @@ export class MahjongDomView {
       const playerId = state.players[seat - 1];
       const stateName = state.playerNames?.[seat - 1];
       const fallbackName = defaultNames[portraitSlotForPosition(position)];
-      const name = stateName && stateName !== PLAYERS[seat - 1].name
-        ? stateName
-        : fallbackName || stateName || PLAYERS[seat - 1].name || "玩家";
+      const name =
+        stateName && stateName !== PLAYERS[seat - 1].name
+          ? stateName
+          : fallbackName || stateName || PLAYERS[seat - 1].name || "玩家";
       station.querySelector("[data-name]").textContent =
         seat === 1 && playerNameIsAuthoritative ? playerName : name;
       const wind = seatWind(state, seat);
@@ -463,7 +464,9 @@ export class MahjongDomView {
       state.phase === "claiming"
         ? seat === 1
           ? "可以鸣牌"
-          : `${name} 正在考虑`
+          : seat > 0
+            ? `${name} 正在考虑`
+            : "等待其他玩家确认"
         : seat === 1
           ? "轮到你出牌"
           : `${name} 的回合`;
@@ -642,7 +645,9 @@ function createResultMeld(meld, winnerIndex, doraCounts) {
   const resultMeldHeight = display.entries.reduce((height, entry) => {
     const baseInward = entry.sideways ? MELD_SIDEWAYS_BOTTOM_INSET : 0;
     const inward = (entry.inward - baseInward) * pixelsPerUnit;
-    const tileHeight = entry.sideways ? RESULT_TILE_WIDTH_PX : RESULT_TILE_HEIGHT_PX;
+    const tileHeight = entry.sideways
+      ? RESULT_TILE_WIDTH_PX
+      : RESULT_TILE_HEIGHT_PX;
     return Math.max(height, inward + tileHeight);
   }, RESULT_TILE_HEIGHT_PX);
   group.style.setProperty("--result-meld-height", `${resultMeldHeight}px`);

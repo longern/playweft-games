@@ -88,6 +88,33 @@ test("Mahjong view reveals only the viewer's concealed hand", async () => {
   assert.deepEqual(result.legalActions.claims, {});
 });
 
+test("Mahjong keeps the pending claim respondent private from other players", async () => {
+  const result = await runScenario(`
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 8 } })
+    state.phase, state.claimIndex = "claiming", 1
+    state.claimants = {
+      { playerId = "p2", playerIndex = 2, options = { { kind = "pon", tileIds = { 1, 2 } } } }
+    }
+    local private_event = { type = "claim_passed", player = "p2", playerIndex = 2 }
+    local observer_projection = view(state, { private_event }, { viewer = { id = "p1", seat = 1 } })
+    local observer = observer_projection.state
+    local respondent = view(state, {}, { viewer = { id = "p2", seat = 2 } }).state
+    result = {
+      observerResponseIndex = observer.responseIndex,
+      observerClaims = #observer.legalActions.claims,
+      observerEvents = #observer_projection.events,
+      respondentResponseIndex = respondent.responseIndex,
+      respondentClaims = #respondent.legalActions.claims,
+    }
+  `);
+
+  assert.equal(result.observerResponseIndex, 0);
+  assert.equal(result.observerClaims, 0);
+  assert.equal(result.observerEvents, 0);
+  assert.equal(result.respondentResponseIndex, 2);
+  assert.equal(result.respondentClaims, 1);
+});
+
 test("Mahjong stores the current draw outside the fixed concealed rack", async () => {
   const result = await runScenario(`
     local base_rack = { 109,5,9,13,17,21,25,29,33,37,41,45,49 }
@@ -208,6 +235,42 @@ test("Mahjong chi options distinguish red fives without duplicating identical co
   assert.deepEqual(result.redFiveTypes, [3, 5]);
 });
 
+test("Mahjong moves the riichi river marker to the next discard when the declaration tile is called", async () => {
+  const result = await runScenario(`
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 17 } })
+    state.riichi.p1 = true
+    state.discards.p1 = { { tile = 5, claimed = false, riichi = true } }
+    state.lastDiscard = { player = "p1", playerIndex = 1, tile = 5, discardIndex = 1 }
+    state.phase, state.claimIndex = "claiming", 1
+    state.claimants = {
+      { playerId = "p2", playerIndex = 2, options = { { kind = "pon", tileIds = { 6, 7 } } } },
+    }
+    state.claimResponses = {}
+    state.hands.p2 = { 6, 7 }
+
+    local called = on_action(state, { type = "claim", option = 1 }, { actor = { id = "p2" } })
+    state = called.state
+    local marker_pending_after_call = state.riichiMarkerPending.p1
+
+    state.phase, state.turnIndex, state.drawnTile = "playing", 1, 9
+    local next_discard = on_action(state, { type = "discard", tileId = 9 }, { actor = { id = "p1" } })
+    state = next_discard.state
+    result = {
+      declarationClaimed = state.discards.p1[1].claimed,
+      markerPendingAfterCall = marker_pending_after_call,
+      nextDiscardMarked = state.discards.p1[2].riichi,
+      markerCleared = state.riichiMarkerPending.p1 == false,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    declarationClaimed: true,
+    markerPendingAfterCall: true,
+    nextDiscardMarked: true,
+    markerCleared: true,
+  });
+});
+
 test("Mahjong recognizes standard, seven-pairs, and thirteen-orphans wins", async () => {
   const result = await runScenario(`
     state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 11 } })
@@ -271,6 +334,106 @@ test("Mahjong local AI finishes a complete game through validated Lua actions", 
   assert.ok(result.steps > 20 && result.steps < 500);
   assert.ok(result.winner || result.draw);
   assert.ok(result.wall >= 0);
+});
+
+test("Mahjong AI balances riichi, dama, defense, calls, and dealer aggression", async () => {
+  const result = await runScenario(`
+    function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+    function fresh(seed)
+      local state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = seed } })
+      state.phase, state.turnIndex = "playing", 2
+      state.discards.p1, state.discards.p2, state.discards.p3, state.discards.p4 = {}, {}, {}, {}
+      state.melds.p1, state.melds.p2, state.melds.p3, state.melds.p4 = {}, {}, {}, {}
+      state.riichi.p1, state.riichi.p2, state.riichi.p3, state.riichi.p4 = false, false, false, false
+      state.kuikaeForbidden.p2 = {}
+      return state
+    end
+
+    local defense = fresh(901)
+    defense.hands.p2 = {
+      5, 18, 29, 41, 53, 65, 77, 89, 101, 109, 117, 125, 133,
+    }
+    defense.drawnTile = 25
+    defense.riichi.p1 = true
+    defense.discards.p1 = { { tile = 19, claimed = false, riichi = true } }
+    local defense_action = ai_action(defense, "p2")
+
+    local riichi = fresh(902)
+    riichi.hands.p2 = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21, 26,26 })
+    riichi.drawnTile = (30 - 1) * 4 + 1
+    local riichi_action = ai_action(riichi, "p2")
+
+    local dama = fresh(903)
+    dama.hands.p2 = ids({ 2,3,4, 6,7,8, 20,21, 24,24, 26,26,26 })
+    dama.drawnTile = (30 - 1) * 4 + 1
+    dama.deadWall[1] = (25 - 1) * 4 + 1
+    local dama_action = ai_action(dama, "p2")
+
+    local chi = fresh(904)
+    chi.hands.p2 = ids({ 2,3, 6,7,8, 11,12,13, 20,21, 25,25,30 })
+    chi.phase, chi.drawnTile = "claiming", 0
+    chi.lastDiscard = {
+      player = "p1", playerIndex = 1, tile = (4 - 1) * 4 + 1, discardIndex = 1,
+    }
+    chi.discards.p1 = { { tile = chi.lastDiscard.tile, claimed = false } }
+    chi.claimants, chi.claimIndex = { {
+      playerId = "p2", playerIndex = 2, distance = 1,
+      options = { { kind = "chi", tileIds = { chi.hands.p2[1], chi.hands.p2[2] } } },
+    } }, 1
+    local chi_action = ai_action(chi, "p2")
+
+    local bad_chi = fresh(906)
+    bad_chi.hands.p2 = ids({ 2,3, 1,9,10,18,19,27,28,29,30,31,34 })
+    bad_chi.phase, bad_chi.drawnTile = "claiming", 0
+    bad_chi.lastDiscard = {
+      player = "p1", playerIndex = 1, tile = (4 - 1) * 4 + 1, discardIndex = 1,
+    }
+    bad_chi.discards.p1 = { { tile = bad_chi.lastDiscard.tile, claimed = false } }
+    bad_chi.claimants, bad_chi.claimIndex = { {
+      playerId = "p2", playerIndex = 2, distance = 1,
+      options = { { kind = "chi", tileIds = { bad_chi.hands.p2[1], bad_chi.hands.p2[2] } } },
+    } }, 1
+    local bad_chi_action = ai_action(bad_chi, "p2")
+
+    local pon = fresh(905)
+    pon.hands.p2 = ids({ 32,32, 2,3,4, 6,7,8, 11,12, 25,25,30 })
+    pon.phase, pon.drawnTile = "claiming", 0
+    pon.lastDiscard = {
+      player = "p1", playerIndex = 1, tile = (32 - 1) * 4 + 3, discardIndex = 1,
+    }
+    pon.discards.p1 = { { tile = pon.lastDiscard.tile, claimed = false } }
+    pon.claimants, pon.claimIndex = { {
+      playerId = "p2", playerIndex = 2, distance = 1,
+      options = { { kind = "pon", tileIds = { pon.hands.p2[1], pon.hands.p2[2] } } },
+    } }, 1
+    local pon_action = ai_action(pon, "p2")
+
+    result = {
+      defenseType = tile_type(defense_action.tileId),
+      riichiAction = riichi_action.type,
+      damaAction = dama_action.type,
+      chiAction = chi_action.type,
+      badChiAction = bad_chi_action.type,
+      ponAction = pon_action.type,
+      dealerBias = dealer_aggression(riichi, riichi.dealerIndex),
+      nonDealerBias = dealer_aggression(riichi, 2),
+    }
+  `);
+
+  assert.equal(result.defenseType, 5);
+  assert.equal(result.riichiAction, "riichi");
+  assert.equal(result.damaAction, "discard");
+  assert.equal(result.chiAction, "claim");
+  assert.equal(result.badChiAction, "pass");
+  assert.equal(result.ponAction, "claim");
+  assert.ok(result.dealerBias > result.nonDealerBias);
 });
 
 test("Mahjong riichi costs 1000 points and own discards cause furiten", async () => {
@@ -513,6 +676,49 @@ test("Mahjong pays every ron winner on one discard", async () => {
   assert.equal(result.first, "p1");
   assert.equal(result.second, "p2");
   assert.ok(result.payerDelta < -10000);
+});
+
+test("Mahjong broadcasts multiple ron only after every claimant responds", async () => {
+  const result = await runScenario(`
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 1619 } })
+    function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+    local waiting = { 1,2, 4,5,6, 10,11,12, 19,20,21, 28,28 }
+    state.hands.p1, state.hands.p2 = ids(waiting), ids(waiting)
+    state.riichi.p1, state.riichi.p2 = true, true
+    local p4_hand = ids({ 3,4,5, 7,8,9, 13,14,15, 22,23,24, 29, 3 })
+    state.drawnTile = table.remove(p4_hand)
+    state.hands.p4, state.turnIndex = p4_hand, 4
+    state = on_action(state, { type = "discard", tileId = state.drawnTile }, { actor = { id = "p4" } }).state
+
+    local first_response = on_action(state, { type = "claim", option = 1 }, { actor = { id = "p1" } })
+    state = first_response.state
+    local intermediate = view(state, first_response.events, { viewer = { id = "p4", seat = 4 } })
+
+    local final_response = on_action(state, { type = "claim", option = 1 }, { actor = { id = "p2" } })
+    local final = view(final_response.state, final_response.events, { viewer = { id = "p4", seat = 4 } })
+    result = {
+      intermediatePhase = intermediate.state.phase,
+      intermediateResponseIndex = intermediate.state.responseIndex,
+      intermediateEvents = #intermediate.events,
+      finalPhase = final.state.phase,
+      finalWins = #final.events,
+      finalWinners = #final.state.winners,
+    }
+  `);
+
+  assert.equal(result.intermediatePhase, "claiming");
+  assert.equal(result.intermediateResponseIndex, 0);
+  assert.equal(result.intermediateEvents, 0);
+  assert.equal(result.finalPhase, "hand_ended");
+  assert.equal(result.finalWins, 2);
+  assert.equal(result.finalWinners, 2);
 });
 
 test("Mahjong supports nine-terminals abortive draw and keeps the dealer", async () => {

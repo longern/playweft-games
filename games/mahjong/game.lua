@@ -549,11 +549,13 @@ end
 local function clear_hand_state(state)
   state.hands, state.discards, state.melds = {}, {}, {}
   state.riichi, state.doubleRiichi, state.ippatsu = {}, {}, {}
+  state.riichiMarkerPending = {}
   state.tempFuriten, state.riichiFuriten, state.firstTurn = {}, {}, {}
   state.pao, state.kanByPlayer, state.kuikaeForbidden = {}, {}, {}
   for _, player_id in ipairs(state.players) do
     state.hands[player_id], state.discards[player_id], state.melds[player_id] = {}, {}, {}
     state.riichi[player_id], state.doubleRiichi[player_id], state.ippatsu[player_id] = false, false, false
+    state.riichiMarkerPending[player_id] = false
     state.tempFuriten[player_id], state.riichiFuriten[player_id], state.firstTurn[player_id] = false, false, true
     state.pao[player_id], state.kanByPlayer[player_id] = {}, 0
     state.kuikaeForbidden[player_id] = {}
@@ -1168,7 +1170,12 @@ local function resolve_claims(state, events)
   }
   state.kuikaeForbidden = state.kuikaeForbidden or {}
   state.kuikaeForbidden[claimant.playerId] = kuikae_forbidden_types(option)
-  state.discards[state.players[discard.playerIndex]][discard.discardIndex].claimed = true
+  local discarded = state.discards[state.players[discard.playerIndex]][discard.discardIndex]
+  discarded.claimed = true
+  if discarded.riichi then
+    state.riichiMarkerPending = state.riichiMarkerPending or {}
+    state.riichiMarkerPending[discard.player] = true
+  end
   state.turnIndex, state.phase, state.lastDiscard, state.drawnTile = claimant.playerIndex, "playing", nil, 0
   events[#events + 1] = { type = "claimed", kind = option.kind, player = claimant.playerId,
     playerIndex = claimant.playerIndex, fromIndex = discard.playerIndex, tile = discard.tile }
@@ -1198,9 +1205,13 @@ local function perform_discard(state, tile_id, actor_id, seat, riichi_declared)
   end
   state.kuikaeForbidden = state.kuikaeForbidden or {}
   state.kuikaeForbidden[actor_id] = {}
+  local replace_riichi_marker = state.riichiMarkerPending
+    and state.riichiMarkerPending[actor_id] == true
   state.discards[actor_id][#state.discards[actor_id] + 1] = {
-    tile = tile_id, claimed = false, riichi = riichi_declared == true,
+    tile = tile_id, claimed = false,
+    riichi = riichi_declared == true or replace_riichi_marker,
   }
+  if replace_riichi_marker then state.riichiMarkerPending[actor_id] = false end
   state.firstTurn[actor_id] = false
   if state.riichi[actor_id] and not riichi_declared then state.ippatsu[actor_id] = false end
   state.moveCount = state.moveCount + 1
@@ -1331,13 +1342,18 @@ end
 local function visible_events(events, viewer_id)
   local result = {}
   for _, event in ipairs(events or {}) do
-    local copy = {}
-    for key, value in pairs(event) do
-      if key ~= "tile" or event.type ~= "drew" or event.player == viewer_id then
-        copy[key] = key == "tile" and tile_type(value) or value
+    -- Responses are private while the call window remains open.  The final
+    -- resolved "claimed" or "won" event is public, so these interim events
+    -- are redundant once the window closes as well.
+    if event.type ~= "claim_passed" and event.type ~= "claim_declared" then
+      local copy = {}
+      for key, value in pairs(event) do
+        if key ~= "tile" or event.type ~= "drew" or event.player == viewer_id then
+          copy[key] = key == "tile" and tile_type(value) or value
+        end
       end
+      result[#result + 1] = copy
     end
-    result[#result + 1] = copy
   end
   return result
 end
@@ -1376,13 +1392,88 @@ local function legal_actions(state, viewer_id)
   return legal
 end
 
-local function hand_value_after_discard(hand, discard_index)
-  local counts = {} for kind = 1, 34 do counts[kind] = 0 end
-  for index, tile in ipairs(hand) do if index ~= discard_index then counts[tile_type(tile)] = counts[tile_type(tile)] + 1 end end
-  local score = 0
+local function standard_shanten(hand, melds)
+  local counts = type_counts(hand)
+  local best = 8
+  local function search(kind, groups, pair, shapes)
+    while kind <= 34 and counts[kind] == 0 do kind = kind + 1 end
+    if kind > 34 then
+      local usable_shapes = math.min(shapes, math.max(0, 4 - groups))
+      best = math.min(best, 8 - groups * 2 - usable_shapes - pair)
+      return
+    end
+    if counts[kind] >= 3 then
+      counts[kind] = counts[kind] - 3
+      search(kind, groups + 1, pair, shapes)
+      counts[kind] = counts[kind] + 3
+    end
+    local rank = kind <= 27 and (((kind - 1) % 9) + 1) or 0
+    if rank > 0 and rank <= 7 and counts[kind + 1] > 0 and counts[kind + 2] > 0 then
+      counts[kind], counts[kind + 1], counts[kind + 2] =
+        counts[kind] - 1, counts[kind + 1] - 1, counts[kind + 2] - 1
+      search(kind, groups + 1, pair, shapes)
+      counts[kind], counts[kind + 1], counts[kind + 2] =
+        counts[kind] + 1, counts[kind + 1] + 1, counts[kind + 2] + 1
+    end
+    if pair == 0 and counts[kind] >= 2 then
+      counts[kind] = counts[kind] - 2
+      search(kind, groups, 1, shapes)
+      counts[kind] = counts[kind] + 2
+    end
+    if counts[kind] >= 2 then
+      counts[kind] = counts[kind] - 2
+      search(kind, groups, pair, shapes + 1)
+      counts[kind] = counts[kind] + 2
+    end
+    if rank > 0 and rank <= 8 and counts[kind + 1] > 0 then
+      counts[kind], counts[kind + 1] = counts[kind] - 1, counts[kind + 1] - 1
+      search(kind, groups, pair, shapes + 1)
+      counts[kind], counts[kind + 1] = counts[kind] + 1, counts[kind + 1] + 1
+    end
+    if rank > 0 and rank <= 7 and counts[kind + 2] > 0 then
+      counts[kind], counts[kind + 2] = counts[kind] - 1, counts[kind + 2] - 1
+      search(kind, groups, pair, shapes + 1)
+      counts[kind], counts[kind + 2] = counts[kind] + 1, counts[kind + 2] + 1
+    end
+    counts[kind] = counts[kind] - 1
+    search(kind, groups, pair, shapes)
+    counts[kind] = counts[kind] + 1
+  end
+  search(1, #(melds or {}), 0, 0)
+  return best
+end
+
+local function hand_shanten(hand, melds, cache)
+  local counts = type_counts(hand)
+  local key_parts = { tostring(#(melds or {})) }
+  for kind = 1, 34 do key_parts[#key_parts + 1] = tostring(counts[kind]) end
+  local key = table.concat(key_parts, ":")
+  if cache and cache[key] ~= nil then return cache[key] end
+  local best = standard_shanten(hand, melds)
+  if #(melds or {}) == 0 then
+    local pairs, distinct = 0, 0
+    for kind = 1, 34 do
+      if counts[kind] > 0 then distinct = distinct + 1 end
+      if counts[kind] >= 2 then pairs = pairs + 1 end
+    end
+    best = math.min(best, 6 - pairs + math.max(0, 7 - distinct))
+    local unique, outside_pair = 0, false
+    for _, kind in ipairs({ 1,9,10,18,19,27,28,29,30,31,32,33,34 }) do
+      if counts[kind] > 0 then unique = unique + 1 end
+      if counts[kind] >= 2 then outside_pair = true end
+    end
+    best = math.min(best, 13 - unique - (outside_pair and 1 or 0))
+  end
+  if cache then cache[key] = best end
+  return best
+end
+
+local function shape_value(hand)
+  local counts, score = type_counts(hand), 0
   for kind = 1, 34 do
     local count = counts[kind]
-    if count >= 2 then score = score + 4 end if count >= 3 then score = score + 7 end
+    if count >= 2 then score = score + 4 end
+    if count >= 3 then score = score + 7 end
     if kind <= 27 and count > 0 then
       local rank = ((kind - 1) % 9) + 1
       if rank < 9 and counts[kind + 1] > 0 then score = score + 3 end
@@ -1392,21 +1483,266 @@ local function hand_value_after_discard(hand, discard_index)
   return score
 end
 
-local function choose_discard(hand, allowed, forbidden)
-  local best_index, best_score, best_throw = nil, -1, -1
-  local allow = nil
-  if allowed and #allowed > 0 then allow = {} for _, tile in ipairs(allowed) do allow[tile] = true end end
-  for index, tile in ipairs(hand) do
-    if (not allow or allow[tile]) and not (forbidden and forbidden[tile_type(tile)]) then
-      local kind, score = tile_type(tile), hand_value_after_discard(hand, index)
-      local rank = kind <= 27 and (((kind - 1) % 9) + 1) or 0
-      local throw = kind >= 28 and 3 or (rank == 1 or rank == 9) and 2 or 1
-      if score > best_score or (score == best_score and throw > best_throw) then
-        best_index, best_score, best_throw = index, score, throw
+local function visible_type_counts(state, player_id, own_hand, own_melds)
+  local counts, seen = {}, {}
+  for kind = 1, 34 do counts[kind] = 0 end
+  local function add(tile)
+    if tile and tile > 0 and not seen[tile] then
+      seen[tile] = true
+      local kind = tile_type(tile)
+      counts[kind] = counts[kind] + 1
+    end
+  end
+  for _, tile in ipairs(own_hand or state.hands[player_id] or {}) do add(tile) end
+  for _, id in ipairs(state.players) do
+    local melds = id == player_id and own_melds or state.melds[id]
+    for _, meld in ipairs(melds or {}) do
+      for _, tile in ipairs(meld.tiles or {}) do add(tile) end
+    end
+    for _, discard in ipairs(state.discards[id] or {}) do add(discard.tile) end
+  end
+  for index = 1, state.kanCount + 1 do add(state.deadWall[(index - 1) * 2 + 1]) end
+  return counts
+end
+
+local function is_dora_kind(state, kind)
+  for _, indicator in ipairs(indicator_types(state, false)) do
+    if next_dora(indicator) == kind then return true end
+  end
+  return false
+end
+
+local function value_honor_kind(state, seat, kind)
+  if kind >= 32 then return true end
+  local seat_wind = 28 + ((seat - state.dealerIndex + 4) % 4)
+  local round_wind = 27 + state.roundWind
+  return kind == seat_wind or kind == round_wind
+end
+
+local function estimated_hand_value(state, seat, hand, melds)
+  local counts = type_counts(hand)
+  local ids = all_tile_ids(hand, melds)
+  local dora = count_dora(state, hand, melds, false)
+  local value, natural = dora, 0
+  if #(melds or {}) == 0 then value = value + 0.85 end
+  local all_simple, suits, has_honor = true, {}, false
+  for _, tile in ipairs(ids) do
+    local kind = tile_type(tile)
+    if is_outside(kind) then all_simple = false end
+    if is_honor(kind) then has_honor = true
+    else suits[math.floor((kind - 1) / 9)] = true end
+  end
+  if all_simple and #ids > 0 then value, natural = value + 1, natural + 1 end
+  for kind = 28, 34 do
+    local completed = counts[kind] >= 3
+    for _, meld in ipairs(melds or {}) do
+      if meld.kind ~= "chi" and tile_type(meld.tiles[1]) == kind then completed = true end
+    end
+    if completed and value_honor_kind(state, seat, kind) then
+      local amount = kind <= 31 and kind == 28 + ((seat - state.dealerIndex + 4) % 4)
+        and kind == 27 + state.roundWind and 2 or 1
+      value, natural = value + amount, natural + amount
+    elseif counts[kind] == 2 and value_honor_kind(state, seat, kind) then
+      value = value + 0.35
+    end
+  end
+  local suit_count = 0 for _ in pairs(suits) do suit_count = suit_count + 1 end
+  if suit_count == 1 and #ids >= 10 then
+    local amount = has_honor and (#(melds or {}) == 0 and 3 or 2)
+      or (#(melds or {}) == 0 and 6 or 5)
+    value, natural = value + amount, natural + amount
+  end
+  return value, natural
+end
+
+local function open_yaku_available(state, seat, hand, melds)
+  local _, natural = estimated_hand_value(state, seat, hand, melds)
+  if natural >= 1 then return true end
+  local counts, pairs_or_sets, has_sequence = type_counts(hand), 0, false
+  for kind = 1, 34 do
+    if counts[kind] >= 2 then pairs_or_sets = pairs_or_sets + 1 end
+  end
+  for _, meld in ipairs(melds or {}) do
+    if meld.kind == "chi" then has_sequence = true else pairs_or_sets = pairs_or_sets + 1 end
+  end
+  return not has_sequence and pairs_or_sets >= 4
+end
+
+local function opponent_discarded_types(state, player_id)
+  local result = {}
+  for _, discard in ipairs(state.discards[player_id] or {}) do
+    result[tile_type(discard.tile)] = true
+  end
+  return result
+end
+
+local function opponent_threat_strength(state, player_id)
+  if state.riichi[player_id] then return 1.15 end
+  local melds = state.melds[player_id] or {}
+  if #melds == 0 then return 0 end
+  local strength = #melds == 1 and 0.18 or #melds == 2 and 0.42 or 0.72
+  local value_melds = 0
+  for _, meld in ipairs(melds) do
+    local kind = tile_type(meld.tiles[1])
+    if meld.kind ~= "chi" and kind >= 32 then value_melds = value_melds + 1 end
+    if is_dora_kind(state, kind) then strength = strength + 0.1 end
+  end
+  return strength + value_melds * 0.12
+end
+
+local function ai_threat_pressure(state, seat)
+  local total = 0
+  for other = 1, PLAYER_COUNT do
+    if other ~= seat then total = total + opponent_threat_strength(state, state.players[other]) end
+  end
+  return total
+end
+
+local function tile_danger_against(state, opponent_id, kind, visible_counts)
+  local threat = opponent_threat_strength(state, opponent_id)
+  if threat <= 0 then return 0 end
+  local discarded = opponent_discarded_types(state, opponent_id)
+  if discarded[kind] then return 0 end
+  local danger
+  if is_honor(kind) then
+    local visible = visible_counts[kind] or 0
+    danger = visible >= 3 and 0.02 or visible == 2 and 0.16 or visible == 1 and 0.38 or 0.62
+  else
+    local rank = ((kind - 1) % 9) + 1
+    local base = ({ 0.30,0.52,0.68,0.84,0.94,0.84,0.68,0.52,0.30 })[rank]
+    local suji, possible = 0, 0
+    if rank >= 4 then possible = possible + 1; if discarded[kind - 3] then suji = suji + 1 end end
+    if rank <= 6 then possible = possible + 1; if discarded[kind + 3] then suji = suji + 1 end end
+    danger = base * (1 - (possible > 0 and suji / possible or 0) * 0.48)
+    local suit_start = math.floor((kind - 1) / 9) * 9 + 1
+    local left = kind > suit_start and visible_counts[kind - 1] == 4
+    local right = kind < suit_start + 8 and visible_counts[kind + 1] == 4
+    if left or right then danger = danger * 0.76 end
+  end
+  if is_dora_kind(state, kind) then danger = danger + 0.32 end
+  return danger * threat
+end
+
+local function tile_danger(state, seat, tile, visible_counts)
+  local kind, total = tile_type(tile), 0
+  for other = 1, PLAYER_COUNT do
+    if other ~= seat then
+      total = total + tile_danger_against(state, state.players[other], kind, visible_counts)
+    end
+  end
+  return total
+end
+
+local function tile_keep_bonus(state, seat, tile)
+  local kind, bonus = tile_type(tile), 0
+  if RED_FIVES[tile] then bonus = bonus + 7 end
+  for _, indicator in ipairs(indicator_types(state, false)) do
+    if next_dora(indicator) == kind then bonus = bonus + 6 end
+  end
+  if value_honor_kind(state, seat, kind) then bonus = bonus + 1.5 end
+  return bonus
+end
+
+local function effective_tile_count(hand, melds, shanten, visible_counts, cache)
+  local counts, total = type_counts(hand), 0
+  for kind = 1, 34 do
+    if counts[kind] < 4 and (visible_counts[kind] or 0) < 4 then
+      local candidate = copy_array(hand)
+      candidate[#candidate + 1] = (kind - 1) * 4 + 1
+      if hand_shanten(candidate, melds, cache) < shanten then
+        total = total + math.max(0, 4 - (visible_counts[kind] or 0))
       end
     end
   end
-  return best_index and hand[best_index] or nil
+  return total
+end
+
+local function dealer_aggression(state, seat)
+  return seat == state.dealerIndex and 0.18 or 0
+end
+
+local function score_position_aggression(state, seat)
+  local own, leader = state.scores[seat], state.scores[1]
+  for index = 2, PLAYER_COUNT do leader = math.max(leader, state.scores[index]) end
+  if own + 12000 < leader then return 0.18 end
+  if own == leader then return -0.08 end
+  return 0
+end
+
+local function choose_ai_discard(state, seat, hand, allowed, forbidden, melds)
+  local player_id = state.players[seat]
+  melds = melds or state.melds[player_id]
+  local allow
+  if allowed and #allowed > 0 then
+    allow = {} for _, tile in ipairs(allowed) do allow[tile] = true end
+  end
+  local cache, candidates, minimum_shanten = {}, {}, 8
+  for index, tile in ipairs(hand) do
+    if (not allow or allow[tile]) and not (forbidden and forbidden[tile_type(tile)]) then
+      local remaining = copy_array(hand)
+      table.remove(remaining, index)
+      local shanten = hand_shanten(remaining, melds, cache)
+      minimum_shanten = math.min(minimum_shanten, shanten)
+      candidates[#candidates + 1] = {
+        tile = tile, hand = remaining, shanten = shanten, index = index,
+      }
+    end
+  end
+  if #candidates == 0 then return nil, nil end
+  local visible = visible_type_counts(state, player_id, hand, melds)
+  local pressure = ai_threat_pressure(state, seat)
+  local best_value = 0
+  for _, candidate in ipairs(candidates) do
+    candidate.value = estimated_hand_value(state, seat, candidate.hand, melds)
+    best_value = math.max(best_value, candidate.value)
+  end
+  local aggression = (minimum_shanten <= 0 and 1.05 or minimum_shanten == 1 and 0.68 or 0.28)
+    + math.min(4, best_value) * 0.12 + dealer_aggression(state, seat)
+    + score_position_aggression(state, seat)
+  if #state.wall <= 20 then aggression = aggression - 0.18 end
+  local folding = pressure >= 0.9 and (minimum_shanten >= 2
+    or (minimum_shanten >= 1 and best_value < 2.2 and aggression < pressure))
+  local ukeire_candidates = {}
+  for _, candidate in ipairs(candidates) do
+    candidate.ukeire = 0
+    if not folding and candidate.shanten == minimum_shanten then
+      candidate.preliminary = shape_value(candidate.hand) * 1.7
+        + candidate.value * 18 - tile_keep_bonus(state, seat, candidate.tile) * 13
+      ukeire_candidates[#ukeire_candidates + 1] = candidate
+    end
+  end
+  table.sort(ukeire_candidates, function(left, right)
+    return left.preliminary > right.preliminary
+  end)
+  for index = 1, math.min(6, #ukeire_candidates) do
+    local candidate = ukeire_candidates[index]
+    candidate.ukeire = effective_tile_count(
+      candidate.hand, melds, candidate.shanten, visible, cache
+    )
+  end
+  local best
+  for _, candidate in ipairs(candidates) do
+    candidate.danger = tile_danger(state, seat, candidate.tile, visible)
+    local efficiency = -candidate.shanten * 300 + candidate.ukeire * 7
+      + shape_value(candidate.hand) * 1.7 + candidate.value * 18
+      - tile_keep_bonus(state, seat, candidate.tile) * 13
+    if folding then
+      candidate.score = -candidate.danger * 1050 - candidate.shanten * 28
+        + candidate.ukeire * 1.5 - tile_keep_bonus(state, seat, candidate.tile) * 2
+    else
+      local defense_weight = 80 + math.max(0, pressure - aggression) * 260
+      candidate.score = efficiency - candidate.danger * defense_weight
+    end
+    local kind = tile_type(candidate.tile)
+    local rank = kind <= 27 and (((kind - 1) % 9) + 1) or 0
+    candidate.throw_order = kind >= 28 and 3 or (rank == 1 or rank == 9) and 2 or 1
+    if not best or candidate.score > best.score + 0.001
+      or (math.abs(candidate.score - best.score) <= 0.001 and candidate.throw_order > best.throw_order) then
+      best = candidate
+    end
+  end
+  best.folding, best.pressure, best.aggression = folding, pressure, aggression
+  return best.tile, best
 end
 
 function setup(context)
@@ -1432,7 +1768,12 @@ function view(state, events, context)
     end
   end
   local response_index = 0
-  if state.phase == "claiming" and state.claimants[state.claimIndex] then response_index = state.claimants[state.claimIndex].playerIndex end
+  -- A pending call is private until it is resolved.  Publishing the current
+  -- claimant would reveal which player has a legal chi/pon/ron opportunity.
+  local claimant = state.claimants[state.claimIndex]
+  if state.phase == "claiming" and claimant and claimant.playerId == viewer_id then
+    response_index = claimant.playerIndex
+  end
   local indicators = {} for _, kind in ipairs(indicator_types(state, false)) do indicators[#indicators + 1] = kind end
   local indicator_tiles = visible_indicator_tiles(state)
   return { state = {
@@ -1487,35 +1828,165 @@ function on_action(state, action, context)
   return apply_discard(state, action, actor_id, seat)
 end
 
+local function copy_meld_list(melds)
+  local result = {}
+  for _, meld in ipairs(melds or {}) do result[#result + 1] = meld end
+  return result
+end
+
+local function simulated_claim(state, claimant, option)
+  local hand = copy_array(state.hands[claimant.playerId])
+  for _, tile in ipairs(option.tileIds or {}) do remove_tile(hand, tile) end
+  local meld_tiles = { state.lastDiscard.tile }
+  for _, tile in ipairs(option.tileIds or {}) do meld_tiles[#meld_tiles + 1] = tile end
+  local melds = copy_meld_list(state.melds[claimant.playerId])
+  melds[#melds + 1] = {
+    kind = option.kind, tiles = meld_tiles, fromIndex = state.lastDiscard.playerIndex,
+    calledTile = state.lastDiscard.tile,
+  }
+  if option.kind == "kan" then
+    return hand, melds, {
+      shanten = hand_shanten(hand, melds, {}), ukeire = 0,
+      value = estimated_hand_value(state, claimant.playerIndex, hand, melds),
+      danger = 0,
+    }
+  end
+  local _, discard = choose_ai_discard(
+    state, claimant.playerIndex, hand, nil, kuikae_forbidden_types(option), melds
+  )
+  return hand, melds, discard
+end
+
+local function choose_ai_claim(state, claimant)
+  for index, option in ipairs(claimant.options) do
+    if option.kind == "ron" then return { type = "claim", option = index } end
+  end
+  local seat, player_id = claimant.playerIndex, claimant.playerId
+  local current_hand, current_melds = state.hands[player_id], state.melds[player_id]
+  local current_shanten = hand_shanten(current_hand, current_melds, {})
+  local pressure = ai_threat_pressure(state, seat)
+  local best
+  for index, option in ipairs(claimant.options) do
+    if option.kind ~= "ron" then
+      local hand, melds, discard = simulated_claim(state, claimant, option)
+      if discard then
+        local improvement = current_shanten - discard.shanten
+        local has_yaku = open_yaku_available(state, seat, discard.hand or hand, melds)
+        local value = discard.value or estimated_hand_value(state, seat, hand, melds)
+        local dealer_bonus = dealer_aggression(state, seat) * 70
+        local score = improvement * 150 - discard.shanten * 32
+          + (discard.ukeire or 0) * 3 + value * 18 + dealer_bonus
+        if option.kind == "kan" then score = score + 10 end
+        if option.kind == "chi" then score = score - 8 end
+        if pressure >= 0.9 then score = score - pressure * 90 end
+        local acceptable = has_yaku and discard.shanten <= 2
+          and (improvement >= 1
+            or (improvement == 0 and discard.shanten <= 1 and value >= 2.2
+              and pressure < 0.9 + dealer_aggression(state, seat)))
+        if option.kind == "kan" and pressure >= 0.75 and not state.riichi[player_id] then
+          acceptable = false
+        end
+        if acceptable and (not best or score > best.score) then
+          best = { index = index, score = score }
+        end
+      end
+    end
+  end
+  return best and { type = "claim", option = best.index } or { type = "pass" }
+end
+
+local function riichi_wait_count(state, seat, candidate)
+  local player_id = state.players[seat]
+  local visible = visible_type_counts(
+    state, player_id, hand_with_drawn(state, player_id), state.melds[player_id]
+  )
+  local total = 0
+  for _, kind in ipairs(waiting_types(candidate.hand, state.melds[player_id])) do
+    total = total + math.max(0, 4 - (visible[kind] or 0))
+  end
+  return total
+end
+
+local function should_declare_riichi(state, seat, candidate)
+  local player_id = state.players[seat]
+  local value, natural = estimated_hand_value(
+    state, seat, candidate.hand, state.melds[player_id]
+  )
+  local waits = riichi_wait_count(state, seat, candidate)
+  local pressure = ai_threat_pressure(state, seat)
+  if waits == 0 then return false end
+  if natural < 1 then return true end
+  local leader = state.scores[1]
+  for index = 2, PLAYER_COUNT do leader = math.max(leader, state.scores[index]) end
+  if state.scores[seat] + 8000 < leader then return true end
+  if pressure >= 1 and candidate.danger > 0.22 and seat ~= state.dealerIndex then return false end
+  if #state.wall <= 12 and waits <= 2 then return false end
+  if value >= 4 and waits >= 2 then return false end
+  if seat == state.dealerIndex then return waits >= 2 or value < 4.5 end
+  return waits >= 3 or value < 3
+end
+
+local function choose_ai_self_kan(state, seat, options)
+  if #options == 0 then return nil end
+  local player_id = state.players[seat]
+  if state.riichi[player_id] then
+    for _, option in ipairs(options) do if option.kind == "ankan" then return option end end
+    return nil
+  end
+  local pressure = ai_threat_pressure(state, seat)
+  if pressure >= 0.75 then return nil end
+  local hand = hand_with_drawn(state, player_id)
+  local _, profile = choose_ai_discard(
+    state, seat, hand, nil, state.kuikaeForbidden and state.kuikaeForbidden[player_id]
+  )
+  local value = estimated_hand_value(state, seat, hand, state.melds[player_id])
+  if profile and profile.shanten <= 1
+    and (value >= 1.5 or seat == state.dealerIndex or #state.wall >= 36) then
+    return options[1]
+  end
+  return nil
+end
+
+local function should_abort_nine_tiles(state, player_id)
+  local distinct = {}
+  for _, tile in ipairs(hand_with_drawn(state, player_id)) do
+    local kind = tile_type(tile)
+    if is_outside(kind) then distinct[kind] = true end
+  end
+  local count = 0 for _ in pairs(distinct) do count = count + 1 end
+  return count < 11
+end
+
 function ai_action(state, actor_id)
   local seat = player_index(state, actor_id)
   if not seat or state.phase == "hand_ended" then return nil end
   if state.phase == "claiming" then
     local claimant = state.claimants[state.claimIndex]
     if not claimant or claimant.playerId ~= actor_id then return nil end
-    for index, option in ipairs(claimant.options) do if option.kind == "ron" then return { type = "claim", option = index } end end
-    for index, option in ipairs(claimant.options) do
-      if option.kind == "kan" then return { type = "claim", option = index } end
-      if option.kind == "pon" and (tile_type(state.lastDiscard.tile) >= 28 or (#state.wall + seat) % 3 == 0) then
-        return { type = "claim", option = index }
-      end
-    end
-    return { type = "pass" }
+    return choose_ai_claim(state, claimant)
   end
   if state.phase ~= "playing" or state.turnIndex ~= seat then return nil end
-  if state.drawnTile > 0 and score_hand(state, seat, state.drawnTile, "tsumo") then return { type = "tsumo" } end
-  if can_abort_nine(state, actor_id) then return { type = "abort_nine" } end
-  local kans = self_kan_options(state, actor_id)
-  if #kans > 0 and (#state.wall + seat) % 3 == 0 then
-    return { type = "kan", kind = kans[1].kind, tileType = kans[1].tileType }
+  if state.drawnTile > 0 and score_hand(state, seat, state.drawnTile, "tsumo") then
+    return { type = "tsumo" }
   end
-  if state.riichi[actor_id] then return { type = "discard", tileId = state.drawnTile } end
-  local riichi_tiles = riichi_discards(state, actor_id)
+  if can_abort_nine(state, actor_id) and should_abort_nine_tiles(state, actor_id) then
+    return { type = "abort_nine" }
+  end
   local concealed = hand_with_drawn(state, actor_id)
-  if #riichi_tiles > 0 then return { type = "riichi", tileId = choose_discard(concealed, riichi_tiles) } end
-  return { type = "discard", tileId = choose_discard(
-    concealed, nil, state.kuikaeForbidden and state.kuikaeForbidden[actor_id]
-  ) }
+  local kans = self_kan_options(state, actor_id)
+  local kan = choose_ai_self_kan(state, seat, kans)
+  if kan then return { type = "kan", kind = kan.kind, tileType = kan.tileType } end
+  if state.riichi[actor_id] then return { type = "discard", tileId = state.drawnTile } end
+  local forbidden = state.kuikaeForbidden and state.kuikaeForbidden[actor_id]
+  local riichi_tiles = riichi_discards(state, actor_id)
+  if #riichi_tiles > 0 then
+    local tile, candidate = choose_ai_discard(state, seat, concealed, riichi_tiles, forbidden)
+    if tile and candidate and should_declare_riichi(state, seat, candidate) then
+      return { type = "riichi", tileId = tile }
+    end
+  end
+  local tile = choose_ai_discard(state, seat, concealed, nil, forbidden)
+  return { type = "discard", tileId = tile or state.drawnTile or concealed[1] }
 end
 
 function on_player_left(state, context)

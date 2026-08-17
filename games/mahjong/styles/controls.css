@@ -150,7 +150,6 @@
   font-synthesis: weight;
   line-height: 1;
   transition:
-    transform 140ms ease,
     filter 140ms ease,
     border-color 140ms ease;
 }
@@ -166,7 +165,6 @@
   font-size: 15px;
   font-weight: 800;
   transition:
-    transform 140ms ease,
     filter 140ms ease,
     border-color 140ms ease;
 }
@@ -174,7 +172,6 @@
 .action-bar button:hover:not(:disabled),
 .result-panel button:hover {
   filter: brightness(1.1);
-  transform: translateY(-1px);
 }
 
 .action-bar button:disabled {

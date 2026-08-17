@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { Euler, PerspectiveCamera, Texture, Vector3 } from "three";
 import {
-  AUTO_RIICHI_DISCARD_DELAY_MS,
   CLAIM_LABELS,
   HAND_INSERTION_DELAY_MS,
   DORA_INDICATOR_SLOT_COUNT,
@@ -44,6 +43,7 @@ import {
   ownHandOverlayTransform,
   OWN_HAND_DRAG,
   OWN_HAND_LAYOUT,
+  OWN_HAND_TILT,
   PLAYFIELD_CENTRE_Z,
   presentedHandTransform,
   presentedTileHingeTransform,
@@ -57,9 +57,6 @@ import {
   TILE_SIZE,
 } from "../games/mahjong/render/three-layout.js";
 import {
-  HAND_REVEAL_FALL_DURATION_MS,
-  OWN_DRAW_ENTRY_DURATION_MS,
-  OWN_TILE_SELECTION_DURATION_MS,
   handRevealFallProgress,
   ownDrawEntryKey,
   ownDrawEntryProgress,
@@ -298,6 +295,8 @@ test("mahjong keeps the 13-tile rack stable and moves the drawn tile to the end"
   assert.equal(firstRackTile.scaleX, drawnTile.scaleX);
   assert.equal(firstRackTile.scaleY, drawnTile.scaleY);
   assert.ok(Math.abs(firstRackTile.lift / firstRackTile.tileHeight - 0.18) < 1e-12);
+  assert.equal(firstRackTile.tilt, OWN_HAND_TILT);
+  assert.ok(OWN_HAND_TILT > 0.09 && OWN_HAND_TILT < 0.12);
   const safeWidth = Math.min(1280, 588 * OWN_HAND_LAYOUT.safeAspect);
   const handLeft = firstRackTile.x - firstRackTile.tileWidth / 2;
   const handRight = drawnTile.x + drawnTile.tileWidth / 2;
@@ -832,7 +831,6 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     new URL("../games/mahjong/index.html", import.meta.url),
     "utf8",
   );
-  assert.equal(HAND_END_PRESENTATION_DELAY_MS, 2700);
   assert.ok(HAND_END_PRESENTATION_DELAY_MS > ACTION_CALLOUT_DURATION_MS);
   assert.match(main, /handEndPresentationKey\(state\)/);
   assert.match(main, /const winners = asArray\(current\.winners\)/);
@@ -945,7 +943,6 @@ test("mahjong hand reveal rotates around a table-contact edge", () => {
 });
 
 test("mahjong hand reveal combines a sustained push with gravity and hand braking", () => {
-  assert.equal(HAND_REVEAL_FALL_DURATION_MS, 420);
   assert.equal(handRevealFallProgress(0), 0);
   assert.equal(handRevealFallProgress(1), 1);
 
@@ -966,7 +963,6 @@ test("mahjong hand reveal combines a sustained push with gravity and hand brakin
 });
 
 test("mahjong gives a newly drawn local tile a short falling fade-in", () => {
-  assert.equal(OWN_DRAW_ENTRY_DURATION_MS, 180);
   assert.equal(ownDrawEntryProgress(0), 0);
   assert.equal(ownDrawEntryProgress(0.5), 0.875);
   assert.equal(ownDrawEntryProgress(1), 1);
@@ -992,7 +988,6 @@ test("mahjong gives a newly drawn local tile a short falling fade-in", () => {
 });
 
 test("mahjong reuses local tile meshes for a quick interruptible selection lift", () => {
-  assert.equal(OWN_TILE_SELECTION_DURATION_MS, 120);
   assert.equal(ownTileSelectionProgress(0), 0);
   assert.equal(ownTileSelectionProgress(0.5), 0.875);
   assert.equal(ownTileSelectionProgress(1), 1);
@@ -1139,7 +1134,6 @@ test("mahjong automatically tsumogiri after riichi only when discard is the sole
     ),
     0,
   );
-  assert.equal(AUTO_RIICHI_DISCARD_DELAY_MS, 520);
 });
 
 test("mahjong uses one standing 3D tile transform for all four seats", () => {

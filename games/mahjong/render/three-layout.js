@@ -35,6 +35,11 @@ export const OWN_HAND_LAYOUT = Object.freeze({
   bottomInset: 9,
 });
 
+// A shallow backward lean exposes only a narrow strip of the real tile top.
+// Keep this restrained: the local rack is an orthographic HUD element rather
+// than part of the perspective table scene.
+export const OWN_HAND_TILT = Math.PI / 30;
+
 export const OWN_HAND_DRAG = Object.freeze({
   discardLineY: 552,
   activationDistance: 8,
@@ -155,7 +160,7 @@ export function ownHandOverlayTransform(index, viewportWidth, viewportHeight, { 
     occupiedWidth,
     centreX,
     lift: tileHeight * 0.18,
-    tilt: 0.065,
+    tilt: OWN_HAND_TILT,
   };
 }
 

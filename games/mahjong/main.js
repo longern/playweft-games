@@ -24,8 +24,10 @@ import { MahjongThreeRenderer } from "./three-renderer.js";
 import { createMahjongSettingsDialog } from "./settings-dialog.js";
 import {
   activateMahjongAssetPack,
+  configureMahjongAssetPackAppearance,
   createMahjongAssetPack,
   deleteMahjongAssetPack,
+  deactivateMahjongAssetPacks,
   getMahjongAssetUrl,
   getMahjongDefaultNames,
   initializeMahjongAssetPacks,
@@ -102,11 +104,12 @@ const visualRendererReady = visualRenderer.init().catch((error) => {
   showLoadingError("图形渲染器加载失败，请刷新页面重试");
 });
 const visualPackElements = {
-  name: document.querySelector("#settings-pack-name"),
   upload: document.querySelector("#settings-pack-upload"),
   feedback: document.querySelector("#settings-pack-feedback"),
   list: document.querySelector("#settings-pack-list"),
+  appearance: document.querySelector("#settings-pack-appearance"),
 };
+const DEFAULT_VISUAL_PACK_ID = "__default__";
 let visualPacks = [];
 const assetPacksReady = initializeMahjongAssetPacks().catch(() => new Map());
 
@@ -115,16 +118,12 @@ void Promise.all([visualRendererReady, assetPacksReady]).then(() =>
 );
 void refreshVisualPacks();
 visualPackElements.upload.addEventListener("change", async () => {
-  const files = [...visualPackElements.upload.files];
+  const archive = visualPackElements.upload.files?.[0];
   visualPackElements.upload.value = "";
-  if (!files.length) return;
+  if (!archive) return;
   visualPackElements.feedback.textContent = "正在保存素材包…";
   try {
-    visualPacks = await createMahjongAssetPack(
-      files,
-      visualPackElements.name.value,
-    );
-    visualPackElements.name.value = "";
+    visualPacks = await createMahjongAssetPack(archive);
     renderVisualPacks();
     visualPackElements.feedback.textContent = "已导入并启用素材包。";
   } catch (error) {
@@ -148,13 +147,40 @@ visualPackElements.list.addEventListener("click", async (event) => {
     visualPacks =
       action === "delete"
         ? await deleteMahjongAssetPack(id)
-        : await activateMahjongAssetPack(id);
+        : id === DEFAULT_VISUAL_PACK_ID
+          ? await deactivateMahjongAssetPacks()
+          : await activateMahjongAssetPack(id);
     renderVisualPacks();
     visualPackElements.feedback.textContent =
-      action === "delete" ? "已删除素材包。" : "已启用素材包。";
+      action === "delete"
+        ? "已删除素材包。"
+        : id === DEFAULT_VISUAL_PACK_ID
+          ? "已切回默认画面。"
+          : "已启用素材包。";
   } catch {
     visualPackElements.feedback.textContent =
       action === "delete" ? "删除素材包失败" : "切换素材包失败";
+  }
+});
+visualPackElements.appearance.addEventListener("change", async (event) => {
+  const select = event.target.closest("select[data-appearance-key]");
+  const activePack = visualPacks.find((pack) => pack.active);
+  if (!select || !activePack) return;
+  const appearance = structuredClone(activePack.appearance);
+  const key = select.dataset.appearanceKey;
+  if (key.startsWith("portrait:")) {
+    appearance.portraits[key.slice("portrait:".length)] = select.value;
+  } else {
+    appearance[key] = select.value;
+  }
+  visualPackElements.feedback.textContent = "正在应用画面配置…";
+  try {
+    visualPacks = await configureMahjongAssetPackAppearance(activePack.id, appearance);
+    renderVisualPacks();
+    visualPackElements.feedback.textContent = "已应用画面配置。";
+  } catch (error) {
+    visualPackElements.feedback.textContent =
+      error instanceof Error ? error.message : "画面配置失败";
   }
 });
 window.addEventListener("mahjong:asset-pack-changed", () => {
@@ -235,8 +261,7 @@ function applyPackAvatars() {
   };
   for (const [position, portraitSlot] of Object.entries(portraitSlotByPosition)) {
     if (position === "bottom" && hasPlatformAvatar) continue;
-    const source = getMahjongAssetUrl(`portrait-${portraitSlot}`) ||
-      (position === "bottom" ? getMahjongAssetUrl("avatar") : "");
+    const source = getMahjongAssetUrl(`portrait-${portraitSlot}`);
     domView.setPlayerAvatar(position, source);
   }
 }
@@ -260,8 +285,18 @@ async function refreshVisualPacks() {
 }
 
 function renderVisualPacks() {
+  const packs = [
+    {
+      id: DEFAULT_VISUAL_PACK_ID,
+      name: "默认主题",
+      assetNames: ["内置画面"],
+      active: !visualPacks.some((pack) => pack.active),
+      isDefault: true,
+    },
+    ...visualPacks,
+  ];
   visualPackElements.list.replaceChildren(
-    ...visualPacks.map((pack) => {
+    ...packs.map((pack) => {
       const item = document.createElement("li");
       item.classList.toggle("is-active", pack.active);
       const details = document.createElement("span");
@@ -279,18 +314,89 @@ function renderVisualPacks() {
       } else {
         actions.append(createVisualPackButton("启用", "activate", pack.id));
       }
-      actions.append(createVisualPackButton("删除", "delete", pack.id));
+      if (!pack.isDefault) {
+        actions.append(createVisualPackButton("删除", "delete", pack.id));
+      }
       item.append(details, actions);
       return item;
     }),
   );
+  renderVisualPackAppearance();
 }
 
-function createVisualPackButton(label, action, id) {
+function renderVisualPackAppearance() {
+  const pack = visualPacks.find((candidate) => candidate.active);
+  const catalog = pack?.catalog;
+  if (!pack || !catalog) {
+    visualPackElements.appearance.hidden = true;
+    visualPackElements.appearance.replaceChildren();
+    return;
+  }
+  const portraitLabels = {
+    self: "自己",
+    right: "右手边",
+    opposite: "对家",
+    left: "左手边",
+  };
+  const controls = document.createDocumentFragment();
+  const portraitGroup = document.createElement("fieldset");
+  portraitGroup.className = "settings-pack-choice-group";
+  const portraitLegend = document.createElement("legend");
+  portraitLegend.textContent = "四家主题肖像";
+  portraitGroup.append(portraitLegend);
+  for (const [position, label] of Object.entries(portraitLabels)) {
+    portraitGroup.append(
+      createAppearanceSelect(
+        label,
+        `portrait:${position}`,
+        catalog.portraits,
+        pack.appearance.portraits[position],
+      ),
+    );
+  }
+  if (catalog.portraits.length) controls.append(portraitGroup);
+
+  const surfaceGroup = document.createElement("fieldset");
+  surfaceGroup.className = "settings-pack-choice-group";
+  const surfaceLegend = document.createElement("legend");
+  surfaceLegend.textContent = "牌桌画面";
+  surfaceGroup.append(surfaceLegend);
+  const surfaces = [
+    ["桌布", "tablecloth", catalog.tablecloths, pack.appearance.tablecloth],
+    ["背景", "background", catalog.backgrounds, pack.appearance.background],
+    ["牌背", "tileBack", catalog.tileBacks, pack.appearance.tileBack],
+  ];
+  for (const [label, key, options, selected] of surfaces) {
+    if (options.length) surfaceGroup.append(createAppearanceSelect(label, key, options, selected));
+  }
+  if (surfaceGroup.childElementCount > 1) controls.append(surfaceGroup);
+  visualPackElements.appearance.replaceChildren(controls);
+  visualPackElements.appearance.hidden = !visualPackElements.appearance.childElementCount;
+}
+
+function createAppearanceSelect(label, key, options, selected) {
+  const row = document.createElement("label");
+  row.className = "settings-pack-choice";
+  const text = document.createElement("span");
+  text.textContent = label;
+  const select = document.createElement("select");
+  select.dataset.appearanceKey = key;
+  for (const option of options) {
+    const element = document.createElement("option");
+    element.value = option.id;
+    element.textContent = option.label;
+    element.selected = option.id === selected;
+    select.append(element);
+  }
+  row.append(text, select);
+  return row;
+}
+
+function createVisualPackButton(label, action, id = "") {
   const button = document.createElement("button");
   button.type = "button";
   button.dataset.packAction = action;
-  button.dataset.packId = id;
+  if (id) button.dataset.packId = id;
   button.textContent = label;
   return button;
 }
@@ -358,6 +464,25 @@ function dispatch(action) {
 
 function runAiTurn() {
   if (!game || !state || state.phase === "hand_ended") return;
+  if (state.phase === "claiming") {
+    // Claim-response identity is deliberately hidden from this projection.
+    // Probe the local AI seats; only the currently queried claimant returns an action.
+    for (const actorId of state.players.slice(1)) {
+      const action = game.aiAction(actorId);
+      if (!action) continue;
+      const result = game.action(action, actorId);
+      if (!result?.accepted) {
+        console.error("AI action rejected", actorId, action, result);
+        elements.message.textContent = "AI 动作未通过规则校验";
+        elements.message.classList.add("is-error");
+        return;
+      }
+      refresh();
+      scheduleAi();
+      return;
+    }
+    return;
+  }
   const seat = activeSeat(state);
   if (seat === 1 || seat < 1) return;
   const actorId = state.players[seat - 1];
@@ -384,6 +509,10 @@ function scheduleAi() {
         dispatch({ type: "discard", tileId: automaticTile });
       }
     }, AUTO_RIICHI_DISCARD_DELAY_MS);
+    return;
+  }
+  if (state.phase === "claiming") {
+    aiTimer = window.setTimeout(runAiTurn, AI_DELAY_MS);
     return;
   }
   const seat = activeSeat(state);
