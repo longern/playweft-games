@@ -3,6 +3,10 @@ import {
   PlayweftRpcError,
   createPlayweftRpcPeer,
 } from "./playweft-rpc.js";
+import {
+  recordImmediateResponseLatency,
+  shouldMeasureImmediateResponse,
+} from "./response-latency.js";
 
 /** Connect a static game entry to its Playweft iframe host. */
 export function createPlayweftClient({
@@ -127,10 +131,15 @@ export function createPlayweftClient({
     sendAction(action) {
       if (!rpc.isConnected()) return undefined;
       const requestId = crypto.randomUUID();
+      const measureResponseLatency = shouldMeasureImmediateResponse(action);
+      const sentAt = measureResponseLatency ? performance.now() : 0;
       void rpc
         .call("room.action", { action }, requestId)
         .then((result) => {
           if (destroyed) return;
+          if (measureResponseLatency) {
+            recordImmediateResponseLatency(action, performance.now() - sentAt);
+          }
           if (result?.accepted === false) {
             onError?.(
               result.error?.message ?? "Action rejected",
