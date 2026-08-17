@@ -35,6 +35,8 @@ body {
 
 button {
   font: inherit;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 button:focus-visible,

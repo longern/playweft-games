@@ -36,6 +36,27 @@ export function activeSeat(state) {
   return Number(state.phase === "claiming" ? state.responseIndex : state.turnIndex);
 }
 
+export function blankDoubleClickAction({
+  doubleClickPassEnabled = false,
+  passAvailable = false,
+  doubleClickTsumogiriEnabled = false,
+  riichiMode = false,
+  canDiscard = false,
+  drawnTile = 0,
+} = {}) {
+  if (doubleClickPassEnabled && passAvailable) return { type: "pass" };
+  const tileId = Number(drawnTile) || 0;
+  if (
+    doubleClickTsumogiriEnabled
+    && !riichiMode
+    && canDiscard
+    && tileId > 0
+  ) {
+    return { type: "discard", tileId };
+  }
+  return null;
+}
+
 export function tileType(tileId) {
   return Math.floor((Number(tileId) - 1) / 4) + 1;
 }

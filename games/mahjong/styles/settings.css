@@ -1,0 +1,177 @@
+.settings-dialog {
+  position: absolute;
+  z-index: 120;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 54px;
+  background: rgba(0, 8, 8, 0.68);
+  backdrop-filter: blur(6px);
+}
+
+.settings-dialog[hidden],
+.settings-tab-panel[hidden] {
+  display: none;
+}
+
+.settings-dialog-card {
+  display: grid;
+  width: 760px;
+  height: 560px;
+  grid-template-rows: 68px minmax(0, 1fr);
+  border: 1px solid rgba(231, 198, 116, 0.58);
+  border-radius: 18px;
+  outline: 0;
+  background:
+    radial-gradient(circle at 12% 0, rgba(52, 115, 96, 0.18), transparent 42%),
+    linear-gradient(145deg, rgba(7, 35, 33, 0.99), rgba(2, 18, 19, 0.99));
+  box-shadow:
+    0 28px 90px rgba(0, 0, 0, 0.58),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.035);
+  color: #f8f1de;
+  overflow: hidden;
+}
+
+.settings-dialog-header {
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+  justify-content: space-between;
+  padding: 0 16px 0 26px;
+  border-bottom: 1px solid rgba(231, 198, 116, 0.22);
+}
+
+.settings-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 30px;
+}
+
+.settings-tabs button {
+  position: relative;
+  min-width: 76px;
+  padding: 2px 6px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: rgba(238, 240, 225, 0.62);
+  font: 700 20px/1 Inter, "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.settings-tabs button::after {
+  position: absolute;
+  right: 5px;
+  bottom: 0;
+  left: 5px;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: transparent;
+  content: "";
+}
+
+.settings-tabs button[aria-selected="true"] {
+  color: #ffe4a0;
+}
+
+.settings-tabs button[aria-selected="true"]::after {
+  background: #e7bd5e;
+  box-shadow: 0 0 12px rgba(231, 189, 94, 0.36);
+}
+
+.settings-tabs button:focus-visible,
+.settings-dialog-close:focus-visible {
+  outline: 2px solid rgba(255, 226, 155, 0.82);
+  outline-offset: 2px;
+}
+
+.settings-dialog-close {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-self: center end;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(248, 241, 222, 0.72);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    transform 80ms ease;
+}
+
+.settings-dialog-close svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 2.2;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings-tabs button:hover {
+    color: #fff4d4;
+  }
+
+  .settings-dialog-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff8e7;
+  }
+}
+
+.settings-dialog-close:active {
+  background: rgba(255, 255, 255, 0.17);
+  color: #fff;
+  transform: scale(0.92);
+}
+
+.settings-tab-panel {
+  min-width: 0;
+  min-height: 0;
+}
+
+.settings-operation-panel {
+  padding: 32px 34px;
+}
+
+.settings-option {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 15px;
+  padding: 6px 2px;
+  cursor: pointer;
+}
+
+.settings-option strong {
+  color: #fff2cc;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.settings-option input {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  margin: 0;
+  accent-color: #c89639;
+  cursor: pointer;
+}
+
+.settings-option input:focus-visible {
+  outline: 2px solid rgba(255, 226, 155, 0.82);
+  outline-offset: 2px;
+}
+
+.settings-help-panel,
+.settings-help-panel iframe {
+  width: 100%;
+  height: 100%;
+}
+
+.settings-help-panel iframe {
+  display: block;
+  border: 0;
+  background: #061b19;
+}

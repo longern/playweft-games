@@ -1,6 +1,6 @@
 import { createLocalLuaGame } from "../../src/local-lua-game.js";
 import { createPlayweftSoloClient } from "../../src/playweft-solo-client.js";
-import { X, createIcons } from "lucide";
+import { Cog, X, createIcons } from "lucide";
 import {
   AI_DELAY_MS,
   AUTO_RIICHI_DISCARD_DELAY_MS,
@@ -16,15 +16,17 @@ import {
   activeSeat,
   asArray,
   automaticRiichiDiscard,
+  blankDoubleClickAction,
   deferredHandInsertion,
   errorMessage,
   exhaustiveDrawPresentation,
 } from "./game-format.js";
 import { MahjongThreeRenderer } from "./three-renderer.js";
+import { createMahjongSettingsDialog } from "./settings-dialog.js";
 import "../../src/base.css";
 import "./styles.css";
 
-createIcons({ icons: { X } });
+createIcons({ icons: { Cog, X } });
 
 let game;
 let state;
@@ -56,12 +58,33 @@ const domView = new MahjongDomView({
   },
 });
 const { elements } = domView;
+const settingsDialog = createMahjongSettingsDialog({
+  trigger: elements.settingsButton,
+  root: elements.settingsDialog,
+  surface: elements.settingsDialogCard,
+  closeButton: elements.settingsClose,
+  tabButtons: elements.settingsTabs,
+  tabPanels: elements.settingsPanels,
+  doubleClickTsumogiri: elements.doubleClickTsumogiri,
+  doubleClickPass: elements.doubleClickPass,
+});
 const visualRenderer = new MahjongThreeRenderer(elements.stage, {
   onSelectTile: selectTile,
   onDiscardTile(tileId) {
     if (!state?.legalActions?.canDiscard) return;
     selectedTileId = tileId;
     discardSelected();
+  },
+  onDoubleClickBlank() {
+    const action = blankDoubleClickAction({
+      doubleClickPassEnabled: settingsDialog.doubleClickPassEnabled,
+      passAvailable: !elements.pass.hidden && !elements.pass.disabled,
+      doubleClickTsumogiriEnabled: settingsDialog.doubleClickTsumogiriEnabled,
+      riichiMode,
+      canDiscard: state?.legalActions?.canDiscard === true,
+      drawnTile: state?.drawnTile,
+    });
+    if (action) dispatch(action);
   },
 });
 const visualRendererReady = visualRenderer.init().catch((error) => {
@@ -467,6 +490,7 @@ function destroy() {
   window.removeEventListener("pageshow", handlePageShow);
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   releaseFixedViewport();
+  settingsDialog.destroy();
   visualRenderer.destroy();
   game?.close();
   soloClient.destroy();

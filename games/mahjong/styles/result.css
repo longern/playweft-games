@@ -162,7 +162,7 @@
   min-height: 33.6px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
-  column-gap: 12px;
+  column-gap: 24px;
   padding: 5px 0;
   color: rgba(255, 255, 255, 0.78);
   font-size: 18px;
@@ -210,7 +210,7 @@
 
 .result-total {
   display: inline-flex;
-  align-items: flex-end;
+  align-items: baseline;
   color: #fff;
   font-family: "Roboto Slab", ui-monospace, monospace;
   font-size: 42px;
@@ -220,6 +220,7 @@
 }
 
 .result-total-unit {
+  display: inline-block;
   margin-left: 2px;
   font-size: 21px;
   font-weight: 800;

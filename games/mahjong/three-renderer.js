@@ -51,6 +51,13 @@ import {
 import { ThreeTileFactory } from "./render/three-tile-factory.js";
 import { ThreeTableConsole } from "./render/three-console.js";
 import { ThreeMahjongTable } from "./render/three-table.js";
+import {
+  HAND_REVEAL_FALL_DURATION_MS,
+  OWN_DRAW_ENTRY_DURATION_MS,
+  handRevealFallProgress,
+  ownDrawEntryKey,
+  ownDrawEntryProgress,
+} from "./render/three-motion.js";
 
 const CAMERA_TARGET = Object.freeze({ x: 0, y: 0.05, z: 0.4 });
 const CAMERA_POSITION = Object.freeze({ x: 0, y: 15.558, z: 15.908 });
@@ -66,6 +73,9 @@ export class MahjongThreeRenderer {
     this.pickableTiles = [];
     this.revealTiles = [];
     this.animationFrame = 0;
+    this.ownDrawAnimationFrame = 0;
+    this.ownDrawAnimation = null;
+    this.lastOwnDrawEntryKey = "";
     this.dragState = null;
     this.lastTap = { tileId: 0, time: 0 };
     this.contextLost = false;
@@ -95,12 +105,22 @@ export class MahjongThreeRenderer {
       this.contextLost = false;
       this.resume();
     };
-    this.renderer.domElement.addEventListener("webglcontextlost", this.onContextLost);
-    this.renderer.domElement.addEventListener("webglcontextrestored", this.onContextRestored);
+    this.renderer.domElement.addEventListener(
+      "webglcontextlost",
+      this.onContextLost,
+    );
+    this.renderer.domElement.addEventListener(
+      "webglcontextrestored",
+      this.onContextRestored,
+    );
 
     this.scene = new Scene();
     this.camera = new PerspectiveCamera(33, MAHJONG_VIEWPORT.aspect, 0.1, 80);
-    this.camera.position.set(CAMERA_POSITION.x, CAMERA_POSITION.y, CAMERA_POSITION.z);
+    this.camera.position.set(
+      CAMERA_POSITION.x,
+      CAMERA_POSITION.y,
+      CAMERA_POSITION.z,
+    );
     this.camera.lookAt(CAMERA_TARGET.x, CAMERA_TARGET.y, CAMERA_TARGET.z);
 
     this.overlayScene = new Scene();
@@ -147,7 +167,10 @@ export class MahjongThreeRenderer {
       }),
     );
 
-    faceAtlas.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+    faceAtlas.anisotropy = Math.min(
+      8,
+      this.renderer.capabilities.getMaxAnisotropy(),
+    );
     this.tileFactory = new ThreeTileFactory(faceAtlas);
 
     this.onPointerDown = (event) => this.handlePointerDown(event);
@@ -155,11 +178,25 @@ export class MahjongThreeRenderer {
     this.onPointerLeave = () => this.handlePointerLeave();
     this.onPointerUp = (event) => this.handlePointerUp(event);
     this.onPointerCancel = () => this.cancelDrag();
-    this.renderer.domElement.addEventListener("pointerdown", this.onPointerDown);
-    this.renderer.domElement.addEventListener("pointermove", this.onPointerMove);
-    this.renderer.domElement.addEventListener("pointerleave", this.onPointerLeave);
+    this.onDoubleClick = (event) => this.handleDoubleClick(event);
+    this.renderer.domElement.addEventListener(
+      "pointerdown",
+      this.onPointerDown,
+    );
+    this.renderer.domElement.addEventListener(
+      "pointermove",
+      this.onPointerMove,
+    );
+    this.renderer.domElement.addEventListener(
+      "pointerleave",
+      this.onPointerLeave,
+    );
     this.renderer.domElement.addEventListener("pointerup", this.onPointerUp);
-    this.renderer.domElement.addEventListener("pointercancel", this.onPointerCancel);
+    this.renderer.domElement.addEventListener(
+      "pointercancel",
+      this.onPointerCancel,
+    );
+    this.renderer.domElement.addEventListener("dblclick", this.onDoubleClick);
 
     this.resize();
     this.ready = true;
@@ -189,7 +226,12 @@ export class MahjongThreeRenderer {
     overhead.shadow.normalBias = 0.018;
     overhead.shadow.focus = 0.9;
     overhead.shadow.radius = 7;
-    this.scene.add(overheadFill, overheadFill.target, overhead, overhead.target);
+    this.scene.add(
+      overheadFill,
+      overheadFill.target,
+      overhead,
+      overhead.target,
+    );
   }
 
   addOverlayLighting() {
@@ -205,7 +247,8 @@ export class MahjongThreeRenderer {
   resize() {
     if (!this.renderer || !this.camera) return;
     const { width, height, aspect } = MAHJONG_VIEWPORT;
-    const viewportChanged = width !== this.viewport?.width || height !== this.viewport?.height;
+    const viewportChanged =
+      width !== this.viewport?.width || height !== this.viewport?.height;
     this.renderer.setSize(width, height, false);
     this.viewport = { width, height };
     this.camera.aspect = aspect;
@@ -230,12 +273,20 @@ export class MahjongThreeRenderer {
     }
     this.pendingRender = null;
     this.cancelDrag(false);
+    const drawEntryKey = ownDrawEntryKey(state);
+    this.animateOwnDrawEntry = Boolean(
+      this.state && drawEntryKey && drawEntryKey !== this.lastOwnDrawEntryKey,
+    );
+    this.lastOwnDrawEntryKey = drawEntryKey;
     this.state = state;
     this.ui = ui;
-    this.highlightedType = Number(ui.selectedTileId) > 0 ? tileType(ui.selectedTileId) : 0;
+    this.highlightedType =
+      Number(ui.selectedTileId) > 0 ? tileType(ui.selectedTileId) : 0;
     this.doraCounts = doraTypeCounts(state);
     this.pickableTiles.length = 0;
     this.cancelHandReveal();
+    this.cancelOwnDrawEntry();
+    this.pendingOwnDrawEntryTile = null;
     this.revealTiles.length = 0;
     this.setHoveredTile(null);
     Object.values(this.layers).forEach(clearGroup);
@@ -249,20 +300,31 @@ export class MahjongThreeRenderer {
       `${state.roundWind}:${state.handNumber}:${state.moveCount}`,
     );
     this.drawFrame();
+    if (this.pendingOwnDrawEntryTile) this.startOwnDrawEntry();
     if (ui.animateHandReveal && this.revealTiles.length) {
-      this.startHandReveal(ui.delayHandRevealForCallout ? ACTION_CALLOUT_DURATION_MS : 0);
+      this.startHandReveal(
+        ui.delayHandRevealForCallout ? ACTION_CALLOUT_DURATION_MS : 0,
+      );
     }
   }
 
   drawHands(state, selectedTileId) {
     const rack = asArray(state.ownHand);
     const drawn = Number(state.drawnTile) || null;
-    const revealSeats = new Set(asArray(this.ui?.revealPlayerIndices).map(Number));
-    const coveredSeats = new Set(asArray(this.ui?.coveredPlayerIndices).map(Number));
+    const revealSeats = new Set(
+      asArray(this.ui?.revealPlayerIndices).map(Number),
+    );
+    const coveredSeats = new Set(
+      asArray(this.ui?.coveredPlayerIndices).map(Number),
+    );
     const animateReveal = this.ui?.animateHandReveal === true;
-    const forbiddenTypes = new Set(asArray(state.legalActions?.forbiddenDiscardTypes));
+    const forbiddenTypes = new Set(
+      asArray(state.legalActions?.forbiddenDiscardTypes),
+    );
     const riichiMode = this.ui?.riichiMode === true;
-    const riichiTiles = new Set(asArray(this.ui?.riichiCandidateTiles).map(Number));
+    const riichiTiles = new Set(
+      asArray(this.ui?.riichiCandidateTiles).map(Number),
+    );
     if (revealSeats.has(1) || coveredSeats.has(1)) {
       this.addPresentedHand(state, "bottom", state.players[0], 1, {
         covered: coveredSeats.has(1),
@@ -275,7 +337,8 @@ export class MahjongThreeRenderer {
           index,
           false,
           selectedTileId,
-          !forbiddenTypes.has(tileType(tileId)) && (!riichiMode || riichiTiles.has(tileId)),
+          !forbiddenTypes.has(tileType(tileId)) &&
+            (!riichiMode || riichiTiles.has(tileId)),
           riichiMode && !riichiTiles.has(tileId),
         );
       });
@@ -285,8 +348,10 @@ export class MahjongThreeRenderer {
           rack.length,
           true,
           selectedTileId,
-          !forbiddenTypes.has(tileType(drawn)) && (!riichiMode || riichiTiles.has(drawn)),
+          !forbiddenTypes.has(tileType(drawn)) &&
+            (!riichiMode || riichiTiles.has(drawn)),
           riichiMode && !riichiTiles.has(drawn),
+          this.animateOwnDrawEntry,
         );
       }
     }
@@ -294,19 +359,22 @@ export class MahjongThreeRenderer {
     for (let seat = 2; seat <= 4; seat += 1) {
       const position = POSITIONS[seat - 1];
       const playerId = state.players[seat - 1];
-      const revealWinner = state.phase === "hand_ended"
-        && state.winType !== "nagashi"
-        && asArray(state.winners).includes(playerId);
+      const revealWinner =
+        state.phase === "hand_ended" &&
+        state.winType !== "nagashi" &&
+        asArray(state.winners).includes(playerId);
       if (revealWinner || revealSeats.has(seat) || coveredSeats.has(seat)) {
         this.addPresentedHand(state, position, playerId, seat, {
           covered: coveredSeats.has(seat),
-          animate: (revealSeats.has(seat) || coveredSeats.has(seat)) && animateReveal,
+          animate:
+            (revealSeats.has(seat) || coveredSeats.has(seat)) && animateReveal,
         });
         continue;
       }
       const count = Number(state.handCounts?.[playerId] || 0);
       const meldCount = asArray(state.melds?.[playerId]).length;
-      const insertionDeferred = Number(this.ui?.deferredHandInsertionSeat) === seat;
+      const insertionDeferred =
+        Number(this.ui?.deferredHandInsertionSeat) === seat;
       const layout = opponentHandLayout(
         Math.max(0, count - (insertionDeferred ? 1 : 0)),
         meldCount,
@@ -320,8 +388,10 @@ export class MahjongThreeRenderer {
         ),
       );
       const rackSlots = insertionDeferred
-        ? Array.from({ length: layout.rackCount + 1 }, (_, index) => index)
-          .filter((index) => index !== deferredIndex)
+        ? Array.from(
+            { length: layout.rackCount + 1 },
+            (_, index) => index,
+          ).filter((index) => index !== deferredIndex)
         : Array.from({ length: layout.rackCount }, (_, index) => index);
       for (const index of rackSlots) {
         const transform = handTransform(position, index, layout.rackCapacity);
@@ -346,14 +416,26 @@ export class MahjongThreeRenderer {
   addPresentedHand(state, position, playerId, seat, { covered, animate }) {
     const { rack, drawn } = splitRevealedHand(state, playerId, seat);
     rack.forEach((tile, index) => {
-      this.addPresentedTableTile(position, tile, index, false, { covered, animate });
+      this.addPresentedTableTile(position, tile, index, false, {
+        covered,
+        animate,
+      });
     });
     if (drawn) {
-      this.addPresentedTableTile(position, drawn, rack.length, true, { covered, animate });
+      this.addPresentedTableTile(position, drawn, rack.length, true, {
+        covered,
+        animate,
+      });
     }
   }
 
-  addPresentedTableTile(position, tileInfo, index, drawn, { covered, animate }) {
+  addPresentedTableTile(
+    position,
+    tileInfo,
+    index,
+    drawn,
+    { covered, animate },
+  ) {
     const transform = handTransform(position, index, index, { drawn });
     const slot = new Group();
     slot.position.set(transform.x, 0, transform.z);
@@ -380,12 +462,14 @@ export class MahjongThreeRenderer {
 
   startHandReveal(delay = 0) {
     const startedAt = performance.now() + delay;
-    const duration = 480;
     const tick = (now) => {
       let running = false;
       for (const { hinge, delay, covered } of this.revealTiles) {
-        const progress = Math.max(0, Math.min(1, (now - startedAt - delay) / duration));
-        const eased = 1 - (1 - progress) ** 3;
+        const progress = Math.max(
+          0,
+          Math.min(1, (now - startedAt - delay) / HAND_REVEAL_FALL_DURATION_MS),
+        );
+        const eased = handRevealFallProgress(progress);
         const { restingRotationX } = presentedTileHingeTransform(covered);
         hinge.rotation.x = restingRotationX * eased;
         if (progress < 1) running = true;
@@ -403,7 +487,15 @@ export class MahjongThreeRenderer {
     this.animationFrame = 0;
   }
 
-  addOwnTile(tileId, index, drawn, selectedTileId, discardable = true, dimmed = false) {
+  addOwnTile(
+    tileId,
+    index,
+    drawn,
+    selectedTileId,
+    discardable = true,
+    dimmed = false,
+    animateEntry = false,
+  ) {
     const transform = ownHandOverlayTransform(
       index,
       this.viewport.width,
@@ -414,9 +506,12 @@ export class MahjongThreeRenderer {
       type: tileType(tileId),
       red: isRedFive(tileId),
       tileId,
-      highlight: Number(tileId) === Number(selectedTileId)
-        ? ""
-        : this.highlightedType === tileType(tileId) ? "match" : "",
+      highlight:
+        Number(tileId) === Number(selectedTileId)
+          ? ""
+          : this.highlightedType === tileType(tileId)
+            ? "match"
+            : "",
       dora: this.doraCounts.has(tileType(tileId)),
       dimmed,
     });
@@ -427,9 +522,60 @@ export class MahjongThreeRenderer {
     tile.userData.baseY = transform.y;
     tile.userData.lift = transform.lift;
     tile.userData.discardable = discardable;
-    tile.position.y += Number(tileId) === Number(selectedTileId) ? tile.userData.lift : 0;
+    tile.position.y +=
+      Number(tileId) === Number(selectedTileId) ? tile.userData.lift : 0;
     this.ownHandLayer.add(tile);
     this.pickableTiles.push(tile);
+    if (animateEntry) this.prepareOwnDrawEntry(tile);
+  }
+
+  prepareOwnDrawEntry(tile) {
+    const targetY = tile.position.y;
+    tile.position.y += tile.userData.lift;
+    const materials = cloneTileMaterialsForFade(tile);
+    setFadedTileOpacity(materials, 0);
+    this.pendingOwnDrawEntryTile = { tile, targetY, materials };
+  }
+
+  startOwnDrawEntry() {
+    const animation = this.pendingOwnDrawEntryTile;
+    this.pendingOwnDrawEntryTile = null;
+    if (!animation) return;
+    const startedAt = performance.now();
+    this.ownDrawAnimation = animation;
+    const tick = (now) => {
+      if (this.ownDrawAnimation !== animation) return;
+      const progress = Math.max(
+        0,
+        Math.min(1, (now - startedAt) / OWN_DRAW_ENTRY_DURATION_MS),
+      );
+      const eased = ownDrawEntryProgress(progress);
+      animation.tile.position.y =
+        animation.targetY + animation.tile.userData.lift * (1 - eased);
+      setFadedTileOpacity(animation.materials, eased);
+      this.drawFrame();
+      if (progress < 1) {
+        this.ownDrawAnimationFrame = window.requestAnimationFrame(tick);
+        return;
+      }
+      this.ownDrawAnimationFrame = 0;
+      this.finishOwnDrawEntry(animation);
+    };
+    this.ownDrawAnimationFrame = window.requestAnimationFrame(tick);
+  }
+
+  cancelOwnDrawEntry() {
+    if (this.ownDrawAnimationFrame) {
+      window.cancelAnimationFrame(this.ownDrawAnimationFrame);
+      this.ownDrawAnimationFrame = 0;
+    }
+    if (this.ownDrawAnimation) this.finishOwnDrawEntry(this.ownDrawAnimation);
+  }
+
+  finishOwnDrawEntry(animation) {
+    animation.tile.position.y = animation.targetY;
+    restoreTileMaterials(animation.materials);
+    if (this.ownDrawAnimation === animation) this.ownDrawAnimation = null;
   }
 
   drawRivers(state) {
@@ -446,9 +592,14 @@ export class MahjongThreeRenderer {
       river.forEach((discard, index) => {
         if (discard.claimed) return;
         const { row } = riverGridPosition(index);
-        const transform = riverTransform(position, index, discard.riichi === true, {
-          riichiColumn: riichiColumns.get(row) ?? -1,
-        });
+        const transform = riverTransform(
+          position,
+          index,
+          discard.riichi === true,
+          {
+            riichiColumn: riichiColumns.get(row) ?? -1,
+          },
+        );
         const slot = new Group();
         slot.position.set(transform.x, transform.y, transform.z);
         slot.rotation.y = transform.yaw;
@@ -464,7 +615,8 @@ export class MahjongThreeRenderer {
         const tile = this.tileFactory.create({
           type: discard.type,
           red: discard.red === true,
-          highlight: this.highlightedType === Number(discard.type) ? "match" : "",
+          highlight:
+            this.highlightedType === Number(discard.type) ? "match" : "",
           dora: this.doraCounts.has(Number(discard.type)),
         });
         tile.rotation.x = -Math.PI / 2;
@@ -489,20 +641,17 @@ export class MahjongThreeRenderer {
             { absolute: true, inwardOffset: entry.inward },
           );
           const slot = new Group();
-          slot.position.set(
-            transform.x,
-            transform.y,
-            transform.z,
-          );
+          slot.position.set(transform.x, transform.y, transform.z);
           slot.rotation.y = transform.yaw + (entry.sideways ? Math.PI / 2 : 0);
           slot.scale.setScalar(MELD_SCALE);
           const tile = this.tileFactory.create({
             type: entry.type,
             red: entry.red,
             concealed: entry.faceDown,
-            highlight: !entry.faceDown && this.highlightedType === Number(entry.type)
-              ? "match"
-              : "",
+            highlight:
+              !entry.faceDown && this.highlightedType === Number(entry.type)
+                ? "match"
+                : "",
             dora: !entry.faceDown && this.doraCounts.has(Number(entry.type)),
           });
           tile.rotation.x = entry.faceDown ? Math.PI / 2 : -Math.PI / 2;
@@ -517,7 +666,12 @@ export class MahjongThreeRenderer {
   handlePointerDown(event) {
     const tile = this.pickTile(event);
     const tileId = Number(tile?.userData.tileId || 0);
-    if (!tileId || !this.state?.legalActions?.canDiscard || !tile.userData.discardable) return;
+    if (
+      !tileId ||
+      !this.state?.legalActions?.canDiscard ||
+      !tile.userData.discardable
+    )
+      return;
     event.preventDefault();
     this.cancelDrag(false);
     this.setHoveredTile(null);
@@ -547,12 +701,14 @@ export class MahjongThreeRenderer {
         event.clientX - drag.startClientX,
         event.clientY - drag.startClientY,
       );
-      if (!drag.moved && clientDistance < OWN_HAND_DRAG.activationDistance) return;
+      if (!drag.moved && clientDistance < OWN_HAND_DRAG.activationDistance)
+        return;
       drag.moved = true;
       const pointer = this.pointerToOverlay(event, drag.bounds);
       drag.tile.position.x = drag.homeX + pointer.x - drag.startX;
       drag.tile.position.y = drag.homeY + Math.max(0, pointer.y - drag.startY);
-      drag.crossed = this.viewport.height / 2 - pointer.y <= OWN_HAND_DRAG.discardLineY;
+      drag.crossed =
+        this.viewport.height / 2 - pointer.y <= OWN_HAND_DRAG.discardLineY;
       this.renderer.domElement.style.cursor = "grabbing";
       this.drawFrame();
       return;
@@ -584,10 +740,12 @@ export class MahjongThreeRenderer {
 
   handleTileTap(tileId, discardable) {
     const now = performance.now();
-    if (discardable
-      && this.state?.legalActions?.canDiscard
-      && this.lastTap.tileId === tileId
-      && now - this.lastTap.time < 340) {
+    if (
+      discardable &&
+      this.state?.legalActions?.canDiscard &&
+      this.lastTap.tileId === tileId &&
+      now - this.lastTap.time < 340
+    ) {
       this.callbacks.onDiscardTile(tileId);
       this.lastTap = { tileId: 0, time: 0 };
       return;
@@ -596,14 +754,26 @@ export class MahjongThreeRenderer {
     this.callbacks.onSelectTile(tileId);
   }
 
+  handleDoubleClick(event) {
+    if (this.pickTile(event) || this.pickTableTile(event)) return;
+    this.callbacks.onDoubleClickBlank?.();
+  }
+
   handlePointerLeave() {
     if (!this.dragState) this.setHoveredTile(null);
   }
 
-  pointerToOverlay(event, bounds = this.renderer.domElement.getBoundingClientRect()) {
+  pointerToOverlay(
+    event,
+    bounds = this.renderer.domElement.getBoundingClientRect(),
+  ) {
     return {
-      x: ((event.clientX - bounds.left) / bounds.width - 0.5) * this.viewport.width,
-      y: (0.5 - (event.clientY - bounds.top) / bounds.height) * this.viewport.height,
+      x:
+        ((event.clientX - bounds.left) / bounds.width - 0.5) *
+        this.viewport.width,
+      y:
+        (0.5 - (event.clientY - bounds.top) / bounds.height) *
+        this.viewport.height,
     };
   }
 
@@ -617,7 +787,8 @@ export class MahjongThreeRenderer {
       this.renderer.domElement.releasePointerCapture(drag.pointerId);
     }
     this.dragState = null;
-    if (this.renderer?.domElement) this.renderer.domElement.style.cursor = "default";
+    if (this.renderer?.domElement)
+      this.renderer.domElement.style.cursor = "default";
     if (redraw) this.drawFrame();
   }
 
@@ -633,22 +804,51 @@ export class MahjongThreeRenderer {
     return hit?.object?.userData.tileRoot ?? null;
   }
 
+  pickTableTile(event) {
+    if (!this.layers || !this.camera) return null;
+    const bounds = this.renderer.domElement.getBoundingClientRect();
+    this.pointer.set(
+      ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+      -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const hit = this.raycaster.intersectObjects(
+      [this.layers.hands, this.layers.rivers, this.layers.melds],
+      true,
+    )[0];
+    return hit?.object?.userData.tileRoot ?? null;
+  }
+
   setHoveredTile(tile) {
     if (this.hoveredTile === tile) return;
     if (this.hoveredTile && this.hoveredTile.parent) {
-      const selected = Number(this.hoveredTile.userData.tileId) === Number(this.ui?.selectedTileId);
-      this.hoveredTile.position.y = this.hoveredTile.userData.baseY
-        + (selected ? this.hoveredTile.userData.lift : 0);
+      const selected =
+        Number(this.hoveredTile.userData.tileId) ===
+        Number(this.ui?.selectedTileId);
+      this.hoveredTile.position.y =
+        this.hoveredTile.userData.baseY +
+        (selected ? this.hoveredTile.userData.lift : 0);
     }
     this.hoveredTile = tile;
-    if (tile && tile.parent && Number(tile.userData.tileId) !== Number(this.ui?.selectedTileId)) {
+    if (
+      tile &&
+      tile.parent &&
+      Number(tile.userData.tileId) !== Number(this.ui?.selectedTileId)
+    ) {
       tile.position.y = tile.userData.baseY + 8;
     }
     this.drawFrame();
   }
 
   drawFrame() {
-    if (this.contextLost || this.destroyed || !this.renderer || !this.scene || !this.camera) return;
+    if (
+      this.contextLost ||
+      this.destroyed ||
+      !this.renderer ||
+      !this.scene ||
+      !this.camera
+    )
+      return;
     this.renderer.clear();
     this.renderer.render(this.scene, this.camera);
     this.renderer.clearDepth();
@@ -666,14 +866,40 @@ export class MahjongThreeRenderer {
     if (this.destroyed) return;
     this.destroyed = true;
     this.cancelHandReveal();
+    this.cancelOwnDrawEntry();
     this.cancelDrag(false);
-    this.renderer?.domElement.removeEventListener("pointerdown", this.onPointerDown);
-    this.renderer?.domElement.removeEventListener("pointermove", this.onPointerMove);
-    this.renderer?.domElement.removeEventListener("pointerleave", this.onPointerLeave);
-    this.renderer?.domElement.removeEventListener("pointerup", this.onPointerUp);
-    this.renderer?.domElement.removeEventListener("pointercancel", this.onPointerCancel);
-    this.renderer?.domElement.removeEventListener("webglcontextlost", this.onContextLost);
-    this.renderer?.domElement.removeEventListener("webglcontextrestored", this.onContextRestored);
+    this.renderer?.domElement.removeEventListener(
+      "pointerdown",
+      this.onPointerDown,
+    );
+    this.renderer?.domElement.removeEventListener(
+      "pointermove",
+      this.onPointerMove,
+    );
+    this.renderer?.domElement.removeEventListener(
+      "pointerleave",
+      this.onPointerLeave,
+    );
+    this.renderer?.domElement.removeEventListener(
+      "pointerup",
+      this.onPointerUp,
+    );
+    this.renderer?.domElement.removeEventListener(
+      "pointercancel",
+      this.onPointerCancel,
+    );
+    this.renderer?.domElement.removeEventListener(
+      "dblclick",
+      this.onDoubleClick,
+    );
+    this.renderer?.domElement.removeEventListener(
+      "webglcontextlost",
+      this.onContextLost,
+    );
+    this.renderer?.domElement.removeEventListener(
+      "webglcontextrestored",
+      this.onContextRestored,
+    );
     this.tileFactory?.destroy();
     this.actionCallout?.destroy();
     this.tableConsole?.destroy();
@@ -698,6 +924,58 @@ function settlePresentedTile(hinge, covered = false) {
 function applyStandingTransform(tile, transform) {
   tile.position.set(transform.x, transform.y, transform.z);
   tile.rotation.y = transform.yaw;
+}
+
+function cloneTileMaterialsForFade(tile) {
+  const records = [];
+  tile.traverse((object) => {
+    if (!object.isMesh || !object.material) return;
+    const sourceMaterial = object.material;
+    const sources = Array.isArray(sourceMaterial)
+      ? sourceMaterial
+      : [sourceMaterial];
+    const clones = sources.map((source) => {
+      const clone = source.clone();
+      clone.transparent = true;
+      clone.depthWrite = false;
+      clone.opacity = 0;
+      clone.needsUpdate = true;
+      return clone;
+    });
+    object.material = Array.isArray(sourceMaterial) ? clones : clones[0];
+    records.push({
+      object,
+      sourceMaterial,
+      cloneMaterial: object.material,
+      targetOpacities: sources.map((source) => source.opacity),
+      castShadow: object.castShadow,
+    });
+  });
+  return records;
+}
+
+function setFadedTileOpacity(records, value) {
+  const opacity = Math.max(0, Math.min(1, Number(value) || 0));
+  for (const record of records) {
+    const materials = Array.isArray(record.cloneMaterial)
+      ? record.cloneMaterial
+      : [record.cloneMaterial];
+    materials.forEach((material, index) => {
+      material.opacity = record.targetOpacities[index] * opacity;
+    });
+    record.object.castShadow = record.castShadow && opacity >= 0.35;
+  }
+}
+
+function restoreTileMaterials(records) {
+  for (const record of records) {
+    record.object.material = record.sourceMaterial;
+    record.object.castShadow = record.castShadow;
+    const materials = Array.isArray(record.cloneMaterial)
+      ? record.cloneMaterial
+      : [record.cloneMaterial];
+    for (const material of materials) material.dispose();
+  }
 }
 
 function clearGroup(group) {

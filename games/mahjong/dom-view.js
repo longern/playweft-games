@@ -645,6 +645,16 @@ function normalizeRevealedTile(tile) {
 function collectElements() {
   return {
     app: document.querySelector("#mahjong-app"),
+    settingsButton: document.querySelector("#settings-button"),
+    settingsDialog: document.querySelector("#settings-dialog"),
+    settingsDialogCard: document.querySelector(".settings-dialog-card"),
+    settingsClose: document.querySelector("#settings-close-button"),
+    settingsTabs: [...document.querySelectorAll("[data-settings-tab]")],
+    settingsPanels: [...document.querySelectorAll("[data-settings-panel]")],
+    doubleClickTsumogiri: document.querySelector(
+      "#double-click-tsumogiri-setting",
+    ),
+    doubleClickPass: document.querySelector("#double-click-pass-setting"),
     loading: document.querySelector("#loading-panel"),
     loadingMessage: document.querySelector("#loading-message"),
     stage: document.querySelector("#mahjong-stage"),
