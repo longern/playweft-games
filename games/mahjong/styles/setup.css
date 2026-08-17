@@ -1,0 +1,225 @@
+.setup-panel,
+.loading-panel {
+  position: absolute;
+  z-index: 110;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(1, 9, 9, 0.4),
+      rgba(1, 11, 10, 0.12),
+      rgba(1, 9, 9, 0.56)
+    ),
+    url("../assets/moonlit-table-v3.jpg") center / cover no-repeat;
+}
+
+.setup-panel::before,
+.loading-panel::before {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at 50% 42%,
+    transparent 15%,
+    rgba(0, 7, 7, 0.38) 82%
+  );
+  content: "";
+  pointer-events: none;
+}
+
+.setup-card {
+  position: relative;
+  display: grid;
+  width: 440px;
+  max-height: 690px;
+  gap: 10px;
+  padding: 31px;
+  border: 1px solid rgba(242, 207, 124, 0.48);
+  border-radius: 24px;
+  background: linear-gradient(
+    145deg,
+    rgba(20, 55, 48, 0.9),
+    rgba(2, 20, 18, 0.95)
+  );
+  box-shadow:
+    0 30px 100px rgba(0, 0, 0, 0.62),
+    inset 0 0 0 3px rgba(255, 255, 255, 0.025);
+  text-align: center;
+  backdrop-filter: blur(20px);
+}
+
+.setup-card > span {
+  color: var(--gold);
+  font-size: 0.64rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+}
+
+.setup-card > strong {
+  font-family: "Songti SC", "Noto Serif SC", serif;
+  font-size: 1.8rem;
+  letter-spacing: 0.06em;
+}
+
+.setup-card > p {
+  margin: 0 0 9px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.77rem;
+}
+
+.setup-card > button {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  padding: 14px 18px;
+  overflow: hidden;
+  border: 1px solid rgba(239, 204, 121, 0.28);
+  border-radius: 13px;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.07),
+    rgba(238, 198, 105, 0.08)
+  );
+  color: #fff6df;
+  cursor: pointer;
+  transition: 170ms ease;
+}
+
+.setup-card > button::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 35%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.1),
+    transparent
+  );
+  content: "";
+  transform: skewX(-18deg);
+  transition: left 380ms ease;
+}
+
+.setup-card > button:hover {
+  border-color: var(--gold);
+  background: linear-gradient(
+    100deg,
+    rgba(238, 198, 105, 0.17),
+    rgba(255, 255, 255, 0.08)
+  );
+  transform: translateY(-1px);
+}
+
+.setup-card > button:hover::after {
+  left: 115%;
+}
+.setup-card button b {
+  font-size: 0.98rem;
+}
+.setup-card button small {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.rule-options {
+  margin-top: 5px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.12);
+  color: rgba(255, 255, 255, 0.68);
+  text-align: left;
+}
+
+.rule-options summary {
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.rule-options[open] {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+}
+
+.rule-options[open] summary {
+  grid-column: 1 / -1;
+  margin-bottom: 3px;
+}
+
+.rule-options label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+}
+
+.rule-options input {
+  accent-color: #d8b45f;
+}
+
+.loading-panel {
+  justify-items: center;
+  color: #fff3d6;
+  text-align: center;
+}
+
+.loading-mark {
+  position: relative;
+  display: grid;
+  width: 70px;
+  aspect-ratio: 0.73;
+  place-items: center;
+  border: 1px solid #8f8b75;
+  border-radius: 8px;
+  background: linear-gradient(145deg, #fffdf3, #ddd7c2);
+  box-shadow:
+    0 7px 0 #9d9a83,
+    0 20px 42px rgba(0, 0, 0, 0.52);
+  color: #c83b32;
+  font-family: "Songti SC", "Noto Serif SC", serif;
+  font-size: 2.4rem;
+  font-weight: 900;
+  animation: loading-float 1.5s ease-in-out infinite;
+}
+
+@keyframes loading-float {
+  50% {
+    transform: translateY(-8px) rotate(2deg);
+  }
+}
+
+.loading-panel strong {
+  position: relative;
+  margin-top: 30px;
+  font-family: "Songti SC", "Noto Serif SC", serif;
+  font-size: 1.2rem;
+  letter-spacing: 0.14em;
+}
+
+.loading-panel p {
+  position: relative;
+  margin: 7px 0 0;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 0.76rem;
+}
+
+.loading-panel.is-error .loading-mark {
+  animation: none;
+  filter: grayscale(0.7);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -74,6 +74,31 @@ import {
 import { TABLE_GEOMETRY } from "../games/mahjong/render/three-table.js";
 import { planarTileJitter } from "../games/mahjong/render/three-tile-jitter.js";
 
+const MAHJONG_STYLE_MODULES = [
+  "table.css",
+  "controls.css",
+  "result.css",
+  "setup.css",
+];
+
+function readMahjongStyles() {
+  return MAHJONG_STYLE_MODULES.map((fileName) => readFileSync(
+    new URL(`../games/mahjong/styles/${fileName}`, import.meta.url),
+    "utf8",
+  )).join("\n");
+}
+
+test("mahjong stylesheet entry preserves the modular cascade order", () => {
+  const entry = readFileSync(
+    new URL("../games/mahjong/styles.css", import.meta.url),
+    "utf8",
+  );
+  assert.deepEqual(
+    [...entry.matchAll(/@import "\.\/styles\/([^"/]+)";/g)].map((match) => match[1]),
+    MAHJONG_STYLE_MODULES,
+  );
+});
+
 function projectedStandingTileBounds(position, index, camera, viewport) {
   const transform = handTransform(position, index, 13);
   const cos = Math.cos(transform.yaw);
@@ -465,10 +490,7 @@ test("mahjong groups every chi behind one action and previews only the two consu
     new URL("../games/mahjong/dom-view.js", import.meta.url),
     "utf8",
   );
-  const styles = readFileSync(
-    new URL("../games/mahjong/styles.css", import.meta.url),
-    "utf8",
-  );
+  const styles = readMahjongStyles();
   assert.match(
     view,
     /if \(chiClaims\.length > 0\) \{\s*elements\.claims\.append\(this\.createChiAction\(chiClaims\)\)/s,
@@ -477,7 +499,7 @@ test("mahjong groups every chi behind one action and previews only the two consu
   assert.match(view, /picker\.className = "claim-choice-popover"/);
   assert.match(
     view,
-    /--claim-choice-columns", String\(Math\.min\(3, claims\.length\)\)/,
+    /--claim-choice-columns",\s*String\(Math\.min\(3, claims\.length\)\)/,
   );
   assert.match(view, /layer\.className = "claim-choice-layer"/);
   assert.match(view, /if \(event\.target === layer\) setOpen\(false\)/);
@@ -535,10 +557,7 @@ test("mahjong keeps action labels compact and gives wins a dark-red treatment", 
     new URL("../games/mahjong/index.html", import.meta.url),
     "utf8",
   );
-  const styles = readFileSync(
-    new URL("../games/mahjong/styles.css", import.meta.url),
-    "utf8",
-  );
+  const styles = readMahjongStyles();
   const view = readFileSync(
     new URL("../games/mahjong/dom-view.js", import.meta.url),
     "utf8",
@@ -607,10 +626,7 @@ test("mahjong uses a cancellable two-step riichi tile selection", () => {
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
     "utf8",
   );
-  const styles = readFileSync(
-    new URL("../games/mahjong/styles.css", import.meta.url),
-    "utf8",
-  );
+  const styles = readMahjongStyles();
 
   assert.match(main, /import \{ X, createIcons \} from "lucide"/);
   assert.match(
@@ -637,7 +653,7 @@ test("mahjong uses a cancellable two-step riichi tile selection", () => {
   );
   assert.match(
     view,
-    /"is-riichi-blocked", riichiMode && !riichiTiles\.has\(tileId\)/,
+    /"is-riichi-blocked",\s*riichiMode && !riichiTiles\.has\(tileId\)/,
   );
   assert.match(renderer, /riichiMode && !riichiTiles\.has\(tileId\)/);
   assert.match(styles, /\.action-bar \.riichi-cancel-action \{/);
@@ -736,10 +752,7 @@ test("mahjong discards by dragging a hand tile above a fixed horizontal line", (
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
     "utf8",
   );
-  const styles = readFileSync(
-    new URL("../games/mahjong/styles.css", import.meta.url),
-    "utf8",
-  );
+  const styles = readMahjongStyles();
   const hand = ownHandOverlayTransform(0, 1280, 720);
   const handTop = 720 / 2 - hand.y - hand.tileHeight / 2;
 
@@ -787,10 +800,7 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     new URL("../games/mahjong/index.html", import.meta.url),
     "utf8",
   );
-  const styles = readFileSync(
-    new URL("../games/mahjong/styles.css", import.meta.url),
-    "utf8",
-  );
+  const styles = readMahjongStyles();
 
   assert.equal(HAND_END_PRESENTATION_DELAY_MS, 2700);
   assert.match(main, /handRevealKey\(state\)/);
@@ -921,10 +931,7 @@ test("mahjong result melds preserve call direction and kan presentation", () => 
     new URL("../games/mahjong/dom-view.js", import.meta.url),
     "utf8",
   );
-  const styles = readFileSync(
-    new URL("../games/mahjong/styles.css", import.meta.url),
-    "utf8",
-  );
+  const styles = readMahjongStyles();
 
   assert.match(view, /meldDisplayLayout\(meld, winnerIndex\)/);
   assert.match(
@@ -1290,12 +1297,9 @@ test("mahjong highlights matching visible tile types without adding count text",
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
     "utf8",
   );
-  const styles = readFileSync(
-    new URL("../games/mahjong/styles.css", import.meta.url),
-    "utf8",
-  );
+  const styles = readMahjongStyles();
   assert.match(view, /renderTypeHighlights\(selectedTileId\)/);
-  assert.match(view, /tile\.classList\.toggle\("is-type-match"/);
+  assert.match(view, /tile\.classList\.toggle\(\s*"is-type-match"/);
   assert.match(
     renderer,
     /this\.highlightedType === tileType\(tileId\) \? "match"/,
@@ -1508,10 +1512,7 @@ test("mahjong aligns the action rail with the downstream third river row", () =>
   const actionRailRightEdge = viewport.width - 342;
   assert.ok(Math.abs(actionRailRightEdge - downstreamRiverEdge) < 8);
 
-  const styles = readFileSync(
-    new URL("../games/mahjong/styles.css", import.meta.url),
-    "utf8",
-  );
+  const styles = readMahjongStyles();
   assert.match(styles, /--mahjong-action-right: 342px/);
   assert.match(
     styles,
@@ -1627,10 +1628,7 @@ test("mahjong uses one fixed 16:9 logical viewport without a top status bar", ()
   assert.equal(typeof packageJson.dependencies.three, "string");
   assert.equal(packageJson.dependencies["pixi.js"], undefined);
 
-  const styles = readFileSync(
-    new URL("../games/mahjong/styles.css", import.meta.url),
-    "utf8",
-  );
+  const styles = readMahjongStyles();
   assert.match(
     styles,
     /\.mahjong-app \{[^}]*overflow: hidden;[^}]*background: #000/s,
@@ -1829,10 +1827,7 @@ test("mahjong renders a compact fixed five-slot dora rack", () => {
     new URL("../games/mahjong/dom-view.js", import.meta.url),
     "utf8",
   );
-  const styles = readFileSync(
-    new URL("../games/mahjong/styles.css", import.meta.url),
-    "utf8",
-  );
+  const styles = readMahjongStyles();
   const tileFactory = readFileSync(
     new URL("../games/mahjong/render/three-tile-factory.js", import.meta.url),
     "utf8",
@@ -1897,22 +1892,19 @@ test("mahjong player nameplates leave scoring to the centre console", () => {
     new URL("../games/mahjong/dom-view.js", import.meta.url),
     "utf8",
   );
-  const styles = readFileSync(
-    new URL("../games/mahjong/styles.css", import.meta.url),
-    "utf8",
-  );
+  const styles = readMahjongStyles();
 
   assert.doesNotMatch(html, /data-detail/);
   assert.doesNotMatch(view, /detail\.textContent|detail\.hidden/);
   assert.doesNotMatch(view, /riichi \? "立直"/);
   assert.doesNotMatch(view, /data-detail[^\n]*scores|scores[^\n]*data-detail/);
-  assert.match(styles, /\.player-right \{ top: 223px; right: 24px; \}/);
-  assert.match(styles, /\.player-left \{ top: 223px; left: 24px; \}/);
-  assert.match(styles, /\.player-bottom \{ bottom: 151px; left: 325px; \}/);
-  assert.match(styles, /\.player-top \{ top: 22px; right: 299px; \}/);
+  assert.match(styles, /\.player-right \{[^}]*top: 223px;[^}]*right: 24px;/s);
+  assert.match(styles, /\.player-left \{[^}]*top: 223px;[^}]*left: 24px;/s);
+  assert.match(styles, /\.player-bottom \{[^}]*bottom: 151px;[^}]*left: 325px;/s);
+  assert.match(styles, /\.player-top \{[^}]*top: 22px;[^}]*right: 299px;/s);
   assert.match(styles, /\.player-station \{[^}]*width: 104px/s);
   assert.match(styles, /\.player-station::before \{[^}]*width: 78px/s);
-  assert.match(styles, /\.player-station strong \{ font-size: 16px; \}/);
+  assert.match(styles, /\.player-station strong \{[^}]*font-size: 16px;/s);
 });
 
 test("mahjong prefers the platform avatar for the local player", () => {
@@ -1928,10 +1920,7 @@ test("mahjong prefers the platform avatar for the local player", () => {
     new URL("../games/mahjong/dom-view.js", import.meta.url),
     "utf8",
   );
-  const styles = readFileSync(
-    new URL("../games/mahjong/styles.css", import.meta.url),
-    "utf8",
-  );
+  const styles = readMahjongStyles();
 
   assert.match(html, /id="player-bottom"[\s\S]*?data-player-avatar/);
   assert.match(main, /capabilities\)\.includes\("user\.getProfile"\)/);
