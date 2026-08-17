@@ -16,6 +16,10 @@ export function partitionClaimActions(claims) {
   for (const claim of asArray(claims)) {
     (claim?.kind === "chi" ? chi : immediate).push(claim);
   }
+  const priority = { pon: 0, kan: 1, ron: 2 };
+  immediate.sort((left, right) =>
+    (priority[left?.kind] ?? Number.MAX_SAFE_INTEGER)
+      - (priority[right?.kind] ?? Number.MAX_SAFE_INTEGER));
   return { chi, immediate };
 }
 
@@ -258,4 +262,21 @@ export function scoreDeltaSummary(state, playerName) {
       return `${name} ${delta >= 0 ? "+" : ""}${delta}`;
     })
     .join("　");
+}
+
+export function resultBasePaymentTotal(state, result) {
+  const exact = Number(result?.basePaymentTotal);
+  if (Number.isFinite(exact) && exact >= 0) return String(Math.round(exact));
+
+  const amounts = String(result?.payment ?? "")
+    .match(/\d+/g)
+    ?.map(Number) ?? [];
+  if (amounts.length >= 2) return String(amounts[0] * 2 + amounts[1]);
+  if (amounts.length !== 1) return "";
+
+  const honba = Math.max(0, Number(state?.honba) || 0);
+  if (result?.paoSeat > 0 || state?.winType === "ron") {
+    return String(Math.max(0, amounts[0] - honba * 300));
+  }
+  return String(amounts[0] * 3);
 }

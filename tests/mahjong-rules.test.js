@@ -337,6 +337,8 @@ test("Mahjong scores yaku, han and fu with conserved tsumo payments", async () =
       pinfu = names["平和"] == true,
       menzenTsumo = names["门前清自摸和"] == true,
       dora = names["宝牌"] == true,
+      basePaymentTotal = state.result.basePaymentTotal,
+      winnerDelta = state.result.deltas[1],
       deltaSum = delta_sum,
       nextDealer = state.nextDealerIndex,
       nextHonba = state.nextHonba,
@@ -351,6 +353,7 @@ test("Mahjong scores yaku, han and fu with conserved tsumo payments", async () =
   assert.equal(result.pinfu, true);
   assert.equal(result.menzenTsumo, true);
   assert.equal(result.dora, true);
+  assert.equal(result.basePaymentTotal, result.winnerDelta);
   assert.equal(result.deltaSum, 0);
   assert.equal(result.nextDealer, 1);
   assert.equal(result.nextHonba, 1);

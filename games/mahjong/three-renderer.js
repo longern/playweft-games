@@ -248,7 +248,7 @@ export class MahjongThreeRenderer {
     );
     this.drawFrame();
     if (ui.animateHandReveal && this.revealTiles.length) {
-      this.startHandReveal(ui.delayHandRevealForCallout ? ACTION_CALLOUT_DURATION_MS * 0.64 : 0);
+      this.startHandReveal(ui.delayHandRevealForCallout ? ACTION_CALLOUT_DURATION_MS : 0);
     }
   }
 

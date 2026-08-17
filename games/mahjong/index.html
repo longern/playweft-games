@@ -1,19 +1,18 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#083f38" />
-    <meta
-      name="description"
-      content="Playweft 麻将：摸牌、鸣牌、立直和牌，来一场紧张刺激的日式麻将。"
-    />
-    <title>麻将 | Playweft</title>
-    <script type="module" src="./main.js"></script>
-  </head>
-  <body>
-    <main id="mahjong-app" class="mahjong-app" aria-busy="true">
-      <div id="mahjong-viewport" class="mahjong-viewport">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#083f38" />
+  <meta name="description" content="Playweft 麻将：摸牌、鸣牌、立直和牌，来一场紧张刺激的日式麻将。" />
+  <title>麻将 | Playweft</title>
+  <script type="module" src="./main.js"></script>
+</head>
+
+<body>
+  <main id="mahjong-app" class="mahjong-app" aria-busy="true">
+    <div id="mahjong-viewport" class="mahjong-viewport">
       <nav class="table-controls" aria-label="牌桌导航">
         <a class="table-control table-control-help" href="./help.html" aria-label="查看玩法">?</a>
       </nav>
@@ -85,7 +84,11 @@
             <p id="result-summary"></p>
             <div id="result-hands" class="result-hands" aria-label="胡牌牌型"></div>
             <div id="result-yaku" class="result-yaku"></div>
-            <button id="rematch-button" type="button">下一局</button>
+            <div class="result-footer">
+              <strong id="result-value" class="result-value" hidden></strong>
+              <strong id="result-total" class="result-total" hidden></strong>
+              <button id="rematch-button" type="button">下一局</button>
+            </div>
           </section>
         </div>
       </section>
@@ -97,14 +100,8 @@
           <button id="pass-button" class="secondary-action" type="button" hidden>跳过</button>
           <button id="abort-button" class="secondary-action" type="button" hidden>流局</button>
           <button id="riichi-button" class="gold-action" type="button" hidden>立直</button>
-          <button
-            id="cancel-riichi-button"
-            class="riichi-cancel-action"
-            type="button"
-            aria-label="取消立直"
-            title="取消立直"
-            hidden
-          ><i data-lucide="x" aria-hidden="true"></i></button>
+          <button id="cancel-riichi-button" class="riichi-cancel-action" type="button" aria-label="取消立直" title="取消立直"
+            hidden><i data-lucide="x" aria-hidden="true"></i></button>
           <button id="tsumo-button" class="win-action" type="button" hidden>自摸</button>
           <span id="furiten-badge" class="furiten-badge" hidden>振听</span>
         </div>
@@ -137,7 +134,8 @@
         <strong>正在摆好牌桌</strong>
         <p id="loading-message">正在洗牌并码好牌山…</p>
       </section>
-      </div>
-    </main>
-  </body>
+    </div>
+  </main>
+</body>
+
 </html>

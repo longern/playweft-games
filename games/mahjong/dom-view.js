@@ -10,6 +10,7 @@ import {
   orderedHand,
   partitionClaimActions,
   roundLabel,
+  resultBasePaymentTotal,
   scoreDeltaSummary,
   seatWind,
   tileFace,
@@ -22,6 +23,8 @@ import {
 } from "./render/three-layout.js";
 import { tileFaceFrameIndex } from "./render/tile-texture-map.js";
 
+const RESULT_TILE_WIDTH_PX = 33;
+
 export class MahjongDomView {
   constructor({ onAction, onSelectTile, onDiscardTile }) {
     this.onAction = onAction;
@@ -29,6 +32,15 @@ export class MahjongDomView {
     this.onDiscardTile = onDiscardTile;
     this.lastEventKey = "";
     this.elements = collectElements();
+    this.elements.actionBar.append(
+      this.elements.abort,
+      this.elements.claims,
+      this.elements.riichi,
+      this.elements.tsumo,
+      this.elements.pass,
+      this.elements.cancelRiichi,
+      this.elements.furiten,
+    );
   }
 
   render(
@@ -43,27 +55,36 @@ export class MahjongDomView {
     elements.message.classList.remove("is-error");
     const currentRound = roundLabel(state.roundWind, state.handNumber);
     elements.consoleRound.textContent = currentRound;
-    elements.matchType.textContent = state.matchType === "hanchan" ? "四人南" : "四人東";
+    elements.matchType.textContent =
+      state.matchType === "hanchan" ? "四人南" : "四人東";
     elements.honba.textContent = String(Number(state.honba) || 0);
     elements.riichiSticks.textContent = String(Number(state.riichiSticks) || 0);
     elements.wall.textContent = `余牌 ${state.wallCount}`;
-    elements.dora.replaceChildren(...doraIndicatorSlots(state).map((indicator, index) => {
-      const tile = indicator
-        ? createTile(indicator.type, "dora", indicator.red)
-        : createTileBack();
-      tile.classList.add("dora-slot", indicator ? "is-revealed" : "is-concealed");
-      tile.dataset.slot = String(index + 1);
-      if (indicator) {
-        tile.setAttribute(
-          "aria-label",
-          `第 ${index + 1} 张宝牌指示牌：${tile.getAttribute("aria-label")}`,
+    elements.dora.replaceChildren(
+      ...doraIndicatorSlots(state).map((indicator, index) => {
+        const tile = indicator
+          ? createTile(indicator.type, "dora", indicator.red)
+          : createTileBack();
+        tile.classList.add(
+          "dora-slot",
+          indicator ? "is-revealed" : "is-concealed",
         );
-      } else {
-        tile.removeAttribute("aria-hidden");
-        tile.setAttribute("aria-label", `第 ${index + 1} 张宝牌指示牌尚未翻开`);
-      }
-      return tile;
-    }));
+        tile.dataset.slot = String(index + 1);
+        if (indicator) {
+          tile.setAttribute(
+            "aria-label",
+            `第 ${index + 1} 张宝牌指示牌：${tile.getAttribute("aria-label")}`,
+          );
+        } else {
+          tile.removeAttribute("aria-hidden");
+          tile.setAttribute(
+            "aria-label",
+            `第 ${index + 1} 张宝牌指示牌尚未翻开`,
+          );
+        }
+        return tile;
+      }),
+    );
     this.renderTypeHighlights(selectedTileId);
     this.renderStations(state, playerName);
     this.riichiMode = riichiMode;
@@ -75,7 +96,12 @@ export class MahjongDomView {
     this.renderResult(state, playerName, showResult);
   }
 
-  renderSelection(state, selectedTileId, playerName, { riichiMode = false } = {}) {
+  renderSelection(
+    state,
+    selectedTileId,
+    playerName,
+    { riichiMode = false } = {},
+  ) {
     this.riichiMode = riichiMode;
     this.renderHands(state, selectedTileId, riichiMode);
     this.renderActions(state, selectedTileId, riichiMode);
@@ -86,7 +112,10 @@ export class MahjongDomView {
   renderTypeHighlights(selectedTileId) {
     const selectedType = selectedTileId ? tileType(selectedTileId) : 0;
     for (const tile of this.elements.dora.querySelectorAll("[data-type]")) {
-      tile.classList.toggle("is-type-match", Number(tile.dataset.type) === selectedType);
+      tile.classList.toggle(
+        "is-type-match",
+        Number(tile.dataset.type) === selectedType,
+      );
     }
   }
 
@@ -101,7 +130,9 @@ export class MahjongDomView {
   }
 
   setPlayerAvatar(position, source) {
-    const image = this.elements.stations[position]?.querySelector("[data-player-avatar]");
+    const image = this.elements.stations[position]?.querySelector(
+      "[data-player-avatar]",
+    );
     if (!image) return;
     const nextSource = typeof source === "string" && source ? source : "";
     if (!nextSource) {
@@ -132,7 +163,8 @@ export class MahjongDomView {
       const station = this.elements.stations[position];
       const playerId = state.players[seat - 1];
       const name = state.playerNames?.[seat - 1] || PLAYERS[seat - 1].name;
-      station.querySelector("[data-name]").textContent = seat === 1 ? playerName : name;
+      station.querySelector("[data-name]").textContent =
+        seat === 1 ? playerName : name;
       station.querySelector("[data-wind]").textContent = seatWind(state, seat);
       const consoleScore = this.elements.consoleScores[seat - 1];
       consoleScore.textContent = String(Number(state.scores?.[seat - 1] ?? 0));
@@ -153,8 +185,12 @@ export class MahjongDomView {
 
   renderHands(state, selectedTileId, riichiMode = false) {
     const hand = orderedHand(state.ownHand, state.drawnTile);
-    const forbiddenTypes = new Set(asArray(state.legalActions?.forbiddenDiscardTypes));
-    const riichiTiles = new Set(asArray(state.legalActions?.riichiTiles).map(Number));
+    const forbiddenTypes = new Set(
+      asArray(state.legalActions?.forbiddenDiscardTypes),
+    );
+    const riichiTiles = new Set(
+      asArray(state.legalActions?.riichiTiles).map(Number),
+    );
     this.elements.hand.replaceChildren(
       ...hand.map((tileId) => {
         const tile = createTile(tileType(tileId), "hand", isRedFive(tileId));
@@ -165,23 +201,24 @@ export class MahjongDomView {
         tile.classList.toggle("is-selected", tileId === selectedTileId);
         tile.classList.toggle(
           "is-type-match",
-          tileId !== selectedTileId
-            && selectedTileId > 0
-            && tileType(tileId) === tileType(selectedTileId),
+          tileId !== selectedTileId &&
+            selectedTileId > 0 &&
+            tileType(tileId) === tileType(selectedTileId),
         );
         tile.classList.toggle("is-drawn", tileId === Number(state.drawnTile));
         tile.classList.toggle(
           "is-riichi-choice",
           riichiMode && riichiTiles.has(tileId),
         );
-        tile.classList.toggle("is-riichi-blocked", riichiMode && !riichiTiles.has(tileId));
-        const discardable = state.legalActions?.canDiscard
-          && !forbiddenTypes.has(tileType(tileId))
-          && (!riichiMode || riichiTiles.has(tileId));
-        tile.setAttribute(
-          "aria-disabled",
-          String(!discardable),
+        tile.classList.toggle(
+          "is-riichi-blocked",
+          riichiMode && !riichiTiles.has(tileId),
         );
+        const discardable =
+          state.legalActions?.canDiscard &&
+          !forbiddenTypes.has(tileType(tileId)) &&
+          (!riichiMode || riichiTiles.has(tileId));
+        tile.setAttribute("aria-disabled", String(!discardable));
         tile.addEventListener("click", () => this.onSelectTile(tileId));
         if (discardable) {
           tile.addEventListener("dblclick", () => this.onDiscardTile(tileId));
@@ -200,7 +237,9 @@ export class MahjongDomView {
   }
 
   renderRivers(state, events) {
-    const latest = [...events].reverse().find((event) => event.type === "discarded");
+    const latest = [...events]
+      .reverse()
+      .find((event) => event.type === "discarded");
     for (let seat = 1; seat <= 4; seat += 1) {
       const position = POSITIONS[seat - 1];
       const river = asArray(state.discards?.[state.players[seat - 1]]);
@@ -252,29 +291,33 @@ export class MahjongDomView {
       return;
     }
     const claims = asArray(legal.claims);
-    const { chi: chiClaims, immediate: immediateClaims } = partitionClaimActions(claims);
+    const { chi: chiClaims, immediate: immediateClaims } =
+      partitionClaimActions(claims);
+    if (chiClaims.length > 0) {
+      elements.claims.append(this.createChiAction(chiClaims));
+    }
     for (const claim of immediateClaims) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = `claim-action claim-${claim.kind}`;
       button.textContent = CLAIM_LABELS[claim.kind] ?? claim.kind;
       button.addEventListener("click", () =>
-        this.onAction({ type: "claim", option: claim.option }));
+        this.onAction({ type: "claim", option: claim.option }),
+      );
       elements.claims.append(button);
-    }
-    if (chiClaims.length > 0) {
-      elements.claims.append(this.createChiAction(chiClaims));
     }
     for (const kan of asArray(legal.selfKans)) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "claim-action";
+      button.className = "claim-action claim-kan";
       button.textContent = CLAIM_LABELS[kan.kind] ?? "杠";
-      button.addEventListener("click", () => this.onAction({
-        type: "kan",
-        kind: kan.kind,
-        tileType: kan.tileType,
-      }));
+      button.addEventListener("click", () =>
+        this.onAction({
+          type: "kan",
+          kind: kan.kind,
+          tileType: kan.tileType,
+        }),
+      );
       elements.claims.append(button);
     }
     const canClaim = claims.length > 0;
@@ -304,7 +347,8 @@ export class MahjongDomView {
 
     if (claims.length === 1) {
       button.addEventListener("click", () =>
-        this.onAction({ type: "claim", option: claims[0].option }));
+        this.onAction({ type: "claim", option: claims[0].option }),
+      );
       return group;
     }
 
@@ -322,7 +366,10 @@ export class MahjongDomView {
     heading.textContent = "选择吃法";
     const list = document.createElement("div");
     list.className = "claim-choice-list";
-    list.style.setProperty("--claim-choice-columns", String(Math.min(3, claims.length)));
+    list.style.setProperty(
+      "--claim-choice-columns",
+      String(Math.min(3, claims.length)),
+    );
     for (const claim of claims) {
       const choice = document.createElement("button");
       choice.type = "button";
@@ -332,14 +379,17 @@ export class MahjongDomView {
         "aria-label",
         `吃：${preview.map((tile) => `${tile.red ? "赤" : ""}${tileFace(tile.type).label}`).join("、")}`,
       );
-      choice.append(...preview.map((tile) => {
-        const element = createTile(tile.type, "claim-choice", tile.red);
-        markDora(element, tile.type, this.doraCounts);
-        element.setAttribute("aria-hidden", "true");
-        return element;
-      }));
+      choice.append(
+        ...preview.map((tile) => {
+          const element = createTile(tile.type, "claim-choice", tile.red);
+          markDora(element, tile.type, this.doraCounts);
+          element.setAttribute("aria-hidden", "true");
+          return element;
+        }),
+      );
       choice.addEventListener("click", () =>
-        this.onAction({ type: "claim", option: claim.option }));
+        this.onAction({ type: "claim", option: claim.option }),
+      );
       list.append(choice);
     }
     picker.append(heading, list);
@@ -367,18 +417,30 @@ export class MahjongDomView {
   renderStatus(state, events, playerName) {
     if (state.phase === "hand_ended") return;
     const seat = activeSeat(state);
-    const name = seat === 1
-      ? playerName
-      : state.playerNames?.[seat - 1] || PLAYERS[seat - 1]?.name;
-    this.elements.heading.textContent = state.phase === "claiming"
-      ? seat === 1 ? "可以鸣牌" : `${name} 正在考虑`
-      : seat === 1 ? "轮到你出牌" : `${name} 的回合`;
+    const name =
+      seat === 1
+        ? playerName
+        : state.playerNames?.[seat - 1] || PLAYERS[seat - 1]?.name;
+    this.elements.heading.textContent =
+      state.phase === "claiming"
+        ? seat === 1
+          ? "可以鸣牌"
+          : `${name} 正在考虑`
+        : seat === 1
+          ? "轮到你出牌"
+          : `${name} 的回合`;
 
-    const event = [...events].reverse().find((item) => item.type !== "claim_passed");
+    const event = [...events]
+      .reverse()
+      .find((item) => item.type !== "claim_passed");
     const key = event ? JSON.stringify(event) : "";
     if (event && key !== this.lastEventKey) {
       this.lastEventKey = key;
-      this.elements.message.textContent = eventMessage(state, event, playerName);
+      this.elements.message.textContent = eventMessage(
+        state,
+        event,
+        playerName,
+      );
       this.elements.message.classList.remove("is-pulsing");
       void this.elements.message.offsetWidth;
       this.elements.message.classList.add("is-pulsing");
@@ -397,6 +459,11 @@ export class MahjongDomView {
     if (state.draw) {
       elements.resultHands.replaceChildren();
       elements.resultHands.hidden = true;
+      elements.resultValue.hidden = true;
+      elements.resultValue.textContent = "";
+      elements.resultTotal.hidden = true;
+      elements.resultTotal.textContent = "";
+      elements.resultSummary.hidden = false;
       const abortive = Boolean(state.result?.abortive);
       elements.resultKicker.textContent = abortive ? "途中流局" : "牌山摸尽";
       elements.resultTitle.textContent = state.abortiveReason || "流局";
@@ -405,46 +472,70 @@ export class MahjongDomView {
       elements.rematch.textContent = state.matchEnded ? "同规则再战" : "下一局";
       return;
     }
-    const winnerName = state.winnerIndex === 1
-      ? playerName
-      : state.playerNames?.[state.winnerIndex - 1] || PLAYERS[state.winnerIndex - 1].name;
+    const winnerName =
+      state.winnerIndex === 1
+        ? playerName
+        : state.playerNames?.[state.winnerIndex - 1] ||
+          PLAYERS[state.winnerIndex - 1].name;
     const winnerNames = asArray(state.winners).map((id) => {
       const index = state.players.indexOf(id);
       return index === 0
         ? playerName
         : state.playerNames?.[index] || PLAYERS[index]?.name;
     });
-    elements.resultKicker.textContent = state.winType === "tsumo"
-      ? "自摸和牌"
-      : state.winType === "nagashi" ? "流局满贯" : "荣和";
-    elements.resultTitle.textContent = winnerNames.length > 1
-      ? winnerNames.join("、")
-      : winnerName;
+    elements.resultKicker.textContent =
+      state.winType === "tsumo"
+        ? "自摸和牌"
+        : state.winType === "nagashi"
+          ? "流局满贯"
+          : "荣和";
+    elements.resultTitle.textContent =
+      winnerNames.length > 1 ? winnerNames.join("、") : winnerName;
     const result = state.result ?? {};
     const value = result.limit || `${result.han ?? 0} 番 ${result.fu ?? 0} 符`;
-    elements.resultSummary.textContent = `${value} · ${result.payment ?? "已结算"}`;
-    const allResults = asArray(state.results).length ? asArray(state.results) : [result];
+    elements.resultSummary.textContent = "";
+    elements.resultSummary.hidden = true;
+    elements.resultValue.textContent = value;
+    elements.resultValue.hidden = false;
+    const basePaymentTotal = resultBasePaymentTotal(state, result);
+    elements.resultTotal.replaceChildren();
+    if (basePaymentTotal) {
+      const unit = document.createElement("small");
+      unit.className = "result-total-unit";
+      unit.textContent = "点";
+      elements.resultTotal.append(basePaymentTotal, unit);
+    }
+    elements.resultTotal.hidden = !basePaymentTotal;
+    const allResults = asArray(state.results).length
+      ? asArray(state.results)
+      : [result];
     elements.resultHands.hidden = state.winType === "nagashi";
     elements.resultHands.replaceChildren(
-      ...allResults.map((scored, scoreIndex) => createResultHand(
-        state,
-        Number(scored.winnerIndex) || state.players.indexOf(state.winners?.[scoreIndex]) + 1,
-        winnerNames[scoreIndex] || winnerName,
-        allResults.length > 1,
-        this.doraCounts,
-      )),
+      ...allResults.map((scored, scoreIndex) =>
+        createResultHand(
+          state,
+          Number(scored.winnerIndex) ||
+            state.players.indexOf(state.winners?.[scoreIndex]) + 1,
+          winnerNames[scoreIndex] || winnerName,
+          allResults.length > 1,
+          this.doraCounts,
+        ),
+      ),
     );
     elements.resultYaku.replaceChildren(
-      ...allResults.flatMap((scored, scoreIndex) => asArray(scored.yaku).map((yaku) => {
-        const item = document.createElement("span");
-        const prefix = allResults.length > 1 ? `${winnerNames[scoreIndex]}：` : "";
-        const name = document.createElement("i");
-        const value = document.createElement("b");
-        name.textContent = `${prefix}${yaku.name}`;
-        value.textContent = yaku.han >= 13 ? "役满" : `${yaku.han}番`;
-        item.append(name, value);
-        return item;
-      })),
+      ...allResults.flatMap((scored, scoreIndex) =>
+        asArray(scored.yaku).map((yaku) => {
+          const item = document.createElement("span");
+          const prefix =
+            allResults.length > 1 ? `${winnerNames[scoreIndex]}：` : "";
+          const name = document.createElement("i");
+          const value = document.createElement("b");
+          name.textContent = `${prefix}${yaku.name}`;
+          value.textContent = yaku.han >= 13 ? "役满" : `${yaku.han}番`;
+          item.append(name, value);
+          return item;
+        }),
+      ),
     );
     const delta = document.createElement("b");
     delta.className = "result-delta";
@@ -454,7 +545,13 @@ export class MahjongDomView {
   }
 }
 
-function createResultHand(state, winnerIndex, winnerName, showName, doraCounts) {
+function createResultHand(
+  state,
+  winnerIndex,
+  winnerName,
+  showName,
+  doraCounts,
+) {
   const playerId = state.players?.[winnerIndex - 1];
   const row = document.createElement("section");
   row.className = "result-hand";
@@ -466,15 +563,20 @@ function createResultHand(state, winnerIndex, winnerName, showName, doraCounts) 
 
   const tiles = document.createElement("div");
   tiles.className = "result-hand-tiles";
-  const concealed = asArray(state.revealedHands?.[playerId]).map(normalizeRevealedTile);
-  const winning = Number(state.winningTile) > 0
-    ? { type: Number(state.winningTile), red: state.winningTileRed === true }
-    : null;
-  tiles.append(...concealed.map((tile) => {
-    const element = createTile(tile.type, "result", tile.red);
-    markDora(element, tile.type, doraCounts);
-    return element;
-  }));
+  const concealed = asArray(state.revealedHands?.[playerId]).map(
+    normalizeRevealedTile,
+  );
+  const winning =
+    Number(state.winningTile) > 0
+      ? { type: Number(state.winningTile), red: state.winningTileRed === true }
+      : null;
+  tiles.append(
+    ...concealed.map((tile) => {
+      const element = createTile(tile.type, "result", tile.red);
+      markDora(element, tile.type, doraCounts);
+      return element;
+    }),
+  );
   if (winning) {
     const winningTile = createTile(winning.type, "result", winning.red);
     markDora(winningTile, winning.type, doraCounts);
@@ -494,8 +596,11 @@ function createResultMeld(meld, winnerIndex, doraCounts) {
   group.className = "result-meld";
   const display = meldDisplayLayout(meld, winnerIndex);
   const normalExtent = TILE_SIZE.width * MELD_SCALE;
-  const pixelsPerUnit = 22 / normalExtent;
-  group.style.setProperty("--result-meld-width", `${display.span * pixelsPerUnit + 2}px`);
+  const pixelsPerUnit = RESULT_TILE_WIDTH_PX / normalExtent;
+  group.style.setProperty(
+    "--result-meld-width",
+    `${display.span * pixelsPerUnit + 3}px`,
+  );
   group.classList.toggle(
     "has-stacked-tile",
     display.entries.some((entry) => entry.stackLevel > 0),
@@ -505,7 +610,10 @@ function createResultMeld(meld, winnerIndex, doraCounts) {
     if (!entry.faceDown) markDora(tile, entry.type, doraCounts);
     const centreFromRight = entry.along + normalExtent / 2;
     const centreFromLeft = display.span - centreFromRight;
-    tile.style.setProperty("--result-meld-x", `${centreFromLeft * pixelsPerUnit + 1}px`);
+    tile.style.setProperty(
+      "--result-meld-x",
+      `${centreFromLeft * pixelsPerUnit + 1.5}px`,
+    );
     tile.classList.toggle("is-sideways", entry.sideways);
     tile.classList.toggle("is-stacked", entry.stackLevel > 0);
     tile.classList.toggle("is-face-down", entry.faceDown);
@@ -533,12 +641,15 @@ function collectElements() {
     honba: document.querySelector("#honba-count"),
     riichiSticks: document.querySelector("#riichi-stick-count"),
     wall: document.querySelector("#wall-count"),
-    consoleScores: [...document.querySelectorAll("[data-console-score]")]
-      .sort((left, right) => Number(left.dataset.consoleScore) - Number(right.dataset.consoleScore)),
+    consoleScores: [...document.querySelectorAll("[data-console-score]")].sort(
+      (left, right) =>
+        Number(left.dataset.consoleScore) - Number(right.dataset.consoleScore),
+    ),
     dora: document.querySelector("#dora-list"),
     heading: document.querySelector("#turn-heading"),
     message: document.querySelector("#table-message"),
     actionHint: document.querySelector("#action-hint"),
+    actionBar: document.querySelector("#action-bar"),
     claims: document.querySelector("#claim-actions"),
     pass: document.querySelector("#pass-button"),
     abort: document.querySelector("#abort-button"),
@@ -551,6 +662,8 @@ function collectElements() {
     resultKicker: document.querySelector("#result-kicker"),
     resultTitle: document.querySelector("#result-title"),
     resultSummary: document.querySelector("#result-summary"),
+    resultValue: document.querySelector("#result-value"),
+    resultTotal: document.querySelector("#result-total"),
     resultHands: document.querySelector("#result-hands"),
     resultYaku: document.querySelector("#result-yaku"),
     rematch: document.querySelector("#rematch-button"),
@@ -560,18 +673,24 @@ function collectElements() {
       right: document.querySelector("#hand-right"),
       left: document.querySelector("#hand-left"),
     },
-    rivers: Object.fromEntries(POSITIONS.map((position) => [
-      position,
-      document.querySelector(`#river-${position}`),
-    ])),
-    melds: Object.fromEntries(POSITIONS.map((position) => [
-      position,
-      document.querySelector(`#meld-${position}`),
-    ])),
-    stations: Object.fromEntries(POSITIONS.map((position) => [
-      position,
-      document.querySelector(`#player-${position}`),
-    ])),
+    rivers: Object.fromEntries(
+      POSITIONS.map((position) => [
+        position,
+        document.querySelector(`#river-${position}`),
+      ]),
+    ),
+    melds: Object.fromEntries(
+      POSITIONS.map((position) => [
+        position,
+        document.querySelector(`#meld-${position}`),
+      ]),
+    ),
+    stations: Object.fromEntries(
+      POSITIONS.map((position) => [
+        position,
+        document.querySelector(`#player-${position}`),
+      ]),
+    ),
   };
 }
 

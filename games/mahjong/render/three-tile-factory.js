@@ -89,6 +89,13 @@ export class ThreeTileFactory {
       depthWrite: false,
       toneMapped: false,
     });
+    this.disabledGeometry = new RoundedBoxGeometry(
+      TILE_SIZE.width + 0.024,
+      TILE_SIZE.height + 0.024,
+      TILE_SIZE.depth + 0.024,
+      TILE_EDGE_SEGMENTS,
+      TILE_EDGE_RADIUS + 0.006,
+    );
     this.faceGeometries = TILE_FACE_NAMES.map((_, index) => createFaceGeometry(index));
   }
 
@@ -135,8 +142,7 @@ export class ThreeTileFactory {
       face.userData.tileRoot = tile;
       tile.add(face);
       if (dimmed) {
-        const wash = new Mesh(this.highlightGeometry, this.disabledWashMaterial);
-        wash.position.z = TILE_SIZE.depth / 2 + 0.01;
+        const wash = new Mesh(this.disabledGeometry, this.disabledWashMaterial);
         wash.userData.tileRoot = tile;
         tile.add(wash);
       }
@@ -149,6 +155,7 @@ export class ThreeTileFactory {
     this.backGeometry.dispose();
     this.highlightGeometry.dispose();
     this.doraWashGeometry.dispose();
+    this.disabledGeometry.dispose();
     for (const geometry of this.faceGeometries) geometry.dispose();
     this.shellMaterial.dispose();
     this.backMaterial.dispose();

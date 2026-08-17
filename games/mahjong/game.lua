@@ -662,6 +662,14 @@ local function pao_seat_for_score(state, player_id, score)
   return nil
 end
 
+local function base_payment_total(score, dealer_win, method, pao_seat)
+  if method == "ron" or pao_seat then
+    return round_up_100(score.base * (dealer_win and 6 or 4))
+  end
+  if dealer_win then return round_up_100(score.base * 2) * 3 end
+  return round_up_100(score.base * 2) + round_up_100(score.base) * 2
+end
+
 local function settle_win(state, seat, method, from_seat, winning_tile)
   local score = score_hand(state, seat, winning_tile, method)
   if not score then return nil end
@@ -669,6 +677,7 @@ local function settle_win(state, seat, method, from_seat, winning_tile)
   local dealer_win = seat == state.dealerIndex
   local pao_seat = pao_seat_for_score(state, state.players[seat], score)
   score.paoSeat = pao_seat or 0
+  score.basePaymentTotal = base_payment_total(score, dealer_win, method, pao_seat)
   if method == "ron" then
     local amount = round_up_100(score.base * (dealer_win and 6 or 4)) + state.honba * 300
     if pao_seat and pao_seat ~= from_seat then
@@ -719,6 +728,7 @@ local function settle_multiple_ron(state, winners, from_seat, winning_tile)
     if score then
       local amount = round_up_100(score.base * (seat == state.dealerIndex and 6 or 4)) + state.honba * 300
       local pao_seat = pao_seat_for_score(state, state.players[seat], score)
+      score.basePaymentTotal = base_payment_total(score, seat == state.dealerIndex, "ron", pao_seat)
       if pao_seat and pao_seat ~= from_seat then
         local liability = math.floor(amount / 200) * 100
         total_deltas[pao_seat] = total_deltas[pao_seat] - liability
@@ -768,6 +778,7 @@ finish_exhaustive_draw = function(state)
         end
         deltas[seat] = deltas[seat] + won
         results[#results + 1] = { winnerIndex = seat, han = 5, fu = 0, limit = "满贯",
+          basePaymentTotal = seat == state.dealerIndex and 12000 or 8000,
           payment = seat == state.dealerIndex and "4000点∀" or "2000/4000点",
           yaku = { { name = "流局满贯", han = 5 } } }
         if seat == state.dealerIndex then dealer_won = true end

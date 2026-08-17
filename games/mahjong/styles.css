@@ -5,9 +5,9 @@
   font-style: normal;
   font-weight: 400;
   unicode-range:
-    U+4E09, U+4EBA, U+51FA, U+5357, U+5403, U+548C, U+56DB, U+5C40,
-    U+6253, U+6478, U+6760, U+6771, U+6D41, U+76F4, U+78B0, U+7ACB,
-    U+81EA, U+8DF3, U+8FC7;
+    U+4E09, U+4EBA, U+51FA, U+5357, U+5403, U+548C, U+56DB, U+5C40, U+6253,
+    U+6478, U+6760, U+6771, U+6D41, U+76F4, U+78B0, U+7ACB, U+81EA, U+8DF3,
+    U+8FC7;
 }
 
 :root {
@@ -75,8 +75,11 @@ a {
   place-items: center;
   border: 1px solid rgba(245, 217, 145, 0.46);
   border-radius: 50%;
-  background:
-    linear-gradient(145deg, rgba(28, 62, 54, 0.88), rgba(2, 18, 17, 0.9));
+  background: linear-gradient(
+    145deg,
+    rgba(28, 62, 54, 0.88),
+    rgba(2, 18, 17, 0.9)
+  );
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.34),
     inset 0 0 0 1px rgba(255, 255, 255, 0.07);
@@ -131,7 +134,9 @@ a {
   font-weight: 400;
   letter-spacing: 0.08em;
   line-height: 0.95;
-  text-shadow: 0 3px 1px rgba(0, 0, 0, 0.72), 0 0 12px rgba(228, 184, 91, 0.25);
+  text-shadow:
+    0 3px 1px rgba(0, 0, 0, 0.72),
+    0 0 12px rgba(228, 184, 91, 0.25);
 }
 
 .dora-list {
@@ -167,11 +172,12 @@ a {
   border-radius: 3px;
   background-color: #e7e7e4;
   background-image: url("./assets/tiles/riichi-faces.webp");
-  background-position:
-    calc(var(--tile-column) * 100% / 7)
+  background-position: calc(var(--tile-column) * 100% / 7)
     calc(var(--tile-row) * 100% / 4);
   background-size: 800% 500%;
-  box-shadow: 0 2px 0 #aaa58f, 0 4px 6px rgba(0, 0, 0, 0.26);
+  box-shadow:
+    0 2px 0 #aaa58f,
+    0 4px 6px rgba(0, 0, 0, 0.26);
 }
 
 .dora-list .mahjong-tile.is-type-match {
@@ -233,8 +239,17 @@ a {
   overflow: hidden;
   isolation: isolate;
   background:
-    radial-gradient(ellipse at 50% 6%, rgba(215, 157, 84, 0.1), transparent 42%),
-    linear-gradient(90deg, rgba(14, 6, 3, 0.12), transparent 18% 82%, rgba(14, 6, 3, 0.12)),
+    radial-gradient(
+      ellipse at 50% 6%,
+      rgba(215, 157, 84, 0.1),
+      transparent 42%
+    ),
+    linear-gradient(
+      90deg,
+      rgba(14, 6, 3, 0.12),
+      transparent 18% 82%,
+      rgba(14, 6, 3, 0.12)
+    ),
     url("./assets/moonlit-table-v3.jpg") center / cover no-repeat;
 }
 
@@ -243,8 +258,17 @@ a {
   z-index: 2;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(2, 10, 9, 0.04), transparent 24% 76%, rgba(1, 7, 7, 0.12)),
-    radial-gradient(ellipse at center, transparent 52%, rgba(0, 5, 5, 0.18) 100%);
+    linear-gradient(
+      180deg,
+      rgba(2, 10, 9, 0.04),
+      transparent 24% 76%,
+      rgba(1, 7, 7, 0.12)
+    ),
+    radial-gradient(
+      ellipse at center,
+      transparent 52%,
+      rgba(0, 5, 5, 0.18) 100%
+    );
   content: "";
   pointer-events: none;
 }
@@ -328,12 +352,17 @@ a {
   padding: 5px 7px;
   border: 1px solid rgba(222, 190, 111, 0.18);
   border-radius: 7px;
-  background:
-    linear-gradient(180deg, rgba(8, 38, 34, 0.96), rgba(1, 17, 16, 0.94));
+  background: linear-gradient(
+    180deg,
+    rgba(8, 38, 34, 0.96),
+    rgba(1, 17, 16, 0.94)
+  );
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.055);
 }
 
-.player-station strong { font-size: 16px; }
+.player-station strong {
+  font-size: 16px;
+}
 
 .wind-badge {
   position: absolute;
@@ -385,15 +414,37 @@ a {
     0 0 0 3px rgba(255, 223, 128, 0.52),
     0 0 18px rgba(255, 201, 74, 0.48);
 }
-.platform-player-avatar[hidden] { display: none; }
-.player-bottom { bottom: 151px; left: 325px; }
-.player-right { top: 223px; right: 24px; }
-.player-top { top: 22px; right: 299px; }
-.player-left { top: 223px; left: 24px; }
-.player-bottom::before { background-position: 0 0; }
-.player-right::before { background-position: 100% 0; }
-.player-top::before { background-position: 0 100%; }
-.player-left::before { background-position: 100% 100%; }
+.platform-player-avatar[hidden] {
+  display: none;
+}
+.player-bottom {
+  bottom: 151px;
+  left: 325px;
+}
+.player-right {
+  top: 223px;
+  right: 24px;
+}
+.player-top {
+  top: 22px;
+  right: 299px;
+}
+.player-left {
+  top: 223px;
+  left: 24px;
+}
+.player-bottom::before {
+  background-position: 0 0;
+}
+.player-right::before {
+  background-position: 100% 0;
+}
+.player-top::before {
+  background-position: 0 100%;
+}
+.player-left::before {
+  background-position: 100% 100%;
+}
 
 .player-dock {
   position: absolute;
@@ -471,8 +522,14 @@ a {
   padding: 10px;
   border: 1px solid rgba(239, 207, 132, 0.62);
   border-radius: 13px;
-  background: linear-gradient(145deg, rgba(11, 42, 37, 0.98), rgba(2, 20, 19, 0.985));
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.52), inset 0 0 0 2px rgba(255, 255, 255, 0.035);
+  background: linear-gradient(
+    145deg,
+    rgba(11, 42, 37, 0.98),
+    rgba(2, 20, 19, 0.985)
+  );
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, 0.52),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.035);
   color: #f8edcf;
   backdrop-filter: blur(14px);
 }
@@ -516,11 +573,12 @@ a {
   border-radius: 3px;
   background-color: #e9e3cf;
   background-image: url("./assets/tiles/riichi-faces.webp");
-  background-position:
-    calc(var(--tile-column) * 100% / 7)
+  background-position: calc(var(--tile-column) * 100% / 7)
     calc(var(--tile-row) * 100% / 4);
   background-size: 800% 500%;
-  box-shadow: 0 2px 0 #aaa58f, 0 3px 5px rgba(0, 0, 0, 0.25);
+  box-shadow:
+    0 2px 0 #aaa58f,
+    0 3px 5px rgba(0, 0, 0, 0.25);
 }
 
 .tile-claim-choice > * {
@@ -537,7 +595,11 @@ a {
   padding: 2px 20px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.045));
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.1),
+    rgba(255, 255, 255, 0.045)
+  );
   box-shadow: 0 5px 14px rgba(0, 0, 0, 0.24);
   color: #f8f2df;
   cursor: pointer;
@@ -546,7 +608,10 @@ a {
   font-weight: 700;
   font-synthesis: weight;
   line-height: 1;
-  transition: transform 140ms ease, filter 140ms ease, border-color 140ms ease;
+  transition:
+    transform 140ms ease,
+    filter 140ms ease,
+    border-color 140ms ease;
 }
 
 .result-panel button {
@@ -559,7 +624,10 @@ a {
   cursor: pointer;
   font-size: 15px;
   font-weight: 800;
-  transition: transform 140ms ease, filter 140ms ease, border-color 140ms ease;
+  transition:
+    transform 140ms ease,
+    filter 140ms ease,
+    border-color 140ms ease;
 }
 
 .action-bar button:hover:not(:disabled),
@@ -574,23 +642,53 @@ a {
 }
 
 #pass-button {
-  border-color: #62696c;
-  background: linear-gradient(145deg, #444a4d, #24282a);
-  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.32), inset 0 1px #686f72;
-  color: #f2f3f3;
+  border-color: #687075;
+  background: linear-gradient(145deg, #555b60, #292d30);
+  box-shadow:
+    0 5px 14px rgba(0, 0, 0, 0.32),
+    inset 0 1px #747b80;
+  color: #f5f6f4;
 }
 
 .action-bar .claim-action {
-  border-color: #e4c46f;
-  background: linear-gradient(145deg, #f5db93, #bc8c39);
-  color: #34250e;
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #f8fbff;
+}
+
+.action-bar .claim-chi {
+  border-color: #58aa9f;
+  background: linear-gradient(145deg, #3d998d, #17625b);
+  color: #f8fffd;
+}
+
+.action-bar .claim-pon {
+  border-color: #82add7;
+  background: linear-gradient(145deg, #669bd0, #345f8d);
+  color: #f8fbff;
+}
+
+.action-bar .claim-kan {
+  border-color: #df956d;
+  background: linear-gradient(145deg, #d47b4c, #984029);
+  color: #fff8ee;
 }
 
 .action-bar .gold-action {
-  border-color: #fff0b1;
-  background: linear-gradient(145deg, #fff0ad, #dc9632);
-  box-shadow: 0 0 20px rgba(241, 190, 74, 0.36);
-  color: #482a08;
+  border-color: rgba(255, 239, 170, 0.72);
+  background: linear-gradient(145deg, #f4d979, #c58d27);
+  box-shadow:
+    0 0 18px rgba(234, 184, 66, 0.28),
+    0 5px 14px rgba(0, 0, 0, 0.24);
+  color: #2d1b02;
+}
+
+#abort-button {
+  border-color: rgba(173, 154, 68, 0.62);
+  background: linear-gradient(145deg, #7d6d27, #4d471b);
+  box-shadow:
+    0 5px 14px rgba(0, 0, 0, 0.3),
+    inset 0 1px rgba(255, 255, 255, 0.12);
+  color: #fff9df;
 }
 
 .action-bar .riichi-cancel-action {
@@ -599,10 +697,12 @@ a {
   height: 54px;
   min-height: 54px;
   padding: 0;
-  border-color: rgba(214, 220, 218, 0.52);
-  background: linear-gradient(145deg, #454b4e, #222629);
-  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.34), inset 0 1px rgba(255, 255, 255, 0.14);
-  color: #f5f6f3;
+  border-color: rgba(183, 205, 219, 0.52);
+  background: linear-gradient(145deg, #596f7f, #303f4b);
+  box-shadow:
+    0 5px 14px rgba(0, 0, 0, 0.34),
+    inset 0 1px rgba(255, 255, 255, 0.14);
+  color: #f7fbff;
 }
 
 .riichi-cancel-action svg {
@@ -617,10 +717,10 @@ a {
 
 .action-bar .win-action,
 .action-bar .claim-ron {
-  border-color: rgba(224, 120, 126, 0.78);
-  background: linear-gradient(145deg, #8d2e38, #4b1119);
+  border-color: rgba(225, 125, 134, 0.78);
+  background: linear-gradient(145deg, #a8404e, #641c28);
   box-shadow: 0 0 18px rgba(133, 26, 37, 0.34);
-  color: #fff1ea;
+  color: #fff5f3;
 }
 
 .result-panel {
@@ -629,7 +729,7 @@ a {
   top: 50%;
   left: 50%;
   display: grid;
-  width: min(92%, 540px);
+  width: 760px;
   justify-items: center;
   padding: 24px 26px;
   border: 1px solid rgba(255, 222, 144, 0.68);
@@ -637,7 +737,9 @@ a {
   background:
     radial-gradient(circle at 50% 0, rgba(83, 136, 109, 0.3), transparent 46%),
     linear-gradient(145deg, rgba(14, 42, 37, 0.98), rgba(3, 18, 17, 0.985));
-  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.66), inset 0 0 0 3px rgba(255, 255, 255, 0.03);
+  box-shadow:
+    0 30px 100px rgba(0, 0, 0, 0.66),
+    inset 0 0 0 3px rgba(255, 255, 255, 0.03);
   text-align: center;
   transform: translate(-50%, -50%);
   animation: result-arrive 420ms cubic-bezier(0.2, 0.85, 0.25, 1.15);
@@ -645,8 +747,14 @@ a {
 }
 
 @keyframes result-arrive {
-  from { opacity: 0; transform: translate(-50%, -45%) scale(0.92); }
-  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  from {
+    opacity: 0;
+    transform: translate(-50%, -45%) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
 }
 
 .result-panel > span {
@@ -692,26 +800,27 @@ a {
   min-width: 0;
   align-items: flex-end;
   justify-content: center;
-  gap: 1px;
+  gap: 1.5px;
   overflow-x: auto;
-  padding: 14px 0 6px;
+  padding: 21px 0 9px;
 }
 
 .tile-result {
   display: block;
   box-sizing: border-box;
-  width: 22px;
-  height: 31px;
-  flex: 0 0 22px;
+  width: 33px;
+  height: 47px;
+  flex: 0 0 33px;
   border: 1px solid rgba(116, 114, 104, 0.75);
   border-radius: 3px;
   background-color: #e7e7e4;
   background-image: url("./assets/tiles/riichi-faces.webp");
-  background-position:
-    calc(var(--tile-column) * 100% / 7)
+  background-position: calc(var(--tile-column) * 100% / 7)
     calc(var(--tile-row) * 100% / 4);
   background-size: 800% 500%;
-  box-shadow: 0 2px 0 #9ea1a0, 0 3px 5px rgba(0, 0, 0, 0.28);
+  box-shadow:
+    0 2px 0 #9ea1a0,
+    0 3px 5px rgba(0, 0, 0, 0.28);
 }
 
 .tile-result > * {
@@ -723,7 +832,7 @@ a {
 }
 
 .tile-result.is-winning-tile {
-  margin-left: 6px;
+  margin-left: 9px;
   border-color: rgba(218, 82, 82, 0.76);
 }
 
@@ -731,13 +840,13 @@ a {
   position: relative;
   display: block;
   width: var(--result-meld-width);
-  height: 31px;
+  height: 47px;
   flex: 0 0 var(--result-meld-width);
-  margin-left: 6px;
+  margin-left: 9px;
 }
 
 .result-meld.has-stacked-tile {
-  height: 42px;
+  height: 63px;
 }
 
 .result-meld .tile-result {
@@ -749,17 +858,17 @@ a {
 }
 
 .result-meld .tile-result.is-sideways {
-  bottom: -4.5px;
+  bottom: -6.75px;
   transform: translateX(-50%) rotate(90deg);
 }
 
 .result-meld .tile-result.is-stacked {
-  bottom: 11px;
+  bottom: 16.5px;
   z-index: 2;
 }
 
 .result-meld .tile-result.is-sideways.is-stacked {
-  bottom: 6.5px;
+  bottom: 9.75px;
 }
 
 .result-meld .tile-result.is-face-down {
@@ -793,7 +902,7 @@ a {
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.07);
   color: rgba(255, 255, 255, 0.78);
-  font-size: 0.67rem;
+  font-size: 14.7px;
 }
 
 .result-yaku span i {
@@ -815,6 +924,39 @@ a {
   font-size: 0.7rem;
 }
 
+.result-footer {
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
+.result-value {
+  margin-right: 2px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.result-total {
+  color: #fff;
+  font-family: "Roboto Slab", ui-monospace, monospace;
+  font-size: 42px;
+  font-weight: 850;
+  line-height: 1;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.48);
+}
+
+.result-total-unit {
+  margin-left: 2px;
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .result-panel button {
   border-color: #e0bd67;
   background: linear-gradient(145deg, #efd487, #b98938);
@@ -830,7 +972,12 @@ a {
   place-items: center;
   padding: 24px;
   background:
-    linear-gradient(90deg, rgba(1, 9, 9, 0.4), rgba(1, 11, 10, 0.12), rgba(1, 9, 9, 0.56)),
+    linear-gradient(
+      90deg,
+      rgba(1, 9, 9, 0.4),
+      rgba(1, 11, 10, 0.12),
+      rgba(1, 9, 9, 0.56)
+    ),
     url("./assets/moonlit-table-v3.jpg") center / cover no-repeat;
 }
 
@@ -838,7 +985,11 @@ a {
 .loading-panel::before {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 50% 42%, transparent 15%, rgba(0, 7, 7, 0.38) 82%);
+  background: radial-gradient(
+    circle at 50% 42%,
+    transparent 15%,
+    rgba(0, 7, 7, 0.38) 82%
+  );
   content: "";
   pointer-events: none;
 }
@@ -852,9 +1003,14 @@ a {
   padding: 31px;
   border: 1px solid rgba(242, 207, 124, 0.48);
   border-radius: 24px;
-  background:
-    linear-gradient(145deg, rgba(20, 55, 48, 0.9), rgba(2, 20, 18, 0.95));
-  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.62), inset 0 0 0 3px rgba(255, 255, 255, 0.025);
+  background: linear-gradient(
+    145deg,
+    rgba(20, 55, 48, 0.9),
+    rgba(2, 20, 18, 0.95)
+  );
+  box-shadow:
+    0 30px 100px rgba(0, 0, 0, 0.62),
+    inset 0 0 0 3px rgba(255, 255, 255, 0.025);
   text-align: center;
   backdrop-filter: blur(20px);
 }
@@ -886,7 +1042,11 @@ a {
   overflow: hidden;
   border: 1px solid rgba(239, 204, 121, 0.28);
   border-radius: 13px;
-  background: linear-gradient(100deg, rgba(255, 255, 255, 0.07), rgba(238, 198, 105, 0.08));
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.07),
+    rgba(238, 198, 105, 0.08)
+  );
   color: #fff6df;
   cursor: pointer;
   transition: 170ms ease;
@@ -898,7 +1058,12 @@ a {
   bottom: 0;
   left: -40%;
   width: 35%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.1),
+    transparent
+  );
   content: "";
   transform: skewX(-18deg);
   transition: left 380ms ease;
@@ -906,13 +1071,23 @@ a {
 
 .setup-card > button:hover {
   border-color: var(--gold);
-  background: linear-gradient(100deg, rgba(238, 198, 105, 0.17), rgba(255, 255, 255, 0.08));
+  background: linear-gradient(
+    100deg,
+    rgba(238, 198, 105, 0.17),
+    rgba(255, 255, 255, 0.08)
+  );
   transform: translateY(-1px);
 }
 
-.setup-card > button:hover::after { left: 115%; }
-.setup-card button b { font-size: 0.98rem; }
-.setup-card button small { color: rgba(255, 255, 255, 0.5); }
+.setup-card > button:hover::after {
+  left: 115%;
+}
+.setup-card button b {
+  font-size: 0.98rem;
+}
+.setup-card button small {
+  color: rgba(255, 255, 255, 0.5);
+}
 
 .rule-options {
   margin-top: 5px;
@@ -949,7 +1124,9 @@ a {
   font-size: 0.7rem;
 }
 
-.rule-options input { accent-color: #d8b45f; }
+.rule-options input {
+  accent-color: #d8b45f;
+}
 
 .loading-panel {
   justify-items: center;
@@ -966,7 +1143,9 @@ a {
   border: 1px solid #8f8b75;
   border-radius: 8px;
   background: linear-gradient(145deg, #fffdf3, #ddd7c2);
-  box-shadow: 0 7px 0 #9d9a83, 0 20px 42px rgba(0, 0, 0, 0.52);
+  box-shadow:
+    0 7px 0 #9d9a83,
+    0 20px 42px rgba(0, 0, 0, 0.52);
   color: #c83b32;
   font-family: "Songti SC", "Noto Serif SC", serif;
   font-size: 2.4rem;
@@ -975,7 +1154,9 @@ a {
 }
 
 @keyframes loading-float {
-  50% { transform: translateY(-8px) rotate(2deg); }
+  50% {
+    transform: translateY(-8px) rotate(2deg);
+  }
 }
 
 .loading-panel strong {
@@ -999,7 +1180,9 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
