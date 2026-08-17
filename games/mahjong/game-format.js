@@ -10,6 +10,13 @@ export function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+export function riverDisplayEntries(river) {
+  return asArray(river)
+    .map((discard, sourceIndex) => ({ discard, sourceIndex }))
+    .filter(({ discard }) => !discard?.claimed)
+    .map((entry, displayIndex) => ({ ...entry, displayIndex }));
+}
+
 export function partitionClaimActions(claims) {
   const chi = [];
   const immediate = [];

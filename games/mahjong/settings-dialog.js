@@ -1,5 +1,7 @@
 const DOUBLE_CLICK_TSUMOGIRI_KEY = "playweft.mahjong.double-click-tsumogiri";
 const DOUBLE_CLICK_PASS_KEY = "playweft.mahjong.double-click-pass";
+const DISCARD_VOLUME_KEY = "playweft.mahjong.discard-volume";
+const DEFAULT_DISCARD_VOLUME = 100;
 const DIALOG_TRANSITION_FALLBACK_MS = 240;
 
 export function createMahjongSettingsDialog({
@@ -11,6 +13,8 @@ export function createMahjongSettingsDialog({
   tabPanels,
   doubleClickTsumogiri,
   doubleClickPass,
+  discardVolume,
+  discardVolumeValue,
 }) {
   let returnFocus = null;
   let open = false;
@@ -22,6 +26,19 @@ export function createMahjongSettingsDialog({
     false,
   );
   doubleClickPass.checked = readBooleanSetting(DOUBLE_CLICK_PASS_KEY, false);
+  discardVolume.value = String(
+    readDiscardVolumeSetting(DISCARD_VOLUME_KEY, DEFAULT_DISCARD_VOLUME),
+  );
+  renderDiscardVolume();
+
+  function renderDiscardVolume() {
+    const value = normalizeDiscardVolume(discardVolume.value);
+    const label = value === 0 ? "静音" : `${value}%`;
+    discardVolume.value = String(value);
+    discardVolume.setAttribute("aria-valuetext", label);
+    discardVolumeValue.textContent = label;
+    return value;
+  }
 
   function setTab(name) {
     for (const button of tabButtons) {
@@ -145,6 +162,10 @@ export function createMahjongSettingsDialog({
     writeBooleanSetting(DOUBLE_CLICK_PASS_KEY, doubleClickPass.checked);
   }
 
+  function onDiscardVolumeInput() {
+    writeDiscardVolumeSetting(DISCARD_VOLUME_KEY, renderDiscardVolume());
+  }
+
   function onTriggerClick() {
     setOpen(true);
   }
@@ -160,6 +181,7 @@ export function createMahjongSettingsDialog({
   document.addEventListener("keydown", onKeyDown);
   doubleClickTsumogiri.addEventListener("change", onTsumogiriSettingChange);
   doubleClickPass.addEventListener("change", onPassSettingChange);
+  discardVolume.addEventListener("input", onDiscardVolumeInput);
   for (const button of tabButtons) {
     button.addEventListener("click", () => setTab(button.dataset.settingsTab));
     button.addEventListener("keydown", onTabKeyDown);
@@ -171,6 +193,9 @@ export function createMahjongSettingsDialog({
     },
     get doubleClickPassEnabled() {
       return doubleClickPass.checked;
+    },
+    get discardVolumeScale() {
+      return normalizeDiscardVolume(discardVolume.value) / 100;
     },
     setOpen,
     destroy() {
@@ -185,11 +210,18 @@ export function createMahjongSettingsDialog({
       document.removeEventListener("keydown", onKeyDown);
       doubleClickTsumogiri.removeEventListener("change", onTsumogiriSettingChange);
       doubleClickPass.removeEventListener("change", onPassSettingChange);
+      discardVolume.removeEventListener("input", onDiscardVolumeInput);
       for (const button of tabButtons) {
         button.removeEventListener("keydown", onTabKeyDown);
       }
     },
   };
+}
+
+export function normalizeDiscardVolume(value, fallback = DEFAULT_DISCARD_VOLUME) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(0, Math.min(100, Math.round(number)));
 }
 
 function readBooleanSetting(key, fallback) {
@@ -202,6 +234,23 @@ function readBooleanSetting(key, fallback) {
 }
 
 function writeBooleanSetting(key, value) {
+  try {
+    window.localStorage.setItem(key, String(value));
+  } catch {
+    // Storage can be unavailable in sandboxed game hosts; the session value remains active.
+  }
+}
+
+function readDiscardVolumeSetting(key, fallback) {
+  try {
+    const value = window.localStorage.getItem(key);
+    return value === null ? fallback : normalizeDiscardVolume(value, fallback);
+  } catch {
+    return fallback;
+  }
+}
+
+function writeDiscardVolumeSetting(key, value) {
   try {
     window.localStorage.setItem(key, String(value));
   } catch {

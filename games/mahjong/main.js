@@ -23,6 +23,8 @@ import {
 import { MahjongThreeRenderer } from "./three-renderer.js";
 import { MahjongPresentationController } from "./presentation-controller.js";
 import { createMahjongSettingsDialog } from "./settings-dialog.js";
+import discardSoundSource from "./assets/audio/discard-sound.js";
+import { riverTileSoundCue } from "./render/audio-cues.js";
 import {
   activateMahjongAssetPack,
   configureMahjongAssetPackAppearance,
@@ -54,8 +56,11 @@ let hasPlatformAvatar = false;
 const matchMusic = new Audio();
 matchMusic.loop = true;
 matchMusic.preload = "metadata";
+const riverTileSound = new Audio(discardSoundSource);
+riverTileSound.preload = "auto";
 let musicNeedsGesture = false;
 let voicedEventKey = "";
+let playedRiverTileSoundKey = "";
 
 const releaseFixedViewport = bindFixedViewport(
   document.querySelector("#mahjong-viewport"),
@@ -81,6 +86,8 @@ const settingsDialog = createMahjongSettingsDialog({
   tabPanels: elements.settingsPanels,
   doubleClickTsumogiri: elements.doubleClickTsumogiri,
   doubleClickPass: elements.doubleClickPass,
+  discardVolume: elements.riverTileVolume,
+  discardVolumeValue: elements.riverTileVolumeValue,
 });
 const visualRenderer = new MahjongThreeRenderer(elements.stage, {
   onSelectTile: selectTile,
@@ -315,6 +322,19 @@ function syncMatchMusic({ start = Boolean(game) } = {}) {
 
 function resumeMatchMusic() {
   if (musicNeedsGesture) syncMatchMusic();
+}
+
+function playRiverTileSound(events) {
+  const cue = riverTileSoundCue(state, events);
+  if (!cue || cue.key === playedRiverTileSoundKey) return;
+  playedRiverTileSoundKey = cue.key;
+  const volume = cue.volume * settingsDialog.discardVolumeScale;
+  if (volume <= 0) return;
+  riverTileSound.pause();
+  riverTileSound.currentTime = 0;
+  riverTileSound.volume = volume;
+  riverTileSound.playbackRate = cue.playbackRate;
+  void riverTileSound.play().catch(() => {});
 }
 
 function playRoleVoices(events) {
@@ -720,6 +740,7 @@ function refresh({ ownDiscardedTile = 0 } = {}) {
   const revealKey = handEndPresentationKey(state);
   presentation.syncResult(revealKey, handEndPresentationDelay(state));
   renderCurrentState();
+  playRiverTileSound(events);
 }
 
 function renderCurrentState() {
@@ -912,6 +933,7 @@ function cancelRiichiMode() {
 
 function handlePageHide(event) {
   matchMusic.pause();
+  riverTileSound.pause();
   window.clearTimeout(aiTimer);
   presentation.suspend();
   if (!event.persisted) destroy();
@@ -924,6 +946,7 @@ function handlePageShow(event) {
 function handleVisibilityChange() {
   if (document.visibilityState === "hidden") {
     matchMusic.pause();
+    riverTileSound.pause();
     window.clearTimeout(aiTimer);
     presentation.suspend();
     return;
@@ -954,6 +977,7 @@ function destroy() {
   presentation.destroy();
   matchMusic.pause();
   matchMusic.removeAttribute("src");
+  riverTileSound.pause();
   window.removeEventListener("pagehide", handlePageHide);
   window.removeEventListener("pageshow", handlePageShow);
   document.removeEventListener("visibilitychange", handleVisibilityChange);

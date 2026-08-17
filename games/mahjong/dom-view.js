@@ -9,6 +9,7 @@ import {
   isRedFive,
   orderedHand,
   partitionClaimActions,
+  riverDisplayEntries,
   roundLabel,
   resultBasePaymentTotal,
   scoreDeltaSummary,
@@ -283,13 +284,12 @@ export class MahjongDomView {
       const position = POSITIONS[seat - 1];
       const river = asArray(state.discards?.[state.players[seat - 1]]);
       this.elements.rivers[position].replaceChildren(
-        ...river.map((discard, index) => {
+        ...riverDisplayEntries(river).map(({ discard, sourceIndex }) => {
           const tile = createTile(discard.type, "river");
           tile.dataset.riichi = String(discard.riichi === true);
-          tile.classList.toggle("is-claimed", discard.claimed);
           tile.classList.toggle(
             "is-latest",
-            latest?.playerIndex === seat && index === river.length - 1,
+            latest?.playerIndex === seat && sourceIndex === river.length - 1,
           );
           return tile;
         }),
@@ -693,6 +693,8 @@ function collectElements() {
       "#double-click-tsumogiri-setting",
     ),
     doubleClickPass: document.querySelector("#double-click-pass-setting"),
+    riverTileVolume: document.querySelector("#discard-volume-setting"),
+    riverTileVolumeValue: document.querySelector("#discard-volume-value"),
     loading: document.querySelector("#loading-panel"),
     loadingMessage: document.querySelector("#loading-message"),
     stage: document.querySelector("#mahjong-stage"),

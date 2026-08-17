@@ -21,6 +21,7 @@ import {
   partitionClaimActions,
   nextDoraType,
   resultBasePaymentTotal,
+  riverDisplayEntries,
   splitRevealedHand,
 } from "../games/mahjong/game-format.js";
 import {
@@ -89,6 +90,8 @@ import { TABLE_GEOMETRY } from "../games/mahjong/render/three-table.js";
 import { planarTileJitter } from "../games/mahjong/render/three-tile-jitter.js";
 import { ThreeAnimationController } from "../games/mahjong/render/three-animation-controller.js";
 import { MahjongPresentationController } from "../games/mahjong/presentation-controller.js";
+import { riverTileSoundCue } from "../games/mahjong/render/audio-cues.js";
+import { normalizeDiscardVolume } from "../games/mahjong/settings-dialog.js";
 
 const MAHJONG_STYLE_MODULES = [
   "table.css",
@@ -106,6 +109,55 @@ function readMahjongStyles() {
     ),
   ).join("\n");
 }
+
+test("mahjong gives each new river tile one quiet perspective sound cue", () => {
+  const state = {
+    roundWind: 1,
+    handNumber: 2,
+    honba: 0,
+    moveCount: 8,
+  };
+  const own = riverTileSoundCue(state, [
+    { type: "discarded", playerIndex: 1, tile: 17 },
+  ]);
+  const opposite = riverTileSoundCue(state, [
+    { type: "riichi", playerIndex: 3, tile: 19 },
+  ]);
+
+  assert.equal(riverTileSoundCue(state, [{ type: "drawn" }]), null);
+  assert.equal(own.key, "1:2:0:8:discarded:1:17");
+  assert.equal(opposite.key, "1:2:0:8:riichi:3:19");
+  assert.ok(own.volume > opposite.volume);
+  assert.ok(own.playbackRate >= 0.98 && own.playbackRate <= 1.02);
+  assert.ok(opposite.playbackRate >= 0.98 && opposite.playbackRate <= 1.02);
+});
+
+test("mahjong closes river gaps left by called discards", () => {
+  const entries = riverDisplayEntries([
+    { type: 4, claimed: false },
+    { type: 7, claimed: true },
+    { type: 12, claimed: false, riichi: true },
+  ]);
+
+  assert.deepEqual(
+    entries.map(({ sourceIndex, displayIndex, discard }) => ({
+      sourceIndex,
+      displayIndex,
+      type: discard.type,
+    })),
+    [
+      { sourceIndex: 0, displayIndex: 0, type: 4 },
+      { sourceIndex: 2, displayIndex: 1, type: 12 },
+    ],
+  );
+});
+
+test("mahjong normalizes the saved river tile volume", () => {
+  assert.equal(normalizeDiscardVolume("42"), 42);
+  assert.equal(normalizeDiscardVolume(-1), 0);
+  assert.equal(normalizeDiscardVolume(120), 100);
+  assert.equal(normalizeDiscardVolume("invalid", 75), 75);
+});
 
 test("mahjong stylesheet entry preserves the modular cascade order", () => {
   const entry = readFileSync(
@@ -1330,7 +1382,7 @@ test("mahjong uses one standing 3D tile transform for all four seats", () => {
   assert.match(renderer, /const riichiColumns = new Map\(\)/);
   assert.match(
     renderer,
-    /const \{ row \} = riverGridPosition\(index\);[\s\S]*riichiColumn: riichiColumns\.get\(row\) \?\? -1/,
+    /const \{ row \} = riverGridPosition\(displayIndex\);[\s\S]*riichiColumn: riichiColumns\.get\(row\) \?\? -1/,
   );
   assert.ok(
     Math.abs(
@@ -1929,6 +1981,15 @@ test("mahjong settings dialog combines operation controls and themed help", () =
     html,
     /role="tab"[^>]*data-settings-tab="help"[^>]*>帮助<\/button>/,
   );
+  assert.match(
+    html,
+    /role="tab"[^>]*data-settings-tab="sound"[^>]*>声音<\/button>/,
+  );
+  assert.match(
+    html,
+    /id="discard-volume-setting"[^>]*type="range"[^>]*min="0"[^>]*max="100"/,
+  );
+  assert.match(html, /id="discard-volume-value"[^>]*>100%<\/output>/);
   assert.match(html, /class="settings-dialog-close"[^>]*aria-label="关闭设置"/);
   assert.match(html, /双击空白处摸切/);
   assert.match(
@@ -1944,10 +2005,12 @@ test("mahjong settings dialog combines operation controls and themed help", () =
   assert.match(helpHtml, /\.\/styles\/help\.css/);
   assert.match(dialog, /DOUBLE_CLICK_TSUMOGIRI_KEY/);
   assert.match(dialog, /DOUBLE_CLICK_PASS_KEY/);
+  assert.match(dialog, /DISCARD_VOLUME_KEY/);
   assert.match(dialog, /window\.localStorage\.setItem/);
   assert.match(main, /Cog, X, createIcons/);
   assert.match(main, /settingsDialog\.doubleClickTsumogiriEnabled/);
   assert.match(main, /settingsDialog\.doubleClickPassEnabled/);
+  assert.match(main, /cue\.volume \* settingsDialog\.discardVolumeScale/);
   assert.match(
     main,
     /passAvailable: !elements\.pass\.hidden && !elements\.pass\.disabled/,

@@ -25,6 +25,7 @@ import {
   doraTypeCounts,
   isRedFive,
   opponentHandLayout,
+  riverDisplayEntries,
   splitRevealedHand,
   tileType,
 } from "./game-format.js";
@@ -737,19 +738,19 @@ export class MahjongThreeRenderer {
     for (let seat = 1; seat <= 4; seat += 1) {
       const position = POSITIONS[seat - 1];
       const river = asArray(state.discards?.[state.players[seat - 1]]);
+      const entries = riverDisplayEntries(river);
       const riichiColumns = new Map();
-      river.forEach((discard, index) => {
-        if (discard.riichi === true && !discard.claimed) {
-          const { column, row } = riverGridPosition(index);
+      entries.forEach(({ discard, displayIndex }) => {
+        if (discard.riichi === true) {
+          const { column, row } = riverGridPosition(displayIndex);
           riichiColumns.set(row, column);
         }
       });
-      river.forEach((discard, index) => {
-        if (discard.claimed) return;
-        const { row } = riverGridPosition(index);
+      entries.forEach(({ discard, sourceIndex, displayIndex }) => {
+        const { row } = riverGridPosition(displayIndex);
         const transform = riverTransform(
           position,
-          index,
+          displayIndex,
           discard.riichi === true,
           {
             riichiColumn: riichiColumns.get(row) ?? -1,
@@ -762,7 +763,7 @@ export class MahjongThreeRenderer {
           slot,
           transform.yaw,
           planarTileJitter(
-            `${seat}:river:${index}:${discard.type}`,
+            `${seat}:river:${sourceIndex}:${discard.type}`,
             RIVER_TILE_GAP,
             { width: TILE_SIZE.width, height: TILE_SIZE.height },
           ),

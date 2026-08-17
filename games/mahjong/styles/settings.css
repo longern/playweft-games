@@ -173,6 +173,58 @@
   line-height: 1.2;
 }
 
+.settings-sound-panel {
+  padding: 32px 34px;
+}
+
+.settings-volume-card {
+  max-width: 610px;
+  padding: 24px 26px 22px;
+  border: 1px solid rgba(231, 198, 116, 0.25);
+  border-radius: 12px;
+  background: rgba(1, 18, 18, 0.48);
+}
+
+.settings-volume-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.settings-volume-heading label {
+  color: #fff2cc;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.settings-volume-heading output {
+  min-width: 3.5em;
+  color: #ffe4a0;
+  font-size: 16px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.settings-volume-card input[type="range"] {
+  width: 100%;
+  margin: 22px 0 14px;
+  accent-color: #d5a443;
+  cursor: pointer;
+}
+
+.settings-volume-card input[type="range"]:focus-visible {
+  outline: 2px solid rgba(255, 226, 155, 0.82);
+  outline-offset: 5px;
+}
+
+.settings-volume-card p {
+  margin: 0;
+  color: rgba(238, 240, 225, 0.64);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 .settings-visual-panel {
   padding: 28px 34px;
   overflow: auto;
