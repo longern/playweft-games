@@ -8,7 +8,7 @@ export const PLAYERS = [
 ];
 
 export const POSITIONS = ["bottom", "right", "top", "left"];
-export const WINDS = ["东", "南", "西", "北"];
+export const WINDS = ["東", "南", "西", "北"];
 export const CLAIM_LABELS = {
   ron: "和",
   kan: "杠",

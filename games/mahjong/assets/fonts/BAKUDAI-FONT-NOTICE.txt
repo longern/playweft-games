@@ -4,8 +4,8 @@ Source: https://github.com/max32002/bakudaifont
 Upstream version used for this subset: 1.48 Regular
 
 Bakudai is derived from Aoyagi Kouzan's Kouzan Brush Font Gyousho. This
-project embeds a WOFF2 subset containing only the characters required by
-the Mahjong match label and action buttons.
+project embeds a WOFF2 subset containing only the numbers and characters
+required by the Mahjong round labels, match labels, and action buttons.
 
 Bakudai is distributed under the SIL Open Font License 1.1. The complete
 license text is included in BAKUDAI-OFL.txt.

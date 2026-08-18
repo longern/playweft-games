@@ -248,7 +248,8 @@ export function seatWind(state, seat) {
 }
 
 export function roundLabel(roundWind, handNumber) {
-  return `${WINDS[Number(roundWind) - 1] ?? "东"}${["一", "二", "三", "四"][Number(handNumber) - 1] ?? "一"}局`;
+  const roundWinds = ["東", "南", "西", "北"];
+  return `${roundWinds[Number(roundWind) - 1] ?? "東"}${["一", "二", "三", "四"][Number(handNumber) - 1] ?? "一"}局`;
 }
 
 export function eventMessage(state, event, playerName) {

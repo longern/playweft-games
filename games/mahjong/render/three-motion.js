@@ -1,6 +1,28 @@
 export const HAND_REVEAL_FALL_DURATION_MS = 360;
+export const OWN_HAND_CROSSFADE_DURATION_MS = 150;
 export const OWN_DRAW_ENTRY_DURATION_MS = 180;
+export const OWN_TILE_HOVER_DURATION_MS = 90;
+export const OWN_TILE_HOVER_LIFT = 5;
 export const OWN_TILE_SELECTION_DURATION_MS = 120;
+
+export function shouldCrossfadeOwnHand({
+  revealed,
+  covered,
+  animated,
+  hasOverlay,
+}) {
+  return Boolean(revealed && !covered && animated && hasOverlay);
+}
+
+export function ownHandCrossfadeProgress(value) {
+  const time = Math.max(0, Math.min(1, Number(value) || 0));
+  return time * time * (3 - 2 * time);
+}
+
+export function handRevealStartDelay(baseDelay, crossfadeOwnHand) {
+  return Math.max(0, Number(baseDelay) || 0)
+    + (crossfadeOwnHand ? OWN_HAND_CROSSFADE_DURATION_MS : 0);
+}
 
 // Two hands keep driving the row after it begins to tip. Gravity adds angular
 // acceleration through the middle of the fall, then the hands absorb part of

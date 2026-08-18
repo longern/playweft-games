@@ -20,6 +20,7 @@ import {
   orderedHand,
   partitionClaimActions,
   nextDoraType,
+  roundLabel,
   resultBasePaymentTotal,
   riverDisplayEntries,
   splitRevealedHand,
@@ -58,10 +59,17 @@ import {
   TILE_SIZE,
 } from "../games/mahjong/render/three-layout.js";
 import {
+  HAND_REVEAL_FALL_DURATION_MS,
+  handRevealStartDelay,
   handRevealFallProgress,
+  OWN_HAND_CROSSFADE_DURATION_MS,
+  OWN_TILE_HOVER_DURATION_MS,
+  OWN_TILE_HOVER_LIFT,
+  ownHandCrossfadeProgress,
   ownDrawEntryKey,
   ownDrawEntryProgress,
   ownTileSelectionProgress,
+  shouldCrossfadeOwnHand,
 } from "../games/mahjong/render/three-motion.js";
 import {
   TILE_FACE_NAMES,
@@ -76,6 +84,7 @@ import {
 } from "../games/mahjong/render/three-tile-factory.js";
 import {
   prepareTableConsoleContext,
+  TABLE_CONSOLE_CORE_LAYOUT,
   TABLE_CONSOLE_LAYOUT,
   TABLE_CONSOLE_SCORE_LAYOUT,
 } from "../games/mahjong/render/three-console.js";
@@ -348,7 +357,9 @@ test("mahjong keeps the 13-tile rack stable and moves the drawn tile to the end"
   assert.equal(firstRackTile.scale, drawnTile.scale);
   assert.equal(firstRackTile.scaleX, drawnTile.scaleX);
   assert.equal(firstRackTile.scaleY, drawnTile.scaleY);
-  assert.ok(Math.abs(firstRackTile.lift / firstRackTile.tileHeight - 0.18) < 1e-12);
+  assert.ok(
+    Math.abs(firstRackTile.lift / firstRackTile.tileHeight - 0.18) < 1e-12,
+  );
   assert.equal(firstRackTile.tilt, OWN_HAND_TILT);
   assert.ok(OWN_HAND_TILT > 0.09 && OWN_HAND_TILT < 0.12);
   const safeWidth = Math.min(1280, 588 * OWN_HAND_LAYOUT.safeAspect);
@@ -380,6 +391,19 @@ test("mahjong keeps the 13-tile rack stable and moves the drawn tile to the end"
     0,
   );
   assert.ok(compactFirst.scale < firstRackTile.scale);
+});
+
+test("mahjong aligns its rightmost action with the thirteenth hand tile", () => {
+  const styles = readMahjongStyles();
+  const actionInset = Number(
+    styles.match(/--mahjong-action-right:\s*([\d.]+)px/)?.[1],
+  );
+  const thirteenthTile = ownHandOverlayTransform(12, 1280, 720);
+  const thirteenthRightEdge =
+    1280 / 2 + thirteenthTile.x + thirteenthTile.tileWidth / 2;
+
+  assert.ok(Number.isFinite(actionInset));
+  assert.ok(Math.abs(1280 - actionInset - thirteenthRightEdge) < 0.01);
 });
 
 test("mahjong pauses before integrating a hand-discarded drawn tile", () => {
@@ -471,8 +495,8 @@ test("mahjong presentation scheduling cancels insertion before terminal reveal",
   let resultReady = 0;
   const presentation = new MahjongPresentationController(
     {
-      onHandInsertionReady: () => insertionReady += 1,
-      onResultReady: () => resultReady += 1,
+      onHandInsertionReady: () => (insertionReady += 1),
+      onResultReady: () => (resultReady += 1),
     },
     { schedule, cancel },
   );
@@ -604,7 +628,10 @@ test("mahjong groups every chi behind one action and previews only the two consu
     { option: 3, kind: "chi", tileTypes: [5, 6], red: [false, false] },
   ];
   const grouped = partitionClaimActions(claims);
-  assert.deepEqual(grouped.immediate.map(({ kind }) => kind), ["ron"]);
+  assert.deepEqual(
+    grouped.immediate.map(({ kind }) => kind),
+    ["ron"],
+  );
   assert.deepEqual(grouped.pon, []);
   assert.deepEqual(
     grouped.chi.map(({ option }) => option),
@@ -689,9 +716,9 @@ test("mahjong keeps action buttons in a fixed player-facing order", () => {
     "for (const claim of immediateClaims)",
   );
   assert.ok(
-    chiPosition > 0
-      && chiPosition < ponPosition
-      && ponPosition < immediatePosition,
+    chiPosition > 0 &&
+      chiPosition < ponPosition &&
+      ponPosition < immediatePosition,
   );
   assert.match(
     view,
@@ -875,7 +902,7 @@ test("mahjong shows oversized non-perspective callouts for claims, riichi, and w
   assert.match(renderer, /this\.actionCallout\.showLatest\(/);
   assert.match(
     renderer,
-    /delayHandRevealForCallout \? ACTION_CALLOUT_DURATION_MS : 0/,
+    /const revealDelay = ui\.delayHandRevealForCallout\s*\? ACTION_CALLOUT_DURATION_MS\s*:\s*0/s,
   );
   assert.doesNotMatch(renderer, /ACTION_CALLOUT_DURATION_MS \* 0\.64/);
   assert.match(callout, /new CanvasTexture\(this\.canvas\)/);
@@ -961,10 +988,7 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   assert.match(main, /current\.abortiveReason === "九种九牌"/);
   assert.match(main, /exhaustive-draw/);
   assert.match(main, /revealPlayerIndices: revealedPlayerIndices/);
-  assert.match(
-    main,
-    /coveredPlayerIndices,/,
-  );
+  assert.match(main, /coveredPlayerIndices,/);
   assert.match(
     main,
     /revealedPlayerIndices\.length \+ coveredPlayerIndices\.length > 0 &&\s*!presentation\.resultVisible/s,
@@ -1037,9 +1061,10 @@ test("mahjong moves the local terminal hand onto a bottom-safe perspective row",
   camera.lookAt(0, 0.05, 0.4);
   camera.updateMatrixWorld();
   camera.updateProjectionMatrix();
-  const projected = new Vector3(0, TILE_SIZE.height / 2, eighth.z)
-    .project(camera);
-  const projectedY = (1 - projected.y) * MAHJONG_VIEWPORT.height / 2;
+  const projected = new Vector3(0, TILE_SIZE.height / 2, eighth.z).project(
+    camera,
+  );
+  const projectedY = ((1 - projected.y) * MAHJONG_VIEWPORT.height) / 2;
   const overlay = ownHandOverlayTransform(
     7,
     MAHJONG_VIEWPORT.width,
@@ -1093,25 +1118,66 @@ test("mahjong hand reveal combines a sustained push with gravity and hand brakin
   assert.ok(contactSpeed < gravityAssistedSpeed);
 });
 
+test("mahjong crossfades only the local revealed hand into perspective", () => {
+  assert.equal(
+    shouldCrossfadeOwnHand({
+      revealed: true,
+      covered: false,
+      animated: true,
+      hasOverlay: true,
+    }),
+    true,
+  );
+  for (const overrides of [
+    { revealed: false },
+    { covered: true },
+    { animated: false },
+    { hasOverlay: false },
+  ]) {
+    assert.equal(
+      shouldCrossfadeOwnHand({
+        revealed: true,
+        covered: false,
+        animated: true,
+        hasOverlay: true,
+        ...overrides,
+      }),
+      false,
+    );
+  }
+  assert.equal(ownHandCrossfadeProgress(0), 0);
+  assert.equal(ownHandCrossfadeProgress(0.5), 0.5);
+  assert.equal(ownHandCrossfadeProgress(1), 1);
+  assert.ok(OWN_HAND_CROSSFADE_DURATION_MS >= 120);
+  assert.ok(OWN_HAND_CROSSFADE_DURATION_MS <= 180);
+  assert.ok(OWN_HAND_CROSSFADE_DURATION_MS < HAND_REVEAL_FALL_DURATION_MS);
+  assert.equal(handRevealStartDelay(0, true), OWN_HAND_CROSSFADE_DURATION_MS);
+  assert.equal(
+    handRevealStartDelay(ACTION_CALLOUT_DURATION_MS, true),
+    ACTION_CALLOUT_DURATION_MS + OWN_HAND_CROSSFADE_DURATION_MS,
+  );
+  assert.equal(
+    handRevealStartDelay(ACTION_CALLOUT_DURATION_MS, false),
+    ACTION_CALLOUT_DURATION_MS,
+  );
+});
+
 test("mahjong animation controller shares one frame loop and deduplicates events", () => {
   let now = 0;
   let nextFrame = 0;
   let pendingFrame = null;
   let frameDraws = 0;
   const samples = { reveal: [], callout: [] };
-  const animations = new ThreeAnimationController(
-    () => frameDraws += 1,
-    {
-      now: () => now,
-      requestFrame(callback) {
-        pendingFrame = callback;
-        return ++nextFrame;
-      },
-      cancelFrame() {
-        pendingFrame = null;
-      },
+  const animations = new ThreeAnimationController(() => (frameDraws += 1), {
+    now: () => now,
+    requestFrame(callback) {
+      pendingFrame = callback;
+      return ++nextFrame;
     },
-  );
+    cancelFrame() {
+      pendingFrame = null;
+    },
+  });
   const advance = (time) => {
     const callback = pendingFrame;
     pendingFrame = null;
@@ -1178,6 +1244,8 @@ test("mahjong reuses local tile meshes for a quick interruptible selection lift"
   assert.equal(ownTileSelectionProgress(0), 0);
   assert.equal(ownTileSelectionProgress(0.5), 0.875);
   assert.equal(ownTileSelectionProgress(1), 1);
+  assert.ok(OWN_TILE_HOVER_DURATION_MS > 0);
+  assert.equal(OWN_TILE_HOVER_LIFT, 5);
 
   const renderer = readFileSync(
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
@@ -1199,6 +1267,22 @@ test("mahjong reuses local tile meshes for a quick interruptible selection lift"
     renderer.indexOf("  updateSelection(ui) {"),
     renderer.indexOf("  drawHands(state, selectedTileId) {"),
   );
+  const pointerDown = renderer.slice(
+    renderer.indexOf("  handlePointerDown(event) {"),
+    renderer.indexOf("  handlePointerMove(event) {"),
+  );
+  const hoverUpdate = renderer.slice(
+    renderer.indexOf("  setHoveredTile(tile, force = false) {"),
+    renderer.indexOf("  drawFrame() {"),
+  );
+  const pointerUp = renderer.slice(
+    renderer.indexOf("  handlePointerUp(event) {"),
+    renderer.indexOf("  handleTileTap(tileId, discardable) {"),
+  );
+  const cancelDrag = renderer.slice(
+    renderer.indexOf("  cancelDrag(redraw = true) {"),
+    renderer.indexOf("  pickTile(event) {"),
+  );
   const domSelection = view.slice(
     view.indexOf("  renderSelection("),
     view.indexOf("  renderTypeHighlights(selectedTileId) {"),
@@ -1211,6 +1295,24 @@ test("mahjong reuses local tile meshes for a quick interruptible selection lift"
   assert.doesNotMatch(selection, /visualRenderer\.render\(/);
   assert.doesNotMatch(selectionUpdate, /clearGroup|drawRivers|drawMelds/);
   assert.match(selectionUpdate, /this\.updateTypeHighlights\(\)/);
+  assert.match(renderer, /fromY: tile\.position\.y/);
+  assert.match(hoverUpdate, /this\.queueOwnTileMotions\(\)/);
+  assert.match(
+    hoverUpdate,
+    /this\.startOwnTileMotion\(OWN_TILE_HOVER_DURATION_MS\)/,
+  );
+  assert.doesNotMatch(hoverUpdate, /tile\.position\.y\s*=/);
+  assert.match(pointerDown, /this\.cancelOwnTileMotion\(\)/);
+  assert.doesNotMatch(pointerDown, /this\.setHoveredTile\(null\)/);
+  assert.match(
+    pointerUp,
+    /const hovered = canDiscard \? this\.pickTile\(event\) : null/,
+  );
+  assert.match(pointerUp, /style\.cursor = hovered \? "pointer" : "default"/);
+  assert.match(
+    cancelDrag,
+    /if \(drag && this\.renderer\?\.domElement\)\s*this\.renderer\.domElement\.style\.cursor = "default"/,
+  );
   assert.match(renderer, /this\.renderer\.shadowMap\.autoUpdate = false/);
   assert.match(domSelection, /this\.updateHandSelection\(selectedTileId\)/);
   assert.doesNotMatch(domSelection, /this\.renderHands|this\.renderActions/);
@@ -2076,6 +2178,12 @@ test("mahjong renders the centre console as a perspective tabletop component", (
   assert.doesNotMatch(consoleRenderer, /y: edgeInset,[^}]*rotation: Math\.PI/s);
   assert.match(consoleRenderer, /rotation: -Math\.PI \/ 2/);
   assert.doesNotMatch(consoleRenderer, /本场|供托/);
+  assert.match(consoleRenderer, /"Playweft Mahjong Xingshu"/);
+  assert.ok(
+    TABLE_CONSOLE_CORE_LAYOUT.roundFontSize >
+      TABLE_CONSOLE_CORE_LAYOUT.wallFontSize,
+  );
+  assert.equal(roundLabel(1, 1), "東一局");
   assert.match(renderer, /this\.scene\.add\(this\.tableConsole\.group\)/);
   assert.doesNotMatch(renderer, /this\.overlayScene\.add\(this\.tableConsole/);
   assert.ok(
@@ -2249,11 +2357,34 @@ test("mahjong renders a compact fixed five-slot dora rack", () => {
     "utf8",
   );
   assert.ok(
-    interfaceFont.byteLength > 1_000 && interfaceFont.byteLength < 10_000,
+    interfaceFont.byteLength > 1_000 && interfaceFont.byteLength < 15_000,
   );
   assert.match(interfaceFontNotice, /Bakudai Brush Font/);
   assert.match(interfaceFontNotice, /SIL Open Font License 1\.1/);
   assert.match(view, /state\.matchType === "hanchan" \? "四人南" : "四人東"/);
+
+  const styles = readMahjongStyles();
+  for (const codePoint of [
+    "U+002B",
+    "U+0030-0039",
+    "U+4E00",
+    "U+4E8C",
+    "U+5317",
+    "U+5834",
+    "U+897F",
+    "U+98A8",
+  ]) {
+    assert.ok(
+      styles.includes(codePoint),
+      `${codePoint} is included in the UI font`,
+    );
+  }
+  for (const codePoint of ["U+4E1C", "U+573A", "U+98CE"]) {
+    assert.ok(
+      !styles.includes(codePoint),
+      `${codePoint} is excluded from the UI font`,
+    );
+  }
 });
 
 test("mahjong player nameplates leave scoring to the centre console", () => {
@@ -2278,7 +2409,7 @@ test("mahjong marks the east-seat badge explicitly", () => {
   );
   assert.match(
     view,
-    /windBadge\.classList\.toggle\("is-east", wind === "东"\)/,
+    /windBadge\.classList\.toggle\("is-east", wind === "東"\)/,
   );
 });
 

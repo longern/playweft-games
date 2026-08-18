@@ -5,9 +5,9 @@
   font-style: normal;
   font-weight: 400;
   unicode-range:
-    U+4E09, U+4EBA, U+51FA, U+5357, U+5403, U+548C, U+56DB, U+5C40, U+6253,
-    U+6478, U+6760, U+6771, U+6D41, U+76F4, U+78B0, U+7ACB, U+81EA, U+8DF3,
-    U+8FC7;
+    U+002B, U+0030-0039, U+4E00, U+4E09, U+4E8C, U+4EBA, U+51FA, U+5317, U+5357,
+    U+5403, U+548C, U+56DB, U+5834, U+5C40, U+6253, U+6478, U+6760, U+6771,
+    U+6D41, U+76F4, U+78B0, U+7ACB, U+81EA, U+897F, U+8DF3, U+8FC7, U+98A8;
 }
 
 :root {
@@ -18,7 +18,8 @@
   --gold-bright: #ffe5a0;
   --panel: rgba(3, 20, 19, 0.92);
   --panel-border: rgba(233, 199, 118, 0.44);
-  --mahjong-action-right: 342px;
+  /* Align the rightmost action with the fixed 13-tile rack, before the draw slot. */
+  --mahjong-action-right: 322.15px;
 }
 
 html,
@@ -391,16 +392,18 @@ a {
   top: -8px;
   right: 1px;
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   place-items: center;
   border: 0;
   border-radius: 50%;
   background: linear-gradient(145deg, #fff0bf, #cfad63);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.34);
   color: #46351e;
-  font-size: 18px;
+  font-family: "Playweft Mahjong Xingshu", "FZKai-Z03", STKaiti, KaiTi, serif;
+  font-size: 24px;
   font-weight: 900;
+  font-synthesis: weight;
 }
 
 .wind-badge.is-east {

@@ -205,7 +205,7 @@ export class MahjongDomView {
       const wind = seatWind(state, seat);
       const windBadge = station.querySelector("[data-wind]");
       windBadge.textContent = wind;
-      windBadge.classList.toggle("is-east", wind === "东");
+      windBadge.classList.toggle("is-east", wind === "東");
       const consoleScore = this.elements.consoleScores[seat - 1];
       consoleScore.textContent = String(Number(state.scores?.[seat - 1] ?? 0));
       consoleScore.classList.toggle(

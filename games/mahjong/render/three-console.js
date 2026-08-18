@@ -13,7 +13,7 @@ import { activeSeat } from "../game-format.js";
 import { PLAYFIELD_CENTRE_Z, TILE_SIZE } from "./three-layout.js";
 
 const LOGICAL_WIDTH = 640;
-const LOGICAL_HEIGHT = Math.round(LOGICAL_WIDTH * 5 / 5.8);
+const LOGICAL_HEIGHT = Math.round((LOGICAL_WIDTH * 5) / 5.8);
 const TEXTURE_SCALE = 2;
 const PANEL_BORDER_INSET = 16;
 
@@ -25,6 +25,11 @@ export const TABLE_CONSOLE_SCORE_LAYOUT = Object.freeze({
   stickWidth: 177,
   stickHeight: 177 / 7,
   stickDotRadius: 8.85,
+});
+
+export const TABLE_CONSOLE_CORE_LAYOUT = Object.freeze({
+  roundFontSize: 80,
+  wallFontSize: 46,
 });
 
 export function prepareTableConsoleContext(context, canvas) {
@@ -56,29 +61,30 @@ export class ThreeTableConsole {
     this.texture.colorSpace = SRGBColorSpace;
     this.texture.anisotropy = anisotropy;
 
-    const baseMaterial = this.trackMaterial(new MeshPhysicalMaterial({
-      color: new Color("#061b1a"),
-      roughness: 0.36,
-      metalness: 0.12,
-      clearcoat: 0.42,
-      clearcoatRoughness: 0.34,
-    }));
-    const faceMaterial = this.trackMaterial(new MeshBasicMaterial({
-      map: this.texture,
-      transparent: true,
-      alphaTest: 0.01,
-      depthWrite: true,
-      toneMapped: false,
-    }));
+    const baseMaterial = this.trackMaterial(
+      new MeshPhysicalMaterial({
+        color: new Color("#061b1a"),
+        roughness: 0.36,
+        metalness: 0.12,
+        clearcoat: 0.42,
+        clearcoatRoughness: 0.34,
+      }),
+    );
+    const faceMaterial = this.trackMaterial(
+      new MeshBasicMaterial({
+        map: this.texture,
+        transparent: true,
+        alphaTest: 0.01,
+        depthWrite: true,
+        toneMapped: false,
+      }),
+    );
 
-    const { width, depth, height, centreZ, cornerRadius } = TABLE_CONSOLE_LAYOUT;
-    const baseGeometry = this.trackGeometry(new RoundedBoxGeometry(
-      width,
-      height,
-      depth,
-      5,
-      cornerRadius,
-    ));
+    const { width, depth, height, centreZ, cornerRadius } =
+      TABLE_CONSOLE_LAYOUT;
+    const baseGeometry = this.trackGeometry(
+      new RoundedBoxGeometry(width, height, depth, 5, cornerRadius),
+    );
     const base = new Mesh(baseGeometry, baseMaterial);
     base.name = "table-console-base";
     base.position.set(0, height / 2 + 0.018, centreZ);
@@ -130,7 +136,12 @@ export class ThreeTableConsole {
 function drawPanel(context) {
   context.save();
   roundedRect(context, 16, 16, LOGICAL_WIDTH - 32, LOGICAL_HEIGHT - 32, 42);
-  const panelGradient = context.createLinearGradient(0, 16, 0, LOGICAL_HEIGHT - 16);
+  const panelGradient = context.createLinearGradient(
+    0,
+    16,
+    0,
+    LOGICAL_HEIGHT - 16,
+  );
   panelGradient.addColorStop(0, "rgba(16, 51, 46, .985)");
   panelGradient.addColorStop(0.48, "rgba(3, 26, 25, .99)");
   panelGradient.addColorStop(1, "rgba(1, 15, 16, .995)");
@@ -152,10 +163,16 @@ function drawPanel(context) {
 }
 
 function drawCore(context, state, ui) {
+  const { roundFontSize, wallFontSize } = TABLE_CONSOLE_CORE_LAYOUT;
   const centreY = LOGICAL_HEIGHT / 2;
   const coreTop = centreY - 84;
   roundedRect(context, 164, coreTop, 312, 168, 27);
-  const coreGradient = context.createLinearGradient(0, coreTop, 0, coreTop + 168);
+  const coreGradient = context.createLinearGradient(
+    0,
+    coreTop,
+    0,
+    coreTop + 168,
+  );
   coreGradient.addColorStop(0, "rgba(0, 12, 12, .52)");
   coreGradient.addColorStop(1, "rgba(0, 8, 9, .28)");
   context.fillStyle = coreGradient;
@@ -164,20 +181,21 @@ function drawCore(context, state, ui) {
   context.strokeStyle = "rgba(232, 203, 132, .18)";
   context.stroke();
 
-  drawText(context, ui.roundLabel, 320, centreY - 32, {
+  drawText(context, ui.roundLabel, 320, centreY - 34, {
     color: "#f2d17d",
-    font: '800 43px "PingFang SC", sans-serif',
+    font: `400 ${roundFontSize}px "Playweft Mahjong Xingshu", "FZKai-Z03", STKaiti, KaiTi, serif`,
   });
-  drawText(context, `余牌 ${Number(state.wallCount) || 0}`, 320, centreY + 33, {
+  drawText(context, `余牌 ${Number(state.wallCount) || 0}`, 320, centreY + 42, {
     color: "#fff1c9",
-    font: '850 56px "PingFang SC", sans-serif',
+    font: `850 ${wallFontSize}px "PingFang SC", sans-serif`,
   });
 }
 
 function drawScores(context, state) {
   const active = activeSeat(state) - 1;
   const centreY = LOGICAL_HEIGHT / 2;
-  const { edgeInset, scoreFontSize, stickEdgeInset } = TABLE_CONSOLE_SCORE_LAYOUT;
+  const { edgeInset, scoreFontSize, stickEdgeInset } =
+    TABLE_CONSOLE_SCORE_LAYOUT;
   const placements = [
     {
       x: LOGICAL_WIDTH / 2,
@@ -218,17 +236,24 @@ function drawScores(context, state) {
         placement.rotation,
       );
     }
-    drawText(context, String(Number(state.scores?.[index] ?? 0)), placement.x, placement.y, {
-      color: index === active ? "#ffdc78" : "rgba(249, 237, 204, .9)",
-      font: `${index === active ? 900 : 760} ${scoreFontSize}px "Roboto Slab", ui-monospace, monospace`,
-      rotation: placement.rotation,
-      shadow: index === active,
-    });
+    drawText(
+      context,
+      String(Number(state.scores?.[index] ?? 0)),
+      placement.x,
+      placement.y,
+      {
+        color: index === active ? "#ffdc78" : "rgba(249, 237, 204, .9)",
+        font: `${index === active ? 900 : 760} ${scoreFontSize}px "Roboto Slab", ui-monospace, monospace`,
+        rotation: placement.rotation,
+        shadow: index === active,
+      },
+    );
   });
 }
 
 function drawRiichiStick(context, x, y, rotation) {
-  const { stickWidth, stickHeight, stickDotRadius } = TABLE_CONSOLE_SCORE_LAYOUT;
+  const { stickWidth, stickHeight, stickDotRadius } =
+    TABLE_CONSOLE_SCORE_LAYOUT;
   context.save();
   context.translate(x, y);
   context.rotate(rotation);
@@ -243,7 +268,12 @@ function drawRiichiStick(context, x, y, rotation) {
     stickHeight,
     stickHeight / 2,
   );
-  const body = context.createLinearGradient(0, -stickHeight / 2, 0, stickHeight / 2);
+  const body = context.createLinearGradient(
+    0,
+    -stickHeight / 2,
+    0,
+    stickHeight / 2,
+  );
   body.addColorStop(0, "#fffdf2");
   body.addColorStop(0.52, "#e9e5d6");
   body.addColorStop(1, "#b7b2a4");
