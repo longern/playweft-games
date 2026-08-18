@@ -10,6 +10,7 @@ const CATALOG_GROUPS = [
   "portraits",
   "tablecloths",
   "backgrounds",
+  "lobby",
   "tileBacks",
   "music",
 ];
@@ -68,6 +69,7 @@ export const MAHJONG_ASSET_SLOTS = Object.freeze({
   "portrait-opposite": "对家",
   "portrait-left": "左手边",
   background: "牌桌背景",
+  lobby: "大厅背景",
   tablecloth: "桌布",
   "tile-back": "牌背",
   music: "对局音乐",
@@ -461,6 +463,7 @@ function catalogFromManifest(assets) {
   addCatalogEntries(catalog.portraits, assets.portraits);
   addCatalogEntries(catalog.tablecloths, assets.tablecloths);
   addCatalogEntries(catalog.backgrounds, assets.backgrounds);
+  addCatalogEntries(catalog.lobby, assets.lobby);
   addCatalogEntries(catalog.tileBacks, assets.tileBacks);
   addCatalogEntries(catalog.music, assets.music);
   addVoiceSets(catalog.voices, assets.voices, catalog.portraits);
@@ -579,14 +582,19 @@ function assetStorageSlot(group, id) {
 }
 
 function catalogForPack(pack) {
-  if (
-    !pack?.catalog ||
-    !CATALOG_GROUPS.every((group) => Array.isArray(pack.catalog[group])) ||
-    !Array.isArray(pack.catalog.voices)
-  ) {
+  if (!pack?.catalog || !Array.isArray(pack.catalog.voices)) {
     throw new Error("素材包缺少素材目录");
   }
-  return pack.catalog;
+  const catalog = { ...pack.catalog };
+  for (const group of CATALOG_GROUPS) {
+    if (Array.isArray(catalog[group])) continue;
+    if (group === "lobby") {
+      catalog[group] = [];
+      continue;
+    }
+    throw new Error("素材包缺少素材目录");
+  }
+  return catalog;
 }
 
 export function normaliseAppearance(appearance, catalog) {
@@ -611,6 +619,7 @@ export function normaliseAppearance(appearance, catalog) {
     ),
     tablecloth: pick("tablecloths", choices.tablecloth),
     background: pick("backgrounds", choices.background),
+    lobby: pick("lobby", choices.lobby),
     tileBack: pick("tileBacks", choices.tileBack),
     music: choices.music === "" ? "" : pick("music", choices.music),
     voice: choices.voice !== false,
@@ -655,6 +664,9 @@ function resolveAppearanceAssets(stored, appearance, catalog) {
     const record = stored.get(assetStorageSlot(group, id));
     if (record) resolved.set(slot, record);
   }
+  const lobbyId = appearance.lobby;
+  const lobbyRecord = stored.get(assetStorageSlot("lobby", lobbyId));
+  if (lobbyRecord) resolved.set("lobby", lobbyRecord);
   return resolved;
 }
 

@@ -39,6 +39,7 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
           ],
           tablecloths: [{ id: "felt", file: "felt.png", label: "绒面" }],
           backgrounds: [],
+          lobby: [{ id: "evening", file: "lobby/evening.webp", label: "暮色" }],
           tileBacks: [],
           music: [{ id: "night", file: "music/night.ogg", label: "夜风" }],
           voices: [
@@ -57,6 +58,7 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
     "moonlit/portraits/fox.png": new Uint8Array([137, 80, 78, 71]),
     "moonlit/portraits/wolf.png": new Uint8Array([137, 80, 78, 71]),
     "moonlit/felt.png": new Uint8Array([137, 80, 78, 71]),
+    "moonlit/lobby/evening.webp": new Uint8Array([137, 80, 78, 71]),
     "moonlit/music/night.ogg": new Uint8Array([79, 103, 103, 83]),
     "moonlit/voices/fox/chi.ogg": new Uint8Array([79, 103, 103, 83]),
     "moonlit/voices/fox/tanyao.ogg": new Uint8Array([79, 103, 103, 83]),
@@ -74,6 +76,10 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
   );
   assert.equal(manifest.catalog.tablecloths[0].fileName, "moonlit/felt.png");
   assert.equal(manifest.catalog.music[0].fileName, "moonlit/music/night.ogg");
+  assert.equal(
+    manifest.catalog.lobby[0].fileName,
+    "moonlit/lobby/evening.webp",
+  );
   assert.equal(
     manifest.catalog.voices[0].lines.chi,
     "moonlit/voices/fox/chi.ogg",
@@ -146,6 +152,7 @@ test("appearance independently selects each local seat and falls back to availab
       portraits: { self: "cat", right: "wolf", opposite: "fox", left: "fox" },
       tablecloth: "felt",
       background: "night",
+      lobby: "",
       tileBack: "cloud",
       music: "dawn",
       voice: false,

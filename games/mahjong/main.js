@@ -46,7 +46,80 @@ import {
 import "../../src/base.css";
 import "./styles.css";
 
+const THEME_JSON_EXAMPLE = {
+  schemaVersion: 1,
+  name: "月下雀席",
+  assets: {
+    portraits: [
+      { id: "fox", file: "portraits/fox.webp", label: "赤狐" },
+      { id: "wolf", file: "portraits/wolf.webp", label: "灰狼" },
+      { id: "leopard", file: "portraits/leopard.webp", label: "雪豹" },
+    ],
+    tablecloths: [
+      { id: "felt", file: "table/felt.webp", label: "深绿绒面" },
+      { id: "brocade", file: "table/brocade.webp", label: "锦缎" },
+    ],
+    backgrounds: [
+      { id: "night", file: "backgrounds/night.webp", label: "夜景" },
+    ],
+    lobby: [
+      { id: "evening", file: "lobby/evening.webp", label: "暮色街巷" },
+    ],
+    tileBacks: [
+      { id: "cloud", file: "tiles/cloud.webp", label: "祥云" },
+    ],
+    music: [
+      { id: "night-wind", file: "music/night-wind.ogg", label: "夜风" },
+    ],
+    voices: [
+      {
+        character: "fox",
+        lines: {
+          chi: "voices/fox/chi.ogg",
+          pon: "voices/fox/pon.ogg",
+          kan: "voices/fox/kan.ogg",
+          riichi: "voices/fox/riichi.ogg",
+          ron: "voices/fox/ron.ogg",
+          tsumo: "voices/fox/tsumo.ogg",
+        },
+        yaku: {
+          tanyao: "voices/fox/tanyao.ogg",
+          iipeikou: "voices/fox/iipeikou.ogg",
+        },
+      },
+    ],
+  },
+  defaults: {
+    appearance: {
+      portraits: {
+        self: "fox",
+        right: "wolf",
+        opposite: "leopard",
+        left: "fox",
+      },
+      tablecloth: "felt",
+      background: "night",
+      lobby: "evening",
+      tileBack: "cloud",
+      music: "night-wind",
+      voice: true,
+    },
+    names: {
+      self: "我",
+      right: "右家",
+      opposite: "对家",
+      left: "左家",
+    },
+  },
+};
+
 createIcons({ icons: { Cog, X } });
+
+document.querySelector("#theme-json-example").textContent = JSON.stringify(
+  THEME_JSON_EXAMPLE,
+  null,
+  2,
+);
 
 let game;
 let state;
@@ -77,6 +150,16 @@ let matchMusicGain = 1;
 let matchMusicPlayRequest = 0;
 let voicedEventKey = "";
 let playedRiverTileSoundKey = "";
+
+function revealMahjongAppAfterStyles() {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      document.documentElement.classList.add("mahjong-app-ready");
+      const splash = document.querySelector("#mahjong-boot-splash");
+      window.setTimeout(() => splash?.remove(), 220);
+    });
+  });
+}
 
 const releaseFixedViewport = bindFixedViewport(
   document.querySelector("#mahjong-viewport"),
@@ -272,6 +355,7 @@ const soloClient = createPlayweftSoloClient({
 });
 
 if (window.parent === window) elements.setup.hidden = false;
+revealMahjongAppAfterStyles();
 
 function requestPlatformAvatar(context) {
   const initialSource = context?.player?.avatar?.src;
@@ -629,6 +713,22 @@ function renderVisualPackAppearance() {
       );
   }
   if (surfaceGroup.childElementCount > 1) controls.append(surfaceGroup);
+  if (catalog.lobby.length) {
+    const lobbyGroup = document.createElement("fieldset");
+    lobbyGroup.className = "settings-pack-choice-group";
+    const lobbyLegend = document.createElement("legend");
+    lobbyLegend.textContent = "大厅";
+    lobbyGroup.append(lobbyLegend);
+    lobbyGroup.append(
+      createAppearanceSelect(
+        "大厅背景",
+        "lobby",
+        catalog.lobby,
+        pack.appearance.lobby,
+      ),
+    );
+    controls.append(lobbyGroup);
+  }
   if (catalog.music.length || catalog.voices.length) {
     const soundGroup = document.createElement("fieldset");
     soundGroup.className = "settings-pack-choice-group";
