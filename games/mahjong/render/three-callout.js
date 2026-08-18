@@ -1,5 +1,6 @@
 import {
   CanvasTexture,
+  Group,
   Sprite,
   SpriteMaterial,
   SRGBColorSpace,
@@ -9,6 +10,8 @@ const TEXTURE_WIDTH = 1024;
 const TEXTURE_HEIGHT = 512;
 const ENTRY_PORTION = 0.18;
 const EXIT_PORTION = 0.72;
+const MAX_CONCURRENT_CALLOUTS = 3;
+const MULTI_CALLOUT_SCALE = 0.78;
 
 export const ACTION_CALLOUT_DURATION_MS = 820;
 export const ACTION_CALLOUT_SIZE = Object.freeze({
@@ -42,6 +45,13 @@ export const ACTION_CALLOUT_TARGETS = Object.freeze({
   4: Object.freeze({ x: -360, y: 36 }),
 });
 
+const MULTI_ACTION_CALLOUT_TARGETS = Object.freeze({
+  1: Object.freeze({ x: 0, y: -205 }),
+  2: Object.freeze({ x: 430, y: 20 }),
+  3: Object.freeze({ x: 0, y: 215 }),
+  4: Object.freeze({ x: -430, y: 20 }),
+});
+
 export function actionCalloutDescriptor(event) {
   const action = event?.type === "claimed"
     ? event.kind
@@ -71,48 +81,59 @@ export function actionCalloutKey(event, scope = "") {
   ].join(":");
 }
 
+export function actionCalloutEvents(events) {
+  const candidates = (Array.isArray(events) ? events : []).filter((event) =>
+    actionCalloutDescriptor(event)
+  );
+  const latest = candidates.at(-1);
+  if (!latest) return [];
+  if (latest.type !== "won") return [latest];
+  return candidates.filter(
+    (event) => event.type === "won" && event.method === latest.method,
+  );
+}
+
 export class ThreeActionCallout {
   constructor(animations) {
     this.animations = animations;
-    this.canvas = document.createElement("canvas");
-    this.canvas.width = TEXTURE_WIDTH;
-    this.canvas.height = TEXTURE_HEIGHT;
-    this.context = this.canvas.getContext("2d");
-    this.texture = new CanvasTexture(this.canvas);
-    this.texture.colorSpace = SRGBColorSpace;
-    this.material = new SpriteMaterial({
-      map: this.texture,
-      transparent: true,
-      depthTest: false,
-      depthWrite: false,
-      toneMapped: false,
-    });
-    this.sprite = new Sprite(this.material);
-    this.sprite.name = "claim-callout";
-    this.sprite.position.z = 800;
-    this.sprite.renderOrder = 1000;
-    this.sprite.visible = false;
+    this.group = new Group();
+    this.group.name = "action-callouts";
+    this.slots = Array.from(
+      { length: MAX_CONCURRENT_CALLOUTS },
+      (_, index) => createCalloutSlot(index),
+    );
+    this.group.add(...this.slots.map((slot) => slot.sprite));
   }
 
   showLatest(events, scope = "") {
-    const event = [...(Array.isArray(events) ? events : [])]
-      .reverse()
-      .find((candidate) => actionCalloutDescriptor(candidate));
-    if (!event) return;
-    const key = actionCalloutKey(event, scope);
+    const calloutEvents = actionCalloutEvents(events);
+    if (!calloutEvents.length) return;
+    const key = calloutEvents
+      .map((event) => actionCalloutKey(event, scope))
+      .join("|");
     if (!this.animations.claim("action-callout", key)) return;
-    this.show(actionCalloutDescriptor(event));
+    this.show(calloutEvents.map(actionCalloutDescriptor));
   }
 
-  show(descriptor) {
+  show(descriptors) {
     this.cancel();
-    drawCallout(this.context, descriptor);
-    this.texture.needsUpdate = true;
-    this.sprite.visible = true;
-    this.material.opacity = 0;
-    const origin = SEAT_ORIGINS[descriptor.playerIndex] ?? SEAT_ORIGINS[1];
-    const target = ACTION_CALLOUT_TARGETS[descriptor.playerIndex]
-      ?? ACTION_CALLOUT_TARGETS[1];
+    const active = (Array.isArray(descriptors) ? descriptors : [descriptors])
+      .filter(Boolean)
+      .slice(0, this.slots.length)
+      .map((descriptor, index) => {
+        const slot = this.slots[index];
+        drawCallout(slot.context, descriptor);
+        slot.texture.needsUpdate = true;
+        slot.sprite.visible = true;
+        slot.material.opacity = 0;
+        return { descriptor, slot };
+      });
+    if (!active.length) return;
+    const multiple = active.length > 1;
+    const targets = multiple
+      ? MULTI_ACTION_CALLOUT_TARGETS
+      : ACTION_CALLOUT_TARGETS;
+    const layoutScale = multiple ? MULTI_CALLOUT_SCALE : 1;
     this.animations.play({
       id: "action-callout",
       duration: ACTION_CALLOUT_DURATION_MS,
@@ -129,35 +150,64 @@ export class ThreeActionCallout {
         const scale = entering < 1
           ? 0.42 + 0.58 * entryEase
           : 1 + 0.13 * exiting;
-
-        this.sprite.position.x =
-          target.x + origin.x * 310 * travel + impactJitter;
-        this.sprite.position.y = target.y + origin.y * 235 * travel;
-        this.sprite.scale.set(
-          ACTION_CALLOUT_SIZE.width * scale,
-          ACTION_CALLOUT_SIZE.height * scale,
-          1,
-        );
-        this.material.rotation = origin.x * -0.055 * travel;
-        this.material.opacity =
-          Math.min(1, entering * 3) * (1 - exiting ** 2);
+        for (const { descriptor, slot } of active) {
+          const origin =
+            SEAT_ORIGINS[descriptor.playerIndex] ?? SEAT_ORIGINS[1];
+          const target = targets[descriptor.playerIndex] ?? targets[1];
+          slot.sprite.position.x =
+            target.x + origin.x * 310 * travel + impactJitter;
+          slot.sprite.position.y =
+            target.y + origin.y * 235 * travel;
+          slot.sprite.scale.set(
+            ACTION_CALLOUT_SIZE.width * scale * layoutScale,
+            ACTION_CALLOUT_SIZE.height * scale * layoutScale,
+            1,
+          );
+          slot.material.rotation = origin.x * -0.055 * travel;
+          slot.material.opacity =
+            Math.min(1, entering * 3) * (1 - exiting ** 2);
+        }
       },
       complete: () => {
-        this.sprite.visible = false;
+        for (const { slot } of active) slot.sprite.visible = false;
       },
     });
   }
 
   cancel() {
     this.animations.cancel("action-callout");
-    this.sprite.visible = false;
+    for (const slot of this.slots) slot.sprite.visible = false;
   }
 
   destroy() {
     this.cancel();
-    this.texture.dispose();
-    this.material.dispose();
+    for (const slot of this.slots) {
+      slot.texture.dispose();
+      slot.material.dispose();
+    }
   }
+}
+
+function createCalloutSlot(index) {
+  const canvas = document.createElement("canvas");
+  canvas.width = TEXTURE_WIDTH;
+  canvas.height = TEXTURE_HEIGHT;
+  const context = canvas.getContext("2d");
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  const material = new SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const sprite = new Sprite(material);
+  sprite.name = `action-callout-${index + 1}`;
+  sprite.position.z = 800;
+  sprite.renderOrder = 1000 + index;
+  sprite.visible = false;
+  return { canvas, context, texture, material, sprite };
 }
 
 function drawCallout(context, descriptor) {

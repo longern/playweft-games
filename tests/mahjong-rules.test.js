@@ -115,6 +115,128 @@ test("Mahjong keeps the pending claim respondent private from other players", as
   assert.equal(result.respondentClaims, 1);
 });
 
+test("Mahjong opens every private claim window on the discard frame", async () => {
+  const result = await runScenario(`
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 81 } })
+    state.phase, state.claimIndex = "claiming", 1
+    state.claimResponses = {}
+    state.claimants = {
+      { playerId = "p2", playerIndex = 2, distance = 1,
+        options = { { kind = "chi", tileIds = { 5, 9 } } } },
+      { playerId = "p3", playerIndex = 3, distance = 2,
+        options = { { kind = "pon", tileIds = { 2, 3 } } } },
+    }
+    local p1 = view(state, {}, { viewer = { id = "p1", seat = 1 } }).state
+    local p2 = view(state, {}, { viewer = { id = "p2", seat = 2 } }).state
+    local p3 = view(state, {}, { viewer = { id = "p3", seat = 3 } }).state
+    result = {
+      observerClaims = #p1.legalActions.claims,
+      p2ResponseIndex = p2.responseIndex,
+      p2Kind = p2.legalActions.claims[1].kind,
+      p3ResponseIndex = p3.responseIndex,
+      p3Kind = p3.legalActions.claims[1].kind,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    observerClaims: 0,
+    p2ResponseIndex: 2,
+    p2Kind: "chi",
+    p3ResponseIndex: 3,
+    p3Kind: "pon",
+  });
+});
+
+test("Mahjong cancels lower claim windows and resolves a higher claim immediately", async () => {
+  const result = await runScenario(`
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 82 } })
+    state.phase, state.claimIndex = "claiming", 1
+    state.claimResponses = {}
+    state.discards.p1 = { { tile = 1, claimed = false } }
+    state.lastDiscard = {
+      player = "p1", playerIndex = 1, tile = 1, discardIndex = 1,
+    }
+    state.hands.p2 = { 2,3, 13,17,21,25,29,33,37,41,45,49,53 }
+    state.hands.p3 = { 5,9, 13,17,21,25,29,33,37,41,45,49,53 }
+    state.claimants = {
+      { playerId = "p2", playerIndex = 2, distance = 1,
+        options = { { kind = "pon", tileIds = { 2, 3 } } } },
+      { playerId = "p3", playerIndex = 3, distance = 2,
+        options = { { kind = "chi", tileIds = { 5, 9 } } } },
+    }
+
+    local claimed = on_action(
+      state, { type = "claim", option = 1 }, { actor = { id = "p2" } }
+    )
+    local cancelled = on_action(
+      claimed.state, { type = "claim", option = 1 }, { actor = { id = "p3" } }
+    )
+    result = {
+      accepted = claimed.accepted,
+      phase = claimed.state.phase,
+      turnIndex = claimed.state.turnIndex,
+      meldKind = claimed.state.melds.p2[1].kind,
+      discardClaimed = claimed.state.discards.p1[1].claimed,
+      lowerRejected = not cancelled.accepted,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    accepted: true,
+    phase: "playing",
+    turnIndex: 2,
+    meldKind: "pon",
+    discardClaimed: true,
+    lowerRejected: true,
+  });
+});
+
+test("Mahjong waits for unresolved claims of the same or higher priority", async () => {
+  const result = await runScenario(`
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 83 } })
+    state.phase, state.claimIndex = "claiming", 1
+    state.claimResponses = {}
+    state.discards.p1 = { { tile = 1, claimed = false } }
+    state.lastDiscard = {
+      player = "p1", playerIndex = 1, tile = 1, discardIndex = 1,
+    }
+    state.hands.p2 = { 2,3, 13,17,21,25,29,33,37,41,45,49,53 }
+    state.hands.p3 = { 5,9, 13,17,21,25,29,33,37,41,45,49,53 }
+    state.claimants = {
+      { playerId = "p2", playerIndex = 2, distance = 1,
+        options = { { kind = "pon", tileIds = { 2, 3 } } } },
+      { playerId = "p3", playerIndex = 3, distance = 2,
+        options = { { kind = "chi", tileIds = { 5, 9 } } } },
+    }
+
+    local lower = on_action(
+      state, { type = "claim", option = 1 }, { actor = { id = "p3" } }
+    )
+    local p2 = view(lower.state, lower.events, {
+      viewer = { id = "p2", seat = 2 },
+    }).state
+    local intermediate_phase = lower.state.phase
+    local higher = on_action(
+      lower.state, { type = "pass" }, { actor = { id = "p2" } }
+    )
+    result = {
+      intermediatePhase = intermediate_phase,
+      higherStillAsked = p2.legalActions.claims[1].kind,
+      finalPhase = higher.state.phase,
+      finalTurnIndex = higher.state.turnIndex,
+      meldKind = higher.state.melds.p3[1].kind,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    intermediatePhase: "claiming",
+    higherStillAsked: "pon",
+    finalPhase: "playing",
+    finalTurnIndex: 3,
+    meldKind: "chi",
+  });
+});
+
 test("Mahjong stores the current draw outside the fixed concealed rack", async () => {
   const result = await runScenario(`
     local base_rack = { 109,5,9,13,17,21,25,29,33,37,41,45,49 }
@@ -177,6 +299,52 @@ test("Mahjong stores the current draw outside the fixed concealed rack", async (
     tsumogiriAccepted: true,
     tsumogiriFromDrawn: true,
     tsumogiriRackUnchanged: true,
+  });
+});
+
+test("Mahjong projects waits and remaining copies for every tenpai discard", async () => {
+  const result = await runScenario(`
+    function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+    function discard_option(legal, tile_id)
+      for _, option in ipairs(legal.tenpaiDiscards) do
+        if option.tileId == tile_id then return option end
+      end
+      return nil
+    end
+
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 84 } })
+    local ready = ids({ 1,2,3, 4,5,6, 10,11,12, 19,20,21, 28,28 })
+    state.drawnTile, state.turnIndex = table.remove(ready), 1
+    state.hands.p1 = ready
+    state.deadWall[1] = 133
+    state.discards.p2 = { { tile = 111, claimed = true } }
+    state.melds.p3 = {
+      { kind = "pon", tiles = { 111 }, calledTile = 111, fromIndex = 2 },
+    }
+
+    local one_left = discard_option(legal_actions(state, "p1"), 110)
+    state.discards.p4 = { { tile = 112, claimed = false } }
+    local exhausted = discard_option(legal_actions(state, "p1"), 110)
+    result = {
+      waitType = one_left.waits[1].type,
+      remaining = one_left.waits[1].remaining,
+      exhaustedRemaining = exhausted.waits[1].remaining,
+      claimedTileNotDoubleCounted = one_left.waits[1].remaining == 1,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    waitType: 28,
+    remaining: 1,
+    exhaustedRemaining: 0,
+    claimedTileNotDoubleCounted: true,
   });
 });
 

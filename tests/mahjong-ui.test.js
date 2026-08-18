@@ -24,6 +24,7 @@ import {
   resultBasePaymentTotal,
   riverDisplayEntries,
   splitRevealedHand,
+  tenpaiWaitsForDiscard,
 } from "../games/mahjong/game-format.js";
 import {
   fixedViewportScale,
@@ -93,6 +94,7 @@ import {
   ACTION_CALLOUT_SIZE,
   ACTION_CALLOUT_TARGETS,
   actionCalloutDescriptor,
+  actionCalloutEvents,
   actionCalloutKey,
 } from "../games/mahjong/render/three-callout.js";
 import { TABLE_GEOMETRY } from "../games/mahjong/render/three-table.js";
@@ -679,8 +681,52 @@ test("mahjong groups every chi behind one action and previews only the two consu
   );
   assert.match(
     styles,
-    /\.tile-claim-choice\s*\{[^}]*width: 48px;[^}]*height: 67px;/s,
+    /\.tile-claim-choice,\s*\.tile-tenpai-wait\s*\{[^}]*width: 48px;[^}]*height: 67px;/s,
   );
+});
+
+test("mahjong previews waits and visible-copy counts for the selected discard", () => {
+  const legalActions = {
+    tenpaiDiscards: [
+      {
+        tileId: 42,
+        waits: [
+          { type: 9, remaining: 3 },
+          { type: 28, remaining: 0 },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(tenpaiWaitsForDiscard(legalActions, 42), [
+    { type: 9, remaining: 3 },
+    { type: 28, remaining: 0 },
+  ]);
+  assert.deepEqual(tenpaiWaitsForDiscard(legalActions, 41), []);
+  assert.deepEqual(tenpaiWaitsForDiscard({}, 42), []);
+
+  const html = readFileSync(
+    new URL("../games/mahjong/index.html", import.meta.url),
+    "utf8",
+  );
+  const view = readFileSync(
+    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    "utf8",
+  );
+  const styles = readMahjongStyles();
+  assert.match(html, /id="tenpai-preview"[^>]*hidden/);
+  assert.match(html, /id="tenpai-waits"/);
+  assert.match(view, /renderTenpaiPreview\(state, selectedTileId\)/);
+  assert.match(view, /count\.textContent = `\$\{wait\.remaining\} 张`/);
+  assert.match(
+    view,
+    /count\.classList\.toggle\("is-empty", wait\.remaining === 0\)/,
+  );
+  assert.match(
+    styles,
+    /\.tenpai-preview\s*\{[\s\S]*?bottom:\s*128px;[\s\S]*?left:\s*50%;/,
+  );
+  assert.match(styles, /\.tenpai-wait-list\s*\{[\s\S]*?grid-template-columns:/);
+  assert.match(styles, /\.tenpai-wait-count\.is-empty/);
 });
 
 test("mahjong keeps action buttons in a fixed player-facing order", () => {
@@ -873,6 +919,21 @@ test("mahjong shows oversized non-perspective callouts for claims, riichi, and w
     actionCalloutDescriptor({ type: "won", method: "tsumo" }).label,
     "自摸",
   );
+  assert.deepEqual(
+    actionCalloutEvents([
+      { type: "claimed", kind: "pon", playerIndex: 1 },
+      { type: "won", method: "ron", playerIndex: 2 },
+      { type: "won", method: "ron", playerIndex: 4 },
+    ]).map((event) => event.playerIndex),
+    [2, 4],
+  );
+  assert.deepEqual(
+    actionCalloutEvents([
+      { type: "claimed", kind: "chi", playerIndex: 2 },
+      { type: "claimed", kind: "pon", playerIndex: 3 },
+    ]).map((event) => event.playerIndex),
+    [3],
+  );
   assert.equal(
     actionCalloutKey(
       { type: "claimed", kind: "pon", playerIndex: 3, fromIndex: 2, tile: 18 },
@@ -898,15 +959,23 @@ test("mahjong shows oversized non-perspective callouts for claims, riichi, and w
     new URL("../games/mahjong/render/three-callout.js", import.meta.url),
     "utf8",
   );
-  assert.match(renderer, /overlayScene\.add\(this\.actionCallout\.sprite\)/);
+  assert.match(renderer, /overlayScene\.add\(this\.actionCallout\.group\)/);
   assert.match(renderer, /this\.actionCallout\.showLatest\(/);
   assert.match(
     renderer,
     /const revealDelay = ui\.delayHandRevealForCallout\s*\? ACTION_CALLOUT_DURATION_MS\s*:\s*0/s,
   );
   assert.doesNotMatch(renderer, /ACTION_CALLOUT_DURATION_MS \* 0\.64/);
-  assert.match(callout, /new CanvasTexture\(this\.canvas\)/);
-  assert.match(callout, /new Sprite\(this\.material\)/);
+  assert.match(callout, /MAX_CONCURRENT_CALLOUTS = 3/);
+  assert.match(callout, /this\.group\.add\(\.\.\.this\.slots/);
+  assert.match(callout, /this\.show\(calloutEvents\.map\(actionCalloutDescriptor\)\)/);
+  assert.match(callout, /for \(const \{ descriptor, slot \} of active\)/);
+  assert.equal(
+    (callout.match(/this\.animations\.play\(\{/g) ?? []).length,
+    1,
+  );
+  assert.match(callout, /new CanvasTexture\(canvas\)/);
+  assert.match(callout, /new Sprite\(material\)/);
   assert.match(callout, /Playweft Mahjong Xingshu/);
 });
 
@@ -1293,6 +1362,14 @@ test("mahjong reuses local tile meshes for a quick interruptible selection lift"
   assert.match(renderer, /this\.startOwnTileMotion\(\)/);
   assert.match(selection, /visualRenderer\.updateSelection\(/);
   assert.doesNotMatch(selection, /visualRenderer\.render\(/);
+  assert.match(main, /onClearSelection: clearSelectedTile/);
+  assert.match(selection, /function clearSelectedTile\(\)/);
+  assert.match(selection, /if \(!selectedTileId\) return/);
+  assert.match(
+    pointerUp,
+    /if \(!this\.pickTableTile\(event\)\) this\.callbacks\.onClearSelection\?\.\(\)/,
+  );
+  assert.match(pointerUp, /this\.lastTap = \{ tileId: 0, time: 0 \}/);
   assert.doesNotMatch(selectionUpdate, /clearGroup|drawRivers|drawMelds/);
   assert.match(selectionUpdate, /this\.updateTypeHighlights\(\)/);
   assert.match(renderer, /fromY: tile\.position\.y/);
@@ -1304,6 +1381,20 @@ test("mahjong reuses local tile meshes for a quick interruptible selection lift"
   assert.doesNotMatch(hoverUpdate, /tile\.position\.y\s*=/);
   assert.match(pointerDown, /this\.cancelOwnTileMotion\(\)/);
   assert.doesNotMatch(pointerDown, /this\.setHoveredTile\(null\)/);
+  assert.match(
+    renderer,
+    /this\.callbacks\.onPreviewDragTile\?\.\(drag\.tileId\)/,
+  );
+  assert.match(
+    cancelDrag,
+    /if \(drag\?\.moved\) this\.callbacks\.onEndDragPreview\?\.\(\)/,
+  );
+  assert.match(main, /onPreviewDragTile: previewDraggedTile/);
+  assert.match(main, /onEndDragPreview: restoreSelectedTilePreview/);
+  assert.match(
+    main,
+    /function previewDraggedTile\(tileId\) \{\s*domView\.renderTenpaiPreview\(presentedState\(\), Number\(tileId\) \|\| 0\);\s*\}/,
+  );
   assert.match(
     pointerUp,
     /const hovered = canDiscard \? this\.pickTile\(event\) : null/,

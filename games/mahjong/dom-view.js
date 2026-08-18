@@ -14,6 +14,7 @@ import {
   resultBasePaymentTotal,
   scoreDeltaSummary,
   seatWind,
+  tenpaiWaitsForDiscard,
   tileFace,
   tileType,
 } from "./game-format.js";
@@ -102,6 +103,7 @@ export class MahjongDomView {
     );
     this.riichiMode = riichiMode;
     this.renderHands(state, selectedTileId, riichiMode);
+    this.renderTenpaiPreview(state, selectedTileId);
     this.renderRivers(state, events);
     this.renderMelds(state);
     this.renderActions(state, selectedTileId, riichiMode);
@@ -118,7 +120,40 @@ export class MahjongDomView {
     this.riichiMode = riichiMode;
     this.updateHandSelection(selectedTileId);
     this.renderTypeHighlights(selectedTileId);
+    this.renderTenpaiPreview(state, selectedTileId);
     return this.visualUi(playerName, selectedTileId);
+  }
+
+  renderTenpaiPreview(state, selectedTileId) {
+    const waits = tenpaiWaitsForDiscard(
+      state?.legalActions,
+      selectedTileId,
+    );
+    const { tenpaiPreview, tenpaiWaits } = this.elements;
+    tenpaiPreview.hidden = waits.length === 0;
+    tenpaiWaits.style.setProperty(
+      "--tenpai-wait-columns",
+      String(Math.min(7, waits.length)),
+    );
+    tenpaiWaits.replaceChildren(
+      ...waits.map((wait) => {
+        const item = document.createElement("span");
+        item.className = "tenpai-wait";
+        item.setAttribute(
+          "aria-label",
+          `${tileFace(wait.type).label}，剩余 ${wait.remaining} 张`,
+        );
+        const tile = createTile(wait.type, "tenpai-wait");
+        markDora(tile, wait.type, this.doraCounts);
+        tile.setAttribute("aria-hidden", "true");
+        const count = document.createElement("small");
+        count.className = "tenpai-wait-count";
+        count.classList.toggle("is-empty", wait.remaining === 0);
+        count.textContent = `${wait.remaining} 张`;
+        item.append(tile, count);
+        return item;
+      }),
+    );
   }
 
   updateHandSelection(selectedTileId) {
@@ -714,6 +749,8 @@ function collectElements() {
     message: document.querySelector("#table-message"),
     actionHint: document.querySelector("#action-hint"),
     actionBar: document.querySelector("#action-bar"),
+    tenpaiPreview: document.querySelector("#tenpai-preview"),
+    tenpaiWaits: document.querySelector("#tenpai-waits"),
     claims: document.querySelector("#claim-actions"),
     pass: document.querySelector("#pass-button"),
     abort: document.querySelector("#abort-button"),

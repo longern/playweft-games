@@ -91,6 +91,9 @@ const settingsDialog = createMahjongSettingsDialog({
 });
 const visualRenderer = new MahjongThreeRenderer(elements.stage, {
   onSelectTile: selectTile,
+  onClearSelection: clearSelectedTile,
+  onPreviewDragTile: previewDraggedTile,
+  onEndDragPreview: restoreSelectedTilePreview,
   onDiscardTile(tileId) {
     if (!state?.legalActions?.canDiscard) return;
     selectedTileId = tileId;
@@ -875,6 +878,24 @@ function selectTile(tileId) {
   )
     return;
   selectedTileId = selectedTileId === tileId ? 0 : tileId;
+  renderTileSelection(renderState);
+}
+
+function clearSelectedTile() {
+  if (!selectedTileId) return;
+  selectedTileId = 0;
+  renderTileSelection(presentedState());
+}
+
+function previewDraggedTile(tileId) {
+  domView.renderTenpaiPreview(presentedState(), Number(tileId) || 0);
+}
+
+function restoreSelectedTilePreview() {
+  domView.renderTenpaiPreview(presentedState(), selectedTileId);
+}
+
+function renderTileSelection(renderState) {
   const ui = domView.renderSelection(renderState, selectedTileId, playerName, {
     riichiMode,
   });

@@ -1256,6 +1256,65 @@ local function option_priority(kind)
   return 0
 end
 
+local function claim_response_for(state, claimant_index)
+  for _, response in ipairs(state.claimResponses or {}) do
+    if response.claimant == claimant_index then return response end
+  end
+  return nil
+end
+
+local function pending_claimant_for_player(state, player_id)
+  for index, claimant in ipairs(state.claimants or {}) do
+    if claimant.playerId == player_id and not claim_response_for(state, index) then
+      return index, claimant
+    end
+  end
+  return nil, nil
+end
+
+local function claimant_priority(claimant)
+  local priority = 0
+  for _, option in ipairs(claimant.options or {}) do
+    priority = math.max(priority, option_priority(option.kind))
+  end
+  return priority
+end
+
+local function highest_selected_claim_priority(state)
+  local priority = 0
+  for _, response in ipairs(state.claimResponses or {}) do
+    if response.option > 0 then
+      local claimant = state.claimants[response.claimant]
+      local option = claimant and claimant.options[response.option]
+      if option then priority = math.max(priority, option_priority(option.kind)) end
+    end
+  end
+  return priority
+end
+
+local function cancel_lower_priority_claims(state, selected_priority)
+  if selected_priority <= 0 then return end
+  for index, claimant in ipairs(state.claimants or {}) do
+    if not claim_response_for(state, index)
+      and claimant_priority(claimant) < selected_priority then
+      state.claimResponses[#state.claimResponses + 1] = {
+        claimant = index, option = 0, cancelled = true,
+      }
+    end
+  end
+end
+
+local function refresh_claim_index(state)
+  state.claimIndex = 0
+  for index in ipairs(state.claimants or {}) do
+    if not claim_response_for(state, index) then
+      state.claimIndex = index
+      return index
+    end
+  end
+  return 0
+end
+
 local function kuikae_forbidden_types(option)
   local forbidden = {}
   if option.kind == "pon" or option.kind == "kan" then
@@ -1399,15 +1458,70 @@ local function perform_discard(state, tile_id, actor_id, seat, riichi_declared)
   return accepted(state, events)
 end
 
-local function riichi_discards(state, player_id)
-  if state.riichi[player_id] or not is_closed_hand(state.melds[player_id])
-    or state.scores[player_index(state, player_id)] < 1000
-    or #state.wall < 4 then return {} end
+local function tenpai_discard_waits(state, player_id)
   local hand, result = hand_with_drawn(state, player_id), {}
   for index, tile in ipairs(hand) do
     local candidate = copy_array(hand)
     table.remove(candidate, index)
-    if #waiting_types(candidate, state.melds[player_id]) > 0 then result[#result + 1] = tile end
+    local waits = waiting_types(candidate, state.melds[player_id])
+    if #waits > 0 then
+      result[#result + 1] = { tileId = tile, waits = waits }
+    end
+  end
+  return result
+end
+
+local function riichi_discards(state, player_id, discard_waits)
+  if state.riichi[player_id] or not is_closed_hand(state.melds[player_id])
+    or state.scores[player_index(state, player_id)] < 1000
+    or #state.wall < 4 then return {} end
+  local result = {}
+  for _, entry in ipairs(discard_waits or tenpai_discard_waits(state, player_id)) do
+    result[#result + 1] = entry.tileId
+  end
+  return result
+end
+
+local function visible_tile_type_counts(state, player_id)
+  local visible_ids, counts = {}, {}
+  local function add(tile)
+    tile = tonumber(tile) or 0
+    if tile > 0 then visible_ids[tile] = true end
+  end
+  for _, tile in ipairs(state.hands[player_id] or {}) do add(tile) end
+  if state.players[state.turnIndex] == player_id then add(state.drawnTile) end
+  for _, other_id in ipairs(state.players) do
+    for _, discard in ipairs(state.discards[other_id] or {}) do add(discard.tile) end
+    for _, meld in ipairs(state.melds[other_id] or {}) do
+      for _, tile in ipairs(meld.tiles or {}) do add(tile) end
+    end
+  end
+  for index = 1, state.kanCount + 1 do
+    add(state.deadWall[(index - 1) * 2 + 1])
+  end
+  for tile in pairs(visible_ids) do
+    local kind = tile_type(tile)
+    counts[kind] = (counts[kind] or 0) + 1
+  end
+  return counts
+end
+
+local function tenpai_discard_options(state, player_id, discard_waits, forbidden)
+  local visible, result = visible_tile_type_counts(state, player_id), {}
+  for _, entry in ipairs(discard_waits or tenpai_discard_waits(state, player_id)) do
+    local tile_id = entry.tileId
+    local allowed = not (forbidden and forbidden[tile_type(tile_id)])
+      and (not state.riichi[player_id] or tile_id == state.drawnTile)
+    if allowed then
+      local waits = {}
+      for _, kind in ipairs(entry.waits) do
+        waits[#waits + 1] = {
+          type = kind,
+          remaining = math.max(0, 4 - (visible[kind] or 0)),
+        }
+      end
+      result[#result + 1] = { tileId = tile_id, waits = waits }
+    end
   end
   return result
 end
@@ -1437,8 +1551,8 @@ end
 
 local function apply_claim_response(state, action, actor_id)
   if state.phase ~= "claiming" then return rejected("not_claiming") end
-  local claimant = state.claimants[state.claimIndex]
-  if not claimant or claimant.playerId ~= actor_id then return rejected("not_your_response") end
+  local claimant_index, claimant = pending_claimant_for_player(state, actor_id)
+  if not claimant then return rejected("not_your_response") end
   local option = 0
   if action.type == "claim" then
     option = tonumber(action.option) or 0
@@ -1449,11 +1563,11 @@ local function apply_claim_response(state, action, actor_id)
   if declined_ron then
       if state.riichi[actor_id] then state.riichiFuriten[actor_id] = true else state.tempFuriten[actor_id] = true end
   end
-  state.claimResponses[#state.claimResponses + 1] = { claimant = state.claimIndex, option = option }
+  state.claimResponses[#state.claimResponses + 1] = { claimant = claimant_index, option = option }
   local events = { { type = option == 0 and "claim_passed" or "claim_declared",
     player = actor_id, playerIndex = claimant.playerIndex } }
-  state.claimIndex = state.claimIndex + 1
-  if state.claimIndex > #state.claimants then resolve_claims(state, events) end
+  cancel_lower_priority_claims(state, highest_selected_claim_priority(state))
+  if refresh_claim_index(state) == 0 then resolve_claims(state, events) end
   return accepted(state, events)
 end
 
@@ -1541,7 +1655,7 @@ local function legal_actions(state, viewer_id)
   local seat = player_index(state, viewer_id)
   local legal = { canDiscard = false, canTsumo = false, canRiichi = false,
     canAbortNine = false, riichiTiles = {}, selfKans = {}, claims = {},
-    forbiddenDiscardTypes = {} }
+    tenpaiDiscards = {}, forbiddenDiscardTypes = {} }
   if not seat or state.phase == "hand_ended" then return legal end
   if state.phase == "playing" and state.turnIndex == seat then
     legal.canDiscard = true
@@ -1549,14 +1663,21 @@ local function legal_actions(state, viewer_id)
       legal.forbiddenDiscardTypes[#legal.forbiddenDiscardTypes + 1] = kind
     end
     table.sort(legal.forbiddenDiscardTypes)
+    local discard_waits = tenpai_discard_waits(state, viewer_id)
     legal.canTsumo = state.drawnTile > 0 and score_hand(state, seat, state.drawnTile, "tsumo") ~= nil
-    legal.riichiTiles = riichi_discards(state, viewer_id)
+    legal.riichiTiles = riichi_discards(state, viewer_id, discard_waits)
+    legal.tenpaiDiscards = tenpai_discard_options(
+      state,
+      viewer_id,
+      discard_waits,
+      state.kuikaeForbidden and state.kuikaeForbidden[viewer_id] or nil
+    )
     legal.canRiichi = #legal.riichiTiles > 0
     legal.canAbortNine = can_abort_nine(state, viewer_id)
     legal.selfKans = self_kan_options(state, viewer_id)
   elseif state.phase == "claiming" then
-    local claimant = state.claimants[state.claimIndex]
-    if claimant and claimant.playerId == viewer_id then
+    local _, claimant = pending_claimant_for_player(state, viewer_id)
+    if claimant then
       for index, option in ipairs(claimant.options) do
         local types, red = {}, {}
         for _, tile in ipairs(option.tileIds) do
@@ -1948,10 +2069,10 @@ function view(state, events, context)
     end
   end
   local response_index = 0
-  -- A pending call is private until it is resolved.  Publishing the current
-  -- claimant would reveal which player has a legal chi/pon/ron opportunity.
-  local claimant = state.claimants[state.claimIndex]
-  if state.phase == "claiming" and claimant and claimant.playerId == viewer_id then
+  -- Every unresolved player receives their own private response window. Other
+  -- viewers still cannot infer who can chi, pon, kan, or ron before resolution.
+  local _, claimant = pending_claimant_for_player(state, viewer_id)
+  if state.phase == "claiming" and claimant then
     response_index = claimant.playerIndex
   end
   local indicators = {} for _, kind in ipairs(indicator_types(state, false)) do indicators[#indicators + 1] = kind end
@@ -2141,8 +2262,8 @@ function ai_action(state, actor_id)
   local seat = player_index(state, actor_id)
   if not seat or state.phase == "hand_ended" then return nil end
   if state.phase == "claiming" then
-    local claimant = state.claimants[state.claimIndex]
-    if not claimant or claimant.playerId ~= actor_id then return nil end
+    local _, claimant = pending_claimant_for_player(state, actor_id)
+    if not claimant then return nil end
     return choose_ai_claim(state, claimant)
   end
   if state.phase ~= "playing" or state.turnIndex ~= seat then return nil end

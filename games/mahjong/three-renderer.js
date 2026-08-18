@@ -152,7 +152,7 @@ export class MahjongThreeRenderer {
     this.ownHandLayer = new Group();
     this.overlayScene.add(this.ownHandLayer);
     this.actionCallout = new ThreeActionCallout(this.animations);
-    this.overlayScene.add(this.actionCallout.sprite);
+    this.overlayScene.add(this.actionCallout.group);
 
     this.tableConsole = new ThreeTableConsole({
       anisotropy: Math.min(8, this.renderer.capabilities.getMaxAnisotropy()),
@@ -318,10 +318,7 @@ export class MahjongThreeRenderer {
     this.pendingRender = null;
     this.cancelDrag(false);
     const drawEntryKey = ownDrawEntryKey(state);
-    const newDrawEntry = this.animations.claim(
-      "own-draw-entry",
-      drawEntryKey,
-    );
+    const newDrawEntry = this.animations.claim("own-draw-entry", drawEntryKey);
     this.animateOwnDrawEntry = Boolean(this.state && newDrawEntry);
     if (!drawEntryKey) this.animations.resetKey("own-draw-entry");
     const handRevealKey = String(ui.handRevealKey || "");
@@ -385,9 +382,7 @@ export class MahjongThreeRenderer {
     }
     this.ui = { ...this.ui, ...ui };
     this.highlightedType =
-      Number(this.ui.selectedTileId) > 0
-        ? tileType(this.ui.selectedTileId)
-        : 0;
+      Number(this.ui.selectedTileId) > 0 ? tileType(this.ui.selectedTileId) : 0;
     this.cancelOwnTileMotion();
     this.queueOwnTileMotions();
     this.updateTypeHighlights();
@@ -441,10 +436,7 @@ export class MahjongThreeRenderer {
       Number(this.ui?.deferredHandInsertionSeat) === 1;
     const deferredOwnRackIndex = Math.max(
       0,
-      Math.min(
-        rack.length,
-        Number(this.ui?.deferredHandInsertionIndex) || 0,
-      ),
+      Math.min(rack.length, Number(this.ui?.deferredHandInsertionIndex) || 0),
     );
     if (revealSeats.has(1) || coveredSeats.has(1)) {
       this.addPresentedHand(state, "bottom", state.players[0], 1, {
@@ -659,8 +651,7 @@ export class MahjongThreeRenderer {
 
   cancelOwnHandCrossfade() {
     this.animations.cancel("own-hand-crossfade");
-    const animation = this.ownHandCrossfade
-      || this.pendingOwnHandCrossfade;
+    const animation = this.ownHandCrossfade || this.pendingOwnHandCrossfade;
     if (animation) this.finishOwnHandCrossfade(animation);
     this.pendingOwnHandCrossfade = null;
   }
@@ -726,11 +717,7 @@ export class MahjongThreeRenderer {
     const targetY =
       transform.y +
       (Number(tileId) === Number(selectedTileId) ? transform.lift : 0);
-    tile.position.set(
-      transform.x,
-      previousY ?? targetY,
-      transform.z,
-    );
+    tile.position.set(transform.x, previousY ?? targetY, transform.z);
     tile.rotation.x = transform.tilt;
     tile.scale.set(transform.scaleX, transform.scaleY, transform.scaleZ);
     tile.userData.baseX = transform.x;
@@ -762,11 +749,7 @@ export class MahjongThreeRenderer {
     const hovered = tile === this.hoveredTile;
     return (
       tile.userData.baseY +
-      (selected
-        ? tile.userData.lift
-        : hovered
-          ? OWN_TILE_HOVER_LIFT
-          : 0)
+      (selected ? tile.userData.lift : hovered ? OWN_TILE_HOVER_LIFT : 0)
     );
   }
 
@@ -972,7 +955,10 @@ export class MahjongThreeRenderer {
       );
       if (!drag.moved && clientDistance < OWN_HAND_DRAG.activationDistance)
         return;
-      drag.moved = true;
+      if (!drag.moved) {
+        drag.moved = true;
+        this.callbacks.onPreviewDragTile?.(drag.tileId);
+      }
       const pointer = this.pointerToOverlay(event, drag.bounds);
       drag.tile.position.x = drag.homeX + pointer.x - drag.startX;
       drag.tile.position.y = drag.homeY + Math.max(0, pointer.y - drag.startY);
@@ -1009,7 +995,11 @@ export class MahjongThreeRenderer {
     }
     const tile = this.pickTile(event);
     const tileId = Number(tile?.userData.tileId || 0);
-    if (!tileId) return;
+    if (!tileId) {
+      this.lastTap = { tileId: 0, time: 0 };
+      if (!this.pickTableTile(event)) this.callbacks.onClearSelection?.();
+      return;
+    }
     this.handleTileTap(tileId, tile.userData.discardable === true);
   }
 
@@ -1062,6 +1052,7 @@ export class MahjongThreeRenderer {
       this.renderer.domElement.releasePointerCapture(drag.pointerId);
     }
     this.dragState = null;
+    if (drag?.moved) this.callbacks.onEndDragPreview?.();
     if (drag && this.renderer?.domElement)
       this.renderer.domElement.style.cursor = "default";
     if (redraw) this.drawFrame();

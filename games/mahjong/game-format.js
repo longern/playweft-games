@@ -42,6 +42,20 @@ export function claimPreviewTiles(claim) {
   return tiles.sort((left, right) => left.type - right.type);
 }
 
+export function tenpaiWaitsForDiscard(legalActions, tileId) {
+  const selectedTileId = Number(tileId) || 0;
+  if (!selectedTileId) return [];
+  const option = asArray(legalActions?.tenpaiDiscards).find(
+    (candidate) => Number(candidate?.tileId) === selectedTileId,
+  );
+  return asArray(option?.waits)
+    .map((wait) => ({
+      type: Number(wait?.type) || 0,
+      remaining: Math.max(0, Math.min(4, Math.trunc(Number(wait?.remaining) || 0))),
+    }))
+    .filter((wait) => wait.type >= 1 && wait.type <= 34);
+}
+
 export function activeSeat(state) {
   return Number(state.phase === "claiming" ? state.responseIndex : state.turnIndex);
 }
