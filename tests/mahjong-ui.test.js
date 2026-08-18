@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { Euler, PerspectiveCamera, Texture, Vector3 } from "three";
+import {
+  Euler,
+  Group,
+  OrthographicCamera,
+  PerspectiveCamera,
+  Texture,
+  Vector3,
+} from "three";
 import {
   CLAIM_LABELS,
   HAND_INSERTION_DELAY_MS,
@@ -1122,27 +1129,84 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   assert.match(renderer, /settlePresentedTile\(hinge, covered\)/);
 });
 
-test("mahjong moves the local terminal hand onto a bottom-safe perspective row", () => {
+test("mahjong centre-aligns the shorter local perspective reveal before it falls", () => {
   const eighth = presentedHandTransform("bottom", 7, 13);
   assert.equal(eighth.x, 0);
   assert.equal(eighth.z, LOCAL_REVEALED_HAND_Z);
-  const camera = new PerspectiveCamera(33, MAHJONG_VIEWPORT.aspect, 0.1, 80);
-  camera.position.set(0, 15.558, 15.908);
-  camera.lookAt(0, 0.05, 0.4);
-  camera.updateMatrixWorld();
-  camera.updateProjectionMatrix();
-  const projected = new Vector3(0, TILE_SIZE.height / 2, eighth.z).project(
-    camera,
-  );
-  const projectedY = ((1 - projected.y) * MAHJONG_VIEWPORT.height) / 2;
-  const overlay = ownHandOverlayTransform(
+  const tileCorners = [];
+  for (const x of [-TILE_SIZE.width / 2, TILE_SIZE.width / 2]) {
+    for (const y of [-TILE_SIZE.height / 2, TILE_SIZE.height / 2]) {
+      for (const z of [-TILE_SIZE.depth / 2, TILE_SIZE.depth / 2]) {
+        tileCorners.push(new Vector3(x, y, z));
+      }
+    }
+  }
+  const screenBounds = (object, camera) => {
+    object.updateWorldMatrix(true, true);
+    camera.updateMatrixWorld(true);
+    camera.updateProjectionMatrix();
+    const yCoordinates = tileCorners.map((corner) => {
+      const projected = corner.clone().applyMatrix4(object.matrixWorld).project(camera);
+      return ((1 - projected.y) * MAHJONG_VIEWPORT.height) / 2;
+    });
+    const top = Math.min(...yCoordinates);
+    const bottom = Math.max(...yCoordinates);
+    return { top, bottom, height: bottom - top, centre: (top + bottom) / 2 };
+  };
+
+  const overlayTransform = ownHandOverlayTransform(
     7,
     MAHJONG_VIEWPORT.width,
     MAHJONG_VIEWPORT.height,
   );
-  const overlayY = MAHJONG_VIEWPORT.height / 2 - overlay.y;
-  assert.ok(overlayY - projectedY > 6);
-  assert.ok(overlayY - projectedY < 12);
+  const overlayTile = new Group();
+  overlayTile.position.set(
+    overlayTransform.x,
+    overlayTransform.y,
+    overlayTransform.z,
+  );
+  overlayTile.rotation.x = overlayTransform.tilt;
+  overlayTile.scale.set(
+    overlayTransform.scaleX,
+    overlayTransform.scaleY,
+    overlayTransform.scaleZ,
+  );
+  const overlayCamera = new OrthographicCamera(
+    -MAHJONG_VIEWPORT.width / 2,
+    MAHJONG_VIEWPORT.width / 2,
+    MAHJONG_VIEWPORT.height / 2,
+    -MAHJONG_VIEWPORT.height / 2,
+    0.1,
+    2000,
+  );
+  overlayCamera.position.set(0, 0, 1000);
+  overlayCamera.lookAt(0, 0, 0);
+
+  const camera = new PerspectiveCamera(33, MAHJONG_VIEWPORT.aspect, 0.1, 80);
+  camera.position.set(0, 15.558, 15.908);
+  camera.lookAt(0, 0.05, 0.4);
+
+  const slot = new Group();
+  slot.position.set(eighth.x, 0, eighth.z);
+  slot.rotation.y = eighth.yaw;
+  const hingeTransform = presentedTileHingeTransform(false);
+  const hinge = new Group();
+  hinge.position.z = hingeTransform.pivotZ;
+  const perspectiveTile = new Group();
+  perspectiveTile.position.set(
+    0,
+    hingeTransform.tileY,
+    hingeTransform.tileZ,
+  );
+  hinge.add(perspectiveTile);
+  slot.add(hinge);
+
+  const overlayBounds = screenBounds(overlayTile, overlayCamera);
+  const perspectiveBounds = screenBounds(perspectiveTile, camera);
+  assert.ok(perspectiveBounds.height < overlayBounds.height);
+  assert.ok(
+    Math.abs(perspectiveBounds.centre - overlayBounds.centre) < 0.001,
+  );
   assert.equal(
     presentedHandTransform("bottom", 7, 13, { covered: true }).z,
     LOCAL_COVERED_HAND_Z,
