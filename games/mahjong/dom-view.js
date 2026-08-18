@@ -732,6 +732,8 @@ function collectElements() {
     doubleClickPass: document.querySelector("#double-click-pass-setting"),
     riverTileVolume: document.querySelector("#discard-volume-setting"),
     riverTileVolumeValue: document.querySelector("#discard-volume-value"),
+    musicVolume: document.querySelector("#music-volume-setting"),
+    musicVolumeValue: document.querySelector("#music-volume-value"),
     loading: document.querySelector("#loading-panel"),
     loadingMessage: document.querySelector("#loading-message"),
     stage: document.querySelector("#mahjong-stage"),

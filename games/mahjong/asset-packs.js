@@ -77,16 +77,38 @@ let databasePromise;
 let activeAssets = new Map();
 let objectUrls = new Map();
 let activeDefaultNames = {};
+let activePackOverridesMusic = false;
 
 export async function initializeMahjongAssetPacks() {
   if (!("indexedDB" in globalThis)) return new Map();
   const active = await readActivePack();
-  applyActiveAssets(active?.assets ?? new Map(), active?.defaultNames);
+  applyActiveAssets(
+    active?.assets ?? new Map(),
+    active?.defaultNames,
+    Boolean(active?.catalog.music.length),
+  );
   return active?.assets ?? new Map();
 }
 
 export function getMahjongAssetUrl(slot) {
   return activeAssets.get(slot)?.url ?? "";
+}
+
+export function chooseMahjongMatchMusicUrl(
+  defaultUrl,
+  customUrl,
+  packOverridesMusic,
+) {
+  return packOverridesMusic ? customUrl : defaultUrl;
+}
+
+/** Use an active pack's music choice, including silence, over the default BGM. */
+export function getMahjongMatchMusicUrl(defaultUrl) {
+  return chooseMahjongMatchMusicUrl(
+    defaultUrl,
+    getMahjongAssetUrl("music"),
+    activePackOverridesMusic,
+  );
 }
 
 export function getMahjongDefaultNames() {
@@ -276,7 +298,11 @@ export async function deleteMahjongAssetPack(id) {
 
 async function refreshActiveAssets() {
   const active = await readActivePack();
-  applyActiveAssets(active?.assets ?? new Map(), active?.defaultNames);
+  applyActiveAssets(
+    active?.assets ?? new Map(),
+    active?.defaultNames,
+    Boolean(active?.catalog.music.length),
+  );
 }
 
 async function readActivePack() {
@@ -300,10 +326,15 @@ async function readActivePack() {
   };
 }
 
-function applyActiveAssets(assets, defaultNames = {}) {
+function applyActiveAssets(
+  assets,
+  defaultNames = {},
+  packOverridesMusic = false,
+) {
   for (const [, url] of objectUrls) URL.revokeObjectURL(url);
   objectUrls = new Map();
   activeAssets = new Map();
+  activePackOverridesMusic = packOverridesMusic;
   activeDefaultNames =
     defaultNames && typeof defaultNames === "object" ? defaultNames : {};
   const root = document.documentElement;

@@ -967,6 +967,7 @@ test("mahjong shows oversized non-perspective callouts for claims, riichi, and w
   );
   assert.doesNotMatch(renderer, /ACTION_CALLOUT_DURATION_MS \* 0\.64/);
   assert.match(callout, /MAX_CONCURRENT_CALLOUTS = 3/);
+  assert.match(callout, /ACTION_CALLOUT_SCALE = 0\.78/);
   assert.match(callout, /this\.group\.add\(\.\.\.this\.slots/);
   assert.match(callout, /this\.show\(calloutEvents\.map\(actionCalloutDescriptor\)\)/);
   assert.match(callout, /for \(const \{ descriptor, slot \} of active\)/);

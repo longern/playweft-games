@@ -11,7 +11,7 @@ const TEXTURE_HEIGHT = 512;
 const ENTRY_PORTION = 0.18;
 const EXIT_PORTION = 0.72;
 const MAX_CONCURRENT_CALLOUTS = 3;
-const MULTI_CALLOUT_SCALE = 0.78;
+const ACTION_CALLOUT_SCALE = 0.78;
 
 export const ACTION_CALLOUT_DURATION_MS = 820;
 export const ACTION_CALLOUT_SIZE = Object.freeze({
@@ -133,7 +133,6 @@ export class ThreeActionCallout {
     const targets = multiple
       ? MULTI_ACTION_CALLOUT_TARGETS
       : ACTION_CALLOUT_TARGETS;
-    const layoutScale = multiple ? MULTI_CALLOUT_SCALE : 1;
     this.animations.play({
       id: "action-callout",
       duration: ACTION_CALLOUT_DURATION_MS,
@@ -159,8 +158,8 @@ export class ThreeActionCallout {
           slot.sprite.position.y =
             target.y + origin.y * 235 * travel;
           slot.sprite.scale.set(
-            ACTION_CALLOUT_SIZE.width * scale * layoutScale,
-            ACTION_CALLOUT_SIZE.height * scale * layoutScale,
+            ACTION_CALLOUT_SIZE.width * scale * ACTION_CALLOUT_SCALE,
+            ACTION_CALLOUT_SIZE.height * scale * ACTION_CALLOUT_SCALE,
             1,
           );
           slot.material.rotation = origin.x * -0.055 * travel;

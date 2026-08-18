@@ -33,10 +33,16 @@ import {
   deactivateMahjongAssetPacks,
   getMahjongAssetUrl,
   getMahjongDefaultNames,
+  getMahjongMatchMusicUrl,
   initializeMahjongAssetPacks,
   listMahjongAssetPacks,
   MAHJONG_YAKU_VOICE_KEYS,
 } from "./asset-packs.js";
+import {
+  DEFAULT_MATCH_MUSIC_COPYRIGHT,
+  DEFAULT_MATCH_MUSIC_URL,
+  DEFAULT_MATCH_MUSIC_VOLUME,
+} from "./media-config.js";
 import "../../src/base.css";
 import "./styles.css";
 
@@ -53,12 +59,22 @@ let playerName = "你";
 let hasPlatformName = false;
 let destroyed = false;
 let hasPlatformAvatar = false;
+const MATCH_MUSIC_FADE_DURATION_MS = 800;
 const matchMusic = new Audio();
 matchMusic.loop = true;
 matchMusic.preload = "metadata";
+matchMusic.volume = DEFAULT_MATCH_MUSIC_VOLUME;
+const defaultMusicCopyright = document.querySelector(
+  "#default-bgm-copyright",
+);
+defaultMusicCopyright.textContent = DEFAULT_MATCH_MUSIC_COPYRIGHT;
+defaultMusicCopyright.hidden = !DEFAULT_MATCH_MUSIC_COPYRIGHT;
 const riverTileSound = new Audio(discardSoundSource);
 riverTileSound.preload = "auto";
 let musicNeedsGesture = false;
+let matchMusicFadeFrame = 0;
+let matchMusicGain = 1;
+let matchMusicPlayRequest = 0;
 let voicedEventKey = "";
 let playedRiverTileSoundKey = "";
 
@@ -88,7 +104,13 @@ const settingsDialog = createMahjongSettingsDialog({
   doubleClickPass: elements.doubleClickPass,
   discardVolume: elements.riverTileVolume,
   discardVolumeValue: elements.riverTileVolumeValue,
+  musicVolume: elements.musicVolume,
+  musicVolumeValue: elements.musicVolumeValue,
+  onMusicVolumeChange() {
+    applyMatchMusicVolume();
+  },
 });
+applyMatchMusicVolume();
 const visualRenderer = new MahjongThreeRenderer(elements.stage, {
   onSelectTile: selectTile,
   onClearSelection: clearSelectedTile,
@@ -300,31 +322,105 @@ async function applyVisualPack() {
   });
 }
 
-function syncMatchMusic({ start = Boolean(game) } = {}) {
-  const source = getMahjongAssetUrl("music");
+function applyMatchMusicVolume() {
+  matchMusic.volume = Math.min(
+    1,
+    Math.max(0, settingsDialog.musicVolumeScale * matchMusicGain),
+  );
+}
+
+function setMatchMusicGain(gain) {
+  matchMusicGain = Math.min(1, Math.max(0, gain));
+  applyMatchMusicVolume();
+}
+
+function cancelMatchMusicFade() {
+  if (matchMusicFadeFrame) cancelAnimationFrame(matchMusicFadeFrame);
+  matchMusicFadeFrame = 0;
+}
+
+function fadeMatchMusicTo(targetGain, { pauseWhenSilent = false } = {}) {
+  cancelMatchMusicFade();
+  const initialGain = matchMusicGain;
+  if (initialGain === targetGain) {
+    if (pauseWhenSilent && targetGain === 0) matchMusic.pause();
+    return;
+  }
+  const startedAt = performance.now();
+  const step = (now) => {
+    const progress = Math.min(
+      1,
+      (now - startedAt) / MATCH_MUSIC_FADE_DURATION_MS,
+    );
+    const easedProgress = progress * progress * (3 - 2 * progress);
+    setMatchMusicGain(
+      initialGain + (targetGain - initialGain) * easedProgress,
+    );
+    if (progress < 1) {
+      matchMusicFadeFrame = requestAnimationFrame(step);
+      return;
+    }
+    matchMusicFadeFrame = 0;
+    if (pauseWhenSilent && targetGain === 0) matchMusic.pause();
+  };
+  matchMusicFadeFrame = requestAnimationFrame(step);
+}
+
+function syncMatchMusic({ start = Boolean(game), fadeIn = false } = {}) {
+  const source = getMahjongMatchMusicUrl(DEFAULT_MATCH_MUSIC_URL);
   if (!start || !source) {
+    matchMusicPlayRequest += 1;
+    cancelMatchMusicFade();
     matchMusic.pause();
     matchMusic.removeAttribute("src");
     matchMusic.load();
+    setMatchMusicGain(1);
     musicNeedsGesture = false;
     return;
   }
-  if (matchMusic.src !== source) {
+  const resolvedSource = new URL(source, document.baseURI).href;
+  if (matchMusic.src !== resolvedSource) {
+    cancelMatchMusicFade();
     matchMusic.pause();
-    matchMusic.src = source;
+    matchMusic.src = resolvedSource;
   }
+  if (state?.phase === "hand_ended") {
+    matchMusicPlayRequest += 1;
+    cancelMatchMusicFade();
+    setMatchMusicGain(0);
+    matchMusic.pause();
+    musicNeedsGesture = false;
+    return;
+  }
+  cancelMatchMusicFade();
+  setMatchMusicGain(fadeIn ? 0 : 1);
+  const playRequest = ++matchMusicPlayRequest;
   void matchMusic.play().then(
     () => {
+      if (playRequest !== matchMusicPlayRequest) return;
       musicNeedsGesture = false;
+      if (fadeIn) fadeMatchMusicTo(1);
     },
-    () => {
-      musicNeedsGesture = true;
+    (error) => {
+      if (playRequest !== matchMusicPlayRequest) return;
+      musicNeedsGesture = error?.name === "NotAllowedError";
     },
   );
 }
 
 function resumeMatchMusic() {
-  if (musicNeedsGesture) syncMatchMusic();
+  if (musicNeedsGesture) syncMatchMusic({ fadeIn: matchMusicGain === 0 });
+}
+
+function syncMatchMusicForHandState(previousState, currentState) {
+  const handWasEnded = previousState?.phase === "hand_ended";
+  const handIsEnded = currentState?.phase === "hand_ended";
+  if (!handWasEnded && handIsEnded) {
+    matchMusicPlayRequest += 1;
+    fadeMatchMusicTo(0, { pauseWhenSilent: true });
+  } else if (handWasEnded && !handIsEnded) {
+    syncMatchMusic({ start: true, fadeIn: true });
+  }
 }
 
 function playRiverTileSound(events) {
@@ -732,6 +828,7 @@ function refresh({ ownDiscardedTile = 0 } = {}) {
   const previousState = state;
   const projection = game.view(HUMAN_ID);
   state = projection.state;
+  syncMatchMusicForHandState(previousState, state);
   if (riichiMode && !state.legalActions?.canRiichi) {
     riichiMode = false;
     selectionBeforeRiichi = 0;
@@ -953,6 +1050,7 @@ function cancelRiichiMode() {
 }
 
 function handlePageHide(event) {
+  cancelMatchMusicFade();
   matchMusic.pause();
   riverTileSound.pause();
   window.clearTimeout(aiTimer);
@@ -966,6 +1064,7 @@ function handlePageShow(event) {
 
 function handleVisibilityChange() {
   if (document.visibilityState === "hidden") {
+    cancelMatchMusicFade();
     matchMusic.pause();
     riverTileSound.pause();
     window.clearTimeout(aiTimer);
@@ -996,6 +1095,8 @@ function destroy() {
   destroyed = true;
   window.clearTimeout(aiTimer);
   presentation.destroy();
+  matchMusicPlayRequest += 1;
+  cancelMatchMusicFade();
   matchMusic.pause();
   matchMusic.removeAttribute("src");
   riverTileSound.pause();

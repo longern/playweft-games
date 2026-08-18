@@ -1,7 +1,9 @@
 const DOUBLE_CLICK_TSUMOGIRI_KEY = "playweft.mahjong.double-click-tsumogiri";
 const DOUBLE_CLICK_PASS_KEY = "playweft.mahjong.double-click-pass";
 const DISCARD_VOLUME_KEY = "playweft.mahjong.discard-volume";
+const MUSIC_VOLUME_KEY = "playweft.mahjong.music-volume";
 const DEFAULT_DISCARD_VOLUME = 100;
+const DEFAULT_MUSIC_VOLUME = 32;
 const DIALOG_TRANSITION_FALLBACK_MS = 240;
 
 export function createMahjongSettingsDialog({
@@ -15,6 +17,9 @@ export function createMahjongSettingsDialog({
   doubleClickPass,
   discardVolume,
   discardVolumeValue,
+  musicVolume,
+  musicVolumeValue,
+  onMusicVolumeChange,
 }) {
   let returnFocus = null;
   let open = false;
@@ -27,9 +32,13 @@ export function createMahjongSettingsDialog({
   );
   doubleClickPass.checked = readBooleanSetting(DOUBLE_CLICK_PASS_KEY, false);
   discardVolume.value = String(
-    readDiscardVolumeSetting(DISCARD_VOLUME_KEY, DEFAULT_DISCARD_VOLUME),
+    readVolumeSetting(DISCARD_VOLUME_KEY, DEFAULT_DISCARD_VOLUME),
   );
   renderDiscardVolume();
+  musicVolume.value = String(
+    readVolumeSetting(MUSIC_VOLUME_KEY, DEFAULT_MUSIC_VOLUME),
+  );
+  renderMusicVolume();
 
   function renderDiscardVolume() {
     const value = normalizeDiscardVolume(discardVolume.value);
@@ -37,6 +46,15 @@ export function createMahjongSettingsDialog({
     discardVolume.value = String(value);
     discardVolume.setAttribute("aria-valuetext", label);
     discardVolumeValue.textContent = label;
+    return value;
+  }
+
+  function renderMusicVolume() {
+    const value = normalizeMusicVolume(musicVolume.value);
+    const label = value === 0 ? "静音" : `${value}%`;
+    musicVolume.value = String(value);
+    musicVolume.setAttribute("aria-valuetext", label);
+    musicVolumeValue.textContent = label;
     return value;
   }
 
@@ -163,7 +181,13 @@ export function createMahjongSettingsDialog({
   }
 
   function onDiscardVolumeInput() {
-    writeDiscardVolumeSetting(DISCARD_VOLUME_KEY, renderDiscardVolume());
+    writeVolumeSetting(DISCARD_VOLUME_KEY, renderDiscardVolume());
+  }
+
+  function onMusicVolumeInput() {
+    const value = renderMusicVolume();
+    writeVolumeSetting(MUSIC_VOLUME_KEY, value);
+    onMusicVolumeChange?.();
   }
 
   function onTriggerClick() {
@@ -182,6 +206,7 @@ export function createMahjongSettingsDialog({
   doubleClickTsumogiri.addEventListener("change", onTsumogiriSettingChange);
   doubleClickPass.addEventListener("change", onPassSettingChange);
   discardVolume.addEventListener("input", onDiscardVolumeInput);
+  musicVolume.addEventListener("input", onMusicVolumeInput);
   for (const button of tabButtons) {
     button.addEventListener("click", () => setTab(button.dataset.settingsTab));
     button.addEventListener("keydown", onTabKeyDown);
@@ -197,6 +222,9 @@ export function createMahjongSettingsDialog({
     get discardVolumeScale() {
       return normalizeDiscardVolume(discardVolume.value) / 100;
     },
+    get musicVolumeScale() {
+      return normalizeMusicVolume(musicVolume.value) / 100;
+    },
     setOpen,
     destroy() {
       open = false;
@@ -211,6 +239,7 @@ export function createMahjongSettingsDialog({
       doubleClickTsumogiri.removeEventListener("change", onTsumogiriSettingChange);
       doubleClickPass.removeEventListener("change", onPassSettingChange);
       discardVolume.removeEventListener("input", onDiscardVolumeInput);
+      musicVolume.removeEventListener("input", onMusicVolumeInput);
       for (const button of tabButtons) {
         button.removeEventListener("keydown", onTabKeyDown);
       }
@@ -219,6 +248,14 @@ export function createMahjongSettingsDialog({
 }
 
 export function normalizeDiscardVolume(value, fallback = DEFAULT_DISCARD_VOLUME) {
+  return normalizeVolume(value, fallback);
+}
+
+export function normalizeMusicVolume(value, fallback = DEFAULT_MUSIC_VOLUME) {
+  return normalizeVolume(value, fallback);
+}
+
+function normalizeVolume(value, fallback = DEFAULT_DISCARD_VOLUME) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
   return Math.max(0, Math.min(100, Math.round(number)));
@@ -241,7 +278,7 @@ function writeBooleanSetting(key, value) {
   }
 }
 
-function readDiscardVolumeSetting(key, fallback) {
+function readVolumeSetting(key, fallback) {
   try {
     const value = window.localStorage.getItem(key);
     return value === null ? fallback : normalizeDiscardVolume(value, fallback);
@@ -250,7 +287,7 @@ function readDiscardVolumeSetting(key, fallback) {
   }
 }
 
-function writeDiscardVolumeSetting(key, value) {
+function writeVolumeSetting(key, value) {
   try {
     window.localStorage.setItem(key, String(value));
   } catch {

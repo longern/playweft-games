@@ -27,10 +27,10 @@
             <div class="settings-tabs" role="tablist" aria-label="设置内容">
               <button id="settings-operation-tab" type="button" role="tab" aria-selected="true"
                 aria-controls="settings-operation-panel" data-settings-tab="operation">操作</button>
-              <button id="settings-sound-tab" type="button" role="tab" aria-selected="false"
-                aria-controls="settings-sound-panel" data-settings-tab="sound" tabindex="-1">声音</button>
               <button id="settings-visual-tab" type="button" role="tab" aria-selected="false"
                 aria-controls="settings-visual-panel" data-settings-tab="visual" tabindex="-1">画面</button>
+              <button id="settings-sound-tab" type="button" role="tab" aria-selected="false"
+                aria-controls="settings-sound-panel" data-settings-tab="sound" tabindex="-1">声音</button>
               <button id="settings-help-tab" type="button" role="tab" aria-selected="false"
                 aria-controls="settings-help-panel" data-settings-tab="help" tabindex="-1">帮助</button>
             </div>
@@ -53,12 +53,18 @@
             aria-labelledby="settings-sound-tab" data-settings-panel="sound" hidden>
             <div class="settings-volume-card">
               <div class="settings-volume-heading">
+                <label for="music-volume-setting">音乐音量</label>
+                <output id="music-volume-value" for="music-volume-setting">32%</output>
+              </div>
+              <input id="music-volume-setting" type="range" min="0" max="100" step="1" value="32" />
+              <p id="default-bgm-copyright" class="settings-bgm-copyright" hidden></p>
+            </div>
+            <div class="settings-volume-card">
+              <div class="settings-volume-heading">
                 <label for="discard-volume-setting">落牌音量</label>
                 <output id="discard-volume-value" for="discard-volume-setting">100%</output>
               </div>
-              <input id="discard-volume-setting" type="range" min="0" max="100" step="1" value="100"
-                aria-describedby="discard-volume-description" />
-              <p id="discard-volume-description">控制舍牌和立直牌落入牌河时的声音。</p>
+              <input id="discard-volume-setting" type="range" min="0" max="100" step="1" value="100" />
             </div>
           </div>
           <div id="settings-visual-panel" class="settings-tab-panel settings-visual-panel" role="tabpanel"
