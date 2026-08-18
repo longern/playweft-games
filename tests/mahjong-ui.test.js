@@ -2314,6 +2314,40 @@ test("mahjong settings dialog combines operation controls and themed help", () =
   assert.doesNotMatch(helpHtml, /本地 Lua 规则|view\(\)/);
 });
 
+test("mahjong shuffles behind a synchronized waiting-scene exit", () => {
+  const html = readFileSync(
+    new URL("../games/mahjong/index.html", import.meta.url),
+    "utf8",
+  );
+  const main = readFileSync(
+    new URL("../games/mahjong/main.js", import.meta.url),
+    "utf8",
+  );
+  const styles = readFileSync(
+    new URL("../games/mahjong/styles/setup.css", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(html, /class="loading-spinner"/);
+  assert.doesNotMatch(html, /class="loading-mark"|正在摆好牌桌/);
+  assert.match(
+    styles,
+    /\.setup-panel\.is-leaving \.setup-signpost\s*\{[^}]*opacity:\s*0;[^}]*translateX\(-36px\)/s,
+  );
+  assert.match(
+    styles,
+    /\.loading-panel\.is-active \.loading-spinner\s*\{\s*opacity:\s*1;/,
+  );
+  assert.match(
+    main,
+    /\[game\] = await Promise\.all\(\[\s*gamePreparation,\s*setupExit,\s*visualRendererReady,\s*\]\)/,
+  );
+  assert.ok(
+    main.indexOf("createLocalLuaGame({") <
+      main.indexOf('elements.setup.hidden = true;'),
+  );
+});
+
 test("mahjong renders the centre console as a perspective tabletop component", () => {
   const consoleRenderer = readFileSync(
     new URL("../games/mahjong/render/three-console.js", import.meta.url),

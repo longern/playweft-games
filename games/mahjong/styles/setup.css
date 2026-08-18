@@ -1,5 +1,4 @@
-.setup-panel,
-.loading-panel {
+.setup-panel {
   position: absolute;
   z-index: 110;
   inset: 0;
@@ -9,8 +8,7 @@
   background: url("../assets/waiting-evening-v1.jpg") center / cover no-repeat;
 }
 
-:root[data-mahjong-has-lobby] .setup-panel,
-:root[data-mahjong-has-lobby] .loading-panel {
+:root[data-mahjong-has-lobby] .setup-panel {
   background-image: var(--mahjong-lobby-image);
 }
 
@@ -26,6 +24,17 @@
   position: relative;
   width: 1280px;
   height: 720px;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity 560ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 560ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, transform;
+}
+
+.setup-panel.is-leaving .setup-signpost {
+  opacity: 0;
+  transform: translateX(-36px);
 }
 
 .setup-signpost-image {
@@ -166,6 +175,13 @@
   text-align: left;
   text-shadow: 0 1px 5px rgba(0, 0, 0, 0.74);
   backdrop-filter: blur(10px);
+  opacity: 1;
+  transition: opacity 560ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.setup-panel.is-leaving .rule-options {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .rule-options summary {
@@ -198,55 +214,55 @@
 }
 
 .loading-panel {
+  position: absolute;
+  z-index: 111;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
   justify-items: center;
   color: #fff3d6;
   text-align: center;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.72);
+  pointer-events: none;
 }
 
-.loading-mark {
-  position: relative;
-  display: grid;
-  width: 70px;
-  aspect-ratio: 0.73;
-  place-items: center;
-  border: 1px solid #8f8b75;
-  border-radius: 8px;
-  background: linear-gradient(145deg, #fffdf3, #ddd7c2);
-  box-shadow:
-    0 7px 0 #9d9a83,
-    0 20px 42px rgba(0, 0, 0, 0.52);
-  color: #c83b32;
-  font-family: "Songti SC", "Noto Serif SC", serif;
-  font-size: 2.4rem;
-  font-weight: 900;
-  animation: loading-float 1.5s ease-in-out infinite;
+.loading-spinner {
+  box-sizing: border-box;
+  width: 38px;
+  height: 38px;
+  border: 3px solid rgba(255, 239, 205, 0.22);
+  border-top-color: rgba(255, 231, 174, 0.96);
+  border-radius: 50%;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.32);
+  opacity: 0;
+  animation: loading-spin 720ms linear infinite;
+  transition: opacity 560ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity;
 }
 
-@keyframes loading-float {
-  50% {
-    transform: translateY(-8px) rotate(2deg);
+.loading-panel.is-active .loading-spinner {
+  opacity: 1;
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(1turn);
   }
 }
 
-.loading-panel strong {
-  position: relative;
-  margin-top: 30px;
-  font-family: "Songti SC", "Noto Serif SC", serif;
-  font-size: 1.2rem;
-  letter-spacing: 0.14em;
-}
-
 .loading-panel p {
-  position: relative;
-  margin: 7px 0 0;
-  color: rgba(255, 255, 255, 0.56);
-  font-size: 0.76rem;
+  position: absolute;
+  top: calc(50% + 38px);
+  max-width: 520px;
+  margin: 0;
+  color: rgba(255, 239, 211, 0.9);
+  font-size: 1rem;
 }
 
-.loading-panel.is-error .loading-mark {
+.loading-panel.is-error .loading-spinner {
   animation: none;
-  filter: grayscale(0.7);
+  opacity: 0.45;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -735,6 +735,7 @@ function collectElements() {
     musicVolume: document.querySelector("#music-volume-setting"),
     musicVolumeValue: document.querySelector("#music-volume-value"),
     loading: document.querySelector("#loading-panel"),
+    loadingSpinner: document.querySelector(".loading-spinner"),
     loadingMessage: document.querySelector("#loading-message"),
     stage: document.querySelector("#mahjong-stage"),
     consoleRound: document.querySelector("#console-round"),

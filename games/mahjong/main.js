@@ -122,6 +122,7 @@ document.querySelector("#theme-json-example").textContent = JSON.stringify(
 );
 
 let game;
+let gameInitializing = false;
 let state;
 let selectedTileId = 0;
 let riichiMode = false;
@@ -133,6 +134,7 @@ let hasPlatformName = false;
 let destroyed = false;
 let hasPlatformAvatar = false;
 const MATCH_MUSIC_FADE_DURATION_MS = 800;
+const SETUP_EXIT_DURATION_MS = 560;
 const matchMusic = new Audio();
 matchMusic.loop = true;
 matchMusic.preload = "metadata";
@@ -805,44 +807,78 @@ function createVisualPackButton(label, action, id = "") {
 }
 
 async function initialize(matchType = "east") {
-  if (game) return;
+  if (game || gameInitializing) return;
+  gameInitializing = true;
   syncMatchMusic({ start: true });
-  elements.setup.hidden = true;
+  const rules = Object.fromEntries(
+    [...elements.setup.querySelectorAll("[data-rule]")].map((input) => [
+      input.dataset.rule,
+      input.checked,
+    ]),
+  );
+  elements.loading.classList.remove("is-active", "is-error");
+  elements.loadingMessage.hidden = true;
   elements.loading.hidden = false;
-  elements.loadingMessage.textContent = "正在洗牌并码好牌山…";
+  void elements.loadingSpinner.offsetWidth;
+  const setupExit = beginSetupExit();
+  const gamePreparation = createLocalLuaGame({
+    sourceUrl: "./game.lua",
+    players: PLAYERS.map((player, index) => ({
+      ...player,
+      name: index === 0 ? playerName : player.name,
+    })),
+    playerId: HUMAN_ID,
+    randomSeed: Date.now(),
+    settings: { matchType, rules },
+  });
   try {
-    await visualRendererReady;
-    game = await createLocalLuaGame({
-      sourceUrl: "./game.lua",
-      players: PLAYERS.map((player, index) => ({
-        ...player,
-        name: index === 0 ? playerName : player.name,
-      })),
-      playerId: HUMAN_ID,
-      randomSeed: Date.now(),
-      settings: {
-        matchType,
-        rules: Object.fromEntries(
-          [...elements.setup.querySelectorAll("[data-rule]")].map((input) => [
-            input.dataset.rule,
-            input.checked,
-          ]),
-        ),
-      },
-    });
+    [game] = await Promise.all([
+      gamePreparation,
+      setupExit,
+      visualRendererReady,
+    ]);
     refresh();
     elements.app.setAttribute("aria-busy", "false");
+    elements.setup.hidden = true;
     elements.loading.hidden = true;
     scheduleAi();
   } catch (error) {
     console.error(error);
+    await setupExit;
     showLoadingError("牌桌准备失败，请刷新页面重试");
+  } finally {
+    gameInitializing = false;
   }
+}
+
+function beginSetupExit() {
+  const signpost = elements.setup.querySelector(".setup-signpost");
+  elements.setup.classList.add("is-leaving");
+  elements.loading.classList.add("is-active");
+  for (const button of elements.setup.querySelectorAll("[data-match-type]")) {
+    button.disabled = true;
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      signpost.removeEventListener("transitionend", handleTransitionEnd);
+      window.clearTimeout(fallbackTimer);
+      resolve();
+    };
+    const handleTransitionEnd = (event) => {
+      if (event.target === signpost && event.propertyName === "opacity") finish();
+    };
+    const fallbackTimer = window.setTimeout(finish, SETUP_EXIT_DURATION_MS + 100);
+    signpost.addEventListener("transitionend", handleTransitionEnd);
+  });
 }
 
 function showLoadingError(message) {
   elements.loading.classList.add("is-error");
   elements.loadingMessage.textContent = message;
+  elements.loadingMessage.hidden = false;
 }
 
 function dispatch(action) {

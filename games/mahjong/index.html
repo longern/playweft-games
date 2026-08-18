@@ -282,10 +282,9 @@
         </div>
       </section>
 
-      <section id="loading-panel" class="loading-panel" aria-live="polite" hidden>
-        <span class="loading-mark">東</span>
-        <strong>正在摆好牌桌</strong>
-        <p id="loading-message">正在洗牌并码好牌山…</p>
+      <section id="loading-panel" class="loading-panel" role="status" aria-label="正在洗牌并码好牌山" hidden>
+        <span class="loading-spinner" aria-hidden="true"></span>
+        <p id="loading-message" hidden></p>
       </section>
     </div>
   </main>
