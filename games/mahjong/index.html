@@ -225,19 +225,6 @@
             </div>
           </section>
 
-          <section id="result-panel" class="result-panel" aria-live="assertive" hidden>
-            <span id="result-kicker">本局结束</span>
-            <strong id="result-title">自摸</strong>
-            <p id="result-summary"></p>
-            <div id="result-hands" class="result-hands" aria-label="胡牌牌型"></div>
-            <div id="result-yaku" class="result-yaku"></div>
-            <b id="result-delta" class="result-delta"></b>
-            <div class="result-footer">
-              <strong id="result-value" class="result-value" hidden></strong>
-              <strong id="result-total" class="result-total" hidden></strong>
-              <button id="rematch-button" type="button">下一局</button>
-            </div>
-          </section>
         </div>
       </section>
 
@@ -257,6 +244,24 @@
           <span id="furiten-badge" class="furiten-badge" hidden>振听</span>
         </div>
         <div id="hand-bottom" class="own-hand" role="listbox" aria-label="你的手牌"></div>
+      </section>
+
+      <section id="result-panel" class="result-panel" aria-live="assertive" hidden>
+        <div class="result-page-stage">
+          <div class="result-content">
+            <span id="result-kicker">本局结束</span>
+            <strong id="result-title">自摸</strong>
+            <p id="result-summary"></p>
+            <div id="result-hands" class="result-hands" aria-label="胡牌牌型"></div>
+            <div id="result-yaku" class="result-yaku"></div>
+            <b id="result-delta" class="result-delta"></b>
+            <div class="result-footer">
+              <strong id="result-value" class="result-value" hidden></strong>
+              <strong id="result-total" class="result-total" hidden></strong>
+              <button id="rematch-button" type="button">继续</button>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section id="setup-panel" class="setup-panel" aria-label="选择对局长度">

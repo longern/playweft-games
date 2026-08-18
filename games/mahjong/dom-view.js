@@ -12,7 +12,8 @@ import {
   riverDisplayEntries,
   roundLabel,
   resultBasePaymentTotal,
-  scoreDeltaSummary,
+  resultDetailPageCount,
+  resultScoreRows,
   seatWind,
   tenpaiWaitsForDiscard,
   tileFace,
@@ -54,6 +55,7 @@ export class MahjongDomView {
     playerName,
     {
       showResult = true,
+      resultPage = 0,
       riichiMode = false,
       defaultNames = {},
       playerNameIsAuthoritative = false,
@@ -108,7 +110,7 @@ export class MahjongDomView {
     this.renderMelds(state);
     this.renderActions(state, selectedTileId, riichiMode);
     this.renderStatus(state, events, playerName);
-    this.renderResult(state, playerName, showResult);
+    this.renderResult(state, playerName, showResult, resultPage);
   }
 
   renderSelection(
@@ -529,49 +531,36 @@ export class MahjongDomView {
     }
   }
 
-  renderResult(state, playerName, showResult = true) {
+  renderResult(state, playerName, showResult = true, pageIndex = 0) {
     const { elements } = this;
     const ended = state.phase === "hand_ended";
     elements.result.hidden = !ended || !showResult;
     if (!ended) return;
-    if (state.draw) {
-      elements.resultHands.replaceChildren();
-      elements.resultHands.hidden = true;
-      elements.resultValue.hidden = true;
-      elements.resultValue.textContent = "";
-      elements.resultTotal.hidden = true;
-      elements.resultTotal.textContent = "";
-      elements.resultSummary.hidden = false;
-      const abortive = Boolean(state.result?.abortive);
-      elements.resultKicker.textContent = abortive ? "途中流局" : "牌山摸尽";
-      elements.resultTitle.textContent = state.abortiveReason || "流局";
-      elements.resultSummary.textContent = `${state.result?.payment ?? "不听罚符结算"}。${state.matchEnded ? state.endReason || "对局结束。" : "准备下一局。"}`;
-      elements.resultYaku.replaceChildren();
-      elements.resultYaku.hidden = true;
-      elements.resultDelta.textContent = scoreDeltaSummary(state, playerName);
-      elements.rematch.textContent = state.matchEnded ? "同规则再战" : "下一局";
+    elements.rematch.textContent = "继续";
+    const detailCount = resultDetailPageCount(state);
+    const safePage = Math.max(0, Math.min(detailCount, Number(pageIndex) || 0));
+    if (safePage >= detailCount) {
+      this.renderResultScores(state, playerName);
       return;
     }
-    const winnerName =
-      state.winnerIndex === 1
-        ? playerName
-        : state.playerNames?.[state.winnerIndex - 1] ||
-          PLAYERS[state.winnerIndex - 1].name;
-    const winnerNames = asArray(state.winners).map((id) => {
-      const index = state.players.indexOf(id);
-      return index === 0
-        ? playerName
-        : state.playerNames?.[index] || PLAYERS[index]?.name;
-    });
+
+    const results = asArray(state.results).length
+      ? asArray(state.results)
+      : [state.result ?? {}];
+    const result = results[safePage] ?? {};
+    const winnerIndex =
+      Number(result.winnerIndex) ||
+      state.players.indexOf(state.winners?.[safePage]) + 1 ||
+      Number(state.winnerIndex) ||
+      1;
+    const winnerName = playerDisplayName(state, winnerIndex, playerName);
     elements.resultKicker.textContent =
       state.winType === "tsumo"
         ? "自摸和牌"
         : state.winType === "nagashi"
           ? "流局满贯"
           : "荣和";
-    elements.resultTitle.textContent =
-      winnerNames.length > 1 ? winnerNames.join("、") : winnerName;
-    const result = state.result ?? {};
+    elements.resultTitle.textContent = winnerName;
     const value = result.limit || `${result.han ?? 0} 番 ${result.fu ?? 0} 符`;
     elements.resultSummary.textContent = "";
     elements.resultSummary.hidden = true;
@@ -586,41 +575,74 @@ export class MahjongDomView {
       elements.resultTotal.append(basePaymentTotal, unit);
     }
     elements.resultTotal.hidden = !basePaymentTotal;
-    const allResults = asArray(state.results).length
-      ? asArray(state.results)
-      : [result];
     elements.resultHands.hidden = state.winType === "nagashi";
     elements.resultHands.replaceChildren(
-      ...allResults.map((scored, scoreIndex) =>
-        createResultHand(
-          state,
-          Number(scored.winnerIndex) ||
-            state.players.indexOf(state.winners?.[scoreIndex]) + 1,
-          winnerNames[scoreIndex] || winnerName,
-          allResults.length > 1,
-          this.doraCounts,
-        ),
+      createResultHand(
+        state,
+        winnerIndex,
+        winnerName,
+        false,
+        this.doraCounts,
       ),
     );
+    elements.resultYaku.classList.remove("is-score-summary");
     elements.resultYaku.hidden = false;
     elements.resultYaku.replaceChildren(
-      ...allResults.flatMap((scored, scoreIndex) =>
-        asArray(scored.yaku).map((yaku) => {
-          const item = document.createElement("span");
-          const prefix =
-            allResults.length > 1 ? `${winnerNames[scoreIndex]}：` : "";
-          const name = document.createElement("i");
-          const value = document.createElement("b");
-          name.textContent = `${prefix}${yaku.name}`;
-          value.textContent = yaku.han >= 13 ? "役满" : `${yaku.han}番`;
-          item.append(name, value);
-          return item;
-        }),
-      ),
+      ...asArray(result.yaku).map((yaku) => {
+        const item = document.createElement("span");
+        const name = document.createElement("i");
+        const yakuValue = document.createElement("b");
+        name.textContent = yaku.name;
+        yakuValue.textContent = yaku.han >= 13 ? "役满" : `${yaku.han}番`;
+        item.append(name, yakuValue);
+        return item;
+      }),
     );
-    elements.resultDelta.textContent = scoreDeltaSummary(state, playerName);
-    elements.rematch.textContent = state.matchEnded ? "同规则再战" : "下一局";
+    elements.resultDelta.textContent = "";
+    elements.resultDelta.hidden = true;
   }
+
+  renderResultScores(state, playerName) {
+    const { elements } = this;
+    elements.resultKicker.textContent = state.draw ? "流局结算" : "本局结算";
+    elements.resultTitle.textContent = "点数结算";
+    const summary = state.draw
+      ? `${state.abortiveReason || "流局"} · ${state.result?.payment ?? "不听罚符结算"}`
+      : state.matchEnded
+        ? state.endReason || "对局结束"
+        : "";
+    elements.resultSummary.textContent = summary;
+    elements.resultSummary.hidden = !summary;
+    elements.resultHands.replaceChildren();
+    elements.resultHands.hidden = true;
+    elements.resultValue.textContent = "";
+    elements.resultValue.hidden = true;
+    elements.resultTotal.textContent = "";
+    elements.resultTotal.hidden = true;
+    elements.resultDelta.textContent = "";
+    elements.resultDelta.hidden = true;
+    elements.resultYaku.classList.add("is-score-summary");
+    elements.resultYaku.hidden = false;
+    elements.resultYaku.replaceChildren(
+      ...resultScoreRows(state, playerName).map((score) => {
+        const item = document.createElement("span");
+        item.className = "result-score-row";
+        const name = document.createElement("i");
+        const delta = document.createElement("b");
+        name.textContent = `${score.name}　${score.before} → ${score.after}`;
+        delta.textContent = `${score.delta >= 0 ? "+" : ""}${score.delta}`;
+        item.append(name, delta);
+        return item;
+      }),
+    );
+  }
+}
+
+function playerDisplayName(state, winnerIndex, playerName) {
+  const index = Number(winnerIndex) - 1;
+  return index === 0
+    ? playerName
+    : state.playerNames?.[index] || PLAYERS[index]?.name || `玩家${winnerIndex}`;
 }
 
 function createResultHand(
@@ -763,6 +785,8 @@ function collectElements() {
     furiten: document.querySelector("#furiten-badge"),
     hand: document.querySelector("#hand-bottom"),
     result: document.querySelector("#result-panel"),
+    resultStage: document.querySelector(".result-page-stage"),
+    resultContent: document.querySelector(".result-content"),
     resultKicker: document.querySelector("#result-kicker"),
     resultTitle: document.querySelector("#result-title"),
     resultSummary: document.querySelector("#result-summary"),

@@ -19,6 +19,7 @@ import {
   deferredHandInsertion,
   errorMessage,
   exhaustiveDrawPresentation,
+  resultDetailPageCount,
 } from "./game-format.js";
 import { MahjongThreeRenderer } from "./three-renderer.js";
 import { MahjongPresentationController } from "./presentation-controller.js";
@@ -124,6 +125,9 @@ document.querySelector("#theme-json-example").textContent = JSON.stringify(
 let game;
 let gameInitializing = false;
 let state;
+let resultPageIndex = 0;
+let resultPageKey = "";
+let resultPageAnimating = false;
 let selectedTileId = 0;
 let riichiMode = false;
 let selectionBeforeRiichi = 0;
@@ -135,6 +139,8 @@ let destroyed = false;
 let hasPlatformAvatar = false;
 const MATCH_MUSIC_FADE_DURATION_MS = 800;
 const SETUP_EXIT_DURATION_MS = 560;
+const RESULT_PAGE_TRANSITION_MS = 260;
+const RESULT_EXIT_DURATION_MS = 320;
 const matchMusic = new Audio();
 matchMusic.loop = true;
 matchMusic.preload = "metadata";
@@ -328,9 +334,7 @@ elements.abort.addEventListener("click", () =>
 elements.tsumo.addEventListener("click", () => dispatch({ type: "tsumo" }));
 elements.riichi.addEventListener("click", enterRiichiMode);
 elements.cancelRiichi.addEventListener("click", cancelRiichiMode);
-elements.rematch.addEventListener("click", () =>
-  dispatch({ type: state.matchEnded ? "new_match" : "next_hand" }),
-);
+elements.rematch.addEventListener("click", () => void continueResult());
 for (const button of elements.setup.querySelectorAll("[data-match-type]")) {
   button.addEventListener(
     "click",
@@ -971,6 +975,7 @@ function refresh({ ownDiscardedTile = 0 } = {}) {
   }
   const events = asArray(projection.events);
   visibleEvents = events;
+  syncResultPage(state);
   playRoleVoices(events);
   queueHandInsertion(previousState, events, ownDiscardedTile);
   const revealKey = handEndPresentationKey(state);
@@ -985,6 +990,7 @@ function renderCurrentState() {
   const coveredPlayerIndices = handCoveredPlayerIndices(state);
   domView.render(renderState, visibleEvents, selectedTileId, playerName, {
     showResult: presentation.resultVisible,
+    resultPage: resultPageIndex,
     riichiMode,
     defaultNames: getMahjongDefaultNames(),
     playerNameIsAuthoritative: hasPlatformName,
@@ -1007,6 +1013,90 @@ function renderCurrentState() {
       Number(presentation.handInsertion?.seat) || 0,
     deferredHandInsertionIndex:
       Number(presentation.handInsertion?.rackIndex) || 0,
+  });
+}
+
+async function continueResult() {
+  if (
+    resultPageAnimating ||
+    state?.phase !== "hand_ended" ||
+    elements.result.hidden
+  ) {
+    return;
+  }
+  const detailCount = resultDetailPageCount(state);
+  resultPageAnimating = true;
+  elements.rematch.disabled = true;
+  if (resultPageIndex < detailCount) {
+    const outgoing = elements.resultContent.cloneNode(true);
+    for (const node of [outgoing, ...outgoing.querySelectorAll("[id]")]) {
+      node.removeAttribute("id");
+    }
+    outgoing.classList.add("is-page-leaving");
+    elements.resultStage.append(outgoing);
+    resultPageIndex += 1;
+    domView.renderResult(state, playerName, true, resultPageIndex);
+    elements.resultContent.classList.add("is-page-entering");
+    await waitForAnimation(
+      elements.resultContent,
+      "result-page-enter",
+      RESULT_PAGE_TRANSITION_MS,
+    );
+    outgoing.remove();
+    elements.resultContent.classList.remove("is-page-entering");
+    elements.rematch.disabled = false;
+    resultPageAnimating = false;
+    return;
+  }
+
+  elements.result.classList.add("is-exiting");
+  await waitForAnimation(
+    elements.result,
+    "result-screen-exit",
+    RESULT_EXIT_DURATION_MS,
+  );
+  dispatch({ type: state.matchEnded ? "new_match" : "next_hand" });
+}
+
+function syncResultPage(current) {
+  const key =
+    current?.phase === "hand_ended"
+      ? [
+          current.roundWind,
+          current.handNumber,
+          current.moveCount,
+          current.winType || "draw",
+          ...asArray(current.winners),
+        ].join(":")
+      : "";
+  if (key === resultPageKey) return;
+  resultPageKey = key;
+  resultPageIndex = 0;
+  resultPageAnimating = false;
+  elements.result.classList.remove("is-exiting");
+  elements.resultContent.classList.remove("is-page-entering");
+  elements.resultStage
+    .querySelectorAll(".is-page-leaving")
+    .forEach((page) => page.remove());
+}
+
+function waitForAnimation(element, animationName, duration) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      element.removeEventListener("animationend", handleAnimationEnd);
+      window.clearTimeout(fallbackTimer);
+      resolve();
+    };
+    const handleAnimationEnd = (event) => {
+      if (event.target === element && event.animationName === animationName) {
+        finish();
+      }
+    };
+    const fallbackTimer = window.setTimeout(finish, duration + 100);
+    element.addEventListener("animationend", handleAnimationEnd);
   });
 }
 

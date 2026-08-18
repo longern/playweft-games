@@ -297,15 +297,24 @@ export function errorMessage(code) {
   return messages[code] ?? `动作未通过规则校验${code ? `（${code}）` : ""}`;
 }
 
-export function scoreDeltaSummary(state, playerName) {
-  return asArray(state.result?.deltas)
-    .map((delta, index) => {
-      const name = index === 0
+export function resultDetailPageCount(state) {
+  if (state?.phase !== "hand_ended" || state.draw === true) return 0;
+  const results = asArray(state.results);
+  return results.length || (state.result ? 1 : 0);
+}
+
+export function resultScoreRows(state, playerName) {
+  const scores = asArray(state?.scores);
+  const deltas = asArray(state?.result?.deltas);
+  return scores.map((score, index) => {
+    const after = Number(score) || 0;
+    const delta = Number(deltas[index]) || 0;
+    const name =
+      index === 0
         ? playerName
         : state.playerNames?.[index] ?? PLAYERS[index].name;
-      return `${name} ${delta >= 0 ? "+" : ""}${delta}`;
-    })
-    .join("　");
+    return { name, before: after - delta, delta, after };
+  });
 }
 
 export function resultBasePaymentTotal(state, result) {

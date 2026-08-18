@@ -29,6 +29,8 @@ import {
   nextDoraType,
   roundLabel,
   resultBasePaymentTotal,
+  resultDetailPageCount,
+  resultScoreRows,
   riverDisplayEntries,
   splitRevealedHand,
   tenpaiWaitsForDiscard,
@@ -1092,14 +1094,22 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   assert.match(html, /id="result-hands" class="result-hands"/);
   assert.match(
     html,
+    /<section id="result-panel"[^>]*>\s*<div class="result-page-stage">\s*<div class="result-content">/,
+  );
+  assert.ok(
+    html.indexOf('id="result-panel"') > html.indexOf('class="player-dock"'),
+  );
+  assert.match(
+    html,
     /class="result-footer"[\s\S]*id="result-value" class="result-value" hidden[\s\S]*id="result-total" class="result-total" hidden[\s\S]*id="rematch-button"/,
   );
+  assert.match(html, /id="rematch-button"[^>]*>继续<\/button>/);
   assert.doesNotMatch(view, /你赢了/);
   assert.match(
     html,
     /id="result-yaku" class="result-yaku"><\/div>\s*<b id="result-delta" class="result-delta"><\/b>\s*<div class="result-footer">/s,
   );
-  assert.match(view, /elements\.resultDelta\.textContent = scoreDeltaSummary/);
+  assert.match(view, /this\.renderResultScores\(state, playerName\)/);
   assert.doesNotMatch(view, /elements\.resultYaku\.append\(delta\)/);
   assert.match(view, /elements\.resultValue\.textContent = value/);
   assert.match(view, /elements\.resultSummary\.hidden = true/);
@@ -1127,6 +1137,49 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   );
   assert.match(renderer, /concealed: covered/);
   assert.match(renderer, /settlePresentedTile\(hinge, covered\)/);
+  const resultStyles = readFileSync(
+    new URL("../games/mahjong/styles/result.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    resultStyles,
+    /\.result-panel\s*\{[^}]*inset:\s*0;[^}]*width:\s*1280px;[^}]*height:\s*720px;[^}]*overflow:\s*hidden;/s,
+  );
+  assert.match(
+    resultStyles,
+    /\.result-panel::before\s*\{[^}]*inset:\s*-48px;[^}]*result-backdrop-grow/s,
+  );
+  const resultContentRule =
+    resultStyles.match(/\.result-content\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(resultContentRule, /width:\s*100%/);
+  assert.match(resultContentRule, /height:\s*100%/);
+  assert.doesNotMatch(
+    resultContentRule,
+    /border(?:-radius)?:|background:|box-shadow:|backdrop-filter:/,
+  );
+  assert.match(resultStyles, /@keyframes result-content-grow/);
+  assert.match(resultStyles, /translateX\(-72px\)/);
+  assert.match(resultStyles, /translateX\(72px\)/);
+  assert.match(resultStyles, /@keyframes result-screen-exit/);
+});
+
+test("mahjong result pages separate winners before the score summary", () => {
+  const state = {
+    phase: "hand_ended",
+    draw: false,
+    results: [{ winnerIndex: 2 }, { winnerIndex: 4 }],
+    scores: [21_000, 31_000, 18_000, 30_000],
+    result: { deltas: [-8_000, 6_000, -4_000, 6_000] },
+    playerNames: ["自家", "青岚", "织羽", "墨池"],
+  };
+  assert.equal(resultDetailPageCount(state), 2);
+  assert.equal(resultDetailPageCount({ ...state, draw: true }), 0);
+  assert.deepEqual(resultScoreRows(state, "你"), [
+    { name: "你", before: 29_000, delta: -8_000, after: 21_000 },
+    { name: "青岚", before: 25_000, delta: 6_000, after: 31_000 },
+    { name: "织羽", before: 22_000, delta: -4_000, after: 18_000 },
+    { name: "墨池", before: 24_000, delta: 6_000, after: 30_000 },
+  ]);
 });
 
 test("mahjong centre-aligns the shorter local perspective reveal before it falls", () => {
