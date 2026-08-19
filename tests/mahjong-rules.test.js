@@ -444,7 +444,10 @@ test("Mahjong pon options let players keep or use a red five", async () => {
   `);
 
   assert.equal(result.count, 2);
-  assert.deepEqual(result.ids, [[18, 19], [18, 17]]);
+  assert.deepEqual(result.ids, [
+    [18, 19],
+    [18, 17],
+  ]);
   assert.equal(result.projectedCount, 2);
   assert.deepEqual(result.withoutRed, [false, false]);
   assert.deepEqual(result.withRed, [false, true]);
@@ -649,6 +652,33 @@ test("Mahjong AI balances riichi, dama, defense, calls, and dealer aggression", 
   assert.equal(result.badChiAction, "pass");
   assert.equal(result.ponAction, "claim");
   assert.ok(result.dealerBias > result.nonDealerBias);
+});
+
+test("Mahjong AI does not treat a potential flush as a guaranteed open yaku", async () => {
+  const result = await runScenario(`
+    function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000071" } })
+    local flush_goal = ai_hand_goal(state, 2,
+      ids({ 1,2,3, 4,5,6, 7,8,9, 1,2,3, 28 }), {})
+    local yakuhai_goal = ai_hand_goal(state, 2,
+      ids({ 1,2,3, 4,5,6, 7,8,9, 10,11,12 }), {
+        { kind = "pon", tiles = ids({ 34,34,34 }) },
+      })
+    result = {
+      flushGuaranteed = flush_goal.guaranteedOpen,
+      yakuhaiGuaranteed = yakuhai_goal.guaranteedOpen,
+    }
+  `);
+
+  assert.equal(result.flushGuaranteed, 0);
+  assert.ok(result.yakuhaiGuaranteed >= 1);
 });
 
 test("Mahjong riichi costs 1000 points and own discards cause furiten", async () => {

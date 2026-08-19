@@ -213,6 +213,36 @@ local function waiting_types(hand, melds)
   return result
 end
 
+local function wait_shape_quality(hand, melds, winning_kind)
+  local candidate = copy_array(hand)
+  candidate[#candidate + 1] = (winning_kind - 1) * 4 + 1
+  if is_seven_pairs(candidate, melds) then return 0.84 end
+  if is_thirteen_orphans(candidate, melds) then return 1.14 end
+  local best = 0.74
+  for _, decomposition in ipairs(standard_decompositions(candidate, melds)) do
+    local pair_count, sequence_quality = 0, 0
+    if decomposition.pair == winning_kind then pair_count = 1 end
+    for _, group in ipairs(decomposition.groups) do
+      if group.kind == "triplet" and group.tile == winning_kind then pair_count = pair_count + 1 end
+      if group.kind == "sequence" and winning_kind >= group.tile and winning_kind <= group.tile + 2 then
+        local position = winning_kind - group.tile
+        local start_rank = ((group.tile - 1) % 9) + 1
+        if (start_rank == 1 and position == 2) or (start_rank == 7 and position == 0) then
+          sequence_quality = math.max(sequence_quality, 0.70)
+        elseif position == 1 then
+          sequence_quality = math.max(sequence_quality, 1.08)
+        else
+          sequence_quality = math.max(sequence_quality, 0.82)
+        end
+      end
+    end
+    if sequence_quality > 0 then best = math.max(best, sequence_quality)
+    elseif pair_count >= 2 then best = math.max(best, 0.94)
+    elseif pair_count == 1 then best = math.max(best, 0.78) end
+  end
+  return best
+end
+
 local function remove_tile(hand, tile)
   for index, candidate in ipairs(hand) do
     if candidate == tile then table.remove(hand, index) return true end
@@ -1708,8 +1738,11 @@ local function legal_actions(state, viewer_id)
   return legal
 end
 
-local function standard_shanten(hand, melds)
-  local counts = type_counts(hand)
+-- `standard_shanten` is the hottest part of the local AI: every candidate
+-- discard and every possible improving draw reaches it.  It mutates and fully
+-- restores its input, so accept a count vector directly and avoid rebuilding
+-- that vector from the hand for each probe.
+local function standard_shanten_counts(counts, meld_count)
   local best = 8
   local function search(kind, groups, pair, shapes)
     while kind <= 34 and counts[kind] == 0 do kind = kind + 1 end
@@ -1755,18 +1788,23 @@ local function standard_shanten(hand, melds)
     search(kind, groups, pair, shapes)
     counts[kind] = counts[kind] + 1
   end
-  search(1, #(melds or {}), 0, 0)
+  search(1, meld_count or 0, 0, 0)
   return best
 end
 
-local function hand_shanten(hand, melds, cache)
-  local counts = type_counts(hand)
-  local key_parts = { tostring(#(melds or {})) }
-  for kind = 1, 34 do key_parts[#key_parts + 1] = tostring(counts[kind]) end
-  local key = table.concat(key_parts, ":")
+local function shanten_cache_key(counts, meld_count)
+  -- Each count fits in one byte. This replaces a 35-item tostring/table.concat
+  -- allocation on every shanten probe with one compact, collision-free key.
+  local bytes = { string.char(meld_count or 0) }
+  for kind = 1, 34 do bytes[#bytes + 1] = string.char(counts[kind] or 0) end
+  return table.concat(bytes)
+end
+
+local function hand_shanten_counts(counts, meld_count, cache)
+  local key = shanten_cache_key(counts, meld_count)
   if cache and cache[key] ~= nil then return cache[key] end
-  local best = standard_shanten(hand, melds)
-  if #(melds or {}) == 0 then
+  local best = standard_shanten_counts(counts, meld_count)
+  if meld_count == 0 then
     local pairs, distinct = 0, 0
     for kind = 1, 34 do
       if counts[kind] > 0 then distinct = distinct + 1 end
@@ -1784,19 +1822,101 @@ local function hand_shanten(hand, melds, cache)
   return best
 end
 
-local function shape_value(hand)
-  local counts, score = type_counts(hand), 0
+local function hand_shanten(hand, melds, cache)
+  local counts = type_counts(hand)
+  return hand_shanten_counts(counts, #(melds or {}), cache)
+end
+
+local function special_hand_profile(hand, melds)
+  if #(melds or {}) ~= 0 then return { chiitoi = 8, kokushi = 14, pairs = 0 } end
+  local counts, pairs, distinct = type_counts(hand), 0, 0
   for kind = 1, 34 do
-    local count = counts[kind]
-    if count >= 2 then score = score + 4 end
-    if count >= 3 then score = score + 7 end
-    if kind <= 27 and count > 0 then
-      local rank = ((kind - 1) % 9) + 1
-      if rank < 9 and counts[kind + 1] > 0 then score = score + 3 end
-      if rank < 8 and counts[kind + 2] > 0 then score = score + 1 end
-    end
+    if counts[kind] > 0 then distinct = distinct + 1 end
+    if counts[kind] >= 2 then pairs = pairs + 1 end
   end
-  return score
+  local chiitoi = 6 - pairs + math.max(0, 7 - distinct)
+  local unique, outside_pair = 0, false
+  for _, kind in ipairs({ 1,9,10,18,19,27,28,29,30,31,32,33,34 }) do
+    if counts[kind] > 0 then unique = unique + 1 end
+    if counts[kind] >= 2 then outside_pair = true end
+  end
+  return {
+    chiitoi = chiitoi,
+    kokushi = 13 - unique - (outside_pair and 1 or 0),
+    pairs = pairs,
+    terminals = unique,
+  }
+end
+
+-- A fast, decomposition-aware tie breaker for equal-shanten hands.  The old
+-- adjacency counter credited one tile for several overlapping blocks (for
+-- example 3456 counted both 34, 45, 56 and 35), so it regularly chose a
+-- visually busy but less flexible hand.  This search uses each tile once and
+-- values completed sets, a head, ryanmen taatsu, then other taatsu under the
+-- four-block limit.  It is deliberately much cheaper than a draw-then-best-
+-- discard search and is memoized alongside the shanten probes.
+local function block_shape_value(hand, melds, cache)
+  local counts, meld_count = type_counts(hand), #(melds or {})
+  local key = shanten_cache_key(counts, meld_count)
+  if cache and cache[key] ~= nil then return cache[key] end
+  local best = 0
+  local function search(kind, groups, pair, ryanmen, other_taatsu)
+    while kind <= 34 and counts[kind] == 0 do kind = kind + 1 end
+    if kind > 34 then
+      local usable = math.min(ryanmen + other_taatsu, math.max(0, 4 - groups))
+      local used_ryanmen = math.min(ryanmen, usable)
+      local used_other = usable - used_ryanmen
+      -- Fixed melds only constrain the remaining block slots; they add no
+      -- tie-break score because every compared candidate shares them.
+      local score = (groups - meld_count) * 24 + used_ryanmen * 7
+        + used_other * 5 + pair * 3
+      best = math.max(best, score)
+      return
+    end
+    if counts[kind] >= 3 then
+      counts[kind] = counts[kind] - 3
+      search(kind, groups + 1, pair, ryanmen, other_taatsu)
+      counts[kind] = counts[kind] + 3
+    end
+    local rank = kind <= 27 and ((kind - 1) % 9) + 1 or 0
+    if rank > 0 and rank <= 7 and counts[kind + 1] > 0 and counts[kind + 2] > 0 then
+      counts[kind], counts[kind + 1], counts[kind + 2] =
+        counts[kind] - 1, counts[kind + 1] - 1, counts[kind + 2] - 1
+      search(kind, groups + 1, pair, ryanmen, other_taatsu)
+      counts[kind], counts[kind + 1], counts[kind + 2] =
+        counts[kind] + 1, counts[kind + 1] + 1, counts[kind + 2] + 1
+    end
+    if pair == 0 and counts[kind] >= 2 then
+      counts[kind] = counts[kind] - 2
+      search(kind, groups, 1, ryanmen, other_taatsu)
+      counts[kind] = counts[kind] + 2
+    end
+    if counts[kind] >= 2 then
+      counts[kind] = counts[kind] - 2
+      search(kind, groups, pair, ryanmen, other_taatsu + 1)
+      counts[kind] = counts[kind] + 2
+    end
+    if rank > 0 and rank <= 8 and counts[kind + 1] > 0 then
+      counts[kind], counts[kind + 1] = counts[kind] - 1, counts[kind + 1] - 1
+      if rank >= 2 and rank <= 7 then
+        search(kind, groups, pair, ryanmen + 1, other_taatsu)
+      else
+        search(kind, groups, pair, ryanmen, other_taatsu + 1)
+      end
+      counts[kind], counts[kind + 1] = counts[kind] + 1, counts[kind + 1] + 1
+    end
+    if rank > 0 and rank <= 7 and counts[kind + 2] > 0 then
+      counts[kind], counts[kind + 2] = counts[kind] - 1, counts[kind + 2] - 1
+      search(kind, groups, pair, ryanmen, other_taatsu + 1)
+      counts[kind], counts[kind + 2] = counts[kind] + 1, counts[kind + 2] + 1
+    end
+    counts[kind] = counts[kind] - 1
+    search(kind, groups, pair, ryanmen, other_taatsu)
+    counts[kind] = counts[kind] + 1
+  end
+  search(1, meld_count, 0, 0, 0)
+  if cache then cache[key] = best end
+  return best
 end
 
 local function visible_type_counts(state, player_id, own_hand, own_melds)
@@ -1885,12 +2005,151 @@ local function open_yaku_available(state, seat, hand, melds)
   return not has_sequence and pairs_or_sets >= 4
 end
 
+local function ai_hand_goal(state, seat, hand, melds)
+  local counts = type_counts(hand)
+  local value, natural = estimated_hand_value(state, seat, hand, melds)
+  local suit_counts, honors, simples = { 0, 0, 0 }, 0, true
+  local pairs_or_sets, sequence_melds = 0, 0
+  for kind = 1, 34 do
+    if counts[kind] >= 2 then pairs_or_sets = pairs_or_sets + 1 end
+    if counts[kind] > 0 and is_outside(kind) then simples = false end
+    if kind <= 27 then
+      suit_counts[math.floor((kind - 1) / 9) + 1] = suit_counts[math.floor((kind - 1) / 9) + 1] + counts[kind]
+    else
+      honors = honors + counts[kind]
+    end
+  end
+  for _, meld in ipairs(melds or {}) do
+    if meld.kind == "chi" then sequence_melds = sequence_melds + 1 else pairs_or_sets = pairs_or_sets + 1 end
+    for _, tile in ipairs(meld.tiles or {}) do
+      local kind = tile_type(tile)
+      if is_outside(kind) then simples = false end
+      if kind <= 27 then
+        suit_counts[math.floor((kind - 1) / 9) + 1] = suit_counts[math.floor((kind - 1) / 9) + 1] + 1
+      else
+        honors = honors + 1
+      end
+    end
+  end
+  local dominant, other_suits = 0, 0
+  for suit = 1, 3 do dominant = math.max(dominant, suit_counts[suit]) end
+  for suit = 1, 3 do if suit_counts[suit] > 0 and suit_counts[suit] < dominant then other_suits = other_suits + 1 end end
+  local route, open_value, guaranteed_open = "closed", natural, 0
+  for kind = 28, 34 do
+    for _, meld in ipairs(melds or {}) do
+      if meld.kind ~= "chi" and tile_type(meld.tiles[1]) == kind
+        and value_honor_kind(state, seat, kind) then
+        guaranteed_open = math.max(guaranteed_open, kind <= 31
+          and kind == 28 + ((seat - state.dealerIndex + 4) % 4)
+          and kind == 27 + state.roundWind and 2 or 1)
+      end
+    end
+  end
+  if dominant >= 8 and other_suits == 0 then
+    route, open_value = honors > 0 and "honitsu" or "chinitsu", honors > 0 and 2 or 5
+  elseif sequence_melds == 0 and pairs_or_sets >= 4 then
+    route, open_value = "toitoi", math.max(open_value, 2)
+  elseif simples then
+    route, open_value = "tanyao", math.max(open_value, 1)
+  else
+    for kind = 28, 34 do
+      if counts[kind] >= 2 and value_honor_kind(state, seat, kind) then
+        route, open_value = "yakuhai", math.max(open_value, 1)
+      end
+    end
+  end
+  return {
+    route = route,
+    openValue = open_value,
+    -- A shape that currently looks like tanyao/honitsu/toitoi is not a yaku
+    -- after a call yet: later draws and the final pair can still invalidate
+    -- it.  Only a completed value-honor meld is truly guaranteed here.
+    guaranteedOpen = guaranteed_open,
+    closedValue = value + (is_closed_hand(melds) and 0.85 or 0),
+    preserveClosed = route == "closed" and guaranteed_open < 1,
+  }
+end
+
 local function opponent_discarded_types(state, player_id)
   local result = {}
   for _, discard in ipairs(state.discards[player_id] or {}) do
     result[tile_type(discard.tile)] = true
   end
   return result
+end
+
+local function early_outer_factor(state, opponent_id, kind)
+  if kind > 27 then return 1 end
+  local rank = ((kind - 1) % 9) + 1
+  if rank > 3 and rank < 7 then return 1 end
+  local suit_start = math.floor((kind - 1) / 9) * 9 + 1
+  local factor = 1
+  -- 早外（外侧牌）不是现物：它表达的是对手早巡丢掉中张后，
+  -- 更外侧搭子被保留的概率下降。只取前六张，且只使用同花色的
+  -- 3/4/5 距离，避免把后期手牌转向误读成早外。
+  for index, discard in ipairs(state.discards[opponent_id] or {}) do
+    if index > 6 then break end
+    local discarded = tile_type(discard.tile)
+    if discarded >= suit_start and discarded < suit_start + 9 then
+      local discarded_rank = ((discarded - 1) % 9) + 1
+      local distance = math.abs(discarded_rank - rank)
+      local points_outward = (rank <= 3 and discarded_rank > rank)
+        or (rank >= 7 and discarded_rank < rank)
+      if points_outward and distance >= 3 and distance <= 5 then
+        local strength = distance == 3 and 0.42 or distance == 4 and 0.29 or 0.17
+        local early_bonus = index <= 3 and 0.08 or index <= 5 and 0.04 or 0
+        factor = math.min(factor, 1 - strength - early_bonus)
+      end
+    end
+  end
+  return factor
+end
+
+local function wall_factor(kind, visible_counts)
+  if (visible_counts[kind] or 0) >= 4 then return 0 end
+  if kind > 27 then
+    local visible = visible_counts[kind] or 0
+    return visible >= 3 and 0.55 or visible == 2 and 0.76 or 1
+  end
+  local suit_start = math.floor((kind - 1) / 9) * 9 + 1
+  local rank = ((kind - 1) % 9) + 1
+  local patterns, blocked, one_chance = 0, 0, 0
+  for start = math.max(1, rank - 2), math.min(7, rank) do
+    patterns = patterns + 1
+    local first, second = suit_start + start - 1, suit_start + start
+    if rank == start then first, second = kind + 1, kind + 2
+    elseif rank == start + 1 then first, second = kind - 1, kind + 1
+    else first, second = kind - 2, kind - 1 end
+    local first_visible, second_visible = visible_counts[first] or 0, visible_counts[second] or 0
+    if first_visible >= 4 or second_visible >= 4 then
+      blocked = blocked + 1
+    elseif first_visible >= 3 or second_visible >= 3 then
+      one_chance = one_chance + 1
+    end
+  end
+  if patterns == 0 then return 1 end
+  return math.max(0.38, 1 - blocked / patterns * 0.54 - one_chance / patterns * 0.12)
+end
+
+local function opponent_suit_factor(state, opponent_id, kind)
+  if kind > 27 then return 1 end
+  local melds = state.melds[opponent_id] or {}
+  if #melds < 2 then return 1 end
+  local suits = { 0, 0, 0 }
+  for _, meld in ipairs(melds) do
+    for _, tile in ipairs(meld.tiles or {}) do
+      local meld_kind = tile_type(tile)
+      if meld_kind <= 27 then suits[math.floor((meld_kind - 1) / 9) + 1] = suits[math.floor((meld_kind - 1) / 9) + 1] + 1 end
+    end
+  end
+  local focus, focused_count = 0, 0
+  for suit = 1, 3 do
+    if suits[suit] > focused_count then focus, focused_count = suit, suits[suit] end
+  end
+  if focused_count < 5 then return 1 end
+  local candidate_suit = math.floor((kind - 1) / 9) + 1
+  if candidate_suit == focus then return 1.18 + math.min(0.18, (focused_count - 5) * 0.04) end
+  return 0.82
 end
 
 local function opponent_threat_strength(state, player_id)
@@ -1930,11 +2189,12 @@ local function tile_danger_against(state, opponent_id, kind, visible_counts)
     local suji, possible = 0, 0
     if rank >= 4 then possible = possible + 1; if discarded[kind - 3] then suji = suji + 1 end end
     if rank <= 6 then possible = possible + 1; if discarded[kind + 3] then suji = suji + 1 end end
-    danger = base * (1 - (possible > 0 and suji / possible or 0) * 0.48)
-    local suit_start = math.floor((kind - 1) / 9) * 9 + 1
-    local left = kind > suit_start and visible_counts[kind - 1] == 4
-    local right = kind < suit_start + 8 and visible_counts[kind + 1] == 4
-    if left or right then danger = danger * 0.76 end
+    local suji_factor = 1 - (possible > 0 and suji / possible or 0) * 0.56
+    if suji == 2 then suji_factor = math.min(suji_factor, 0.40) end
+    danger = base * suji_factor
+    danger = danger * wall_factor(kind, visible_counts)
+    danger = danger * early_outer_factor(state, opponent_id, kind)
+    danger = danger * opponent_suit_factor(state, opponent_id, kind)
   end
   if is_dora_kind(state, kind) then danger = danger + 0.32 end
   return danger * threat
@@ -1962,12 +2222,36 @@ end
 
 local function effective_tile_count(hand, melds, shanten, visible_counts, cache)
   local counts, total = type_counts(hand), 0
+  local meld_count = #(melds or {})
   for kind = 1, 34 do
     if counts[kind] < 4 and (visible_counts[kind] or 0) < 4 then
-      local candidate = copy_array(hand)
-      candidate[#candidate + 1] = (kind - 1) * 4 + 1
-      if hand_shanten(candidate, melds, cache) < shanten then
+      counts[kind] = counts[kind] + 1
+      local improves = hand_shanten_counts(counts, meld_count, cache) < shanten
+      counts[kind] = counts[kind] - 1
+      if improves then
         total = total + math.max(0, 4 - (visible_counts[kind] or 0))
+      end
+    end
+  end
+  return total
+end
+
+local function improvement_tile_count(hand, melds, shanten, visible_counts, cache, shape_cache)
+  -- 轻量的改良张：保持向听、并提升完整手牌的形状。真正的摸后
+  -- 最佳弃牌搜索会让一局 AI 决策从毫秒级膨胀到秒级，不适合前端实时局。
+  local counts, total = type_counts(hand), 0
+  local meld_count, current_shape = #(melds or {}), block_shape_value(hand, melds, shape_cache)
+  for kind = 1, 34 do
+    if counts[kind] < 4 and (visible_counts[kind] or 0) < 4 then
+      counts[kind] = counts[kind] + 1
+      local keeps_shanten = hand_shanten_counts(counts, meld_count, cache) == shanten
+      counts[kind] = counts[kind] - 1
+      if keeps_shanten then
+        local drawn = copy_array(hand)
+        drawn[#drawn + 1] = (kind - 1) * 4 + 1
+        if block_shape_value(drawn, melds, shape_cache) > current_shape then
+        total = total + math.max(0, 4 - (visible_counts[kind] or 0))
+        end
       end
     end
   end
@@ -1986,6 +2270,27 @@ local function score_position_aggression(state, seat)
   return 0
 end
 
+local function endgame_objective(state, seat)
+  local final_wind = state.matchType == "hanchan" and 2 or 1
+  local late = state.roundWind >= final_wind and state.handNumber >= 3
+  if not late then return { mode = "normal", weight = 0 } end
+  local own, rank = state.scores[seat], 1
+  for other = 1, PLAYER_COUNT do
+    if other ~= seat and state.scores[other] > own then rank = rank + 1 end
+  end
+  local gap_up, gap_down = math.huge, math.huge
+  for other = 1, PLAYER_COUNT do
+    if other ~= seat then
+      local delta = state.scores[other] - own
+      if delta > 0 then gap_up = math.min(gap_up, delta)
+      elseif delta < 0 then gap_down = math.min(gap_down, -delta) end
+    end
+  end
+  if rank > 1 and gap_up <= 8000 then return { mode = "chase", weight = 0.26 } end
+  if rank == 1 and gap_down <= 6000 then return { mode = "protect", weight = -0.24 } end
+  return { mode = "normal", weight = 0 }
+end
+
 local function choose_ai_discard(state, seat, hand, allowed, forbidden, melds)
   local player_id = state.players[seat]
   melds = melds or state.melds[player_id]
@@ -1993,29 +2298,42 @@ local function choose_ai_discard(state, seat, hand, allowed, forbidden, melds)
   if allowed and #allowed > 0 then
     allow = {} for _, tile in ipairs(allowed) do allow[tile] = true end
   end
-  local cache, candidates, minimum_shanten = {}, {}, 8
+  local cache, shape_cache, candidates, candidate_keys, minimum_shanten = {}, {}, {}, {}, 8
+  local base_counts = type_counts(hand)
+  local meld_count = #(melds or {})
   for index, tile in ipairs(hand) do
     if (not allow or allow[tile]) and not (forbidden and forbidden[tile_type(tile)]) then
+      local kind = tile_type(tile)
+      local candidate_key = tostring(kind) .. (RED_FIVES[tile] and ":red" or ":plain")
+      if candidate_keys[candidate_key] then goto continue_candidate end
+      candidate_keys[candidate_key] = true
       local remaining = copy_array(hand)
       table.remove(remaining, index)
-      local shanten = hand_shanten(remaining, melds, cache)
+      base_counts[kind] = base_counts[kind] - 1
+      local shanten = hand_shanten_counts(base_counts, meld_count, cache)
+      base_counts[kind] = base_counts[kind] + 1
       minimum_shanten = math.min(minimum_shanten, shanten)
       candidates[#candidates + 1] = {
         tile = tile, hand = remaining, shanten = shanten, index = index,
       }
     end
+    ::continue_candidate::
   end
   if #candidates == 0 then return nil, nil end
   local visible = visible_type_counts(state, player_id, hand, melds)
   local pressure = ai_threat_pressure(state, seat)
+  local objective = endgame_objective(state, seat)
   local best_value = 0
   for _, candidate in ipairs(candidates) do
     candidate.value = estimated_hand_value(state, seat, candidate.hand, melds)
+    local special = special_hand_profile(candidate.hand, melds)
+    candidate.special = math.min(special.chiitoi, special.kokushi)
+    candidate.specialRoute = special.chiitoi <= special.kokushi and "chiitoi" or "kokushi"
     best_value = math.max(best_value, candidate.value)
   end
   local aggression = (minimum_shanten <= 0 and 1.05 or minimum_shanten == 1 and 0.68 or 0.28)
     + math.min(4, best_value) * 0.12 + dealer_aggression(state, seat)
-    + score_position_aggression(state, seat)
+    + score_position_aggression(state, seat) + objective.weight
   if #state.wall <= 20 then aggression = aggression - 0.18 end
   local folding = pressure >= 0.9 and (minimum_shanten >= 2
     or (minimum_shanten >= 1 and best_value < 2.2 and aggression < pressure))
@@ -2023,25 +2341,35 @@ local function choose_ai_discard(state, seat, hand, allowed, forbidden, melds)
   for _, candidate in ipairs(candidates) do
     candidate.ukeire = 0
     if not folding and candidate.shanten == minimum_shanten then
-      candidate.preliminary = shape_value(candidate.hand) * 1.7
+      candidate.preliminary = block_shape_value(candidate.hand, melds, shape_cache) * 1.7
         + candidate.value * 18 - tile_keep_bonus(state, seat, candidate.tile) * 13
+        + math.max(0, 3 - candidate.special) * (#state.wall >= 36 and 12 or 4)
       ukeire_candidates[#ukeire_candidates + 1] = candidate
     end
   end
   table.sort(ukeire_candidates, function(left, right)
     return left.preliminary > right.preliminary
   end)
-  for index = 1, math.min(6, #ukeire_candidates) do
+  for index = 1, math.min(8, #ukeire_candidates) do
     local candidate = ukeire_candidates[index]
     candidate.ukeire = effective_tile_count(
       candidate.hand, melds, candidate.shanten, visible, cache
     )
+    -- 完整“摸后最佳弃牌”改良张昂贵，只用于牌效预筛最好的两种牌；
+    -- 其余候选仍可凭完整进张与向听参与比较。
+    if index <= 2 then
+      candidate.improvement = improvement_tile_count(
+        candidate.hand, melds, candidate.shanten, visible, cache, shape_cache
+      )
+    end
   end
   local best
   for _, candidate in ipairs(candidates) do
     candidate.danger = tile_danger(state, seat, candidate.tile, visible)
     local efficiency = -candidate.shanten * 300 + candidate.ukeire * 7
-      + shape_value(candidate.hand) * 1.7 + candidate.value * 18
+      + (candidate.improvement or 0) * 1.8
+      + block_shape_value(candidate.hand, melds, shape_cache) * 1.7 + candidate.value * 18
+      + math.max(0, 3 - candidate.special) * (#state.wall >= 36 and 10 or 2)
       - tile_keep_bonus(state, seat, candidate.tile) * 13
     if folding then
       candidate.score = -candidate.danger * 1050 - candidate.shanten * 28
@@ -2059,6 +2387,7 @@ local function choose_ai_discard(state, seat, hand, allowed, forbidden, melds)
     end
   end
   best.folding, best.pressure, best.aggression = folding, pressure, aggression
+  best.objective = objective.mode
   return best.tile, best
 end
 
@@ -2181,6 +2510,7 @@ local function choose_ai_claim(state, claimant)
   local seat, player_id = claimant.playerIndex, claimant.playerId
   local current_hand, current_melds = state.hands[player_id], state.melds[player_id]
   local current_shanten = hand_shanten(current_hand, current_melds, {})
+  local current_goal = ai_hand_goal(state, seat, current_hand, current_melds)
   local pressure = ai_threat_pressure(state, seat)
   local best
   for index, option in ipairs(claimant.options) do
@@ -2188,18 +2518,35 @@ local function choose_ai_claim(state, claimant)
       local hand, melds, discard = simulated_claim(state, claimant, option)
       if discard then
         local improvement = current_shanten - discard.shanten
-        local has_yaku = open_yaku_available(state, seat, discard.hand or hand, melds)
+        local goal = ai_hand_goal(state, seat, discard.hand or hand, melds)
+        -- 鸣牌只把已保证的役（或本次碰到的役牌）当作可和；
+        -- 对对、染手等远期潜力只能加分，不能单独授权副露。
+        local has_yaku = goal.guaranteedOpen >= 1
         local value = discard.value or estimated_hand_value(state, seat, hand, melds)
+        local called_kind = tile_type(state.lastDiscard.tile)
+        local yakuhai_call = option.kind ~= "chi" and value_honor_kind(state, seat, called_kind)
         local dealer_bonus = dealer_aggression(state, seat) * 70
         local score = improvement * 150 - discard.shanten * 32
-          + (discard.ukeire or 0) * 3 + value * 18 + dealer_bonus
+          + (discard.ukeire or 0) * 3 + value * 18 + goal.openValue * 24 + dealer_bonus
+        if yakuhai_call then score = score + 54 end
         if option.kind == "kan" then score = score + 10 end
         if option.kind == "chi" then score = score - 8 end
+        if goal.route == current_goal.route then score = score + 12 end
+        if current_goal.preserveClosed then score = score - 44 end
         if pressure >= 0.9 then score = score - pressure * 90 end
-        local acceptable = has_yaku and discard.shanten <= 2
+        -- Potential routes never authorize a distant or slow call, but a
+        -- clear one-step speed gain into tenpai may take an all-simple route
+        -- when its post-call hand has no outside tiles.  This admits the
+        -- ordinary chi-to-tenpai case without treating every early tanyao
+        -- shape (or any honitsu/toitoi wish) as a made yaku.
+        local locked_tanyao = goal.route == "tanyao" and discard.shanten <= 0
+          and goal.openValue >= 1
+        local acceptable = (has_yaku or locked_tanyao) and discard.shanten <= 2
           and (improvement >= 1
             or (improvement == 0 and discard.shanten <= 1 and value >= 2.2
               and pressure < 0.9 + dealer_aggression(state, seat)))
+        if yakuhai_call and discard.shanten <= 2 and improvement >= 0 then acceptable = true end
+        if current_goal.preserveClosed and improvement < 1 then acceptable = false end
         if option.kind == "kan" and pressure >= 0.75 and not state.riichi[player_id] then
           acceptable = false
         end
@@ -2212,16 +2559,18 @@ local function choose_ai_claim(state, claimant)
   return best and { type = "claim", option = best.index } or { type = "pass" }
 end
 
-local function riichi_wait_count(state, seat, candidate)
+local function riichi_wait_profile(state, seat, candidate)
   local player_id = state.players[seat]
   local visible = visible_type_counts(
     state, player_id, hand_with_drawn(state, player_id), state.melds[player_id]
   )
-  local total = 0
-  for _, kind in ipairs(waiting_types(candidate.hand, state.melds[player_id])) do
-    total = total + math.max(0, 4 - (visible[kind] or 0))
+  local waits, total, quality = waiting_types(candidate.hand, state.melds[player_id]), 0, 0
+  for _, kind in ipairs(waits) do
+    local remaining = math.max(0, 4 - (visible[kind] or 0))
+    total = total + remaining
+    quality = quality + remaining * wait_shape_quality(candidate.hand, state.melds[player_id], kind)
   end
-  return total
+  return { count = total, quality = quality, kinds = #waits }
 end
 
 local function should_declare_riichi(state, seat, candidate)
@@ -2229,18 +2578,27 @@ local function should_declare_riichi(state, seat, candidate)
   local value, natural = estimated_hand_value(
     state, seat, candidate.hand, state.melds[player_id]
   )
-  local waits = riichi_wait_count(state, seat, candidate)
+  local wait = riichi_wait_profile(state, seat, candidate)
+  local waits, quality = wait.count, wait.quality
   local pressure = ai_threat_pressure(state, seat)
+  local objective = endgame_objective(state, seat)
   if waits == 0 then return false end
-  if natural < 1 then return true end
   local leader = state.scores[1]
   for index = 2, PLAYER_COUNT do leader = math.max(leader, state.scores[index]) end
-  if state.scores[seat] + 8000 < leader then return true end
+  if state.scores[seat] + 8000 < leader or objective.mode == "chase" then return true end
+  if objective.mode == "protect" and quality < 4.2 and seat ~= state.dealerIndex then return false end
   if pressure >= 1 and candidate.danger > 0.22 and seat ~= state.dealerIndex then return false end
-  if #state.wall <= 12 and waits <= 2 then return false end
-  if value >= 4 and waits >= 2 then return false end
-  if seat == state.dealerIndex then return waits >= 2 or value < 4.5 end
-  return waits >= 3 or value < 3
+  if #state.wall <= 12 and (waits <= 2 or quality < 3) then return false end
+  -- 闲家的一番愚形默听保留防守与改良空间；落后、末局或牌山很浅时
+  -- 仍可立直争取自摸、里宝和一发的上限。
+  if seat ~= state.dealerIndex and natural == 1 and (waits <= 3 or quality < 3.4)
+    and #state.wall >= 18 and state.scores[seat] + 8000 >= leader then
+    return false
+  end
+  if value >= 4 and quality >= 2 then return false end
+  if natural < 1 and #state.wall <= 10 and quality < 3.2 and seat ~= state.dealerIndex then return false end
+  if seat == state.dealerIndex then return quality >= 1.8 or value < 4.5 end
+  return quality >= 3.4 or (value < 3 and waits >= 4)
 end
 
 local function choose_ai_self_kan(state, seat, options)
