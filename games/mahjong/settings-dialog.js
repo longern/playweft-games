@@ -11,6 +11,8 @@ export function createMahjongSettingsDialog({
   root,
   surface,
   closeButton,
+  returnButton,
+  endMatchButton,
   tabButtons,
   tabPanels,
   doubleClickTsumogiri,
@@ -20,6 +22,7 @@ export function createMahjongSettingsDialog({
   musicVolume,
   musicVolumeValue,
   onMusicVolumeChange,
+  onEndMatch,
 }) {
   let returnFocus = null;
   let open = false;
@@ -198,8 +201,18 @@ export function createMahjongSettingsDialog({
     setOpen(false);
   }
 
+  function onReturnClick() {
+    setOpen(false);
+  }
+
+  function onEndMatchClick() {
+    onEndMatch?.();
+  }
+
   trigger.addEventListener("click", onTriggerClick);
   closeButton.addEventListener("click", onCloseClick);
+  returnButton?.addEventListener("click", onReturnClick);
+  endMatchButton?.addEventListener("click", onEndMatchClick);
   root.addEventListener("click", onRootClick);
   surface.addEventListener("transitionend", onSurfaceTransitionEnd);
   document.addEventListener("keydown", onKeyDown);
@@ -225,6 +238,9 @@ export function createMahjongSettingsDialog({
     get musicVolumeScale() {
       return normalizeMusicVolume(musicVolume.value) / 100;
     },
+    setSoloMatchActive(active) {
+      if (endMatchButton) endMatchButton.hidden = !active;
+    },
     setOpen,
     destroy() {
       open = false;
@@ -233,6 +249,8 @@ export function createMahjongSettingsDialog({
       trigger.setAttribute("aria-expanded", "false");
       trigger.removeEventListener("click", onTriggerClick);
       closeButton.removeEventListener("click", onCloseClick);
+      returnButton?.removeEventListener("click", onReturnClick);
+      endMatchButton?.removeEventListener("click", onEndMatchClick);
       root.removeEventListener("click", onRootClick);
       surface.removeEventListener("transitionend", onSurfaceTransitionEnd);
       document.removeEventListener("keydown", onKeyDown);

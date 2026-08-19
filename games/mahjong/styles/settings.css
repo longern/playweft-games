@@ -24,7 +24,7 @@
   display: grid;
   width: 760px;
   height: 560px;
-  grid-template-rows: 68px minmax(0, 1fr);
+  grid-template-rows: 68px minmax(0, 1fr) 72px;
   border: 1px solid rgba(231, 198, 116, 0.58);
   border-radius: 18px;
   outline: 0;
@@ -152,6 +152,125 @@
 .settings-tab-panel {
   min-width: 0;
   min-height: 0;
+}
+
+.settings-dialog-body {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.settings-dialog-body > .settings-tab-panel {
+  min-height: 100%;
+}
+
+.settings-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 0 18px;
+  border-top: 1px solid rgba(244, 211, 128, 0.48);
+  background: linear-gradient(
+    180deg,
+    rgba(23, 56, 50, 0.92),
+    rgba(4, 23, 21, 0.98)
+  );
+  box-shadow:
+    inset 0 2px 0 rgba(0, 0, 0, 0.44),
+    inset 0 3px 0 rgba(246, 211, 128, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.54);
+}
+
+.settings-dialog-footer button {
+  box-sizing: border-box;
+  min-width: 122px;
+  height: 36px;
+  padding: 0 17px;
+  border: 1px solid rgba(202, 184, 132, 0.42);
+  border-radius: 5px;
+  background: linear-gradient(
+    180deg,
+    rgba(48, 91, 80, 0.88),
+    rgba(10, 38, 34, 0.94)
+  );
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.38);
+  color: rgba(247, 239, 212, 0.88);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0.065em;
+  line-height: 1;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.56);
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    transform 100ms ease;
+}
+
+.settings-dialog-footer .settings-dialog-end-match {
+  min-width: 112px;
+  border-color: rgba(163, 108, 91, 0.5);
+  background: linear-gradient(
+    180deg,
+    rgba(79, 53, 45, 0.72),
+    rgba(37, 25, 23, 0.84)
+  );
+  color: rgba(229, 179, 159, 0.78);
+}
+
+.settings-dialog-footer .settings-dialog-return {
+  border-color: rgba(241, 205, 118, 0.78);
+  background: linear-gradient(
+    180deg,
+    rgba(70, 111, 94, 0.92),
+    rgba(15, 53, 46, 0.96)
+  );
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(248, 218, 143, 0.08),
+    inset 0 1px 0 rgba(255, 247, 214, 0.16),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.42);
+  color: #ffe4a0;
+}
+
+.settings-dialog-footer button:focus-visible {
+  outline: 2px solid rgba(255, 226, 155, 0.82);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings-dialog-footer .settings-dialog-end-match:hover {
+    border-color: rgba(204, 135, 113, 0.76);
+    background: linear-gradient(
+      180deg,
+      rgba(101, 66, 55, 0.82),
+      rgba(48, 30, 27, 0.92)
+    );
+    color: rgba(245, 198, 178, 0.94);
+  }
+
+  .settings-dialog-footer .settings-dialog-return:hover {
+    border-color: rgba(255, 224, 144, 0.96);
+    background: linear-gradient(
+      180deg,
+      rgba(88, 132, 112, 0.98),
+      rgba(20, 67, 58, 0.98)
+    );
+    color: #fff0bf;
+  }
+}
+
+.settings-dialog-footer button:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.28),
+    inset 0 2px 4px rgba(0, 0, 0, 0.24);
 }
 
 .settings-operation-panel {
@@ -424,14 +543,14 @@
   outline-offset: 2px;
 }
 
-.settings-help-panel,
-.settings-help-panel iframe {
-  width: 100%;
+.settings-help-panel {
   height: 100%;
 }
 
 .settings-help-panel iframe {
   display: block;
+  width: 100%;
+  height: 100%;
   border: 0;
   background: #061b19;
 }

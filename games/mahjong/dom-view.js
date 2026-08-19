@@ -746,6 +746,8 @@ function collectElements() {
     settingsDialog: document.querySelector("#settings-dialog"),
     settingsDialogCard: document.querySelector(".settings-dialog-card"),
     settingsClose: document.querySelector("#settings-close-button"),
+    settingsReturn: document.querySelector("#settings-return-button"),
+    settingsEndMatch: document.querySelector("#settings-end-match-button"),
     settingsTabs: [...document.querySelectorAll("[data-settings-tab]")],
     settingsPanels: [...document.querySelectorAll("[data-settings-panel]")],
     doubleClickTsumogiri: document.querySelector(

@@ -34,6 +34,7 @@ import {
   MELD_SCALE,
   meldDisplayLayout,
   meldRightExtension,
+  ownHandDoubleClickSafeBounds,
   meldTransform,
   ownHandOverlayTransform,
   OWN_HAND_DRAG,
@@ -1018,6 +1019,18 @@ export class MahjongThreeRenderer {
 
   handleDoubleClick(event) {
     if (this.pickTile(event) || this.pickTableTile(event)) return;
+    const pointer = this.pointerToOverlay(event);
+    const safeBounds = ownHandDoubleClickSafeBounds(
+      this.viewport.width,
+      this.viewport.height,
+    );
+    if (
+      pointer.x >= safeBounds.left &&
+      pointer.x <= safeBounds.right &&
+      pointer.y >= safeBounds.bottom &&
+      pointer.y <= safeBounds.top
+    )
+      return;
     this.callbacks.onDoubleClickBlank?.();
   }
 

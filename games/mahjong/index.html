@@ -110,54 +110,60 @@
               <i data-lucide="x" aria-hidden="true"></i>
             </button>
           </header>
-          <div id="settings-operation-panel" class="settings-tab-panel settings-operation-panel" role="tabpanel"
-            aria-labelledby="settings-operation-tab" data-settings-panel="operation">
-            <label class="settings-option" for="double-click-tsumogiri-setting">
-              <input id="double-click-tsumogiri-setting" type="checkbox" />
-              <strong>双击空白处摸切</strong>
-            </label>
-            <label class="settings-option" for="double-click-pass-setting">
-              <input id="double-click-pass-setting" type="checkbox" />
-              <strong>双击空白处跳过</strong>
-            </label>
-          </div>
-          <div id="settings-sound-panel" class="settings-tab-panel settings-sound-panel" role="tabpanel"
-            aria-labelledby="settings-sound-tab" data-settings-panel="sound" hidden>
-            <div class="settings-volume-card">
-              <div class="settings-volume-heading">
-                <label for="music-volume-setting">音乐音量</label>
-                <output id="music-volume-value" for="music-volume-setting">32%</output>
-              </div>
-              <input id="music-volume-setting" type="range" min="0" max="100" step="1" value="32" />
-              <p id="default-bgm-copyright" class="settings-bgm-copyright" hidden></p>
+          <div class="settings-dialog-body">
+            <div id="settings-operation-panel" class="settings-tab-panel settings-operation-panel" role="tabpanel"
+              aria-labelledby="settings-operation-tab" data-settings-panel="operation">
+              <label class="settings-option" for="double-click-tsumogiri-setting">
+                <input id="double-click-tsumogiri-setting" type="checkbox" />
+                <strong>双击空白处摸切</strong>
+              </label>
+              <label class="settings-option" for="double-click-pass-setting">
+                <input id="double-click-pass-setting" type="checkbox" />
+                <strong>双击空白处跳过</strong>
+              </label>
             </div>
-            <div class="settings-volume-card">
-              <div class="settings-volume-heading">
-                <label for="discard-volume-setting">落牌音量</label>
-                <output id="discard-volume-value" for="discard-volume-setting">100%</output>
+            <div id="settings-sound-panel" class="settings-tab-panel settings-sound-panel" role="tabpanel"
+              aria-labelledby="settings-sound-tab" data-settings-panel="sound" hidden>
+              <div class="settings-volume-card">
+                <div class="settings-volume-heading">
+                  <label for="music-volume-setting">音乐音量</label>
+                  <output id="music-volume-value" for="music-volume-setting">32%</output>
+                </div>
+                <input id="music-volume-setting" type="range" min="0" max="100" step="1" value="32" />
+                <p id="default-bgm-copyright" class="settings-bgm-copyright" hidden></p>
               </div>
-              <input id="discard-volume-setting" type="range" min="0" max="100" step="1" value="100" />
+              <div class="settings-volume-card">
+                <div class="settings-volume-heading">
+                  <label for="discard-volume-setting">落牌音量</label>
+                  <output id="discard-volume-value" for="discard-volume-setting">100%</output>
+                </div>
+                <input id="discard-volume-setting" type="range" min="0" max="100" step="1" value="100" />
+              </div>
+            </div>
+            <div id="settings-visual-panel" class="settings-tab-panel settings-visual-panel" role="tabpanel"
+              aria-labelledby="settings-visual-tab" data-settings-panel="visual" hidden>
+              <p class="settings-visual-intro">素材仅保存在本机。四家角色对应本地视角：自己、右手边、对家、左手边；它们不关联玩家名称或联机身份。</p>
+              <details class="settings-pack-manifest">
+                <summary>查看 theme.json 示例</summary>
+                <pre id="theme-json-example"></pre>
+              </details>
+              <label class="settings-pack-upload" for="settings-pack-upload">
+                <span>选择 .zip 素材包</span>
+                <input id="settings-pack-upload" type="file" accept=".zip,application/zip,application/x-zip-compressed" />
+              </label>
+              <p id="settings-pack-feedback" class="settings-pack-feedback" role="status" aria-live="polite"></p>
+              <ul id="settings-pack-list" class="settings-pack-list" aria-label="素材包列表"></ul>
+              <div id="settings-pack-appearance" class="settings-pack-appearance" hidden></div>
+            </div>
+            <div id="settings-help-panel" class="settings-tab-panel settings-help-panel" role="tabpanel"
+              aria-labelledby="settings-help-tab" data-settings-panel="help" hidden>
+              <iframe id="settings-help-frame" title="麻将玩法帮助" src="./help.html"></iframe>
             </div>
           </div>
-          <div id="settings-visual-panel" class="settings-tab-panel settings-visual-panel" role="tabpanel"
-            aria-labelledby="settings-visual-tab" data-settings-panel="visual" hidden>
-            <p class="settings-visual-intro">素材仅保存在本机。四家角色对应本地视角：自己、右手边、对家、左手边；它们不关联玩家名称或联机身份。</p>
-            <details class="settings-pack-manifest">
-              <summary>查看 theme.json 示例</summary>
-              <pre id="theme-json-example"></pre>
-            </details>
-            <label class="settings-pack-upload" for="settings-pack-upload">
-              <span>选择 .zip 素材包</span>
-              <input id="settings-pack-upload" type="file" accept=".zip,application/zip,application/x-zip-compressed" />
-            </label>
-            <p id="settings-pack-feedback" class="settings-pack-feedback" role="status" aria-live="polite"></p>
-            <ul id="settings-pack-list" class="settings-pack-list" aria-label="素材包列表"></ul>
-            <div id="settings-pack-appearance" class="settings-pack-appearance" hidden></div>
-          </div>
-          <div id="settings-help-panel" class="settings-tab-panel settings-help-panel" role="tabpanel"
-            aria-labelledby="settings-help-tab" data-settings-panel="help" hidden>
-            <iframe id="settings-help-frame" title="麻将玩法帮助" src="./help.html"></iframe>
-          </div>
+          <footer class="settings-dialog-footer">
+            <button id="settings-end-match-button" class="settings-dialog-end-match" type="button" hidden>结束本局</button>
+            <button id="settings-return-button" class="settings-dialog-return" type="button">返回对局</button>
+          </footer>
         </div>
       </section>
       <div class="table-status-stack" aria-live="polite">

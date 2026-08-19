@@ -45,6 +45,14 @@ import {
   DEFAULT_MATCH_MUSIC_URL,
   DEFAULT_MATCH_MUSIC_VOLUME,
 } from "./media-config.js";
+import {
+  appendMahjongSoloAction,
+  clearMahjongSoloSave,
+  createMahjongSoloSave,
+  readMahjongSoloSave,
+  writeMahjongSoloSave,
+} from "./solo-save.js";
+import { mahjongInitialEntry } from "./entry-flow.js";
 import "../../src/base.css";
 import "./styles.css";
 
@@ -64,15 +72,9 @@ const THEME_JSON_EXAMPLE = {
     backgrounds: [
       { id: "night", file: "backgrounds/night.webp", label: "夜景" },
     ],
-    lobby: [
-      { id: "evening", file: "lobby/evening.webp", label: "暮色街巷" },
-    ],
-    tileBacks: [
-      { id: "cloud", file: "tiles/cloud.webp", label: "祥云" },
-    ],
-    music: [
-      { id: "night-wind", file: "music/night-wind.ogg", label: "夜风" },
-    ],
+    lobby: [{ id: "evening", file: "lobby/evening.webp", label: "暮色街巷" }],
+    tileBacks: [{ id: "cloud", file: "tiles/cloud.webp", label: "祥云" }],
+    music: [{ id: "night-wind", file: "music/night-wind.ogg", label: "夜风" }],
     voices: [
       {
         character: "fox",
@@ -146,9 +148,7 @@ const matchMusic = new Audio();
 matchMusic.loop = true;
 matchMusic.preload = "metadata";
 matchMusic.volume = DEFAULT_MATCH_MUSIC_VOLUME;
-const defaultMusicCopyright = document.querySelector(
-  "#default-bgm-copyright",
-);
+const defaultMusicCopyright = document.querySelector("#default-bgm-copyright");
 defaultMusicCopyright.textContent = DEFAULT_MATCH_MUSIC_COPYRIGHT;
 defaultMusicCopyright.hidden = !DEFAULT_MATCH_MUSIC_COPYRIGHT;
 const riverTileSound = new Audio(discardSoundSource);
@@ -159,6 +159,8 @@ let matchMusicGain = 1;
 let matchMusicPlayRequest = 0;
 let voicedEventKey = "";
 let playedRiverTileSoundKey = "";
+let soloSave = readMahjongSoloSave();
+let playMode = window.parent === window ? "solo" : null;
 
 function revealMahjongAppAfterStyles() {
   requestAnimationFrame(() => {
@@ -190,6 +192,8 @@ const settingsDialog = createMahjongSettingsDialog({
   root: elements.settingsDialog,
   surface: elements.settingsDialogCard,
   closeButton: elements.settingsClose,
+  returnButton: elements.settingsReturn,
+  endMatchButton: elements.settingsEndMatch,
   tabButtons: elements.settingsTabs,
   tabPanels: elements.settingsPanels,
   doubleClickTsumogiri: elements.doubleClickTsumogiri,
@@ -200,6 +204,9 @@ const settingsDialog = createMahjongSettingsDialog({
   musicVolumeValue: elements.musicVolumeValue,
   onMusicVolumeChange() {
     applyMatchMusicVolume();
+  },
+  onEndMatch() {
+    endSoloMatch();
   },
 });
 applyMatchMusicVolume();
@@ -257,9 +264,7 @@ void Promise.all([
   visualRendererReady,
   resultHandRendererReady,
   assetPacksReady,
-]).then(() =>
-  applyVisualPack(),
-);
+]).then(() => applyVisualPack());
 void refreshVisualPacks();
 visualPackElements.upload.addEventListener("change", async () => {
   const archive = visualPackElements.upload.files?.[0];
@@ -338,10 +343,6 @@ window.addEventListener("mahjong:asset-pack-changed", () => {
   applyPackAvatars(state);
   if (state) renderCurrentState();
 });
-for (const eventName of ["pointerdown", "keydown"]) {
-  document.addEventListener(eventName, resumeMatchMusic, { passive: true });
-}
-
 elements.pass.addEventListener("click", () => dispatch({ type: "pass" }));
 elements.abort.addEventListener("click", () =>
   dispatch({ type: "abort_nine" }),
@@ -362,20 +363,21 @@ document.addEventListener("visibilitychange", handleVisibilityChange);
 
 const soloClient = createPlayweftSoloClient({
   onReady(context) {
+    playMode = context?.mode ?? "solo";
     const name = context?.player?.name?.trim();
     if (name) {
       playerName = name;
       hasPlatformName = true;
     }
     requestPlatformAvatar(context);
-    elements.setup.hidden = false;
+    startMahjongEntry();
   },
   onError(message) {
     if (!game) showLoadingError(message);
   },
 });
 
-if (window.parent === window) elements.setup.hidden = false;
+if (window.parent === window) startMahjongEntry();
 revealMahjongAppAfterStyles();
 
 function requestPlatformAvatar(context) {
@@ -463,9 +465,7 @@ function fadeMatchMusicTo(targetGain, { pauseWhenSilent = false } = {}) {
       (now - startedAt) / MATCH_MUSIC_FADE_DURATION_MS,
     );
     const easedProgress = progress * progress * (3 - 2 * progress);
-    setMatchMusicGain(
-      initialGain + (targetGain - initialGain) * easedProgress,
-    );
+    setMatchMusicGain(initialGain + (targetGain - initialGain) * easedProgress);
     if (progress < 1) {
       matchMusicFadeFrame = requestAnimationFrame(step);
       return;
@@ -845,6 +845,8 @@ async function initialize(matchType = "east") {
   elements.loading.hidden = false;
   void elements.loadingSpinner.offsetWidth;
   const setupExit = beginSetupExit();
+  const randomSeed = crypto.randomUUID().replaceAll("-", "");
+  const matchId = `solo-${crypto.randomUUID()}`;
   const gamePreparation = createLocalLuaGame({
     sourceUrl: "./game.lua",
     players: PLAYERS.map((player, index) => ({
@@ -852,7 +854,8 @@ async function initialize(matchType = "east") {
       name: index === 0 ? playerName : player.name,
     })),
     playerId: HUMAN_ID,
-    randomSeed: crypto.randomUUID().replaceAll("-", ""),
+    randomSeed,
+    matchId,
     settings: { matchType, rules },
   });
   try {
@@ -861,10 +864,19 @@ async function initialize(matchType = "east") {
       setupExit,
       visualRendererReady,
     ]);
+    soloSave = createMahjongSoloSave({
+      randomSeed,
+      matchId,
+      matchType,
+      rules,
+      playerName,
+    });
+    writeMahjongSoloSave(soloSave);
     refresh();
     elements.app.setAttribute("aria-busy", "false");
     elements.setup.hidden = true;
     elements.loading.hidden = true;
+    settingsDialog.setSoloMatchActive(true);
     scheduleAi();
   } catch (error) {
     console.error(error);
@@ -873,6 +885,116 @@ async function initialize(matchType = "east") {
   } finally {
     gameInitializing = false;
   }
+}
+
+async function resumeSavedMatch() {
+  if (game || gameInitializing || !soloSave) return;
+  gameInitializing = true;
+  const save = soloSave;
+  elements.loading.classList.remove("is-active", "is-error");
+  elements.loadingMessage.hidden = true;
+  elements.loading.hidden = false;
+  void elements.loadingSpinner.offsetWidth;
+  // A local save resumes straight to the table.  The setup screen is only an
+  // entry point for a brand-new solo match (and future online flows).
+  elements.setup.hidden = true;
+  let restored;
+  try {
+    restored = await createLocalLuaGame({
+      sourceUrl: "./game.lua",
+      players: PLAYERS.map((player, index) => ({
+        ...player,
+        name: index === 0 ? save.playerName || playerName : player.name,
+      })),
+      playerId: HUMAN_ID,
+      randomSeed: save.randomSeed,
+      matchId: save.matchId,
+      settings: { matchType: save.matchType, rules: save.rules },
+    });
+    for (const { action, actorId } of save.actions) {
+      const result = restored.action(action, actorId);
+      if (!result?.accepted) {
+        throw new Error(
+          `saved action rejected: ${result?.error?.code || "unknown"}`,
+        );
+      }
+    }
+    await visualRendererReady;
+    game = restored;
+    if (save.playerName) playerName = save.playerName;
+    refresh();
+    // Start BGM only after the restored game and its hand state are live.
+    // Starting earlier can be overwritten by asset-pack initialization, and
+    // a mid-hand restore has no hand-transition to start it again.
+    syncMatchMusic({ start: true });
+    elements.app.setAttribute("aria-busy", "false");
+    elements.setup.hidden = true;
+    elements.loading.hidden = true;
+    settingsDialog.setSoloMatchActive(true);
+    scheduleAi();
+  } catch (error) {
+    console.error(error);
+    restored?.close();
+    clearSoloSave();
+    showSetup();
+    elements.loading.hidden = true;
+  } finally {
+    gameInitializing = false;
+  }
+}
+
+function persistAcceptedAction(action, actorId) {
+  if (!soloSave) return;
+  const next = appendMahjongSoloAction(soloSave, action, actorId);
+  if (!next) return;
+  soloSave = next;
+  writeMahjongSoloSave(soloSave);
+}
+
+function clearSoloSave() {
+  clearMahjongSoloSave();
+  soloSave = null;
+}
+
+function startMahjongEntry() {
+  if (game || gameInitializing) return;
+  if (mahjongInitialEntry(playMode, Boolean(soloSave)) === "resume") {
+    void resumeSavedMatch();
+    return;
+  }
+  showSetup();
+}
+
+function showSetup() {
+  elements.setup.classList.remove("is-leaving");
+  for (const button of elements.setup.querySelectorAll("[data-match-type]")) {
+    button.disabled = false;
+  }
+  elements.setup.hidden = false;
+}
+
+function endSoloMatch() {
+  if (!game || gameInitializing) return;
+  if (!window.confirm("结束本局并返回标题？本局进度不会保留。")) return;
+  window.clearTimeout(aiTimer);
+  settingsDialog.setOpen(false, { restoreFocus: false, animate: false });
+  presentation.suspend();
+  game.close();
+  game = undefined;
+  state = undefined;
+  visibleEvents = [];
+  selectedTileId = 0;
+  riichiMode = false;
+  selectionBeforeRiichi = 0;
+  resultPageIndex = 0;
+  resultPageKey = "";
+  resultPageAnimating = false;
+  syncMatchMusic({ start: false });
+  elements.result.hidden = true;
+  elements.loading.hidden = true;
+  showSetup();
+  settingsDialog.setSoloMatchActive(false);
+  clearSoloSave();
 }
 
 function beginSetupExit() {
@@ -892,9 +1014,13 @@ function beginSetupExit() {
       resolve();
     };
     const handleTransitionEnd = (event) => {
-      if (event.target === signpost && event.propertyName === "opacity") finish();
+      if (event.target === signpost && event.propertyName === "opacity")
+        finish();
     };
-    const fallbackTimer = window.setTimeout(finish, SETUP_EXIT_DURATION_MS + 100);
+    const fallbackTimer = window.setTimeout(
+      finish,
+      SETUP_EXIT_DURATION_MS + 100,
+    );
     signpost.addEventListener("transitionend", handleTransitionEnd);
   });
 }
@@ -914,6 +1040,7 @@ function dispatch(action) {
     elements.message.classList.add("is-error");
     return;
   }
+  persistAcceptedAction(action, HUMAN_ID);
   riichiMode = false;
   selectionBeforeRiichi = 0;
   selectedTileId = 0;
@@ -941,6 +1068,7 @@ function runAiTurn() {
         elements.message.classList.add("is-error");
         return;
       }
+      persistAcceptedAction(action, actorId);
       refresh();
       scheduleAi();
       return;
@@ -959,6 +1087,7 @@ function runAiTurn() {
     elements.message.classList.add("is-error");
     return;
   }
+  persistAcceptedAction(action, actorId);
   refresh();
   scheduleAi();
 }
@@ -1030,8 +1159,7 @@ function renderCurrentState() {
     delayHandRevealForCallout: visibleEvents.some(
       (event) => event.type === "won",
     ),
-    deferredHandInsertionSeat:
-      Number(presentation.handInsertion?.seat) || 0,
+    deferredHandInsertionSeat: Number(presentation.handInsertion?.seat) || 0,
     deferredHandInsertionIndex:
       Number(presentation.handInsertion?.rackIndex) || 0,
   });
@@ -1270,8 +1398,7 @@ function renderTileSelection(renderState) {
     ...ui,
     riichiMode,
     riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),
-    deferredHandInsertionSeat:
-      Number(presentation.handInsertion?.seat) || 0,
+    deferredHandInsertionSeat: Number(presentation.handInsertion?.seat) || 0,
     deferredHandInsertionIndex:
       Number(presentation.handInsertion?.rackIndex) || 0,
   });

@@ -53,6 +53,7 @@ import {
   LOCAL_REVEALED_HAND_Z,
   meldTransform,
   ownHandOverlayTransform,
+  ownHandDoubleClickSafeBounds,
   OWN_HAND_DRAG,
   OWN_HAND_LAYOUT,
   OWN_HAND_TILT,
@@ -412,6 +413,27 @@ test("mahjong keeps the 13-tile rack stable and moves the drawn tile to the end"
     0,
   );
   assert.ok(compactFirst.scale < firstRackTile.scale);
+});
+
+test("mahjong keeps blank double-click actions away from the local hand", () => {
+  const bounds = ownHandDoubleClickSafeBounds(1280, 720);
+  const first = ownHandOverlayTransform(0, 1280, 720);
+  const drawn = ownHandOverlayTransform(13, 1280, 720, { drawn: true });
+
+  assert.ok(bounds.left < first.x - first.tileWidth / 2);
+  assert.ok(bounds.right > drawn.x + drawn.tileWidth / 2);
+  assert.ok(bounds.top > first.y + first.tileHeight / 2);
+  assert.ok(bounds.bottom < first.y - first.tileHeight / 2);
+  assert.equal(OWN_HAND_DRAG.doubleClickSafePaddingX, 24);
+  assert.equal(OWN_HAND_DRAG.doubleClickSafePaddingTop, 24);
+  assert.equal(OWN_HAND_DRAG.doubleClickSafePaddingBottom, 24);
+
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(renderer, /ownHandDoubleClickSafeBounds/);
+  assert.match(renderer, /pointer\.x >= safeBounds\.left/);
 });
 
 test("mahjong aligns its rightmost action with the thirteenth hand tile", () => {
@@ -2345,6 +2367,9 @@ test("mahjong settings dialog combines operation controls and themed help", () =
   );
   assert.match(html, /id="discard-volume-value"[^>]*>100%<\/output>/);
   assert.match(html, /class="settings-dialog-close"[^>]*aria-label="关闭设置"/);
+  assert.match(html, /class="settings-dialog-body"/);
+  assert.match(html, /id="settings-end-match-button"[^>]*hidden[^>]*>结束本局<\/button>/);
+  assert.match(html, /id="settings-return-button"[^>]*>返回对局<\/button>/);
   assert.match(html, /双击空白处摸切/);
   assert.match(
     html,
@@ -2359,16 +2384,23 @@ test("mahjong settings dialog combines operation controls and themed help", () =
   assert.match(helpHtml, /\.\/styles\/help\.css/);
   assert.match(dialog, /DOUBLE_CLICK_TSUMOGIRI_KEY/);
   assert.match(dialog, /DOUBLE_CLICK_PASS_KEY/);
+  assert.match(dialog, /setSoloMatchActive\(active\)/);
   assert.match(dialog, /DISCARD_VOLUME_KEY/);
   assert.match(dialog, /window\.localStorage\.setItem/);
   assert.match(main, /Cog, X, createIcons/);
   assert.match(main, /settingsDialog\.doubleClickTsumogiriEnabled/);
   assert.match(main, /settingsDialog\.doubleClickPassEnabled/);
+  assert.match(main, /settingsDialog\.setSoloMatchActive\(true\)/);
+  assert.match(main, /结束本局并返回标题/);
   assert.match(main, /cue\.volume \* settingsDialog\.discardVolumeScale/);
   assert.match(
     main,
     /passAvailable: !elements\.pass\.hidden && !elements\.pass\.disabled/,
   );
+  const styles = readMahjongStyles();
+  assert.match(styles, /\.settings-dialog-card\s*\{[^}]*grid-template-rows:\s*68px minmax\(0, 1fr\) 72px;/s);
+  assert.match(styles, /\.settings-dialog-body\s*\{[^}]*overflow:\s*auto;/s);
+  assert.match(styles, /\.settings-dialog-footer\s*\{[^}]*border-top:/s);
   assert.match(renderer, /addEventListener\("dblclick", this\.onDoubleClick\)/);
   assert.match(
     renderer,

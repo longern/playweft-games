@@ -1,6 +1,10 @@
 // AMOS parlor-size riichi tiles are 28 × 21 × 16.5 mm. Keep the scene units
 // normalized to tile height so standing and laid tiles share real proportions.
-export const TILE_PHYSICAL_MM = Object.freeze({ width: 21, height: 28, depth: 16.5 });
+export const TILE_PHYSICAL_MM = Object.freeze({
+  width: 21,
+  height: 28,
+  depth: 16.5,
+});
 export const TILE_SIZE = Object.freeze({
   width: TILE_PHYSICAL_MM.width / TILE_PHYSICAL_MM.height,
   height: 1,
@@ -13,8 +17,9 @@ export const MELD_HAND_CLEARANCE = 0.14;
 export const OPPONENT_MELD_HAND_CLEARANCE = 0.42;
 export const MELD_TILE_GAP = 0.035;
 export const MELD_SIDEWAYS_BOTTOM_INSET =
-  (TILE_SIZE.width - TILE_SIZE.height) * MELD_SCALE / 2;
-export const MELD_KAKAN_INWARD_STEP = TILE_SIZE.width * MELD_SCALE + MELD_TILE_GAP;
+  ((TILE_SIZE.width - TILE_SIZE.height) * MELD_SCALE) / 2;
+export const MELD_KAKAN_INWARD_STEP =
+  TILE_SIZE.width * MELD_SCALE + MELD_TILE_GAP;
 export const CONCEALED_RACK_CAPACITY = 13;
 // Perspective makes the near half visually denser, so the interactive centre
 // sits slightly beyond the geometric screen centre toward the opposite seat.
@@ -47,15 +52,42 @@ export const OWN_HAND_TILT = Math.PI / 30;
 export const OWN_HAND_DRAG = Object.freeze({
   discardLineY: 552,
   activationDistance: 8,
+  doubleClickSafePaddingX: 24,
+  doubleClickSafePaddingTop: 24,
+  doubleClickSafePaddingBottom: 16,
 });
+
+export function ownHandDoubleClickSafeBounds(
+  viewportWidth,
+  viewportHeight,
+  { drawn = true } = {},
+) {
+  const first = ownHandOverlayTransform(0, viewportWidth, viewportHeight);
+  const last = ownHandOverlayTransform(12, viewportWidth, viewportHeight);
+  const end = drawn
+    ? ownHandOverlayTransform(13, viewportWidth, viewportHeight, {
+        drawn: true,
+      })
+    : last;
+  return {
+    left: first.x - first.tileWidth / 2 - OWN_HAND_DRAG.doubleClickSafePaddingX,
+    right: end.x + end.tileWidth / 2 + OWN_HAND_DRAG.doubleClickSafePaddingX,
+    top:
+      first.y + first.tileHeight / 2 + OWN_HAND_DRAG.doubleClickSafePaddingTop,
+    bottom:
+      first.y -
+      first.tileHeight / 2 -
+      OWN_HAND_DRAG.doubleClickSafePaddingBottom,
+  };
+}
 
 export function presentedTileHingeTransform(covered = false) {
   const fallDirection = covered ? 1 : -1;
   return {
-    pivotZ: fallDirection * TILE_SIZE.depth / 2,
+    pivotZ: (fallDirection * TILE_SIZE.depth) / 2,
     tileY: TILE_SIZE.height / 2,
-    tileZ: -fallDirection * TILE_SIZE.depth / 2,
-    restingRotationX: fallDirection * Math.PI / 2,
+    tileZ: (-fallDirection * TILE_SIZE.depth) / 2,
+    restingRotationX: (fallDirection * Math.PI) / 2,
   };
 }
 
@@ -78,13 +110,11 @@ export const RIVER_TILE_GAP = 0.055;
 const RIVER_ROW_GAP = 0.085;
 const RIVER_ACROSS_STEP = TILE_SIZE.width + RIVER_TILE_GAP;
 export const RIICHI_TILE_ACROSS_EXTRA = TILE_SIZE.height - TILE_SIZE.width;
-const RIVER_HALF_ACROSS_EXTENT = (RIVER_COLUMN_COUNT - 1) / 2
-  * RIVER_ACROSS_STEP
-  + TILE_SIZE.width / 2;
+const RIVER_HALF_ACROSS_EXTENT =
+  ((RIVER_COLUMN_COUNT - 1) / 2) * RIVER_ACROSS_STEP + TILE_SIZE.width / 2;
 export const RIVER_CORNER_GAP = TILE_SIZE.width * 0.15;
-const RIVER_RING_OFFSET = RIVER_HALF_ACROSS_EXTENT
-  + TILE_SIZE.height / 2
-  + RIVER_CORNER_GAP;
+const RIVER_RING_OFFSET =
+  RIVER_HALF_ACROSS_EXTENT + TILE_SIZE.height / 2 + RIVER_CORNER_GAP;
 
 // All four first rows form one physical ring around the console. Keeping every
 // anchor on the same ring makes adjacent inner corners meet with one narrow,
@@ -96,14 +126,20 @@ const RIVER_ANCHORS = Object.freeze({
   left: { x: -RIVER_RING_OFFSET, z: PLAYFIELD_CENTRE_Z },
 });
 
-export function handTransform(position, index, _rackCapacity, { drawn = false } = {}) {
+export function handTransform(
+  position,
+  index,
+  _rackCapacity,
+  { drawn = false } = {},
+) {
   const anchor = HAND_ANCHORS[position];
   if (!anchor) throw new RangeError(`Invalid mahjong seat: ${position}`);
   const step = TILE_SIZE.width + HAND_TILE_GAP;
   const drawnOffset = drawn ? DRAWN_TILE_GAP : 0;
   // Every rack owns the same left edge. Calls remove three tiles from the
   // right; they must never recenter the concealed tiles that remain.
-  const along = (index - (CONCEALED_RACK_CAPACITY - 1) / 2) * step + drawnOffset;
+  const along =
+    (index - (CONCEALED_RACK_CAPACITY - 1) / 2) * step + drawnOffset;
   const yaw = SEAT_YAW[position];
   return {
     x: anchor.x + along * Math.cos(yaw),
@@ -132,7 +168,12 @@ export function presentedHandTransform(
   };
 }
 
-export function ownHandOverlayTransform(index, viewportWidth, viewportHeight, { drawn = false } = {}) {
+export function ownHandOverlayTransform(
+  index,
+  viewportWidth,
+  viewportHeight,
+  { drawn = false } = {},
+) {
   const width = Math.max(1, Number(viewportWidth) || 1);
   const height = Math.max(1, Number(viewportHeight) || 1);
   const safeWidth = Math.min(width, height * OWN_HAND_LAYOUT.safeAspect);
@@ -146,8 +187,7 @@ export function ownHandOverlayTransform(index, viewportWidth, viewportHeight, { 
   // Derive the fixed left anchor once from the initial rack: its eighth tile
   // aligns with the table-console centre. Every later layout still starts at
   // this same first-tile position, so draws and calls only alter the right edge.
-  const firstCenter =
-    centreX - OWN_HAND_LAYOUT.initialCentreTileIndex * step;
+  const firstCenter = centreX - OWN_HAND_LAYOUT.initialCentreTileIndex * step;
   const drawnOffset = drawn ? drawnGap - regularGap : 0;
   const scaleX = tileWidth / TILE_SIZE.width;
   const scaleY = tileHeight / TILE_SIZE.height;
@@ -179,17 +219,21 @@ export function riverTransform(
   const { column, row } = riverGridPosition(index);
   const riichiColumn = Number.isInteger(suppliedRiichiColumn)
     ? suppliedRiichiColumn
-    : riichi ? column : -1;
+    : riichi
+      ? column
+      : -1;
   // The first six tiles run from the player's left to right. Later rows grow
   // away from the centre toward that player, while every face remains upright
   // to the seat that discarded it.
-  const riichiWidthOffset = column > riichiColumn && riichiColumn >= 0
-    ? RIICHI_TILE_ACROSS_EXTRA
-    : column === riichiColumn
-      ? RIICHI_TILE_ACROSS_EXTRA / 2
-      : 0;
-  const across = (column - (RIVER_COLUMN_COUNT - 1) / 2) * RIVER_ACROSS_STEP
-    + riichiWidthOffset;
+  const riichiWidthOffset =
+    column > riichiColumn && riichiColumn >= 0
+      ? RIICHI_TILE_ACROSS_EXTRA
+      : column === riichiColumn
+        ? RIICHI_TILE_ACROSS_EXTRA / 2
+        : 0;
+  const across =
+    (column - (RIVER_COLUMN_COUNT - 1) / 2) * RIVER_ACROSS_STEP +
+    riichiWidthOffset;
   const outward = row * (TILE_SIZE.height + RIVER_ROW_GAP);
   const yaw = SEAT_YAW[position];
   const cos = Math.cos(yaw);
@@ -205,9 +249,10 @@ export function riverTransform(
 export function riverGridPosition(index) {
   const normalizedIndex = Math.max(0, Math.trunc(Number(index) || 0));
   const row = Math.min(2, Math.floor(normalizedIndex / RIVER_COLUMN_COUNT));
-  const column = row === 2
-    ? normalizedIndex - RIVER_COLUMN_COUNT * 2
-    : normalizedIndex % RIVER_COLUMN_COUNT;
+  const column =
+    row === 2
+      ? normalizedIndex - RIVER_COLUMN_COUNT * 2
+      : normalizedIndex % RIVER_COLUMN_COUNT;
   return { column, row };
 }
 
@@ -218,15 +263,18 @@ export function meldTransform(
 ) {
   const anchor = HAND_ANCHORS[position];
   if (!anchor) throw new RangeError(`Invalid mahjong seat: ${position}`);
-  const along = absolute ? offset : offset * (TILE_SIZE.width * MELD_SCALE + 0.035);
+  const along = absolute
+    ? offset
+    : offset * (TILE_SIZE.width * MELD_SCALE + 0.035);
   const yaw = SEAT_YAW[position];
   const cos = Math.cos(yaw);
   const sin = Math.sin(yaw);
   const handStep = TILE_SIZE.width + HAND_TILE_GAP;
-  const drawnCentre = (CONCEALED_RACK_CAPACITY
-    - (CONCEALED_RACK_CAPACITY - 1) / 2) * handStep + DRAWN_TILE_GAP;
+  const drawnCentre =
+    (CONCEALED_RACK_CAPACITY - (CONCEALED_RACK_CAPACITY - 1) / 2) * handStep +
+    DRAWN_TILE_GAP;
   const rackRightEdge = drawnCentre + TILE_SIZE.width / 2;
-  const meldRightCentre = rackRightEdge - TILE_SIZE.width * MELD_SCALE / 2;
+  const meldRightCentre = rackRightEdge - (TILE_SIZE.width * MELD_SCALE) / 2;
   // The local hand is a narrower orthographic HUD rack. Align its 3D meld band
   // after the virtual draw slot, with enough clearance that the empty slot is
   // still legible after a call and at common phone aspect ratios.
@@ -234,10 +282,10 @@ export function meldTransform(
   // Side-seat calls extend the physical centre line of their concealed rack.
   // The near and opposite seats retain a separate inner lane because the local
   // rack is an orthographic HUD and the opposite rack needs its face kept clear.
-  const rackLaneInset = TILE_SIZE.depth / 2
-    + TILE_SIZE.height * MELD_SCALE / 2
-    + 0.08;
-  const laneInward = position === "left" || position === "right" ? 0 : rackLaneInset;
+  const rackLaneInset =
+    TILE_SIZE.depth / 2 + (TILE_SIZE.height * MELD_SCALE) / 2 + 0.08;
+  const laneInward =
+    position === "left" || position === "right" ? 0 : rackLaneInset;
   const inward = laneInward + (Number(inwardOffset) || 0);
   const fromRight = meldRightCentre + hudAlignment - along;
   return {
@@ -270,7 +318,9 @@ export function meldDisplayLayout(meld, claimantSeat) {
 
   const addedIndex = validSourceIndex(meld?.addedTileIndex, entries.length)
     ? Number(meld.addedTileIndex)
-    : meld?.kind === "kakan" ? entries.length - 1 : -1;
+    : meld?.kind === "kakan"
+      ? entries.length - 1
+      : -1;
   const added = addedIndex >= 0 ? entries.splice(addedIndex, 1)[0] : null;
   let calledIndex = Number(meld?.calledTileIndex);
   if (addedIndex >= 0 && calledIndex > addedIndex) calledIndex -= 1;
@@ -305,17 +355,21 @@ function calledMarkerIndex(claimantSeat, fromIndex, tileCount) {
 }
 
 function compareMeldEntriesRightToLeft(left, right) {
-  return Number(right.type) - Number(left.type) || right.sourceIndex - left.sourceIndex;
+  return (
+    Number(right.type) - Number(left.type) ||
+    right.sourceIndex - left.sourceIndex
+  );
 }
 
 export function meldRightExtension(melds, claimantSeat) {
   const groups = Array.isArray(melds) ? melds : [];
   if (!groups.length) return 0;
-  const clearance = Number(claimantSeat) === 1
-    ? MELD_HAND_CLEARANCE
-    : OPPONENT_MELD_HAND_CLEARANCE;
-  const available = groups.length * 3 * (TILE_SIZE.width + HAND_TILE_GAP)
-    - clearance;
+  const clearance =
+    Number(claimantSeat) === 1
+      ? MELD_HAND_CLEARANCE
+      : OPPONENT_MELD_HAND_CLEARANCE;
+  const available =
+    groups.length * 3 * (TILE_SIZE.width + HAND_TILE_GAP) - clearance;
   const totalSpan = groups.reduce(
     (sum, meld) => sum + meldDisplayLayout(meld, claimantSeat).span,
     Math.max(0, groups.length - 1) * MELD_GROUP_GAP,
@@ -328,7 +382,8 @@ function measureMeldEntries(entries) {
   const gap = MELD_TILE_GAP;
   let cursor = 0;
   for (const entry of entries) {
-    const extent = (entry.sideways ? TILE_SIZE.height : TILE_SIZE.width) * MELD_SCALE;
+    const extent =
+      (entry.sideways ? TILE_SIZE.height : TILE_SIZE.width) * MELD_SCALE;
     entry.along = cursor + extent / 2 - normalExtent / 2;
     cursor += extent + gap;
   }
