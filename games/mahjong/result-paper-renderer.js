@@ -28,6 +28,10 @@ const PAPER_TEXT_COLOR = "#1d1c18";
 const PAPER_VALUE_COLOR = "#173f61";
 const PAPER_GRID_COLOR = "rgba(78, 96, 102, 0.3)";
 const PAPER_GRID_EDGE_COLOR = "rgba(78, 96, 102, 0.38)";
+const SCORE_SHEET_TOP = 72;
+const SCORE_SHEET_BOTTOM = 634;
+const SCORE_SHEET_HEADER_HEIGHT = 54;
+const SCORE_SHEET_ROW_COUNT = 8;
 export class MahjongResultPaper {
   constructor(maxAnisotropy = 1) {
     this.destroyed = false;
@@ -91,6 +95,25 @@ export class MahjongResultPaper {
     this.paper.visible = true;
   }
 
+  renderScoreSheet({ playerNames = [], rows = [] } = {}) {
+    const width = PAPER_TEXTURE_VIEWPORT.width * PAPER_TEXTURE_SCALE;
+    const height = PAPER_TEXTURE_VIEWPORT.height * PAPER_TEXTURE_SCALE;
+    const canvas = this.paperTextureCanvas;
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.scale(PAPER_TEXTURE_SCALE, PAPER_TEXTURE_SCALE);
+    const logicalHeight = height / PAPER_TEXTURE_SCALE;
+    const logicalWidth = width / PAPER_TEXTURE_SCALE;
+
+    paintPaperSurface(context, logicalWidth, logicalHeight);
+    context.textBaseline = "middle";
+    drawScoreSheet(context, logicalWidth, { playerNames, rows });
+    this.paperTexture.needsUpdate = true;
+    this.paper.visible = true;
+  }
+
   hide() {
     this.paper.visible = false;
   }
@@ -144,6 +167,98 @@ function drawResultScore(context, width, { fu, han, total }) {
     left = lineRight + unitWidth + 10 + (index < fields.length - 1 ? gap : 0);
   });
   context.textBaseline = "middle";
+}
+
+function drawScoreSheet(context, width, { playerNames, rows }) {
+  const left = PAPER_MARGIN_X;
+  const tableWidth = width - PAPER_MARGIN_X * 2;
+  const tableHeight = SCORE_SHEET_BOTTOM - SCORE_SHEET_TOP;
+  const roundWidth = 96;
+  const honbaWidth = 74;
+  const scoreWidth = (tableWidth - roundWidth - honbaWidth) / 4;
+  const rowHeight = (tableHeight - SCORE_SHEET_HEADER_HEIGHT) / SCORE_SHEET_ROW_COUNT;
+  const headers = [
+    { label: "局", width: roundWidth },
+    { label: "本场", width: honbaWidth },
+    ...Array.from({ length: 4 }, (_, index) => ({
+      label: String(playerNames[index] ?? `玩家${index + 1}`),
+      width: scoreWidth,
+    })),
+  ];
+
+  context.lineCap = "butt";
+  context.strokeStyle = PAPER_GRID_EDGE_COLOR;
+  context.lineWidth = 1.25;
+  context.strokeRect(left, SCORE_SHEET_TOP, tableWidth, tableHeight);
+  context.strokeStyle = PAPER_GRID_COLOR;
+  context.lineWidth = 0.9;
+  context.beginPath();
+  const headerBottom = SCORE_SHEET_TOP + SCORE_SHEET_HEADER_HEIGHT;
+  context.moveTo(left, headerBottom);
+  context.lineTo(left + tableWidth, headerBottom);
+  for (let row = 1; row < SCORE_SHEET_ROW_COUNT; row += 1) {
+    const y = headerBottom + row * rowHeight;
+    context.moveTo(left, y);
+    context.lineTo(left + tableWidth, y);
+  }
+  let cursor = left;
+  for (let column = 0; column < headers.length - 1; column += 1) {
+    cursor += headers[column].width;
+    context.moveTo(cursor, SCORE_SHEET_TOP);
+    context.lineTo(cursor, SCORE_SHEET_BOTTOM);
+  }
+  context.stroke();
+
+  cursor = left;
+  context.fillStyle = PAPER_TEXT_COLOR;
+  context.textAlign = "center";
+  headers.forEach((header) => {
+    context.font = fittedPaperFont(
+      context,
+      header.label,
+      header.width - 22,
+      20,
+      14,
+    );
+    context.fillText(
+      header.label,
+      cursor + header.width / 2,
+      SCORE_SHEET_TOP + SCORE_SHEET_HEADER_HEIGHT / 2,
+    );
+    cursor += header.width;
+  });
+
+  rows.slice(0, SCORE_SHEET_ROW_COUNT).forEach((row, rowIndex) => {
+    const y = headerBottom + rowHeight * (rowIndex + 0.5);
+    cursor = left;
+    context.fillStyle = PAPER_TEXT_COLOR;
+    context.textAlign = "center";
+    context.font = paperFont(23);
+    context.fillText(String(row.round ?? ""), cursor + roundWidth / 2, y);
+    cursor += roundWidth;
+    context.font = paperFont(22);
+    context.fillText(String(row.honba ?? 0), cursor + honbaWidth / 2, y);
+    cursor += honbaWidth;
+    for (let seat = 0; seat < 4; seat += 1) {
+      const score = Number(row.scores?.[seat]) || 0;
+      const delta = Number(row.deltas?.[seat]) || 0;
+      context.fillStyle = PAPER_TEXT_COLOR;
+      context.font = paperNumberFont(28);
+      context.textAlign = "center";
+      context.fillText(String(score), cursor + scoreWidth / 2, y);
+      if (delta) {
+        context.fillStyle = PAPER_VALUE_COLOR;
+        context.font = paperFont(14);
+        context.textAlign = "left";
+        context.fillText(
+          `${delta > 0 ? "+" : ""}${delta}`,
+          cursor + 10,
+          y - rowHeight / 2 + 13,
+        );
+      }
+      cursor += scoreWidth;
+    }
+  });
 }
 
 function drawResultHeading(context, width, winnerName, winType) {

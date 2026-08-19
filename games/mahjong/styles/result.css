@@ -370,45 +370,8 @@
   clip-path: inset(50%);
 }
 
-.result-score-list {
-  display: grid;
-  max-height: none;
-  width: 640px;
-  height: auto;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  margin: 24px 0 30px;
+.result-score-content {
   padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  overflow: visible;
-}
-
-.result-score-list .result-score-row {
-  min-height: 48px;
-  grid-template-columns: minmax(0, 1fr) 120px;
-  padding: 8px 18px;
-  border-bottom: 1px solid rgba(238, 207, 133, 0.18);
-  font-size: 22px;
-}
-
-.result-score-list .result-score-row i {
-  text-align: left;
-}
-
-.result-score-list .result-score-row b {
-  text-align: right;
-}
-
-.result-delta {
-  display: block;
-  width: 100%;
-  margin: 0 0 16px;
-  color: var(--gold);
-  font-size: 17px;
-  text-align: center;
 }
 
 .result-footer {

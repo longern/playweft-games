@@ -29,6 +29,7 @@ import {
   roundLabel,
   resultBasePaymentTotal,
   resultDetailPageCount,
+  resultScoreSheetRows,
   resultScoreRows,
   riverDisplayEntries,
   splitRevealedHand,
@@ -1142,18 +1143,15 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   );
   assert.match(
     html,
-    /id="result-score-content" class="result-content result-score-content" hidden[\s\S]*id="result-heading"[\s\S]*id="result-score-list" class="result-score-list"[\s\S]*class="result-footer"[\s\S]*id="rematch-button"/,
+    /id="result-score-content" class="result-content result-score-content" aria-label="记分纸" hidden><\/div>[\s\S]*class="result-footer"[\s\S]*id="rematch-button"/,
   );
   assert.match(html, /id="rematch-button"[^>]*>继续<\/button>/);
   assert.doesNotMatch(view, /你赢了/);
-  assert.match(
-    html,
-    /id="result-yaku" class="result-yaku"><\/div>\s*<\/div>\s*<div id="result-score-content"[\s\S]*id="result-score-delta" class="result-delta"><\/b>/s,
-  );
+  assert.doesNotMatch(html, /id="result-heading"|id="result-score-list"|id="result-score-delta"/);
   assert.match(view, /this\.renderResultScores\(state, playerName\)/);
   assert.match(view, /elements\.resultDetailContent\.hidden = false/);
   assert.match(view, /elements\.resultScoreContent\.hidden = false/);
-  assert.doesNotMatch(view, /elements\.resultScoreList\.append\(delta\)/);
+  assert.doesNotMatch(view, /result-score-sheet/);
   assert.doesNotMatch(html, /id="result-value"|id="result-total"/);
   assert.deepEqual(
     exhaustiveDrawPresentation({
@@ -1225,6 +1223,18 @@ test("mahjong result pages separate winners before the score summary", () => {
     { name: "青岚", before: 25_000, delta: 6_000, after: 31_000 },
     { name: "织羽", before: 22_000, delta: -4_000, after: 18_000 },
     { name: "墨池", before: 24_000, delta: 6_000, after: 30_000 },
+  ]);
+});
+
+test("mahjong score sheets retain the latest scored hands and show each change from the prior row", () => {
+  const rows = resultScoreSheetRows({
+    scoreHistory: [
+      { roundWind: 1, handNumber: 1, honba: 0, scores: [25_000, 25_000, 25_000, 25_000] },
+      { roundWind: 1, handNumber: 1, honba: 1, scores: [24_000, 25_000, 25_000, 26_000] },
+    ],
+  });
+  assert.deepEqual(rows, [
+    { round: "東1", honba: 1, scores: [24_000, 25_000, 25_000, 26_000], deltas: [-1_000, 0, 0, 1_000] },
   ]);
 });
 

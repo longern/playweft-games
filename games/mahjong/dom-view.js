@@ -12,7 +12,6 @@ import {
   riverDisplayEntries,
   roundLabel,
   resultDetailPageCount,
-  resultScoreRows,
   seatWind,
   tenpaiWaitsForDiscard,
   tileFace,
@@ -580,29 +579,6 @@ export class MahjongDomView {
     const { elements } = this;
     elements.resultDetailContent.hidden = true;
     elements.resultScoreContent.hidden = false;
-    elements.resultKicker.textContent = state.draw ? "流局结算" : "本局结算";
-    elements.resultTitle.textContent = "点数结算";
-    const summary = state.draw
-      ? `${state.abortiveReason || "流局"} · ${state.result?.payment ?? "不听罚符结算"}`
-      : state.matchEnded
-        ? state.endReason || "对局结束"
-        : "";
-    elements.resultSummary.textContent = summary;
-    elements.resultSummary.hidden = !summary;
-    elements.resultScoreDelta.textContent = "";
-    elements.resultScoreDelta.hidden = true;
-    elements.resultScoreList.replaceChildren(
-      ...resultScoreRows(state, playerName).map((score) => {
-        const item = document.createElement("span");
-        item.className = "result-score-row";
-        const name = document.createElement("i");
-        const delta = document.createElement("b");
-        name.textContent = `${score.name}　${score.before} → ${score.after}`;
-        delta.textContent = `${score.delta >= 0 ? "+" : ""}${score.delta}`;
-        item.append(name, delta);
-        return item;
-      }),
-    );
   }
 }
 
@@ -764,14 +740,8 @@ function collectElements() {
     resultTrack: document.querySelector(".result-page-track"),
     resultDetailContent: document.querySelector("#result-detail-content"),
     resultScoreContent: document.querySelector("#result-score-content"),
-    resultHeading: document.querySelector("#result-heading"),
-    resultKicker: document.querySelector("#result-kicker"),
-    resultTitle: document.querySelector("#result-title"),
-    resultSummary: document.querySelector("#result-summary"),
     resultDetailHands: document.querySelector("#result-hands"),
     resultDetailYaku: document.querySelector("#result-yaku"),
-    resultScoreList: document.querySelector("#result-score-list"),
-    resultScoreDelta: document.querySelector("#result-score-delta"),
     rematch: document.querySelector("#rematch-button"),
     setup: document.querySelector("#setup-panel"),
     opponentHands: {

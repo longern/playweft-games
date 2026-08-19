@@ -21,6 +21,7 @@ import {
   doraTypeCounts,
   resultDetailPageCount,
   resultBasePaymentTotal,
+  resultScoreSheetRows,
 } from "./game-format.js";
 import { MELD_GROUP_GAP, TILE_SIZE } from "./render/three-layout.js";
 import {
@@ -49,12 +50,14 @@ const VIEW_WIDTH = 14.4;
 const CAMERA_TARGET = new Vector3(0, 0.08, 0.8);
 const RESULT_HAND_Z = -1.25;
 const RESULT_PAPER_Z = 3.45;
+const RESULT_SCORE_PAPER_Z = 1.6;
 
 export class MahjongResultHandRenderer {
-  constructor(host, { handsHost, yakuHost } = {}) {
+  constructor(host, { handsHost, yakuHost, scoreHost } = {}) {
     this.host = host;
     this.handsHost = handsHost;
     this.yakuHost = yakuHost;
+    this.scoreHost = scoreHost;
     this.ready = false;
     this.destroyed = false;
     this.pendingRender = null;
@@ -199,25 +202,29 @@ export class MahjongResultHandRenderer {
     this.drawFrame();
   }
 
-  render(state, pageIndex = 0) {
-    this.lastRender = [state, pageIndex];
+  render(state, pageIndex = 0, playerName = "你") {
+    this.lastRender = [state, pageIndex, playerName];
     if (!this.ready) {
-      this.pendingRender = [state, pageIndex];
+      this.pendingRender = [state, pageIndex, playerName];
       return;
     }
     this.pendingRender = null;
     const detailCount = resultDetailPageCount(state);
     const safePage = Math.max(0, Math.min(detailCount, Number(pageIndex) || 0));
-    if (
-      state?.phase !== "hand_ended" ||
-      state.winType === "nagashi" ||
-      safePage >= detailCount ||
-      this.yakuHost?.classList.contains("is-score-summary")
-    ) {
+    if (state?.phase !== "hand_ended") {
       this.hide();
       return;
     }
     if (this.contextLost) return;
+
+    if (safePage >= detailCount) {
+      this.renderScoreSheet(state, playerName);
+      return;
+    }
+    if (state.winType === "nagashi") {
+      this.hide();
+      return;
+    }
 
     const results = asArray(state.results).length
       ? asArray(state.results)
@@ -234,6 +241,8 @@ export class MahjongResultHandRenderer {
       return;
     }
 
+    this.scoreHost?.classList.remove("is-three-result-rendered");
+    this.paper.object3d.position.z = RESULT_PAPER_Z;
     this.host.prepend(this.renderer.domElement);
     this.host.classList.add("is-three-result-rendered");
     this.handsHost?.classList.add("is-three-rendered");
@@ -247,6 +256,31 @@ export class MahjongResultHandRenderer {
       fu: result.fu,
       han: result.han,
       total: resultBasePaymentTotal(state, result),
+    });
+    this.drawFrame();
+  }
+
+  renderScoreSheet(state, playerName) {
+    if (!this.scoreHost) {
+      this.hide();
+      return;
+    }
+    this.host.classList.remove("is-three-result-rendered");
+    this.handsHost?.classList.remove("is-three-rendered");
+    this.yakuHost?.classList.remove("is-paper-rendered");
+    this.clearTiles();
+    this.paper.object3d.position.z = RESULT_SCORE_PAPER_Z;
+    this.scoreHost.prepend(this.renderer.domElement);
+    this.scoreHost.classList.add("is-three-result-rendered");
+    this.paper.renderScoreSheet({
+      playerNames: [
+        playerName,
+        ...Array.from(
+          { length: 3 },
+          (_, index) => state.playerNames?.[index + 1] ?? `玩家${index + 2}`,
+        ),
+      ],
+      rows: resultScoreSheetRows(state),
     });
     this.drawFrame();
   }
@@ -324,6 +358,7 @@ export class MahjongResultHandRenderer {
 
   hide() {
     this.host.classList.remove("is-three-result-rendered");
+    this.scoreHost?.classList.remove("is-three-result-rendered");
     this.handsHost?.classList.remove("is-three-rendered");
     this.yakuHost?.classList.remove("is-paper-rendered");
     this.paper?.hide();

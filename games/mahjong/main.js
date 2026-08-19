@@ -243,6 +243,7 @@ const resultHandRenderer = new MahjongResultHandRenderer(
   {
     handsHost: elements.resultDetailHands,
     yakuHost: elements.resultDetailYaku,
+    scoreHost: elements.resultScoreContent,
   },
 );
 const presentation = new MahjongPresentationController({
@@ -1241,7 +1242,7 @@ function renderCurrentState() {
     defaultNames: getMahjongDefaultNames(),
     playerNameIsAuthoritative: hasPlatformName,
   });
-  resultHandRenderer.render(renderState, resultPageIndex);
+  resultHandRenderer.render(renderState, resultPageIndex, playerName);
   applyPackAvatars(renderState);
   visualRenderer.render(renderState, visibleEvents, {
     ...domView.visualUi(playerName, selectedTileId),
@@ -1321,7 +1322,7 @@ async function continueResult() {
       elements.resultTrack.prepend(outgoing);
       resultPageIndex += 1;
       domView.renderResult(state, playerName, true, resultPageIndex);
-      resultHandRenderer.render(state, resultPageIndex);
+      resultHandRenderer.render(state, resultPageIndex, playerName);
       void elements.resultTrack.offsetWidth;
       elements.resultTrack.classList.add("is-step-advancing");
       await waitForAnimation(

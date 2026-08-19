@@ -1117,6 +1117,42 @@ local function mark_next_hand(state, dealer_repeats, was_draw)
 	end
 end
 
+local SCORE_HISTORY_LIMIT = 8
+
+local function copy_scores(scores)
+	return { scores[1], scores[2], scores[3], scores[4] }
+end
+
+local function record_score_history(state)
+	-- 途中流局不落在记分纸上。即使其前有立直棒，下一次实际结算
+	-- 仍会相对上一条已记下的总分显示变化。
+	if state.result and state.result.abortive then
+		return
+	end
+	local history = state.scoreHistory or {}
+	local previous = history[#history]
+	local changed = previous == nil
+	for seat = 1, 4 do
+		if not previous or state.scores[seat] ~= previous.scores[seat] then
+			changed = true
+			break
+		end
+	end
+	if not changed then
+		return
+	end
+	history[#history + 1] = {
+		roundWind = state.roundWind,
+		handNumber = state.handNumber,
+		honba = state.honba,
+		scores = copy_scores(state.scores),
+	}
+	while #history > SCORE_HISTORY_LIMIT do
+		table.remove(history, 1)
+	end
+	state.scoreHistory = history
+end
+
 local function pao_liabilities_for_score(state, player_id, score)
 	if not state.rules.pao or not score or (score.yakuman or 0) == 0 then
 		return {}
@@ -1262,6 +1298,7 @@ local function settle_win(state, seat, method, from_seat, winning_tile)
 	state.winType, state.winningTile, state.draw = method, winning_tile, false
 	state.winners, state.results, state.result = { state.players[seat] }, { score }, score
 	mark_next_hand(state, dealer_win, false)
+	record_score_history(state)
 	return score
 end
 
@@ -1301,6 +1338,7 @@ local function settle_multiple_ron(state, winners, from_seat, winning_tile)
 	state.winnerIndex, state.winner = results[1].winnerIndex, winner_ids[1]
 	state.winners, state.results, state.result = winner_ids, results, results[1]
 	mark_next_hand(state, dealer_won, false)
+	record_score_history(state)
 	return true
 end
 
@@ -1361,6 +1399,7 @@ finish_exhaustive_draw = function(state)
 				state.winners[#state.winners + 1] = state.players[seat]
 			end
 			mark_next_hand(state, dealer_won, false)
+			record_score_history(state)
 			return
 		end
 	end
@@ -1388,6 +1427,7 @@ finish_exhaustive_draw = function(state)
 		payment = count == 0 or count == 4 and "不听罚符 0点" or "不听罚符 3000点",
 	}
 	mark_next_hand(state, tenpai[state.dealerIndex], true)
+	record_score_history(state)
 end
 
 finish_abortive_draw = function(state, reason, player_index)
@@ -1415,6 +1455,9 @@ local function new_match(players, names, seed, settings)
 		honba = 0,
 		riichiSticks = 0,
 		scores = { 25000, 25000, 25000, 25000 },
+		scoreHistory = {
+			{ roundWind = 1, handNumber = 1, honba = 0, scores = { 25000, 25000, 25000, 25000 } },
+		},
 		matchEnded = false,
 		rules = rule_settings(settings),
 	}
@@ -3651,6 +3694,7 @@ function view(state, events, context)
 			honba = state.honba,
 			riichiSticks = state.riichiSticks,
 			scores = state.scores,
+			scoreHistory = state.scoreHistory,
 			turnIndex = state.turnIndex,
 			responseIndex = response_index,
 			phase = state.phase,

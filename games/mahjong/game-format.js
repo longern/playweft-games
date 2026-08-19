@@ -343,6 +343,36 @@ export function resultScoreRows(state, playerName) {
   });
 }
 
+export function resultScoreSheetRows(state) {
+  const history = asArray(state?.scoreHistory)
+    .map((entry) => ({
+      roundWind: Number(entry?.roundWind) || 1,
+      handNumber: Number(entry?.handNumber) || 1,
+      honba: Math.max(0, Number(entry?.honba) || 0),
+      scores: asArray(entry?.scores)
+        .slice(0, 4)
+        .map((score) => Number(score) || 0),
+    }))
+    .filter((entry) => entry.scores.length === 4);
+  return history
+    .map((entry, index) => {
+      const previous = history[index - 1];
+      return {
+        round: scoreSheetRoundLabel(entry.roundWind, entry.handNumber),
+        honba: entry.honba,
+        scores: entry.scores,
+        deltas: entry.scores.map((score, seat) =>
+          previous ? score - previous.scores[seat] : 0),
+      };
+    })
+    .slice(1);
+}
+
+function scoreSheetRoundLabel(roundWind, handNumber) {
+  const wind = ["東", "南", "西", "北"][roundWind - 1] ?? "東";
+  return `${wind}${Math.max(1, Math.min(4, handNumber))}`;
+}
+
 export function resultBasePaymentTotal(state, result) {
   const exact = Number(result?.basePaymentTotal);
   if (Number.isFinite(exact) && exact >= 0) return String(Math.round(exact));

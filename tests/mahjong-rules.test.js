@@ -895,6 +895,9 @@ test("Mahjong scores yaku, han and fu with conserved tsumo payments", async () =
       deltaSum = delta_sum,
       nextDealer = state.nextDealerIndex,
       nextHonba = state.nextHonba,
+      scoreHistoryRows = #state.scoreHistory,
+      recordedScore = state.scoreHistory[#state.scoreHistory].scores[1],
+      winnerScore = state.scores[1],
     }
   `);
 
@@ -910,6 +913,8 @@ test("Mahjong scores yaku, han and fu with conserved tsumo payments", async () =
   assert.equal(result.deltaSum, 0);
   assert.equal(result.nextDealer, 1);
   assert.equal(result.nextHonba, 1);
+  assert.equal(result.scoreHistoryRows, 2);
+  assert.equal(result.recordedScore, result.winnerScore);
 });
 
 test("Mahjong East match ends after East 4 while hanchan advances to South 1", async () => {
@@ -1295,12 +1300,18 @@ test("Mahjong detects four-winds abortive draw after claims are passed", async (
       local claimant = state.claimants[state.claimIndex]
       state = on_action(state, { type = "pass" }, { actor = { id = claimant.playerId } }).state
     end
-    result = { phase = state.phase, reason = state.abortiveReason, honba = state.nextHonba }
+    result = {
+      phase = state.phase,
+      reason = state.abortiveReason,
+      honba = state.nextHonba,
+      scoreHistoryRows = #state.scoreHistory,
+    }
   `);
 
   assert.equal(result.phase, "hand_ended");
   assert.equal(result.reason, "四风连打");
   assert.equal(result.honba, 1);
+  assert.equal(result.scoreHistoryRows, 1);
 });
 
 test("Mahjong supports agari-yame and East-match extension", async () => {
