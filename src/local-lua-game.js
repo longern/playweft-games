@@ -102,7 +102,7 @@ export async function createLocalLuaGame({
   sourceUrl,
   players,
   playerId = players?.[0]?.id,
-  randomSeed = Date.now(),
+  randomSeed = crypto.randomUUID().replaceAll("-", ""),
   matchId = `solo-${crypto.randomUUID()}`,
   settings = {},
 } = {}) {
@@ -173,8 +173,9 @@ export async function createLocalLuaGame({
 }
 
 function normalizeSeed(seed) {
-  const number = Math.abs(Math.trunc(Number(seed) || 1));
-  return number % 2147483647 || 1;
+  const text = String(seed ?? "").trim().toLowerCase();
+  if (/^[0-9a-f]{32}$/.test(text)) return text;
+  throw new TypeError("randomSeed must be a 32-character lowercase hexadecimal string");
 }
 
 function ensureOpen(closed) {

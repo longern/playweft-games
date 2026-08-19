@@ -1,5 +1,13 @@
 local RANDOM_MODULUS=2147483647
 local RANDOM_MULTIPLIER=48271
+local function normalize_random_seed(value)
+ local seed=0
+ for i=1,#tostring(value or "") do
+  local digit=tonumber(string.sub(tostring(value),i,i),16)
+  if digit then seed=(seed*16+digit)%RANDOM_MODULUS end
+ end
+ return seed==0 and 1 or seed
+end
 local function setup_players(context)local players={} for _,p in ipairs(context.players)do table.insert(players,p.id)end return players end
 local function rejected(state,reason)return{accepted=false,error={code=string.upper(reason),message=string.gsub(reason,"_"," ")}}end
 local function player_index(state,id)for i,p in ipairs(state.players)do if p==id then return i end end return nil end
@@ -51,7 +59,7 @@ local function resolve_vote(state)
  state.lastEvent={kind="eliminated",player=eliminated,role=copy_role(role),whiteGod=role.id=="white_god",voteRound=state.voteRound} state.voteRound=state.voteRound+1
  return{accepted=true,state=state,events={{type="eliminated",player=eliminated,role=copy_role(role)}}}
 end
-function setup(context)return{phase="setup",players=setup_players(context),seed=context.match.randomSeed,round=1,lastEvent={kind="setup"}}end
+function setup(context)return{phase="setup",players=setup_players(context),seed=normalize_random_seed(context.match.randomSeed),round=1,lastEvent={kind="setup"}}end
 function view(state,events,context)
  state.seed=nil state.canConfigure=context.viewer.isOwner==true
  if state.phase=="setup" then return{state=state,events=events}end

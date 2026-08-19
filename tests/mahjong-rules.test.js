@@ -23,8 +23,8 @@ async function runScenario(scenario) {
 
 test("Mahjong deals one deterministic complete 136-tile set", async () => {
   const result = await runScenario(`
-    first = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 42 } })
-    second = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 42 } })
+    first = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000002a" } })
+    second = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000002a" } })
     seen = {}
     duplicate = false
     total = 0
@@ -74,11 +74,11 @@ test("Mahjong deals one deterministic complete 136-tile set", async () => {
 
 test("Mahjong draws seats deterministically and can assign every initial wind", async () => {
   const result = await runScenario(`
-    local first = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 42 } })
-    local second = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 42 } })
+    local first = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000002a" } })
+    local second = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000002a" } })
     local east_seats = {}
     for seed = 1, 32 do
-      local state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = seed } })
+      local state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = string.format("%032x", seed) } })
       east_seats[state.dealerIndex] = true
     end
     local covered = 0
@@ -97,7 +97,7 @@ test("Mahjong draws seats deterministically and can assign every initial wind", 
 
 test("Mahjong view reveals only the viewer's concealed hand", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 7 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000007" } })
     result = view(state, {}, {
       viewer = { id = "p2", seat = 2, role = "player", isOwner = false }
     }).state
@@ -113,7 +113,7 @@ test("Mahjong view reveals only the viewer's concealed hand", async () => {
 
 test("Mahjong keeps the pending claim respondent private from other players", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 8 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000008" } })
     state.phase, state.claimIndex = "claiming", 1
     state.claimants = {
       { playerId = "p2", playerIndex = 2, options = { { kind = "pon", tileIds = { 1, 2 } } } }
@@ -140,7 +140,7 @@ test("Mahjong keeps the pending claim respondent private from other players", as
 
 test("Mahjong opens every private claim window on the discard frame", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 81 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000051" } })
     state.phase, state.claimIndex = "claiming", 1
     state.claimResponses = {}
     state.claimants = {
@@ -172,7 +172,7 @@ test("Mahjong opens every private claim window on the discard frame", async () =
 
 test("Mahjong cancels lower claim windows and resolves a higher claim immediately", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 82 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000052" } })
     state.phase, state.claimIndex = "claiming", 1
     state.claimResponses = {}
     state.discards.p1 = { { tile = 1, claimed = false } }
@@ -216,7 +216,7 @@ test("Mahjong cancels lower claim windows and resolves a higher claim immediatel
 
 test("Mahjong waits for unresolved claims of the same or higher priority", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 83 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000053" } })
     state.phase, state.claimIndex = "claiming", 1
     state.claimResponses = {}
     state.discards.p1 = { { tile = 1, claimed = false } }
@@ -265,7 +265,7 @@ test("Mahjong stores the current draw outside the fixed concealed rack", async (
     local base_rack = { 109,5,9,13,17,21,25,29,33,37,41,45,49 }
     local harmless = { 1,5,9,13,17,21,25,29,33,37,41,45,49 }
 
-    local tedashi = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 73 } })
+    local tedashi = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000049" } })
     tedashi.hands.p1 = copy_array(base_rack)
     tedashi.hands.p2, tedashi.hands.p3, tedashi.hands.p4 =
       copy_array(harmless), copy_array(harmless), copy_array(harmless)
@@ -276,7 +276,7 @@ test("Mahjong stores the current draw outside the fixed concealed rack", async (
       viewer = { id = "p2", seat = 2, role = "player", isOwner = false }
     })
 
-    local tsumogiri = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 74 } })
+    local tsumogiri = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000004a" } })
     tsumogiri.hands.p1 = copy_array(base_rack)
     tsumogiri.hands.p2, tsumogiri.hands.p3, tsumogiri.hands.p4 =
       copy_array(harmless), copy_array(harmless), copy_array(harmless)
@@ -342,7 +342,7 @@ test("Mahjong projects waits and remaining copies for every tenpai discard", asy
       return nil
     end
 
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 84 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000054" } })
     local ready = ids({ 1,2,3, 4,5,6, 10,11,12, 19,20,21, 28,28 })
     state.drawnTile, state.turnIndex = table.remove(ready), 1
     state.hands.p1 = ready
@@ -373,7 +373,7 @@ test("Mahjong projects waits and remaining copies for every tenpai discard", asy
 
 test("Mahjong terminal view reveals tile faces and red-five identity", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 7 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000007" } })
     state.phase, state.winningTile = "hand_ended", 17
     state.hands.p2 = { 17, 18, 21 }
     result = view(state, {}, {
@@ -393,7 +393,7 @@ test("Mahjong terminal view reveals tile faces and red-five identity", async () 
 test("Mahjong chi options distinguish red fives without duplicating identical copies", async () => {
   const result = await runScenario(`
     local options = chi_options({ 5, 9, 10, 17, 18, 21 }, 4)
-    local state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 9 } })
+    local state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000009" } })
     state.hands.p2 = { 5, 9, 10, 17, 18, 21 }
     state.phase, state.claimIndex = "claiming", 1
     state.lastDiscard = { player = "p1", playerIndex = 1, tile = 13, discardIndex = 1 }
@@ -429,7 +429,7 @@ test("Mahjong chi options distinguish red fives without duplicating identical co
 test("Mahjong pon options let players keep or use a red five", async () => {
   const result = await runScenario(`
     local options = pon_options({ 17, 18, 19, 25, 29 }, 5)
-    local state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 11 } })
+    local state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000000b" } })
     state.hands.p2 = { 17, 18, 19, 25, 29 }
     state.phase, state.claimIndex = "claiming", 1
     state.claimants = { { playerId = "p2", playerIndex = 2, options = options } }
@@ -452,7 +452,7 @@ test("Mahjong pon options let players keep or use a red five", async () => {
 
 test("Mahjong moves the riichi river marker to the next discard when the declaration tile is called", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 17 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000011" } })
     state.riichi.p1 = true
     state.discards.p1 = { { tile = 5, claimed = false, riichi = true } }
     state.lastDiscard = { player = "p1", playerIndex = 1, tile = 5, discardIndex = 1 }
@@ -488,7 +488,7 @@ test("Mahjong moves the riichi river marker to the next discard when the declara
 
 test("Mahjong recognizes standard, seven-pairs, and thirteen-orphans wins", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 11 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000000b" } })
     function ids(types)
       local copies, tiles = {}, {}
       for _, kind in ipairs(types) do
@@ -521,7 +521,7 @@ test("Mahjong recognizes standard, seven-pairs, and thirteen-orphans wins", asyn
 
 test("Mahjong local AI finishes a complete game through validated Lua actions", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 12345 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000003039" } })
     steps = 0
     all_accepted = true
     while state.phase ~= "hand_ended" and steps < 500 do
@@ -562,7 +562,7 @@ test("Mahjong AI balances riichi, dama, defense, calls, and dealer aggression", 
       return tiles
     end
     function fresh(seed)
-      local state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = seed } })
+      local state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = string.format("%032x", seed) } })
       state.phase, state.turnIndex = "playing", 2
       state.discards.p1, state.discards.p2, state.discards.p3, state.discards.p4 = {}, {}, {}, {}
       state.melds.p1, state.melds.p2, state.melds.p3, state.melds.p4 = {}, {}, {}, {}
@@ -653,7 +653,7 @@ test("Mahjong AI balances riichi, dama, defense, calls, and dealer aggression", 
 
 test("Mahjong riichi costs 1000 points and own discards cause furiten", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 91, settings = { matchType = "east" } } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000005b", settings = { matchType = "east" } } })
     function ids(types)
       local copies, tiles = {}, {}
       for _, kind in ipairs(types) do
@@ -687,7 +687,7 @@ test("Mahjong riichi costs 1000 points and own discards cause furiten", async ()
 
 test("Mahjong scores yaku, han and fu with conserved tsumo payments", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 77 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000004d" } })
     state.dealerIndex = 1
     function ids(types)
       local copies, tiles = {}, {}
@@ -751,7 +751,7 @@ test("Mahjong East match ends after East 4 while hanchan advances to South 1", a
     end
     function finish_east_four(match_type)
       local state = setup({ players = ${PLAYER_TABLE}, match = {
-        randomSeed = 88, settings = { matchType = match_type }
+        randomSeed = "00000000000000000000000000000058", settings = { matchType = match_type }
       } })
       state.handNumber, state.roundWind, state.dealerIndex = 4, 1, 1
       state.hands.p2 = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21, 26,26 })
@@ -781,7 +781,7 @@ test("Mahjong East match ends after East 4 while hanchan advances to South 1", a
 
 test("Mahjong supports concealed kan and reveals an extra dora indicator", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 314 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000013a" } })
     state.hands.p1 = { 1,2,3, 17,21,25, 41,45,49, 77,81,109,113 }
     state.drawnTile, state.turnIndex = 4, 1
     local applied = on_action(state, { type = "kan", kind = "ankan", tileType = 1 }, { actor = { id = "p1" } })
@@ -823,7 +823,7 @@ test("Mahjong concealed kan preserves riichi and closed-hand wins", async () => 
       return tiles
     end
 
-    local riichi_state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 315 } })
+    local riichi_state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000013b" } })
     local riichi_tiles = ids({ 1,1,1,1, 2,3, 5,6,7, 10,11,12, 28,28 })
     riichi_state.drawnTile = table.remove(riichi_tiles)
     riichi_state.hands.p1, riichi_state.turnIndex = riichi_tiles, 1
@@ -842,7 +842,7 @@ test("Mahjong concealed kan preserves riichi and closed-hand wins", async () => 
       { actor = { id = "p1" } }
     )
 
-    local win_state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 316 } })
+    local win_state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000013c" } })
     local win_tiles = ids({ 1,1,1,1, 2,3,4, 5,6,7, 10,11, 28,28 })
     win_state.drawnTile = table.remove(win_tiles)
     win_state.hands.p1, win_state.turnIndex = win_tiles, 1
@@ -889,7 +889,7 @@ test("Mahjong concealed kan preserves riichi and closed-hand wins", async () => 
 
 test("Mahjong opens a robbing-kan window and scores chankan", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 2718 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000a9e" } })
     function ids(types)
       local copies, tiles = {}, {}
       for _, kind in ipairs(types) do
@@ -931,7 +931,7 @@ test("Mahjong opens a robbing-kan window and scores chankan", async () => {
 
 test("Mahjong pays every ron winner on one discard", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 1618 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000652" } })
     function ids(types)
       local copies, tiles = {}, {}
       for _, kind in ipairs(types) do
@@ -972,7 +972,7 @@ test("Mahjong pays every ron winner on one discard", async () => {
 
 test("Mahjong broadcasts multiple ron only after every claimant responds", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 1619 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000653" } })
     function ids(types)
       local copies, tiles = {}, {}
       for _, kind in ipairs(types) do
@@ -1015,7 +1015,7 @@ test("Mahjong broadcasts multiple ron only after every claimant responds", async
 
 test("Mahjong supports nine-terminals abortive draw and keeps the dealer", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 999 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "000000000000000000000000000003e7" } })
     state.dealerIndex = 1
     state.hands.p1 = { 1,33,37,69,73,105,109,113,117,121,125,129,133 }
     state.drawnTile, state.turnIndex = 134, 1
@@ -1049,7 +1049,7 @@ test("Mahjong supports nine-terminals abortive draw and keeps the dealer", async
 
 test("Mahjong applies yakuman responsibility payment and bankruptcy ending", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 2024 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "000000000000000000000000000007e8" } })
     state.melds.p1 = {
       { kind = "pon", tiles = { 125,126,127 }, fromIndex = 2 },
       { kind = "pon", tiles = { 129,130,131 }, fromIndex = 3 },
@@ -1080,7 +1080,7 @@ test("Mahjong applies yakuman responsibility payment and bankruptcy ending", asy
 
 test("Mahjong awards nagashi mangan instead of noten payments", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 4242 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000001092" } })
     state.dealerIndex = 1
     state.wall = {}
     state.hands.p1 = { 1,5,9,13,17,21,25,29,33,37,41,45,49 }
@@ -1109,7 +1109,7 @@ test("Mahjong awards nagashi mangan instead of noten payments", async () => {
 
 test("Mahjong detects four-winds abortive draw after claims are passed", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 5150 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000141e" } })
     local east = 109
     state.discards.p1 = { { tile = east, claimed = false } }
     state.discards.p2 = { { tile = 110, claimed = false } }
@@ -1146,13 +1146,13 @@ test("Mahjong supports agari-yame and East-match extension", async () => {
       state.turnIndex = seat
       state.firstTurn[player_id] = false
     end
-    yame = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 61, settings = { matchType = "east" } } })
+    yame = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000003d", settings = { matchType = "east" } } })
     yame.dealerIndex = 1
     yame.handNumber, yame.scores[1] = 4, 31000
     winning_hand(yame, "p1", 1)
     yame = on_action(yame, { type = "tsumo" }, { actor = { id = "p1" } }).state
 
-    extension = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 62, settings = { matchType = "east" } } })
+    extension = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000003e", settings = { matchType = "east" } } })
     extension.dealerIndex = 1
     extension.handNumber = 4
     extension.scores = { 20000, 20000, 20000, 20000 }
@@ -1179,7 +1179,7 @@ test("Mahjong extension draws ignore target score until the forced final hand", 
   const result = await runScenario(`
     function extension_state(match_type, wind, hand, scores)
       local state = setup({ players = ${PLAYER_TABLE}, match = {
-        randomSeed = 71,
+        randomSeed = "00000000000000000000000000000047",
         settings = { matchType = match_type }
       } })
       state.roundWind, state.handNumber, state.dealerIndex = wind, hand, 1
@@ -1245,7 +1245,7 @@ test("Mahjong forbids genbutsu and suji kuikae immediately after a call", async 
       end
       return tiles
     end
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 71 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000047" } })
     state.hands.p2 = ids({ 2,3,4,5,6,7,8,9,10,11,12,28,29 })
     local called = 1
     state.discards.p1 = { { tile = called, claimed = false } }
@@ -1295,7 +1295,7 @@ test("Mahjong voids a riichi declaration when its declaration tile is ronned", a
       end
       return tiles
     end
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 801 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000321" } })
     local declarer = ids({ 1,2,3, 4,5,6, 10,11,12, 19,20,21, 28,28 })
     state.drawnTile = table.remove(declarer)
     state.hands.p1, state.turnIndex = declarer, 1
@@ -1338,7 +1338,7 @@ test("Mahjong rejects post-riichi okuri-kan and impossible fifth-copy waits", as
       end
       return tiles
     end
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 802 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000322" } })
     state.hands.p1 = ids({ 1,1,1,1, 2,3, 5,6,7, 10,11,12, 28 })
     state.drawnTile, state.turnIndex, state.riichi.p1 = ids({ 29 })[1], 1, true
     local kans = self_kan_options(state, "p1")
@@ -1366,12 +1366,12 @@ test("Mahjong tracks no-yaku and declined-ron temporary furiten correctly", asyn
       return tiles
     end
 
-    no_yaku = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 803 } })
+    no_yaku = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000323" } })
     no_yaku.hands.p3 = ids({ 1,2, 4,5,6, 10,11,12, 25,26,27, 28,28 })
     begin_claims(no_yaku, 1, 9)
     local no_yaku_furiten = no_yaku.tempFuriten.p3
 
-    called = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 804 } })
+    called = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000324" } })
     called.melds.p2 = { { kind = "pon", tiles = { 125,126,127 }, fromIndex = 3 } }
     called.hands.p2 = ids({ 1,1, 2,3,4, 5,6,7, 28,28 })
     called.hands.p3 = ids({ 2,3,4,5,6,7,8,9,10,11,12,29,30 })
@@ -1411,7 +1411,7 @@ test("Mahjong blocks last-discard calls and keeps last-tile yaku exclusive", asy
       end
       return tiles
     end
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 805 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000325" } })
     state.wall = {}
     state.hands.p2 = ids({ 2,3, 5,6,8,9, 11,12,14,15,20,24,29 })
     local options = claim_options(state, 2, 1, 1)
@@ -1469,24 +1469,24 @@ test("Mahjong scores first-turn, nine-gates, and seven-pairs yakuman cleanly", a
       for _, yaku in ipairs(score.yaku or {}) do result[yaku.name] = true end
       return result
     end
-    heaven = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 806 } })
+    heaven = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000326" } })
     heaven.dealerIndex = 1
     heaven.hands.p1 = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21, 26,26 })
     heaven.drawnTile, heaven.turnIndex = ids({ 22 })[1], 1
     local heaven_score = score_hand(heaven, 1, heaven.drawnTile, "tsumo")
 
-    earth = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 807 } })
+    earth = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000327" } })
     earth.dealerIndex = 1
     earth.hands.p2 = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21, 26,26 })
     earth.drawnTile, earth.turnIndex = ids({ 22 })[1], 2
     local earth_score = score_hand(earth, 2, earth.drawnTile, "tsumo")
 
-    gates = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 808 } })
+    gates = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000328" } })
     gates.hands.p1 = ids({ 1,1,1,2,3,4,5,6,7,8,9,9,9 })
     gates.drawnTile, gates.turnIndex, gates.firstTurn.p1 = ids({ 5 })[1], 1, false
     local gates_score = score_hand(gates, 1, gates.drawnTile, "tsumo")
 
-    honors = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 809 } })
+    honors = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000329" } })
     honors.hands.p2 = ids({ 28,28,29,29,30,30,31,31,32,32,33,33,34 })
     honors.firstTurn.p2 = false
     local honors_score = score_hand(honors, 2, ids({ 34 })[1], "ron")
@@ -1514,7 +1514,7 @@ test("Mahjong scores first-turn, nine-gates, and seven-pairs yakuman cleanly", a
 
 test("Mahjong applies pao only to the liable yakuman and leaves honba to the discarder", async () => {
   const result = await runScenario(`
-    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 810 } })
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000032a" } })
     state.dealerIndex = 1
     state.honba = 1
     state.pao.p1.daisangen = 2

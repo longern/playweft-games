@@ -6,6 +6,16 @@ local MAX_RAISES = 3
 local RANDOM_MODULUS = 2147483647
 local RANDOM_MULTIPLIER = 48271
 
+local function normalize_random_seed(value)
+  local seed = 0
+  local text = tostring(value or "")
+  for index = 1, #text do
+    local digit = tonumber(string.sub(text, index, index), 16)
+    if digit then seed = (seed * 16 + digit) % RANDOM_MODULUS end
+  end
+  return seed == 0 and 1 or seed
+end
+
 local function setup_players(context)
   local players = {}
   for _, player in ipairs(context.players) do table.insert(players, player.id) end
@@ -441,7 +451,7 @@ local function new_match(players, seed, dealer, round)
 end
 
 function setup(context)
-  return new_match(setup_players(context), context.match.randomSeed, 1, 1)
+  return new_match(setup_players(context), normalize_random_seed(context.match.randomSeed), 1, 1)
 end
 
 function view(state, events, context)

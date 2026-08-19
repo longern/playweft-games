@@ -6,6 +6,16 @@ local finish_exhaustive_draw
 local finish_abortive_draw
 local cancel_ippatsu
 
+local function normalize_random_seed(value)
+  local seed = 0
+  local text = tostring(value or "")
+  for index = 1, #text do
+    local digit = tonumber(string.sub(text, index, index), 16)
+    if digit then seed = (seed * 16 + digit) % RANDOM_MODULUS end
+  end
+  return seed == 0 and 1 or seed
+end
+
 local function rule_settings(settings)
   local supplied = settings and settings.rules or {}
   local function enabled(name, default)
@@ -2056,7 +2066,7 @@ function setup(context)
   local players, names = setup_players(context)
   if #players ~= PLAYER_COUNT then error("Mahjong requires exactly four players") end
   local settings = context.match and context.match.settings or {}
-  return new_match(players, names, context.match.randomSeed, settings)
+  return new_match(players, names, normalize_random_seed(context.match.randomSeed), settings)
 end
 
 function view(state, events, context)

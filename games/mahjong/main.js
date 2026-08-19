@@ -846,7 +846,7 @@ async function initialize(matchType = "east") {
       name: index === 0 ? playerName : player.name,
     })),
     playerId: HUMAN_ID,
-    randomSeed: Date.now(),
+    randomSeed: crypto.randomUUID().replaceAll("-", ""),
     settings: { matchType, rules },
   });
   try {

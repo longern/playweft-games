@@ -1,5 +1,16 @@
 local BOARD_SIZE = 15
 local DIRECTIONS = { { 0, 1 }, { 1, 0 }, { 1, 1 }, { 1, -1 } }
+local RANDOM_MODULUS = 2147483647
+
+local function normalize_random_seed(value)
+  local seed = 0
+  local text = tostring(value or "")
+  for index = 1, #text do
+    local digit = tonumber(string.sub(text, index, index), 16)
+    if digit then seed = (seed * 16 + digit) % RANDOM_MODULUS end
+  end
+  return seed == 0 and 1 or seed
+end
 
 local function setup_players(context)
   local players = {}
@@ -314,7 +325,7 @@ function setup(context)
     players,
     1,
     settings,
-    math.floor(math.abs(context.match.randomSeed or 1)),
+    normalize_random_seed(context.match.randomSeed),
     context.match.ownerId
   )
 end

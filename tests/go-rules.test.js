@@ -18,7 +18,7 @@ setup = function(context)
         id = "match_test",
         ownerId = context.hostId or context.ownerId or context.players[1],
         startedAt = 0,
-        randomSeed = context.randomSeed or 1,
+        randomSeed = context.randomSeed or "00000000000000000000000000000001",
       },
     }
   end
@@ -83,7 +83,7 @@ test("Go preserves optional player names for the game UI", async () => {
         id = "match_names",
         ownerId = "host",
         startedAt = 0,
-        randomSeed = 1,
+        randomSeed = "00000000000000000000000000000001",
       },
     })
     setup_names = state.playerNames
@@ -307,7 +307,7 @@ test("Go allows only the host to submit setup", async () => {
     state = setup({
       players = { "guest", "host" },
       hostId = "host",
-      randomSeed = 12
+      randomSeed = "0000000000000000000000000000000c"
     })
     denied = on_action(state, {
       type = "start", size = 19, rules = "chinese", komi = 7.5,
@@ -338,7 +338,7 @@ test("Go broadcasts host setting updates while remaining in setup", async () => 
     state = setup({
       players = { "host", "guest" },
       hostId = "host",
-      randomSeed = 12
+      randomSeed = "0000000000000000000000000000000c"
     })
     denied = on_action(state, {
       type = "update_settings", size = 19, rules = "japanese", komi = 7.5,

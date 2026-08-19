@@ -1,6 +1,17 @@
 local DEFAULT_SIZE = 19
 local DEFAULT_KOMI = 6.5
 local DIRECTIONS = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } }
+local RANDOM_MODULUS = 2147483647
+
+local function normalize_random_seed(value)
+  local seed = 0
+  local text = tostring(value or "")
+  for index = 1, #text do
+    local digit = tonumber(string.sub(text, index, index), 16)
+    if digit then seed = (seed * 16 + digit) % RANDOM_MODULUS end
+  end
+  return seed == 0 and 1 or seed
+end
 
 local function setup_players(context)
   local players, player_names = {}, {}
@@ -430,7 +441,7 @@ function setup(context)
     player_names,
     1,
     settings,
-    math.floor(math.abs(context.match.randomSeed or 1)),
+    normalize_random_seed(context.match.randomSeed),
     context.match.ownerId
   )
 end

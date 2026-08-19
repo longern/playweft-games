@@ -18,7 +18,7 @@ async function runScenario(scenario, resultName = "result") {
 const setupContext = `{
   protocolVersion = 1,
   players = { { id = "red", seat = 1 }, { id = "black", seat = 2 } },
-  match = { id = "xiangqi_test", ownerId = "red", startedAt = 0, randomSeed = 1 },
+  match = { id = "xiangqi_test", ownerId = "red", startedAt = 0, randomSeed = "00000000000000000000000000000001" },
 }`;
 
 function actionContext(player) {

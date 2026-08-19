@@ -18,7 +18,7 @@ setup = function(context)
         id = "match_test",
         ownerId = context.hostId or context.players[1],
         startedAt = 0,
-        randomSeed = context.randomSeed or 1,
+        randomSeed = context.randomSeed or "00000000000000000000000000000001",
       },
     }
   end
@@ -58,7 +58,7 @@ async function runLua(scenario, resultName = "result") {
 
 test("Gomoku always starts on a 15 × 15 board", async () => {
   const result = await runLua(`
-    state = setup({ players = { "a", "b" }, randomSeed = 1, hostId = "a" })
+    state = setup({ players = { "a", "b" }, randomSeed = "00000000000000000000000000000001", hostId = "a" })
     invalid = on_action(state, {
       type = "start",
       blackMode = "player1",
@@ -83,7 +83,7 @@ test("Gomoku always starts on a 15 × 15 board", async () => {
 
 test("Gomoku alternates turns and rejects occupied points", async () => {
   const result = await runLua(`
-    state = setup({ players = { "black", "white" }, randomSeed = 1, hostId = "black" })
+    state = setup({ players = { "black", "white" }, randomSeed = "00000000000000000000000000000001", hostId = "black" })
     started = on_action(state, {
       type = "start",
       blackMode = "player1",
@@ -120,7 +120,7 @@ test("Gomoku detects horizontal, vertical, and diagonal five-in-a-row", async ()
     function ready()
       local state = setup({
         players = { "black", "white" },
-        randomSeed = 1,
+        randomSeed = "00000000000000000000000000000001",
         hostId = "black"
       })
       return on_action(state, {
@@ -172,7 +172,7 @@ test("Gomoku detects horizontal, vertical, and diagonal five-in-a-row", async ()
 
 test("Gomoku forbidden-move mode rejects black overlines", async () => {
   const result = await runLua(`
-    state = setup({ players = { "black", "white" }, randomSeed = 1, hostId = "black" })
+    state = setup({ players = { "black", "white" }, randomSeed = "00000000000000000000000000000001", hostId = "black" })
     state = on_action(state, {
       type = "start",
       blackMode = "player1",
@@ -192,7 +192,7 @@ test("Gomoku forbidden-move mode rejects black overlines", async () => {
 
 test("Gomoku forbidden-move mode rejects black double-four", async () => {
   const result = await runLua(`
-    state = setup({ players = { "black", "white" }, randomSeed = 1, hostId = "black" })
+    state = setup({ players = { "black", "white" }, randomSeed = "00000000000000000000000000000001", hostId = "black" })
     state = on_action(state, {
       type = "start",
       blackMode = "player1",
@@ -216,7 +216,7 @@ test("Gomoku forbidden-move mode rejects black double-four", async () => {
 
 test("Gomoku forbidden-move mode rejects black double-three", async () => {
   const result = await runLua(`
-    state = setup({ players = { "black", "white" }, randomSeed = 1, hostId = "black" })
+    state = setup({ players = { "black", "white" }, randomSeed = "00000000000000000000000000000001", hostId = "black" })
     state = on_action(state, {
       type = "start",
       blackMode = "player1",
@@ -238,13 +238,13 @@ test("Gomoku forbidden-move mode rejects black double-three", async () => {
 
 test("Gomoku allows the same patterns without forbidden moves and for white", async () => {
   const result = await runLua(`
-    free = setup({ players = { "black", "white" }, randomSeed = 1, hostId = "black" })
+    free = setup({ players = { "black", "white" }, randomSeed = "00000000000000000000000000000001", hostId = "black" })
     free = on_action(free, {
       type = "start",
       blackMode = "player1",
       forbiddenMoves = false
     }, { playerId = "black", actionAt = 0 }).state
-    restricted = setup({ players = { "black", "white" }, randomSeed = 1, hostId = "black" })
+    restricted = setup({ players = { "black", "white" }, randomSeed = "00000000000000000000000000000001", hostId = "black" })
     restricted = on_action(restricted, {
       type = "start",
       blackMode = "player2",
@@ -278,7 +278,7 @@ test("Gomoku allows the same patterns without forbidden moves and for white", as
 
 test("Gomoku rematches swap black and white", async () => {
   const result = await runLua(`
-    state = setup({ players = { "a", "b" }, randomSeed = 1, hostId = "a" })
+    state = setup({ players = { "a", "b" }, randomSeed = "00000000000000000000000000000001", hostId = "a" })
     state = on_action(state, {
       type = "start",
       blackMode = "player1",
