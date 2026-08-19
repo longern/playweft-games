@@ -14,10 +14,13 @@ export function writeMahjongSoloSave(save, storage = safeLocalStorage()) {
   const normalized = normalizeSave(save);
   if (!storage || !normalized) return false;
   try {
-    storage.setItem(MAHJONG_SOLO_SAVE_KEY, JSON.stringify({
-      ...normalized,
-      savedAt: Date.now(),
-    }));
+    storage.setItem(
+      MAHJONG_SOLO_SAVE_KEY,
+      JSON.stringify({
+        ...normalized,
+        savedAt: Date.now(),
+      }),
+    );
     return true;
   } catch {
     return false;
@@ -40,6 +43,7 @@ export function createMahjongSoloSave({
   rules,
   playerName,
   actions = [],
+  autoActions,
 } = {}) {
   return normalizeSave({
     version: MAHJONG_SOLO_SAVE_VERSION,
@@ -49,6 +53,7 @@ export function createMahjongSoloSave({
     rules,
     playerName,
     actions,
+    autoActions,
   });
 }
 
@@ -59,7 +64,19 @@ export function appendMahjongSoloAction(save, action, actorId) {
   }
   return {
     ...normalized,
-    actions: [...normalized.actions, { action: structuredClone(action), actorId }],
+    actions: [
+      ...normalized.actions,
+      { action: structuredClone(action), actorId },
+    ],
+  };
+}
+
+export function setMahjongSoloAutoActions(save, autoActions) {
+  const normalized = normalizeSave(save);
+  if (!normalized) return null;
+  return {
+    ...normalized,
+    autoActions: normalizeAutoActions(autoActions),
   };
 }
 
@@ -83,13 +100,24 @@ function normalizeSave(value) {
       action: structuredClone(action),
       actorId,
     })),
+    autoActions: normalizeAutoActions(value.autoActions),
+  };
+}
+
+function normalizeAutoActions(value) {
+  return {
+    autoWin: value?.autoWin === true,
+    passClaims: value?.passClaims === true,
+    autoTsumogiri: value?.autoTsumogiri === true,
   };
 }
 
 function isSavedAction(value) {
-  return isPlainObject(value)
-    && isPlainObject(value.action)
-    && typeof value.actorId === "string";
+  return (
+    isPlainObject(value) &&
+    isPlainObject(value.action) &&
+    typeof value.actorId === "string"
+  );
 }
 
 function isPlainObject(value) {

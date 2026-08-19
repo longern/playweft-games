@@ -127,10 +127,7 @@ export class MahjongDomView {
   }
 
   renderTenpaiPreview(state, selectedTileId) {
-    const waits = tenpaiWaitsForDiscard(
-      state?.legalActions,
-      selectedTileId,
-    );
+    const waits = tenpaiWaitsForDiscard(state?.legalActions, selectedTileId);
     const { tenpaiPreview, tenpaiWaits } = this.elements;
     tenpaiPreview.hidden = waits.length === 0;
     tenpaiWaits.style.setProperty(
@@ -367,8 +364,11 @@ export class MahjongDomView {
       return;
     }
     const claims = asArray(legal.claims);
-    const { chi: chiClaims, pon: ponClaims, immediate: immediateClaims } =
-      partitionClaimActions(claims);
+    const {
+      chi: chiClaims,
+      pon: ponClaims,
+      immediate: immediateClaims,
+    } = partitionClaimActions(claims);
     if (chiClaims.length > 0) {
       elements.claims.append(this.createGroupedClaimAction(chiClaims, "chi"));
     }
@@ -577,13 +577,7 @@ export class MahjongDomView {
     elements.resultTotal.hidden = !basePaymentTotal;
     elements.resultHands.hidden = state.winType === "nagashi";
     elements.resultHands.replaceChildren(
-      createResultHand(
-        state,
-        winnerIndex,
-        winnerName,
-        false,
-        this.doraCounts,
-      ),
+      createResultHand(state, winnerIndex, winnerName, false, this.doraCounts),
     );
     elements.resultYaku.classList.remove("is-score-summary");
     elements.resultYaku.hidden = false;
@@ -642,7 +636,9 @@ function playerDisplayName(state, winnerIndex, playerName) {
   const index = Number(winnerIndex) - 1;
   return index === 0
     ? playerName
-    : state.playerNames?.[index] || PLAYERS[index]?.name || `玩家${winnerIndex}`;
+    : state.playerNames?.[index] ||
+        PLAYERS[index]?.name ||
+        `玩家${winnerIndex}`;
 }
 
 function createResultHand(
@@ -743,6 +739,9 @@ function collectElements() {
   return {
     app: document.querySelector("#mahjong-app"),
     settingsButton: document.querySelector("#settings-button"),
+    autoWin: document.querySelector("#auto-win-button"),
+    passClaims: document.querySelector("#pass-claims-button"),
+    autoTsumogiri: document.querySelector("#auto-tsumogiri-button"),
     settingsDialog: document.querySelector("#settings-dialog"),
     settingsDialogCard: document.querySelector(".settings-dialog-card"),
     settingsClose: document.querySelector("#settings-close-button"),

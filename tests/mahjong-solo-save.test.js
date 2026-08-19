@@ -7,6 +7,7 @@ import {
   clearMahjongSoloSave,
   createMahjongSoloSave,
   readMahjongSoloSave,
+  setMahjongSoloAutoActions,
   writeMahjongSoloSave,
 } from "../games/mahjong/solo-save.js";
 
@@ -74,4 +75,31 @@ test("mahjong solo saves can be discarded without affecting play", () => {
   writeMahjongSoloSave(createSave(), storage);
   clearMahjongSoloSave(storage);
   assert.equal(readMahjongSoloSave(storage), null);
+});
+
+test("mahjong solo saves retain per-hand automatic actions", () => {
+  const storage = createStorage();
+  const save = createSave();
+  assert.deepEqual(save.autoActions, {
+    autoWin: false,
+    passClaims: false,
+    autoTsumogiri: false,
+  });
+
+  const updated = setMahjongSoloAutoActions(save, {
+    autoWin: true,
+    passClaims: "yes",
+    autoTsumogiri: true,
+  });
+  assert.ok(updated);
+  assert.deepEqual(updated.autoActions, {
+    autoWin: true,
+    passClaims: false,
+    autoTsumogiri: true,
+  });
+  writeMahjongSoloSave(updated, storage);
+  assert.deepEqual(
+    readMahjongSoloSave(storage)?.autoActions,
+    updated.autoActions,
+  );
 });

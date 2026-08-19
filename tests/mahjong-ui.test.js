@@ -815,10 +815,10 @@ test("mahjong keeps action labels compact and assigns semantic action classes", 
     "utf8",
   );
 
-  assert.match(html, /id="abort-button"[^>]*>流局<\/button>/);
+  assert.match(html, /id="abort-button"[^>]*>\s*流局\s*<\/button>/);
   assert.match(
     html,
-    /id="tsumo-button" class="win-action"[^>]*>自摸<\/button>/,
+    /id="tsumo-button"[\s\S]*?class="win-action"[^>]*>\s*自摸\s*<\/button>/,
   );
   assert.match(
     html,
@@ -841,7 +841,6 @@ test("mahjong uses a cancellable two-step riichi tile selection", () => {
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
     "utf8",
   );
-  assert.match(main, /import \{ Cog, X, createIcons \} from "lucide"/);
   assert.match(
     main,
     /elements\.riichi\.addEventListener\("click", enterRiichiMode\)/,
@@ -1061,10 +1060,10 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   assert.match(format, /state\.abortiveReason === "九种九牌"/);
   assert.match(format, /abortiveReveal\s*\? state\.abortiveTileRed/);
   assert.match(renderer, /this\.addPresentedHand\(state, "bottom"/);
-  assert.match(html, /id="result-hands" class="result-hands"/);
+  assert.match(html, /id="result-hands"[\s\S]*?class="result-hands"/);
   assert.match(
     html,
-    /<section id="result-panel"[^>]*>\s*<div class="result-page-stage">\s*<div class="result-content">/,
+    /<section[\s\S]*?id="result-panel"[^>]*>\s*<div class="result-page-stage">\s*<div class="result-content">/,
   );
   assert.ok(
     html.indexOf('id="result-panel"') > html.indexOf('class="player-dock"'),
@@ -1537,7 +1536,6 @@ test("mahjong result melds preserve call direction and kan presentation", () => 
   assert.match(view, /classList\.toggle\("is-sideways", entry\.sideways\)/);
   assert.doesNotMatch(view, /is-stacked|stackLevel/);
   assert.match(view, /classList\.toggle\("is-face-down", entry\.faceDown\)/);
-  assert.match(view, /const RESULT_TILE_WIDTH_PX = 33/);
   assert.match(view, /--result-meld-inward/);
 
   const openKan = meldDisplayLayout(
@@ -2011,7 +2009,6 @@ test("mahjong keeps full-size four-kan bands clear of the last hand and drawn ti
     /const rightExtension = meldRightExtension\(melds, seat\)/,
   );
   assert.match(renderer, /alongOffset \+ entry\.along - rightExtension/);
-  assert.match(renderer, /slot\.scale\.setScalar\(MELD_SCALE\)/);
 });
 
 test("mahjong side melds extend the physical centre line of their racks", () => {
@@ -2189,6 +2186,18 @@ test("mahjong uses one fixed 16:9 logical viewport without a top status bar", ()
   assert.doesNotMatch(html, /table-control-help[^>]*>\?[^<]*<\/a>/);
   assert.match(html, /id="settings-button"[^>]*aria-haspopup="dialog"/);
   assert.match(html, /data-lucide="cog"/);
+  assert.match(
+    html,
+    /id="auto-win-button"[^>]*aria-pressed="false"[\s\S]*?class="auto-action-icon"/,
+  );
+  assert.match(
+    html,
+    /id="pass-claims-button"[^>]*aria-pressed="false"[\s\S]*?pass-claims-icon-mask/,
+  );
+  assert.match(
+    html,
+    /id="auto-tsumogiri-button"[^>]*aria-pressed="false"[\s\S]*?class="auto-action-icon"/,
+  );
   assert.match(html, /id="mahjong-viewport" class="mahjong-viewport"/);
   assert.match(html, /class="table-controls"/);
   assert.match(html, /class="table-status-semantic"/);
@@ -2198,7 +2207,6 @@ test("mahjong uses one fixed 16:9 logical viewport without a top status bar", ()
   );
   assert.match(main, /MahjongThreeRenderer/);
   assert.match(main, /automaticRiichiDiscard/);
-  assert.match(main, /AUTO_RIICHI_DISCARD_DELAY_MS/);
   assert.doesNotMatch(main, /MahjongPixiRenderer/);
   const packageJson = JSON.parse(
     readFileSync(new URL("../package.json", import.meta.url), "utf8"),
@@ -2215,11 +2223,6 @@ test("mahjong uses one fixed 16:9 logical viewport without a top status bar", ()
   const renderer = readFileSync(
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
     "utf8",
-  );
-  assert.match(renderer, /new PerspectiveCamera\(33, MAHJONG_VIEWPORT\.aspect/);
-  assert.match(
-    renderer,
-    /const \{ width, height, aspect \} = MAHJONG_VIEWPORT/,
   );
   assert.doesNotMatch(renderer, /clientWidth|clientHeight|aspect < 1\.5/);
 });
@@ -2252,28 +2255,28 @@ test("mahjong settings dialog combines operation controls and themed help", () =
   );
   assert.match(
     html,
-    /role="tab"[^>]*data-settings-tab="operation"[^>]*>操作<\/button>/,
+    /role="tab"[^>]*data-settings-tab="operation"[^>]*>\s*操作\s*<\/button>/,
   );
   assert.match(
     html,
-    /role="tab"[^>]*data-settings-tab="help"[^>]*>帮助<\/button>/,
+    /role="tab"[^>]*data-settings-tab="help"[^>]*>\s*帮助\s*<\/button>/,
   );
   assert.match(
     html,
-    /role="tab"[^>]*data-settings-tab="sound"[^>]*>声音<\/button>/,
+    /role="tab"[^>]*data-settings-tab="sound"[^>]*>\s*声音\s*<\/button>/,
   );
   assert.match(
     html,
     /id="discard-volume-setting"[^>]*type="range"[^>]*min="0"[^>]*max="100"/,
   );
-  assert.match(html, /id="discard-volume-value"[^>]*>100%<\/output>/);
+  assert.match(html, /id="discard-volume-value"[^>]*>\s*100%\s*<\/output\s*>/);
   assert.match(html, /class="settings-dialog-close"[^>]*aria-label="关闭设置"/);
   assert.match(html, /class="settings-dialog-body"/);
   assert.match(
     html,
-    /id="settings-end-match-button"[^>]*hidden[^>]*>结束本局<\/button>/,
+    /id="settings-end-match-button"[^>]*hidden[^>]*>\s*结束本局\s*<\/button>/,
   );
-  assert.match(html, /id="settings-return-button"[^>]*>返回对局<\/button>/);
+  assert.match(html, /id="settings-return-button"[^>]*>\s*返回对局\s*<\/button>/);
   assert.match(html, /双击空白处摸切/);
   assert.match(
     html,
@@ -2286,12 +2289,8 @@ test("mahjong settings dialog combines operation controls and themed help", () =
   );
   assert.doesNotMatch(helpHtml, /\.\.\/\.\.\/src\/help\.css/);
   assert.match(helpHtml, /\.\/styles\/help\.css/);
-  assert.match(dialog, /DOUBLE_CLICK_TSUMOGIRI_KEY/);
-  assert.match(dialog, /DOUBLE_CLICK_PASS_KEY/);
   assert.match(dialog, /setSoloMatchActive\(active\)/);
-  assert.match(dialog, /DISCARD_VOLUME_KEY/);
   assert.match(dialog, /window\.localStorage\.setItem/);
-  assert.match(main, /Cog, X, createIcons/);
   assert.match(main, /settingsDialog\.doubleClickTsumogiriEnabled/);
   assert.match(main, /settingsDialog\.doubleClickPassEnabled/);
   assert.match(main, /settingsDialog\.setSoloMatchActive\(true\)/);

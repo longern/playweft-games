@@ -10,6 +10,7 @@ import {
   PLAYERS,
 } from "./constants.js";
 import { MahjongDomView } from "./dom-view.js";
+import { automaticMahjongAction, sameMahjongAction } from "./auto-actions.js";
 import { bindFixedViewport } from "./fixed-viewport.js";
 import {
   activeSeat,
@@ -50,6 +51,7 @@ import {
   clearMahjongSoloSave,
   createMahjongSoloSave,
   readMahjongSoloSave,
+  setMahjongSoloAutoActions,
   writeMahjongSoloSave,
 } from "./solo-save.js";
 import { mahjongInitialEntry } from "./entry-flow.js";
@@ -161,6 +163,7 @@ let voicedEventKey = "";
 let playedRiverTileSoundKey = "";
 let soloSave = readMahjongSoloSave();
 let playMode = window.parent === window ? "solo" : null;
+let autoActions = defaultAutoActions();
 
 function revealMahjongAppAfterStyles() {
   requestAnimationFrame(() => {
@@ -351,6 +354,14 @@ elements.tsumo.addEventListener("click", () => dispatch({ type: "tsumo" }));
 elements.riichi.addEventListener("click", enterRiichiMode);
 elements.cancelRiichi.addEventListener("click", cancelRiichiMode);
 elements.rematch.addEventListener("click", () => void continueResult());
+elements.autoWin.addEventListener("click", () => toggleAutoAction("autoWin"));
+elements.passClaims.addEventListener("click", () =>
+  toggleAutoAction("passClaims"),
+);
+elements.autoTsumogiri.addEventListener("click", () =>
+  toggleAutoAction("autoTsumogiri"),
+);
+syncAutoActionControls();
 for (const button of elements.setup.querySelectorAll("[data-match-type]")) {
   button.addEventListener(
     "click",
@@ -864,12 +875,14 @@ async function initialize(matchType = "east") {
       setupExit,
       visualRendererReady,
     ]);
+    resetAutoActions({ persist: false });
     soloSave = createMahjongSoloSave({
       randomSeed,
       matchId,
       matchType,
       rules,
       playerName,
+      autoActions,
     });
     writeMahjongSoloSave(soloSave);
     refresh();
@@ -922,6 +935,8 @@ async function resumeSavedMatch() {
     await visualRendererReady;
     game = restored;
     if (save.playerName) playerName = save.playerName;
+    autoActions = { ...save.autoActions };
+    syncAutoActionControls();
     refresh();
     // Start BGM only after the restored game and its hand state are live.
     // Starting earlier can be overwritten by asset-pack initialization, and
@@ -946,6 +961,50 @@ async function resumeSavedMatch() {
 function persistAcceptedAction(action, actorId) {
   if (!soloSave) return;
   const next = appendMahjongSoloAction(soloSave, action, actorId);
+  if (!next) return;
+  soloSave = next;
+  writeMahjongSoloSave(soloSave);
+}
+
+function defaultAutoActions() {
+  return {
+    autoWin: false,
+    passClaims: false,
+    autoTsumogiri: false,
+  };
+}
+
+function toggleAutoAction(name) {
+  autoActions = {
+    ...autoActions,
+    [name]: !autoActions[name],
+  };
+  syncAutoActionControls();
+  persistAutoActions();
+  scheduleAi();
+}
+
+function resetAutoActions({ persist = true } = {}) {
+  autoActions = defaultAutoActions();
+  syncAutoActionControls();
+  if (persist) persistAutoActions();
+}
+
+function syncAutoActionControls() {
+  const controls = [
+    [elements.autoWin, autoActions.autoWin, "自动胡牌"],
+    [elements.passClaims, autoActions.passClaims, "放弃鸣牌"],
+    [elements.autoTsumogiri, autoActions.autoTsumogiri, "自动摸切"],
+  ];
+  for (const [button, enabled, label] of controls) {
+    button.setAttribute("aria-pressed", String(enabled));
+    button.title = `${label}（${enabled ? "开启" : "关闭"}）`;
+  }
+}
+
+function persistAutoActions() {
+  if (!soloSave) return;
+  const next = setMahjongSoloAutoActions(soloSave, autoActions);
   if (!next) return;
   soloSave = next;
   writeMahjongSoloSave(soloSave);
@@ -1041,6 +1100,9 @@ function dispatch(action) {
     return;
   }
   persistAcceptedAction(action, HUMAN_ID);
+  if (action.type === "next_hand" || action.type === "new_match") {
+    resetAutoActions();
+  }
   riichiMode = false;
   selectionBeforeRiichi = 0;
   selectedTileId = 0;
@@ -1095,6 +1157,16 @@ function runAiTurn() {
 function scheduleAi() {
   window.clearTimeout(aiTimer);
   if (!state || state.phase === "hand_ended") return;
+  const autoAction = automaticMahjongAction(state, autoActions, { riichiMode });
+  if (autoAction) {
+    aiTimer = window.setTimeout(() => {
+      const currentAction = automaticMahjongAction(state, autoActions, {
+        riichiMode,
+      });
+      if (sameMahjongAction(currentAction, autoAction)) dispatch(currentAction);
+    }, 0);
+    return;
+  }
   const automaticTile = automaticRiichiDiscard(state, HUMAN_ID);
   if (automaticTile) {
     aiTimer = window.setTimeout(() => {

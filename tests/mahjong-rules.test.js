@@ -1490,14 +1490,16 @@ test("Mahjong voids a riichi declaration when its declaration tile is ronned", a
       declarerRiichi = state.riichi.p1,
       marker = state.discards.p1[1].riichi,
       awardedSticks = state.result.riichiAward,
+      remainingSticks = state.riichiSticks,
     }
   `);
 
   assert.deepEqual(result, {
     accepted: true,
     declarerRiichi: false,
-    marker: false,
+    marker: true,
     awardedSticks: 2000,
+    remainingSticks: 0,
   });
 });
 

@@ -1962,10 +1962,9 @@ local function rollback_ronned_riichi_declaration(state, discard)
 	state.scores[seat] = state.scores[seat] + 1000
 	state.riichiSticks = math.max(0, state.riichiSticks - 1)
 	state.riichi[player_id], state.doubleRiichi[player_id], state.ippatsu[player_id] = false, false, false
-	local entry = state.discards[player_id][discard.discardIndex]
-	if entry then
-		entry.riichi = false
-	end
+	-- The declaration is void and its 1000 points are returned, but its discard
+	-- remains exactly where it landed in the river. Keeping the sideways marker
+	-- avoids an abrupt visual "turn back" after a ron on the declaration tile.
 end
 
 local function resolve_claims(state, events)
