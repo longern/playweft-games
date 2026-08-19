@@ -143,10 +143,12 @@ let playerName = "你";
 let hasPlatformName = false;
 let destroyed = false;
 let hasPlatformAvatar = false;
+let endingSoloMatch = false;
 const MATCH_MUSIC_FADE_DURATION_MS = 800;
 const SETUP_EXIT_DURATION_MS = 560;
 const RESULT_PAGE_TRANSITION_MS = 300;
 const RESULT_EXIT_DURATION_MS = 320;
+const KAN_DRAW_PAUSE_MS = 300;
 const matchMusic = new Audio();
 matchMusic.loop = true;
 matchMusic.preload = "metadata";
@@ -210,7 +212,7 @@ const settingsDialog = createMahjongSettingsDialog({
     applyMatchMusicVolume();
   },
   onEndMatch() {
-    endSoloMatch();
+    void endSoloMatch();
   },
 });
 applyMatchMusicVolume();
@@ -245,6 +247,10 @@ const resultHandRenderer = new MahjongResultHandRenderer(
 );
 const presentation = new MahjongPresentationController({
   onHandInsertionReady: renderCurrentState,
+  onKanDrawReady() {
+    renderCurrentState();
+    scheduleAi();
+  },
   onResultReady: refresh,
 });
 const visualRendererReady = visualRenderer.init().catch((error) => {
@@ -1037,28 +1043,40 @@ function showSetup() {
   elements.setup.hidden = false;
 }
 
-function endSoloMatch() {
-  if (!game || gameInitializing) return;
-  if (!window.confirm("结束本局并返回标题？本局进度不会保留。")) return;
-  window.clearTimeout(aiTimer);
-  settingsDialog.setOpen(false, { restoreFocus: false, animate: false });
-  presentation.suspend();
-  game.close();
-  game = undefined;
-  state = undefined;
-  visibleEvents = [];
-  selectedTileId = 0;
-  riichiMode = false;
-  selectionBeforeRiichi = 0;
-  resultPageIndex = 0;
-  resultPageKey = "";
-  resultPageAnimating = false;
-  syncMatchMusic({ start: false });
-  elements.result.hidden = true;
-  elements.loading.hidden = true;
-  showSetup();
-  settingsDialog.setSoloMatchActive(false);
-  clearSoloSave();
+async function endSoloMatch() {
+  if (!game || gameInitializing || endingSoloMatch) return;
+  endingSoloMatch = true;
+  try {
+    const confirmation = "结束本局并返回标题？本局进度不会保留。";
+    const confirmed =
+      window.parent === window
+        ? window.confirm(confirmation)
+        : await soloClient.confirm(confirmation);
+    if (!confirmed) return;
+    window.clearTimeout(aiTimer);
+    settingsDialog.setOpen(false, { restoreFocus: false, animate: false });
+    presentation.suspend();
+    game.close();
+    game = undefined;
+    state = undefined;
+    visibleEvents = [];
+    selectedTileId = 0;
+    riichiMode = false;
+    selectionBeforeRiichi = 0;
+    resultPageIndex = 0;
+    resultPageKey = "";
+    resultPageAnimating = false;
+    syncMatchMusic({ start: false });
+    elements.result.hidden = true;
+    elements.loading.hidden = true;
+    showSetup();
+    settingsDialog.setSoloMatchActive(false);
+    clearSoloSave();
+  } catch (error) {
+    console.error("Unable to confirm ending the Mahjong match", error);
+  } finally {
+    endingSoloMatch = false;
+  }
 }
 
 function beginSetupExit() {
@@ -1161,7 +1179,8 @@ function runAiTurn() {
 
 function scheduleAi() {
   window.clearTimeout(aiTimer);
-  if (!state || state.phase === "hand_ended") return;
+  if (!state || state.phase === "hand_ended" || presentation.kanDrawPending)
+    return;
   const autoAction = automaticMahjongAction(state, autoActions, { riichiMode });
   if (autoAction) {
     aiTimer = window.setTimeout(() => {
@@ -1203,6 +1222,7 @@ function refresh({ ownDiscardedTile = 0 } = {}) {
   visibleEvents = events;
   syncResultPage(state);
   playRoleVoices(events);
+  queueKanDraw(events);
   queueHandInsertion(previousState, events, ownDiscardedTile);
   const revealKey = handEndPresentationKey(state);
   presentation.syncResult(revealKey, handEndPresentationDelay(state));
@@ -1393,12 +1413,45 @@ function waitForAnimation(element, animationName, duration) {
 }
 
 function presentedState() {
-  if (Number(presentation.handInsertion?.seat) !== 1) return state;
+  let presented = state;
+  if (presentation.kanDrawPending) {
+    presented = {
+      ...presented,
+      drawnTile: 0,
+      drawnPlayerIndex: 0,
+      legalActions: {},
+    };
+  }
+  if (Number(presentation.handInsertion?.seat) !== 1) return presented;
   return {
-    ...state,
+    ...presented,
     ownHand: presentation.handInsertion.ownHand,
     drawnTile: presentation.handInsertion.drawnTile,
   };
+}
+
+function queueKanDraw(events) {
+  const kan = asArray(events).find(
+    (event) =>
+      event?.type === "claimed" &&
+      ["kan", "ankan", "kakan"].includes(event.kind),
+  );
+  if (!kan) return;
+  const draw = asArray(events).find(
+    (event) =>
+      event?.type === "drew" &&
+      Number(event.playerIndex) === Number(kan.playerIndex),
+  );
+  if (!draw) return;
+  const eventKey = [
+    Number(state?.roundWind) || 0,
+    Number(state?.handNumber) || 0,
+    Number(state?.honba) || 0,
+    Number(state?.moveCount) || 0,
+    kan.kind,
+    Number(kan.playerIndex) || 0,
+  ].join(":");
+  presentation.scheduleKanDraw(eventKey, KAN_DRAW_PAUSE_MS);
 }
 
 function queueHandInsertion(previousState, events, ownDiscardedTile = 0) {

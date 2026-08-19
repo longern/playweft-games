@@ -403,7 +403,7 @@ test("Solo client initializes from its Manifest contract", async () => {
   const originalWindow = globalThis.window;
   const originalCrypto = globalThis.crypto;
   globalThis.window = harness.fakeWindow;
-  const ids = ["solo-initialize", "solo-profile"];
+  const ids = ["solo-initialize", "solo-profile", "solo-confirm"];
   Object.defineProperty(globalThis, "crypto", {
     configurable: true,
     value: { randomUUID: () => ids.shift() },
@@ -455,6 +455,16 @@ test("Solo client initializes from its Manifest contract", async () => {
     assert.deepEqual(await profile, {
       avatar: { src: "https://play.example/avatar/self" },
     });
+
+    const confirmation = client.confirm("结束本局？");
+    assert.deepEqual(harness.portMessages.at(-1), {
+      jsonrpc: "2.0",
+      id: "solo-confirm",
+      method: "window.confirm",
+      params: { message: "结束本局？" },
+    });
+    respond(harness.fakePort, "solo-confirm", true);
+    assert.equal(await confirmation, true);
     client.destroy();
   } finally {
     globalThis.window = originalWindow;
@@ -489,6 +499,7 @@ test("Solo client is inert when the game opens directly", async () => {
       client.getUserProfile({ fields: ["avatar"] }),
       /not running inside Playweft/,
     );
+    await assert.rejects(client.confirm("结束本局？"), /not running inside Playweft/);
     client.destroy();
   } finally {
     globalThis.window = originalWindow;

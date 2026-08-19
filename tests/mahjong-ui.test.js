@@ -552,10 +552,12 @@ test("mahjong presentation scheduling cancels insertion before terminal reveal",
     if (timer) timer.cancelled = true;
   };
   let insertionReady = 0;
+  let kanDrawReady = 0;
   let resultReady = 0;
   const presentation = new MahjongPresentationController(
     {
       onHandInsertionReady: () => (insertionReady += 1),
+      onKanDrawReady: () => (kanDrawReady += 1),
       onResultReady: () => (resultReady += 1),
     },
     { schedule, cancel },
@@ -574,6 +576,14 @@ test("mahjong presentation scheduling cancels insertion before terminal reveal",
   assert.equal(timers.get(insertionTimer).cancelled, true);
   assert.equal(presentation.handInsertion, null);
   assert.equal(insertionReady, 0);
+
+  assert.equal(presentation.scheduleKanDraw("10:kan:1", 300), true);
+  assert.equal(presentation.kanDrawPending, true);
+  assert.equal(presentation.scheduleKanDraw("10:kan:1", 300), false);
+  const kanDrawTimer = presentation.kanDrawTimer;
+  timers.get(kanDrawTimer).callback();
+  assert.equal(presentation.kanDrawPending, false);
+  assert.equal(kanDrawReady, 1);
 
   presentation.syncResult("10:exhaustive-draw", HAND_END_PRESENTATION_DELAY_MS);
   const resultTimer = presentation.resultTimer;

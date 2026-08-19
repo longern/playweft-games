@@ -1,18 +1,22 @@
 export class MahjongPresentationController {
   constructor(
-    { onHandInsertionReady, onResultReady },
+    { onHandInsertionReady, onKanDrawReady, onResultReady },
     {
       schedule = (callback, delay) => window.setTimeout(callback, delay),
       cancel = (timer) => window.clearTimeout(timer),
     } = {},
   ) {
     this.onHandInsertionReady = onHandInsertionReady;
+    this.onKanDrawReady = onKanDrawReady;
     this.onResultReady = onResultReady;
     this.schedule = schedule;
     this.cancel = cancel;
     this.handInsertion = null;
     this.handInsertionTimer = 0;
     this.lastHandInsertionKey = "";
+    this.kanDrawPending = false;
+    this.kanDrawTimer = 0;
+    this.lastKanDrawKey = "";
     this.resultKey = "";
     this.resultVisible = true;
     this.resultTimer = 0;
@@ -59,6 +63,27 @@ export class MahjongPresentationController {
     this.handInsertion = null;
   }
 
+  scheduleKanDraw(key, delay) {
+    const presentationKey = String(key || "");
+    if (!presentationKey || presentationKey === this.lastKanDrawKey)
+      return false;
+    this.lastKanDrawKey = presentationKey;
+    this.cancelKanDraw();
+    this.kanDrawPending = true;
+    this.kanDrawTimer = this.schedule(() => {
+      this.kanDrawTimer = 0;
+      this.kanDrawPending = false;
+      this.onKanDrawReady?.();
+    }, delay);
+    return true;
+  }
+
+  cancelKanDraw() {
+    if (this.kanDrawTimer) this.cancel(this.kanDrawTimer);
+    this.kanDrawTimer = 0;
+    this.kanDrawPending = false;
+  }
+
   cancelResultTimer() {
     if (this.resultTimer) this.cancel(this.resultTimer);
     this.resultTimer = 0;
@@ -66,6 +91,7 @@ export class MahjongPresentationController {
 
   suspend() {
     this.cancelHandInsertion();
+    this.cancelKanDraw();
     this.cancelResultTimer();
     this.resultVisible = true;
   }
