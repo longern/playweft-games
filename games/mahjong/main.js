@@ -22,6 +22,7 @@ import {
   resultDetailPageCount,
 } from "./game-format.js";
 import { MahjongThreeRenderer } from "./three-renderer.js";
+import { MahjongResultHandRenderer } from "./result-hand-renderer.js";
 import { MahjongPresentationController } from "./presentation-controller.js";
 import { createMahjongSettingsDialog } from "./settings-dialog.js";
 import discardSoundSource from "./assets/audio/discard-sound.js";
@@ -224,6 +225,7 @@ const visualRenderer = new MahjongThreeRenderer(elements.stage, {
     if (action) dispatch(action);
   },
 });
+const resultHandRenderer = new MahjongResultHandRenderer(elements.resultHands);
 const presentation = new MahjongPresentationController({
   onHandInsertionReady: renderCurrentState,
   onResultReady: refresh,
@@ -231,6 +233,9 @@ const presentation = new MahjongPresentationController({
 const visualRendererReady = visualRenderer.init().catch((error) => {
   console.error("Mahjong renderer failed", error);
   showLoadingError("图形渲染器加载失败，请刷新页面重试");
+});
+const resultHandRendererReady = resultHandRenderer.init().catch((error) => {
+  console.error("Mahjong result hand renderer failed", error);
 });
 const visualPackElements = {
   upload: document.querySelector("#settings-pack-upload"),
@@ -242,7 +247,11 @@ const DEFAULT_VISUAL_PACK_ID = "__default__";
 let visualPacks = [];
 const assetPacksReady = initializeMahjongAssetPacks().catch(() => new Map());
 
-void Promise.all([visualRendererReady, assetPacksReady]).then(() =>
+void Promise.all([
+  visualRendererReady,
+  resultHandRendererReady,
+  assetPacksReady,
+]).then(() =>
   applyVisualPack(),
 );
 void refreshVisualPacks();
@@ -405,11 +414,16 @@ function applyPackAvatars() {
 }
 
 async function applyVisualPack() {
-  await visualRendererReady;
-  await visualRenderer.setAppearance({
-    tablecloth: getMahjongAssetUrl("tablecloth"),
-    tileBack: getMahjongAssetUrl("tile-back"),
-  });
+  await Promise.all([visualRendererReady, resultHandRendererReady]);
+  const tileBack = getMahjongAssetUrl("tile-back");
+  const tablecloth = getMahjongAssetUrl("tablecloth");
+  await Promise.all([
+    visualRenderer.setAppearance({
+      tablecloth,
+      tileBack,
+    }),
+    resultHandRenderer.setAppearance({ tablecloth, tileBack }),
+  ]);
 }
 
 function applyMatchMusicVolume() {
@@ -995,6 +1009,7 @@ function renderCurrentState() {
     defaultNames: getMahjongDefaultNames(),
     playerNameIsAuthoritative: hasPlatformName,
   });
+  resultHandRenderer.render(renderState, resultPageIndex);
   applyPackAvatars(renderState);
   visualRenderer.render(renderState, visibleEvents, {
     ...domView.visualUi(playerName, selectedTileId),
@@ -1030,6 +1045,7 @@ async function continueResult() {
   try {
     if (resultPageIndex < detailCount) {
       const outgoing = elements.resultContent.cloneNode(true);
+      copyCanvasBitmaps(elements.resultContent, outgoing);
       for (const node of [outgoing, ...outgoing.querySelectorAll("[id]")]) {
         node.removeAttribute("id");
       }
@@ -1037,6 +1053,7 @@ async function continueResult() {
       elements.resultStage.append(outgoing);
       resultPageIndex += 1;
       domView.renderResult(state, playerName, true, resultPageIndex);
+      resultHandRenderer.render(state, resultPageIndex);
       elements.resultContent.classList.add("is-page-entering");
       await waitForAnimation(
         elements.resultContent,
@@ -1064,6 +1081,18 @@ async function continueResult() {
       elements.result.classList.remove("is-exiting");
     }
   }
+}
+
+function copyCanvasBitmaps(source, clone) {
+  const sourceCanvases = source.querySelectorAll("canvas");
+  const cloneCanvases = clone.querySelectorAll("canvas");
+  sourceCanvases.forEach((canvas, index) => {
+    const copy = cloneCanvases[index];
+    if (!copy) return;
+    copy.width = canvas.width;
+    copy.height = canvas.height;
+    copy.getContext("2d")?.drawImage(canvas, 0, 0);
+  });
 }
 
 function syncResultPage(current) {
@@ -1313,6 +1342,7 @@ function resumeAfterSuspension() {
   if (destroyed) return;
   syncMatchMusic();
   visualRenderer.resume();
+  resultHandRenderer.resume();
   window.requestAnimationFrame(() => {
     if (destroyed) return;
     if (state?.phase === "hand_ended") {
@@ -1341,6 +1371,7 @@ function destroy() {
   releaseFixedViewport();
   settingsDialog.destroy();
   visualRenderer.destroy();
+  resultHandRenderer.destroy();
   game?.close();
   soloClient.destroy();
 }

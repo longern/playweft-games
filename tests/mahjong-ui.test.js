@@ -68,6 +68,7 @@ import {
   TILE_PHYSICAL_MM,
   TILE_SIZE,
 } from "../games/mahjong/render/three-layout.js";
+import { resultMeldDisplayLayout } from "../games/mahjong/render/result-hand-layout.js";
 import {
   HAND_REVEAL_FALL_DURATION_MS,
   handRevealStartDelay,
@@ -106,7 +107,10 @@ import {
   actionCalloutEvents,
   actionCalloutKey,
 } from "../games/mahjong/render/three-callout.js";
-import { TABLE_GEOMETRY } from "../games/mahjong/render/three-table.js";
+import {
+  TABLE_GEOMETRY,
+  TABLETOP_SHADOW_OPACITY,
+} from "../games/mahjong/render/three-table.js";
 import { planarTileJitter } from "../games/mahjong/render/three-tile-jitter.js";
 import { ThreeAnimationController } from "../games/mahjong/render/three-animation-controller.js";
 import { MahjongPresentationController } from "../games/mahjong/presentation-controller.js";
@@ -263,6 +267,7 @@ test("mahjong tile geometry follows real parlor tile proportions", () => {
 });
 
 test("mahjong table is a perspective 3D surface that surrounds every tile zone", () => {
+  assert.equal(TABLETOP_SHADOW_OPACITY, 0.24);
   assert.deepEqual(TABLE_GEOMETRY, {
     width: 28,
     depth: 25,
@@ -292,7 +297,13 @@ test("mahjong table is a perspective 3D surface that surrounds every tile zone",
   );
   assert.match(renderer, /overhead\.position\.set\(0, 16, -1\.5\)/);
   assert.match(renderer, /overhead\.target\.position\.set\(0, 0, -1\.5\)/);
-  assert.doesNotMatch(renderer, /ShadowMaterial|addShadowReceiver/);
+  const table = readFileSync(
+    new URL("../games/mahjong/render/three-table.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(table, /new ShadowMaterial\(\{/);
+  assert.match(table, /shadowCatcher\.receiveShadow = true/);
+  assert.match(table, /this\.group\.add\(felt, shadowCatcher\)/);
 });
 
 test("mahjong restores its canvas overlay after mobile suspension", () => {
@@ -978,12 +989,12 @@ test("mahjong shows oversized non-perspective callouts for claims, riichi, and w
   assert.match(callout, /MAX_CONCURRENT_CALLOUTS = 3/);
   assert.match(callout, /ACTION_CALLOUT_SCALE = 0\.78/);
   assert.match(callout, /this\.group\.add\(\.\.\.this\.slots/);
-  assert.match(callout, /this\.show\(calloutEvents\.map\(actionCalloutDescriptor\)\)/);
-  assert.match(callout, /for \(const \{ descriptor, slot \} of active\)/);
-  assert.equal(
-    (callout.match(/this\.animations\.play\(\{/g) ?? []).length,
-    1,
+  assert.match(
+    callout,
+    /this\.show\(calloutEvents\.map\(actionCalloutDescriptor\)\)/,
   );
+  assert.match(callout, /for \(const \{ descriptor, slot \} of active\)/);
+  assert.equal((callout.match(/this\.animations\.play\(\{/g) ?? []).length, 1);
   assert.match(callout, /new CanvasTexture\(canvas\)/);
   assert.match(callout, /new Sprite\(material\)/);
   assert.match(callout, /Playweft Mahjong Xingshu/);
@@ -1182,6 +1193,15 @@ test("mahjong result pages separate winners before the score summary", () => {
   ]);
 });
 
+test("mahjong result melds use the same physical tile scale as the hand", () => {
+  const layout = resultMeldDisplayLayout(
+    { kind: "pon", tiles: [14, 14, 14], fromIndex: 2 },
+    3,
+  );
+  assert.equal(layout.entries.length, 3);
+  assert.ok(layout.span >= TILE_SIZE.width * 3);
+});
+
 test("mahjong centre-aligns the shorter local perspective reveal before it falls", () => {
   const eighth = presentedHandTransform("bottom", 7, 13);
   assert.equal(eighth.x, 0);
@@ -1199,7 +1219,10 @@ test("mahjong centre-aligns the shorter local perspective reveal before it falls
     camera.updateMatrixWorld(true);
     camera.updateProjectionMatrix();
     const yCoordinates = tileCorners.map((corner) => {
-      const projected = corner.clone().applyMatrix4(object.matrixWorld).project(camera);
+      const projected = corner
+        .clone()
+        .applyMatrix4(object.matrixWorld)
+        .project(camera);
       return ((1 - projected.y) * MAHJONG_VIEWPORT.height) / 2;
     });
     const top = Math.min(...yCoordinates);
@@ -1246,20 +1269,14 @@ test("mahjong centre-aligns the shorter local perspective reveal before it falls
   const hinge = new Group();
   hinge.position.z = hingeTransform.pivotZ;
   const perspectiveTile = new Group();
-  perspectiveTile.position.set(
-    0,
-    hingeTransform.tileY,
-    hingeTransform.tileZ,
-  );
+  perspectiveTile.position.set(0, hingeTransform.tileY, hingeTransform.tileZ);
   hinge.add(perspectiveTile);
   slot.add(hinge);
 
   const overlayBounds = screenBounds(overlayTile, overlayCamera);
   const perspectiveBounds = screenBounds(perspectiveTile, camera);
   assert.ok(perspectiveBounds.height < overlayBounds.height);
-  assert.ok(
-    Math.abs(perspectiveBounds.centre - overlayBounds.centre) < 0.001,
-  );
+  assert.ok(Math.abs(perspectiveBounds.centre - overlayBounds.centre) < 0.001);
   assert.equal(
     presentedHandTransform("bottom", 7, 13, { covered: true }).z,
     LOCAL_COVERED_HAND_Z,
@@ -2397,7 +2414,7 @@ test("mahjong shuffles behind a synchronized waiting-scene exit", () => {
   );
   assert.ok(
     main.indexOf("createLocalLuaGame({") <
-      main.indexOf('elements.setup.hidden = true;'),
+      main.indexOf("elements.setup.hidden = true;"),
   );
 });
 

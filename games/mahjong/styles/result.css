@@ -17,9 +17,16 @@
   position: absolute;
   z-index: -1;
   inset: -48px;
-  background:
-    radial-gradient(circle at 50% 0, rgba(83, 136, 109, 0.34), transparent 46%),
-    linear-gradient(145deg, #0e2a25, #031211 72%);
+  background-image:
+    radial-gradient(
+      circle at 50% 0,
+      rgba(103, 157, 128, 0.18),
+      transparent 48%
+    ),
+    linear-gradient(145deg, rgba(5, 34, 29, 0.18), rgba(1, 15, 14, 0.44)),
+    var(--result-tablecloth-image, url("../assets/felt-skin-moonwave-v1.jpg"));
+  background-position: center;
+  background-size: cover;
   content: "";
   transform-origin: center;
   animation: result-backdrop-grow 420ms cubic-bezier(0.2, 0.78, 0.25, 1) both;
@@ -44,6 +51,9 @@
   width: 100%;
   height: 100%;
   align-content: start;
+  grid-template-columns: auto auto;
+  column-gap: 32px;
+  justify-content: center;
   justify-items: center;
   padding: 54px 72px 48px;
   will-change: opacity, transform;
@@ -129,15 +139,19 @@
 
 .result-content > span {
   color: var(--gold);
-  font-size: 0.9rem;
+  font-size: 44px;
   font-weight: 850;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.08em;
 }
 
 .result-content > strong {
-  margin-top: 8px;
-  font-family: "Songti SC", "Noto Serif SC", serif;
+  margin-top: 0;
   font-size: 44px;
+}
+
+.result-content
+  > :is(p, .result-hands, .result-yaku, .result-delta, .result-footer) {
+  grid-column: 1 / -1;
 }
 
 .result-content > p {
@@ -155,6 +169,7 @@
 }
 
 .result-hand {
+  position: relative;
   display: grid;
   min-width: 0;
   gap: 4px;
@@ -164,6 +179,32 @@
   color: rgba(241, 211, 139, 0.9);
   font-size: 0.88rem;
   text-align: left;
+}
+
+.result-hand-3d {
+  display: none;
+  width: 100%;
+  height: 128px;
+}
+
+.result-hands.is-three-rendered .result-hand-3d {
+  display: block;
+}
+
+.result-hands.is-three-rendered .result-hand-tiles {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  padding: 0;
+  clip-path: inset(50%);
+}
+
+.result-hand-canvas {
+  display: block;
+  width: 100%;
+  height: 128px;
+  pointer-events: none;
 }
 
 .result-hand-tiles {
@@ -322,7 +363,7 @@
   min-height: 42px;
   align-items: flex-end;
   justify-content: flex-end;
-  gap: 16px;
+  gap: 28px;
 }
 
 .result-value {
@@ -337,9 +378,10 @@
   display: inline-flex;
   align-items: baseline;
   color: #fff;
-  font-family: "Roboto Slab", ui-monospace, monospace;
-  font-size: 52px;
+  font-family: "Playweft Mahjong Xingshu", "FZKai-Z03", STKaiti, KaiTi, serif;
+  font-size: 64px;
   font-weight: 850;
+  font-synthesis: weight;
   line-height: 1;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.48);
 }
@@ -347,7 +389,7 @@
 .result-total-unit {
   display: inline-block;
   margin-left: 2px;
-  font-size: 25px;
+  font-size: 28px;
   font-weight: 800;
   line-height: 1;
 }
@@ -356,5 +398,5 @@
   border-color: #e0bd67;
   background: linear-gradient(145deg, #efd487, #b98938);
   color: #34240d;
-  font-size: 18px;
+  font-size: 40px;
 }

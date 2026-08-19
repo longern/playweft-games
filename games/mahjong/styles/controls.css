@@ -212,9 +212,9 @@
 }
 
 .result-panel button {
-  min-width: 80px;
+  min-width: 120px;
   min-height: 42px;
-  padding: 10px 18px;
+  padding: 2px 20px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 999px;
   box-shadow: 0 5px 14px rgba(0, 0, 0, 0.24);

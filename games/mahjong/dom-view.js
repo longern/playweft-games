@@ -663,6 +663,9 @@ function createResultHand(
 
   const tiles = document.createElement("div");
   tiles.className = "result-hand-tiles";
+  const threeViewport = document.createElement("div");
+  threeViewport.className = "result-hand-3d";
+  threeViewport.setAttribute("aria-hidden", "true");
   const concealed = asArray(state.revealedHands?.[playerId]).map(
     normalizeRevealedTile,
   );
@@ -687,7 +690,7 @@ function createResultHand(
     .map((meld) => createResultMeld(meld, winnerIndex, doraCounts))
     .reverse();
   tiles.append(...resultMelds);
-  row.append(tiles);
+  row.append(threeViewport, tiles);
   return row;
 }
 

@@ -72,6 +72,29 @@ test("Mahjong deals one deterministic complete 136-tile set", async () => {
   assert.equal(result.deterministic, true);
 });
 
+test("Mahjong draws seats deterministically and can assign every initial wind", async () => {
+  const result = await runScenario(`
+    local first = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 42 } })
+    local second = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 42 } })
+    local east_seats = {}
+    for seed = 1, 32 do
+      local state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = seed } })
+      east_seats[state.dealerIndex] = true
+    end
+    local covered = 0
+    for seat = 1, 4 do if east_seats[seat] then covered = covered + 1 end end
+    result = {
+      dealer = first.dealerIndex,
+      deterministic = first.dealerIndex == second.dealerIndex,
+      covered = covered,
+    }
+  `);
+
+  assert.ok(result.dealer >= 1 && result.dealer <= 4);
+  assert.equal(result.deterministic, true);
+  assert.equal(result.covered, 4);
+});
+
 test("Mahjong view reveals only the viewer's concealed hand", async () => {
   const result = await runScenario(`
     state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 7 } })
@@ -83,7 +106,7 @@ test("Mahjong view reveals only the viewer's concealed hand", async () => {
   assert.equal(result.ownHand.length, 13);
   assert.equal(result.handCounts.p1, 13);
   assert.equal(result.handCounts.p2, 13);
-  assert.equal(result.drawnPlayerIndex, 1);
+  assert.equal(result.drawnPlayerIndex, result.dealerIndex);
   assert.equal("hands" in result, false);
   assert.deepEqual(result.legalActions.claims, {});
 });
@@ -665,6 +688,7 @@ test("Mahjong riichi costs 1000 points and own discards cause furiten", async ()
 test("Mahjong scores yaku, han and fu with conserved tsumo payments", async () => {
   const result = await runScenario(`
     state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 77 } })
+    state.dealerIndex = 1
     function ids(types)
       local copies, tiles = {}, {}
       for _, kind in ipairs(types) do
@@ -992,6 +1016,7 @@ test("Mahjong broadcasts multiple ron only after every claimant responds", async
 test("Mahjong supports nine-terminals abortive draw and keeps the dealer", async () => {
   const result = await runScenario(`
     state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 999 } })
+    state.dealerIndex = 1
     state.hands.p1 = { 1,33,37,69,73,105,109,113,117,121,125,129,133 }
     state.drawnTile, state.turnIndex = 134, 1
     local legal = view(state, {}, { viewer = { id = "p1", seat = 1 } }).state.legalActions
@@ -1056,6 +1081,7 @@ test("Mahjong applies yakuman responsibility payment and bankruptcy ending", asy
 test("Mahjong awards nagashi mangan instead of noten payments", async () => {
   const result = await runScenario(`
     state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 4242 } })
+    state.dealerIndex = 1
     state.wall = {}
     state.hands.p1 = { 1,5,9,13,17,21,25,29,33,37,41,45,49 }
     state.turnIndex, state.drawnTile = 1, 109
@@ -1121,11 +1147,13 @@ test("Mahjong supports agari-yame and East-match extension", async () => {
       state.firstTurn[player_id] = false
     end
     yame = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 61, settings = { matchType = "east" } } })
+    yame.dealerIndex = 1
     yame.handNumber, yame.scores[1] = 4, 31000
     winning_hand(yame, "p1", 1)
     yame = on_action(yame, { type = "tsumo" }, { actor = { id = "p1" } }).state
 
     extension = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 62, settings = { matchType = "east" } } })
+    extension.dealerIndex = 1
     extension.handNumber = 4
     extension.scores = { 20000, 20000, 20000, 20000 }
     winning_hand(extension, "p2", 2)
@@ -1442,11 +1470,13 @@ test("Mahjong scores first-turn, nine-gates, and seven-pairs yakuman cleanly", a
       return result
     end
     heaven = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 806 } })
+    heaven.dealerIndex = 1
     heaven.hands.p1 = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21, 26,26 })
     heaven.drawnTile, heaven.turnIndex = ids({ 22 })[1], 1
     local heaven_score = score_hand(heaven, 1, heaven.drawnTile, "tsumo")
 
     earth = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 807 } })
+    earth.dealerIndex = 1
     earth.hands.p2 = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21, 26,26 })
     earth.drawnTile, earth.turnIndex = ids({ 22 })[1], 2
     local earth_score = score_hand(earth, 2, earth.drawnTile, "tsumo")
@@ -1485,6 +1515,7 @@ test("Mahjong scores first-turn, nine-gates, and seven-pairs yakuman cleanly", a
 test("Mahjong applies pao only to the liable yakuman and leaves honba to the discarder", async () => {
   const result = await runScenario(`
     state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = 810 } })
+    state.dealerIndex = 1
     state.honba = 1
     state.pao.p1.daisangen = 2
     local score = {

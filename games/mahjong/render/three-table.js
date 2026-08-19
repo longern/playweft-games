@@ -7,6 +7,7 @@ import {
   MeshPhysicalMaterial,
   PlaneGeometry,
   RepeatWrapping,
+  ShadowMaterial,
   SRGBColorSpace,
 } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
@@ -19,6 +20,11 @@ export const TABLE_GEOMETRY = Object.freeze({
   railHeight: 0.58,
   baseHeight: 0.42,
 });
+
+// A dedicated shadow catcher keeps tabletop contact shadows independent from
+// the felt's ambient and emissive lighting. This is the maximum black opacity
+// of a fully occluded point under the overhead lamp.
+export const TABLETOP_SHADOW_OPACITY = 0.24;
 
 export const DEFAULT_TABLE_THEME = Object.freeze({
   feltBase: "#06483f",
@@ -77,6 +83,12 @@ export class ThreeMahjongTable {
       clearcoat: 0.018,
       clearcoatRoughness: 0.94,
     }));
+    const tabletopShadowMaterial = this.trackMaterial(new ShadowMaterial({
+      color: 0x000000,
+      opacity: TABLETOP_SHADOW_OPACITY,
+      transparent: true,
+      depthWrite: false,
+    }));
     this.feltMaterial = feltMaterial;
     this.defaultFeltTexture = feltTexture;
     this.customFeltTexture = null;
@@ -102,7 +114,7 @@ export class ThreeMahjongTable {
     }));
 
     this.addBase(baseMaterial);
-    this.addFelt(feltMaterial);
+    this.addFelt(feltMaterial, tabletopShadowMaterial);
     this.addRails(woodMaterial, trimMaterial);
   }
 
@@ -123,7 +135,7 @@ export class ThreeMahjongTable {
     this.group.add(base);
   }
 
-  addFelt(material) {
+  addFelt(material, shadowMaterial) {
     const { width, depth, centreZ, railWidth } = TABLE_GEOMETRY;
     const geometry = this.trackGeometry(new PlaneGeometry(
       width - railWidth * 1.25,
@@ -135,8 +147,13 @@ export class ThreeMahjongTable {
     felt.name = "table-felt";
     felt.rotation.x = -Math.PI / 2;
     felt.position.set(0, 0.012, centreZ);
-    felt.receiveShadow = true;
-    this.group.add(felt);
+    const shadowCatcher = new Mesh(geometry, shadowMaterial);
+    shadowCatcher.name = "tabletop-shadow-catcher";
+    shadowCatcher.rotation.x = -Math.PI / 2;
+    shadowCatcher.position.set(0, 0.016, centreZ);
+    shadowCatcher.receiveShadow = true;
+    shadowCatcher.renderOrder = 2;
+    this.group.add(felt, shadowCatcher);
   }
 
   addRails(woodMaterial, trimMaterial) {

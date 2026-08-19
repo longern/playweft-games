@@ -99,13 +99,13 @@
 .setup-route-east {
   top: 141px;
   left: 72px;
-  width: 441px;
+  width: 443px;
   height: 133px;
-  clip-path: polygon(0 4%, 84% 0, 100% 48%, 84% 96%, 1% 100%);
+  clip-path: polygon(0 4%, 84% 0, 100% 48%, 85% 88%, 1% 100%);
 }
 
 .setup-route-east::after {
-  clip-path: polygon(0 4%, 84% 0, 100% 48%, 84% 96%, 1% 100%);
+  clip-path: polygon(0 4%, 84% 0, 100% 48%, 85% 88%, 1% 100%);
 }
 
 .setup-route-east span {
@@ -143,11 +143,11 @@
   }
 
   .setup-route-east:hover span {
-    transform: perspective(800px) rotateY(-1.5deg) rotateZ(-1.9deg) scale(1.025);
+    transform: perspective(800px) rotateY(-1.5deg) rotateZ(-1.9deg);
   }
 
   .setup-route-south:hover span {
-    transform: perspective(800px) rotateY(5deg) rotateZ(1.6deg) scaleX(0.98) scale(1.025);
+    transform: perspective(800px) rotateY(5deg) rotateZ(1.6deg) scaleX(0.98);
   }
 }
 

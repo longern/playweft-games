@@ -954,6 +954,12 @@ local function new_match(players, names, seed, settings)
     honba = 0, riichiSticks = 0, scores = { 25000, 25000, 25000, 25000 },
     matchEnded = false, rules = rule_settings(settings),
   }
+  -- Drawing the east seat is equivalent to drawing all four winds: once east
+  -- is known, south, west, and north follow clockwise around the fixed table.
+  -- Derive the draw from the match seed without advancing the tile-shuffle RNG,
+  -- so seat assignment and wall order remain independent reproducible results.
+  local seat_draw = (state.seed * RANDOM_MULTIPLIER) % RANDOM_MODULUS
+  state.dealerIndex = (seat_draw % PLAYER_COUNT) + 1
   deal(state)
   return state
 end
