@@ -1027,35 +1027,43 @@ async function continueResult() {
   const detailCount = resultDetailPageCount(state);
   resultPageAnimating = true;
   elements.rematch.disabled = true;
-  if (resultPageIndex < detailCount) {
-    const outgoing = elements.resultContent.cloneNode(true);
-    for (const node of [outgoing, ...outgoing.querySelectorAll("[id]")]) {
-      node.removeAttribute("id");
+  try {
+    if (resultPageIndex < detailCount) {
+      const outgoing = elements.resultContent.cloneNode(true);
+      for (const node of [outgoing, ...outgoing.querySelectorAll("[id]")]) {
+        node.removeAttribute("id");
+      }
+      outgoing.classList.add("is-page-leaving");
+      elements.resultStage.append(outgoing);
+      resultPageIndex += 1;
+      domView.renderResult(state, playerName, true, resultPageIndex);
+      elements.resultContent.classList.add("is-page-entering");
+      await waitForAnimation(
+        elements.resultContent,
+        "result-page-enter",
+        RESULT_PAGE_TRANSITION_MS,
+      );
+      return;
     }
-    outgoing.classList.add("is-page-leaving");
-    elements.resultStage.append(outgoing);
-    resultPageIndex += 1;
-    domView.renderResult(state, playerName, true, resultPageIndex);
-    elements.resultContent.classList.add("is-page-entering");
-    await waitForAnimation(
-      elements.resultContent,
-      "result-page-enter",
-      RESULT_PAGE_TRANSITION_MS,
-    );
-    outgoing.remove();
-    elements.resultContent.classList.remove("is-page-entering");
-    elements.rematch.disabled = false;
-    resultPageAnimating = false;
-    return;
-  }
 
-  elements.result.classList.add("is-exiting");
-  await waitForAnimation(
-    elements.result,
-    "result-screen-exit",
-    RESULT_EXIT_DURATION_MS,
-  );
-  dispatch({ type: state.matchEnded ? "new_match" : "next_hand" });
+    elements.result.classList.add("is-exiting");
+    await waitForAnimation(
+      elements.result,
+      "result-screen-exit",
+      RESULT_EXIT_DURATION_MS,
+    );
+    dispatch({ type: state.matchEnded ? "new_match" : "next_hand" });
+  } finally {
+    resultPageAnimating = false;
+    elements.rematch.disabled = false;
+    elements.resultContent.classList.remove("is-page-entering");
+    elements.resultStage
+      .querySelectorAll(".is-page-leaving")
+      .forEach((page) => page.remove());
+    if (state?.phase === "hand_ended") {
+      elements.result.classList.remove("is-exiting");
+    }
+  }
 }
 
 function syncResultPage(current) {
@@ -1073,6 +1081,7 @@ function syncResultPage(current) {
   resultPageKey = key;
   resultPageIndex = 0;
   resultPageAnimating = false;
+  elements.rematch.disabled = false;
   elements.result.classList.remove("is-exiting");
   elements.resultContent.classList.remove("is-page-entering");
   elements.resultStage
