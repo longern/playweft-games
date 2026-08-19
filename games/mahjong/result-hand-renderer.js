@@ -20,6 +20,7 @@ import {
   asArray,
   doraTypeCounts,
   resultDetailPageCount,
+  resultBasePaymentTotal,
 } from "./game-format.js";
 import { MELD_GROUP_GAP, TILE_SIZE } from "./render/three-layout.js";
 import {
@@ -46,7 +47,7 @@ const MELD_GAP = 0.34;
 const VIEW_ASPECT = VIEWPORT.width / VIEWPORT.height;
 const VIEW_WIDTH = 14.4;
 const CAMERA_TARGET = new Vector3(0, 0.08, 0.8);
-const RESULT_HAND_Z = -0.95;
+const RESULT_HAND_Z = -1.25;
 const RESULT_PAPER_Z = 3.45;
 
 export class MahjongResultHandRenderer {
@@ -239,7 +240,14 @@ export class MahjongResultHandRenderer {
     this.yakuHost?.classList.add("is-paper-rendered");
     this.clearTiles();
     this.buildHand(state, playerId, winnerIndex);
-    this.paper.render(asArray(result.yaku));
+    this.paper.render({
+      yaku: asArray(result.yaku),
+      winnerName: state.playerNames?.[winnerIndex - 1] || `玩家${winnerIndex}`,
+      winType: state.winType,
+      fu: result.fu,
+      han: result.han,
+      total: resultBasePaymentTotal(state, result),
+    });
     this.drawFrame();
   }
 

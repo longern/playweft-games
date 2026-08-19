@@ -1135,31 +1135,26 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   assert.match(html, /id="result-hands"[\s\S]*?class="result-hands"/);
   assert.match(
     html,
-    /<section[\s\S]*?id="result-panel"[^>]*>\s*<div class="result-page-stage">\s*<div class="result-page-track">\s*<div class="result-content">/,
+    /<section[\s\S]*?id="result-panel"[^>]*>\s*<div class="result-page-stage">\s*<div class="result-page-track">\s*<div id="result-detail-content" class="result-content result-detail-content">/,
   );
   assert.ok(
     html.indexOf('id="result-panel"') > html.indexOf('class="player-dock"'),
   );
   assert.match(
     html,
-    /class="result-footer"[\s\S]*id="result-value" class="result-value" hidden[\s\S]*id="result-total" class="result-total" hidden[\s\S]*id="rematch-button"/,
+    /id="result-score-content" class="result-content result-score-content" hidden[\s\S]*id="result-heading"[\s\S]*id="result-score-list" class="result-score-list"[\s\S]*class="result-footer"[\s\S]*id="rematch-button"/,
   );
   assert.match(html, /id="rematch-button"[^>]*>继续<\/button>/);
   assert.doesNotMatch(view, /你赢了/);
   assert.match(
     html,
-    /id="result-yaku" class="result-yaku"><\/div>\s*<b id="result-delta" class="result-delta"><\/b>\s*<div class="result-footer">/s,
+    /id="result-yaku" class="result-yaku"><\/div>\s*<\/div>\s*<div id="result-score-content"[\s\S]*id="result-score-delta" class="result-delta"><\/b>/s,
   );
   assert.match(view, /this\.renderResultScores\(state, playerName\)/);
-  assert.doesNotMatch(view, /elements\.resultYaku\.append\(delta\)/);
-  assert.match(view, /elements\.resultValue\.textContent = value/);
-  assert.match(view, /elements\.resultSummary\.hidden = true/);
-  assert.match(
-    view,
-    /const basePaymentTotal = resultBasePaymentTotal\(state, result\)/,
-  );
-  assert.match(view, /unit\.className = "result-total-unit"/);
-  assert.match(view, /unit\.textContent = "点"/);
+  assert.match(view, /elements\.resultDetailContent\.hidden = false/);
+  assert.match(view, /elements\.resultScoreContent\.hidden = false/);
+  assert.doesNotMatch(view, /elements\.resultScoreList\.append\(delta\)/);
+  assert.doesNotMatch(html, /id="result-value"|id="result-total"/);
   assert.deepEqual(
     exhaustiveDrawPresentation({
       phase: "hand_ended",

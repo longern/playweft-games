@@ -11,7 +11,6 @@ import {
   partitionClaimActions,
   riverDisplayEntries,
   roundLabel,
-  resultBasePaymentTotal,
   resultDetailPageCount,
   resultScoreRows,
   seatWind,
@@ -547,6 +546,8 @@ export class MahjongDomView {
       return;
     }
 
+    elements.resultDetailContent.hidden = false;
+    elements.resultScoreContent.hidden = true;
     const results = asArray(state.results).length
       ? asArray(state.results)
       : [state.result ?? {}];
@@ -557,34 +558,12 @@ export class MahjongDomView {
       Number(state.winnerIndex) ||
       1;
     const winnerName = playerDisplayName(state, winnerIndex, playerName);
-    elements.resultKicker.textContent =
-      state.winType === "tsumo"
-        ? "自摸"
-        : state.winType === "nagashi"
-          ? "流局"
-          : "和";
-    elements.resultTitle.textContent = winnerName;
-    const value = result.limit || `${result.han ?? 0} 番 ${result.fu ?? 0} 符`;
-    elements.resultSummary.textContent = "";
-    elements.resultSummary.hidden = true;
-    elements.resultValue.textContent = value;
-    elements.resultValue.hidden = false;
-    const basePaymentTotal = resultBasePaymentTotal(state, result);
-    elements.resultTotal.replaceChildren();
-    if (basePaymentTotal) {
-      const unit = document.createElement("small");
-      unit.className = "result-total-unit";
-      unit.textContent = "点";
-      elements.resultTotal.append(basePaymentTotal, unit);
-    }
-    elements.resultTotal.hidden = !basePaymentTotal;
-    elements.resultHands.hidden = state.winType === "nagashi";
-    elements.resultHands.replaceChildren(
+    elements.resultDetailHands.hidden = state.winType === "nagashi";
+    elements.resultDetailHands.replaceChildren(
       createResultHand(state, winnerIndex, winnerName, false, this.doraCounts),
     );
-    elements.resultYaku.classList.remove("is-score-summary");
-    elements.resultYaku.hidden = false;
-    elements.resultYaku.replaceChildren(
+    elements.resultDetailYaku.hidden = false;
+    elements.resultDetailYaku.replaceChildren(
       ...asArray(result.yaku).map((yaku) => {
         const item = document.createElement("span");
         const name = document.createElement("i");
@@ -595,12 +574,12 @@ export class MahjongDomView {
         return item;
       }),
     );
-    elements.resultDelta.textContent = "";
-    elements.resultDelta.hidden = true;
   }
 
   renderResultScores(state, playerName) {
     const { elements } = this;
+    elements.resultDetailContent.hidden = true;
+    elements.resultScoreContent.hidden = false;
     elements.resultKicker.textContent = state.draw ? "流局结算" : "本局结算";
     elements.resultTitle.textContent = "点数结算";
     const summary = state.draw
@@ -610,17 +589,9 @@ export class MahjongDomView {
         : "";
     elements.resultSummary.textContent = summary;
     elements.resultSummary.hidden = !summary;
-    elements.resultHands.replaceChildren();
-    elements.resultHands.hidden = true;
-    elements.resultValue.textContent = "";
-    elements.resultValue.hidden = true;
-    elements.resultTotal.textContent = "";
-    elements.resultTotal.hidden = true;
-    elements.resultDelta.textContent = "";
-    elements.resultDelta.hidden = true;
-    elements.resultYaku.classList.add("is-score-summary");
-    elements.resultYaku.hidden = false;
-    elements.resultYaku.replaceChildren(
+    elements.resultScoreDelta.textContent = "";
+    elements.resultScoreDelta.hidden = true;
+    elements.resultScoreList.replaceChildren(
       ...resultScoreRows(state, playerName).map((score) => {
         const item = document.createElement("span");
         item.className = "result-score-row";
@@ -791,15 +762,16 @@ function collectElements() {
     result: document.querySelector("#result-panel"),
     resultStage: document.querySelector(".result-page-stage"),
     resultTrack: document.querySelector(".result-page-track"),
-    resultContent: document.querySelector(".result-content"),
+    resultDetailContent: document.querySelector("#result-detail-content"),
+    resultScoreContent: document.querySelector("#result-score-content"),
+    resultHeading: document.querySelector("#result-heading"),
     resultKicker: document.querySelector("#result-kicker"),
     resultTitle: document.querySelector("#result-title"),
     resultSummary: document.querySelector("#result-summary"),
-    resultValue: document.querySelector("#result-value"),
-    resultTotal: document.querySelector("#result-total"),
-    resultHands: document.querySelector("#result-hands"),
-    resultYaku: document.querySelector("#result-yaku"),
-    resultDelta: document.querySelector("#result-delta"),
+    resultDetailHands: document.querySelector("#result-hands"),
+    resultDetailYaku: document.querySelector("#result-yaku"),
+    resultScoreList: document.querySelector("#result-score-list"),
+    resultScoreDelta: document.querySelector("#result-score-delta"),
     rematch: document.querySelector("#rematch-button"),
     setup: document.querySelector("#setup-panel"),
     opponentHands: {

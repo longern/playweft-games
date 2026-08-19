@@ -17,16 +17,17 @@ const PAPER_EDGE_LIFT = 0.024;
 const PAPER_CORNER_LIFT = 0.065;
 const PAPER_BUMP_SCALE = 0.004;
 const PAPER_MARGIN_X = 54;
-const PAPER_MARGIN_Y = 72;
-const PAPER_ROW_HEIGHT = 68;
-const PAPER_COLUMN_GAP = 64;
+const PAPER_HEADING_Y = 76;
+const PAPER_TABLE_TOP = 120;
+const PAPER_TABLE_BOTTOM = 396;
+const PAPER_SCORE_TOP = 416;
+const PAPER_SCORE_HEIGHT = 58;
 const PAPER_TEXTURE_SCALE = 2;
 const PAPER_TEXT_SIZE = 32;
-const PAPER_TEXT_FONT =
-  `700 ${PAPER_TEXT_SIZE}px system-ui, -apple-system, BlinkMacSystemFont, `
-  + '"Segoe UI", "Microsoft YaHei", sans-serif';
 const PAPER_TEXT_COLOR = "#1d1c18";
 const PAPER_VALUE_COLOR = "#173f61";
+const PAPER_GRID_COLOR = "rgba(78, 96, 102, 0.3)";
+const PAPER_GRID_EDGE_COLOR = "rgba(78, 96, 102, 0.38)";
 export class MahjongResultPaper {
   constructor(maxAnisotropy = 1) {
     this.destroyed = false;
@@ -61,7 +62,14 @@ export class MahjongResultPaper {
     return this.paper;
   }
 
-  render(yaku) {
+  render({
+    yaku = [],
+    winnerName = "",
+    winType = "",
+    fu = 0,
+    han = 0,
+    total = 0,
+  } = {}) {
     const width = PAPER_TEXTURE_VIEWPORT.width * PAPER_TEXTURE_SCALE;
     const height = PAPER_TEXTURE_VIEWPORT.height * PAPER_TEXTURE_SCALE;
     const canvas = this.paperTextureCanvas;
@@ -75,24 +83,10 @@ export class MahjongResultPaper {
 
     paintPaperSurface(context, logicalWidth, logicalHeight);
 
-    context.font = PAPER_TEXT_FONT;
     context.textBaseline = "middle";
-    const columnWidth =
-      (logicalWidth - PAPER_MARGIN_X * 2 - PAPER_COLUMN_GAP) / 2;
-    yaku.forEach((item, index) => {
-      const column = index % 2;
-      const row = Math.floor(index / 2);
-      const left =
-        PAPER_MARGIN_X + column * (columnWidth + PAPER_COLUMN_GAP);
-      const baseline = PAPER_MARGIN_Y + row * PAPER_ROW_HEIGHT + 10;
-      const value = item.han >= 13 ? "役满" : `${item.han ?? 0}番`;
-      context.fillStyle = PAPER_TEXT_COLOR;
-      context.textAlign = "left";
-      context.fillText(item.name ?? "", left, baseline);
-      context.fillStyle = PAPER_VALUE_COLOR;
-      context.textAlign = "right";
-      context.fillText(value, left + columnWidth, baseline);
-    });
+    drawResultHeading(context, logicalWidth, winnerName, winType);
+    drawYakuTable(context, yaku, logicalWidth);
+    drawResultScore(context, logicalWidth, { fu, han, total });
     this.paperTexture.needsUpdate = true;
     this.paper.visible = true;
   }
@@ -110,6 +104,183 @@ export class MahjongResultPaper {
     this.paperTexture?.dispose();
     this.paperSurfaceTexture?.dispose();
   }
+}
+
+function drawResultScore(context, width, { fu, han, total }) {
+  const fields = [
+    { value: fu, unit: "符", lineWidth: 104, numberSize: 30 },
+    { value: han, unit: "番", lineWidth: 104, numberSize: 30 },
+    { value: total, unit: "点", lineWidth: 176, numberSize: 46 },
+  ];
+  const unitSize = 22;
+  const gap = 34;
+  context.font = paperFont(unitSize);
+  const unitWidth = context.measureText("点").width;
+  const groupWidth = fields.reduce(
+    (sum, field) => sum + field.lineWidth + unitWidth + 10,
+    gap * (fields.length - 1),
+  );
+  let left = (width - groupWidth) / 2;
+  const lineY = PAPER_SCORE_TOP + PAPER_SCORE_HEIGHT - 10;
+
+  context.textBaseline = "alphabetic";
+  fields.forEach((field, index) => {
+    const lineRight = left + field.lineWidth;
+    context.strokeStyle = "rgba(29, 28, 24, 0.72)";
+    context.lineWidth = 1.15;
+    context.beginPath();
+    context.moveTo(left, lineY);
+    context.lineTo(lineRight, lineY);
+    context.stroke();
+
+    context.fillStyle = PAPER_TEXT_COLOR;
+    context.textAlign = "center";
+    context.font = paperNumberFont(field.numberSize);
+    context.fillText(String(field.value ?? 0), left + field.lineWidth / 2, lineY - 6);
+
+    context.textAlign = "left";
+    context.font = paperFont(unitSize);
+    context.fillText(field.unit, lineRight + 10, lineY - 7);
+    left = lineRight + unitWidth + 10 + (index < fields.length - 1 ? gap : 0);
+  });
+  context.textBaseline = "middle";
+}
+
+function drawResultHeading(context, width, winnerName, winType) {
+  context.fillStyle = "rgba(42, 41, 36, 0.66)";
+  context.textAlign = "left";
+  context.font = paperFont(20);
+  context.fillText("和了人", PAPER_MARGIN_X, PAPER_HEADING_Y);
+
+  context.fillStyle = PAPER_TEXT_COLOR;
+  context.font = fittedPaperFont(
+    context,
+    String(winnerName),
+    380,
+    34,
+    20,
+  );
+  context.fillText(String(winnerName), PAPER_MARGIN_X + 102, PAPER_HEADING_Y);
+
+  const checkboxes = [
+    { label: "自摸", selected: winType === "tsumo" },
+    { label: "荣和", selected: winType === "ron" },
+  ];
+  const checkboxWidth = 116;
+  const start = width - PAPER_MARGIN_X - checkboxWidth * checkboxes.length;
+  checkboxes.forEach((checkbox, index) => {
+    drawResultCheckbox(
+      context,
+      start + checkboxWidth * index,
+      PAPER_HEADING_Y,
+      checkbox,
+    );
+  });
+}
+
+function drawResultCheckbox(context, x, y, { label, selected }) {
+  const size = 22;
+  const boxY = y - size / 2;
+  context.fillStyle = selected ? "rgba(43, 104, 116, 0.1)" : "rgba(75, 82, 79, 0.06)";
+  context.fillRect(x, boxY, size, size);
+  context.strokeStyle = selected ? PAPER_TEXT_COLOR : "rgba(75, 82, 79, 0.32)";
+  context.lineWidth = 1.35;
+  context.strokeRect(x + 0.7, boxY + 0.7, size - 1.4, size - 1.4);
+  if (selected) {
+    context.strokeStyle = PAPER_VALUE_COLOR;
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(x + 4.7, y);
+    context.lineTo(x + 9.1, y + 4.7);
+    context.lineTo(x + 17.5, y - 5.2);
+    context.stroke();
+  }
+  context.fillStyle = selected ? PAPER_TEXT_COLOR : "rgba(42, 41, 36, 0.42)";
+  context.textAlign = "left";
+  context.font = paperFont(20);
+  context.fillText(label, x + size + 10, y);
+}
+
+function drawYakuTable(context, yaku, width) {
+  const entries = yaku;
+  const groupCount = entries.length >= 11 ? 3 : 2;
+  const rowCount = Math.max(5, Math.ceil(entries.length / groupCount));
+  const tableWidth = width - PAPER_MARGIN_X * 2;
+  const tableHeight = PAPER_TABLE_BOTTOM - PAPER_TABLE_TOP;
+  const groupWidth = tableWidth / groupCount;
+  const rowHeight = tableHeight / rowCount;
+  const nameWidth = groupWidth * (groupCount === 2 ? 0.7 : 0.66);
+
+  context.lineCap = "butt";
+  context.strokeStyle = PAPER_GRID_EDGE_COLOR;
+  context.lineWidth = 1.25;
+  context.strokeRect(PAPER_MARGIN_X, PAPER_TABLE_TOP, tableWidth, tableHeight);
+
+  context.strokeStyle = PAPER_GRID_COLOR;
+  context.lineWidth = 0.9;
+  context.beginPath();
+  for (let row = 1; row < rowCount; row += 1) {
+    const y = PAPER_TABLE_TOP + row * rowHeight;
+    context.moveTo(PAPER_MARGIN_X, y);
+    context.lineTo(PAPER_MARGIN_X + tableWidth, y);
+  }
+  for (let column = 1; column < groupCount; column += 1) {
+    const x = PAPER_MARGIN_X + column * groupWidth;
+    context.moveTo(x, PAPER_TABLE_TOP);
+    context.lineTo(x, PAPER_TABLE_TOP + tableHeight);
+  }
+  for (let column = 0; column < groupCount; column += 1) {
+    const x = PAPER_MARGIN_X + column * groupWidth + nameWidth;
+    context.moveTo(x, PAPER_TABLE_TOP);
+    context.lineTo(x, PAPER_TABLE_TOP + tableHeight);
+  }
+  context.stroke();
+
+  const preferredNameSize = groupCount === 2 ? PAPER_TEXT_SIZE : 25;
+  const preferredValueSize = groupCount === 2 ? 29 : 23;
+  entries.forEach((item, index) => {
+    const column = index % groupCount;
+    const row = Math.floor(index / groupCount);
+    const left = PAPER_MARGIN_X + column * groupWidth;
+    const baseline = PAPER_TABLE_TOP + row * rowHeight + rowHeight / 2;
+    const value = item.han >= 13 ? "役满" : `${item.han ?? 0}番`;
+    const nameInset = groupCount === 2 ? 18 : 13;
+    const valueInset = groupCount === 2 ? 18 : 12;
+
+    context.fillStyle = PAPER_TEXT_COLOR;
+    context.textAlign = "right";
+    context.font = fittedPaperFont(
+      context,
+      String(item.name ?? ""),
+      nameWidth - nameInset * 2,
+      preferredNameSize,
+      17,
+    );
+    context.fillText(String(item.name ?? ""), left + nameWidth - nameInset, baseline);
+
+    context.fillStyle = PAPER_VALUE_COLOR;
+    context.textAlign = "right";
+    context.font = paperFont(preferredValueSize);
+    context.fillText(value, left + groupWidth - valueInset, baseline);
+  });
+}
+
+function paperFont(size) {
+  return `700 ${size}px system-ui, -apple-system, BlinkMacSystemFont, `
+    + '"Segoe UI", "Microsoft YaHei", sans-serif';
+}
+
+function paperNumberFont(size) {
+  return `700 ${size}px "Bradley Hand", "Segoe Print", "Chalkboard SE", cursive`;
+}
+
+function fittedPaperFont(context, text, maxWidth, preferredSize, minimumSize) {
+  for (let size = preferredSize; size > minimumSize; size -= 1) {
+    const font = paperFont(size);
+    context.font = font;
+    if (context.measureText(text).width <= maxWidth) return font;
+  }
+  return paperFont(minimumSize);
 }
 
 function createWarpedPaperGeometry(depth) {

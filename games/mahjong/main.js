@@ -239,10 +239,10 @@ const visualRenderer = new MahjongThreeRenderer(elements.stage, {
   },
 });
 const resultHandRenderer = new MahjongResultHandRenderer(
-  elements.resultContent,
+  elements.resultDetailContent,
   {
-    handsHost: elements.resultHands,
-    yakuHost: elements.resultYaku,
+    handsHost: elements.resultDetailHands,
+    yakuHost: elements.resultDetailYaku,
   },
 );
 const presentation = new MahjongPresentationController({
@@ -1293,7 +1293,8 @@ function isResultBlankSpace(target) {
     target === elements.result ||
     target === elements.resultStage ||
     target === elements.resultTrack ||
-    target === elements.resultContent
+    target === elements.resultDetailContent ||
+    target === elements.resultScoreContent
   );
 }
 
@@ -1310,8 +1311,8 @@ async function continueResult() {
   elements.rematch.disabled = true;
   try {
     if (resultPageIndex < detailCount) {
-      const outgoing = elements.resultContent.cloneNode(true);
-      copyCanvasBitmaps(elements.resultContent, outgoing);
+      const outgoing = elements.resultDetailContent.cloneNode(true);
+      copyCanvasBitmaps(elements.resultDetailContent, outgoing);
       for (const node of [outgoing, ...outgoing.querySelectorAll("[id]")]) {
         node.removeAttribute("id");
       }
