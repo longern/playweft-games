@@ -225,7 +225,13 @@ const visualRenderer = new MahjongThreeRenderer(elements.stage, {
     if (action) dispatch(action);
   },
 });
-const resultHandRenderer = new MahjongResultHandRenderer(elements.resultHands);
+const resultHandRenderer = new MahjongResultHandRenderer(
+  elements.resultContent,
+  {
+    handsHost: elements.resultHands,
+    yakuHost: elements.resultYaku,
+  },
+);
 const presentation = new MahjongPresentationController({
   onHandInsertionReady: renderCurrentState,
   onResultReady: refresh,

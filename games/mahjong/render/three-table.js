@@ -40,7 +40,6 @@ export class ThreeMahjongTable {
   constructor({
     anisotropy = 1,
     feltTexture,
-    feltBumpTexture = feltTexture,
     theme = DEFAULT_TABLE_THEME,
   } = {}) {
     this.group = new Group();
@@ -56,13 +55,6 @@ export class ThreeMahjongTable {
     feltTexture.wrapT = RepeatWrapping;
     feltTexture.repeat.set(1, 1);
     this.textures.push(feltTexture);
-    if (feltBumpTexture !== feltTexture) {
-      feltBumpTexture.anisotropy = anisotropy;
-      feltBumpTexture.wrapS = RepeatWrapping;
-      feltBumpTexture.wrapT = RepeatWrapping;
-      feltBumpTexture.repeat.set(2, 2);
-      this.textures.push(feltBumpTexture);
-    }
 
     const woodTexture = createWoodTexture(theme);
     woodTexture.anisotropy = anisotropy;
@@ -74,8 +66,6 @@ export class ThreeMahjongTable {
     const feltMaterial = this.trackMaterial(new MeshPhysicalMaterial({
       color: new Color("#edf2ec"),
       map: feltTexture,
-      bumpMap: feltBumpTexture,
-      bumpScale: 0.009,
       emissive: new Color("#104c40"),
       emissiveIntensity: 0.34,
       roughness: 0.93,

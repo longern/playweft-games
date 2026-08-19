@@ -286,7 +286,6 @@ test("mahjong table is a perspective 3D surface that surrounds every tile zone",
     /CAMERA_POSITION = Object\.freeze\(\{ x: 0, y: 15\.558, z: 15\.908 \}\)/,
   );
   assert.match(renderer, /felt-skin-moonwave-v1\.jpg\?url/);
-  assert.match(renderer, /felt-texture-v1\.jpg\?url/);
   assert.match(
     renderer,
     /new SpotLight\(0xffedcf, 62, 46, 0\.96, 0\.86, 1\.35\)/,

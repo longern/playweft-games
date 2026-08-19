@@ -17,7 +17,6 @@ import {
 } from "three";
 import tileFacesUrl from "./assets/tiles/riichi-faces.webp?url";
 import feltSkinUrl from "./assets/felt-skin-moonwave-v1.jpg?url";
-import feltTextureUrl from "./assets/felt-texture-v1.jpg?url";
 import { POSITIONS } from "./constants.js";
 import { MAHJONG_VIEWPORT } from "./fixed-viewport.js";
 import {
@@ -164,10 +163,9 @@ export class MahjongThreeRenderer {
       `400 300px "Playweft Mahjong Xingshu"`,
       "吃碰杠立直和自摸",
     );
-    const [faceAtlas, feltSkin, feltTexture] = await Promise.all([
+    const [faceAtlas, feltSkin] = await Promise.all([
       textureLoader.loadAsync(tileFacesUrl),
       textureLoader.loadAsync(feltSkinUrl),
-      textureLoader.loadAsync(feltTextureUrl),
     ]);
 
     this.addLighting();
@@ -175,7 +173,6 @@ export class MahjongThreeRenderer {
     this.table = new ThreeMahjongTable({
       anisotropy: Math.min(8, this.renderer.capabilities.getMaxAnisotropy()),
       feltTexture: feltSkin,
-      feltBumpTexture: feltTexture,
     });
     this.scene.add(this.table.group);
     this.dynamic = new Group();

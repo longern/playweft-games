@@ -16,11 +16,12 @@ import {
   WebGLRenderer,
 } from "three";
 import tileFacesUrl from "./assets/tiles/riichi-faces.webp?url";
-import { asArray, doraTypeCounts, resultDetailPageCount } from "./game-format.js";
 import {
-  MELD_GROUP_GAP,
-  TILE_SIZE,
-} from "./render/three-layout.js";
+  asArray,
+  doraTypeCounts,
+  resultDetailPageCount,
+} from "./game-format.js";
+import { MELD_GROUP_GAP, TILE_SIZE } from "./render/three-layout.js";
 import {
   RESULT_HAND_SHADOW_OPACITY,
   RESULT_MELD_SCALE,
@@ -28,26 +29,36 @@ import {
 } from "./render/result-hand-layout.js";
 import { ThreeTileFactory } from "./render/three-tile-factory.js";
 import {
+  MahjongResultPaper,
+  RESULT_PAPER_DEPTH,
+} from "./result-paper-renderer.js";
+import {
   RESULT_HAND_KEY_LIGHT_POSITION,
   resultHandCameraDistance,
   resultHandCameraPosition,
   resultHandVerticalFov,
 } from "./render/result-hand-camera.js";
 
-const VIEWPORT = Object.freeze({ width: 1080, height: 128 });
+const VIEWPORT = Object.freeze({ width: 1280, height: 720 });
 const TILE_GAP = 0.035;
 const WINNING_TILE_GAP = 0.24;
 const MELD_GAP = 0.34;
-const VIEW_PADDING = 1.15;
 const VIEW_ASPECT = VIEWPORT.width / VIEWPORT.height;
-const CAMERA_TARGET = new Vector3(0, 0.08, 0);
+const VIEW_WIDTH = 14.4;
+const CAMERA_TARGET = new Vector3(0, 0.08, 0.8);
+const RESULT_HAND_Z = -0.95;
+const RESULT_PAPER_Z = 3.45;
 
 export class MahjongResultHandRenderer {
-  constructor(host) {
+  constructor(host, { handsHost, yakuHost } = {}) {
     this.host = host;
+    this.handsHost = handsHost;
+    this.yakuHost = yakuHost;
     this.ready = false;
     this.destroyed = false;
     this.pendingRender = null;
+    this.lastRender = null;
+    this.contextLost = false;
     this.appearanceVersion = 0;
   }
 
@@ -65,29 +76,55 @@ export class MahjongResultHandRenderer {
     this.renderer.toneMappingExposure = 1.04;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFShadowMap;
-    this.renderer.domElement.className = "result-hand-canvas";
+    this.renderer.domElement.className = "result-scene-canvas";
     this.renderer.domElement.setAttribute("aria-hidden", "true");
+    this.onContextLost = (event) => {
+      event.preventDefault();
+      this.contextLost = true;
+    };
+    this.onContextRestored = () => {
+      this.contextLost = false;
+      if (this.lastRender) this.render(...this.lastRender);
+      else this.drawFrame();
+    };
+    this.renderer.domElement.addEventListener(
+      "webglcontextlost",
+      this.onContextLost,
+    );
+    this.renderer.domElement.addEventListener(
+      "webglcontextrestored",
+      this.onContextRestored,
+    );
 
     this.scene = new Scene();
     this.camera = new PerspectiveCamera(
       resultHandVerticalFov(VIEW_ASPECT),
       VIEW_ASPECT,
       0.1,
-      40,
+      60,
     );
-    const cameraPosition = resultHandCameraPosition();
+    const cameraPosition = resultHandCameraPosition(
+      resultHandCameraDistance(VIEW_WIDTH),
+    );
     this.camera.position.set(
       cameraPosition.x,
       cameraPosition.y,
-      cameraPosition.z,
+      cameraPosition.z + CAMERA_TARGET.z,
     );
     this.camera.up.set(0, 1, 0);
     this.camera.lookAt(CAMERA_TARGET);
 
     this.tiles = new Group();
+    this.tiles.position.z = RESULT_HAND_Z;
     this.scene.add(this.tiles);
     this.addLighting();
     this.addShadowPlane();
+
+    this.paper = new MahjongResultPaper(
+      this.renderer.capabilities.getMaxAnisotropy(),
+    );
+    this.paper.object3d.position.z = RESULT_PAPER_Z;
+    this.scene.add(this.paper.object3d);
 
     const atlas = await new TextureLoader().loadAsync(tileFacesUrl);
     atlas.anisotropy = Math.min(
@@ -124,7 +161,7 @@ export class MahjongResultHandRenderer {
   }
 
   addShadowPlane() {
-    this.shadowGeometry = new PlaneGeometry(30, 5);
+    this.shadowGeometry = new PlaneGeometry(30, RESULT_PAPER_DEPTH + 8);
     this.shadowMaterial = new ShadowMaterial({
       color: 0x000000,
       opacity: RESULT_HAND_SHADOW_OPACITY,
@@ -133,7 +170,7 @@ export class MahjongResultHandRenderer {
     });
     this.shadowPlane = new Mesh(this.shadowGeometry, this.shadowMaterial);
     this.shadowPlane.rotation.x = -Math.PI / 2;
-    this.shadowPlane.position.y = -0.015;
+    this.shadowPlane.position.set(0, -0.015, 1.8);
     this.shadowPlane.receiveShadow = true;
     this.scene.add(this.shadowPlane);
   }
@@ -162,27 +199,24 @@ export class MahjongResultHandRenderer {
   }
 
   render(state, pageIndex = 0) {
+    this.lastRender = [state, pageIndex];
     if (!this.ready) {
       this.pendingRender = [state, pageIndex];
       return;
     }
     this.pendingRender = null;
     const detailCount = resultDetailPageCount(state);
-    const safePage = Math.max(
-      0,
-      Math.min(detailCount, Number(pageIndex) || 0),
-    );
-    const viewport = this.host.querySelector(".result-hand-3d");
+    const safePage = Math.max(0, Math.min(detailCount, Number(pageIndex) || 0));
     if (
-      !viewport ||
       state?.phase !== "hand_ended" ||
       state.winType === "nagashi" ||
-      safePage >= detailCount
+      safePage >= detailCount ||
+      this.yakuHost?.classList.contains("is-score-summary")
     ) {
-      this.host.classList.remove("is-three-rendered");
-      this.renderer.domElement.remove();
+      this.hide();
       return;
     }
+    if (this.contextLost) return;
 
     const results = asArray(state.results).length
       ? asArray(state.results)
@@ -194,13 +228,18 @@ export class MahjongResultHandRenderer {
       Number(state.winnerIndex) ||
       1;
     const playerId = state.players?.[winnerIndex - 1];
-    if (!playerId) return;
+    if (!playerId) {
+      this.hide();
+      return;
+    }
 
-    viewport.append(this.renderer.domElement);
-    this.host.classList.add("is-three-rendered");
+    this.host.prepend(this.renderer.domElement);
+    this.host.classList.add("is-three-result-rendered");
+    this.handsHost?.classList.add("is-three-rendered");
+    this.yakuHost?.classList.add("is-paper-rendered");
     this.clearTiles();
-    const width = this.buildHand(state, playerId, winnerIndex);
-    this.frameHand(width);
+    this.buildHand(state, playerId, winnerIndex);
+    this.paper.render(asArray(result.yaku));
     this.drawFrame();
   }
 
@@ -250,53 +289,46 @@ export class MahjongResultHandRenderer {
       cursor += display.span;
       if (meldIndex < melds.length - 1) cursor += MELD_GROUP_GAP;
     });
-    this.tiles.position.x = -cursor / 2;
+    this.tiles.position.set(-cursor / 2, 0, RESULT_HAND_Z);
     return cursor;
   }
 
   addTile(tileInfo, x, z, scale, doraCounts) {
     const slot = new Group();
-    slot.position.set(x, TILE_SIZE.depth * scale / 2, z);
+    slot.position.set(x, (TILE_SIZE.depth * scale) / 2, z);
     slot.rotation.y = tileInfo.sideways ? Math.PI / 2 : 0;
     slot.scale.setScalar(scale);
     const tile = this.tileFactory.create({
       type: tileInfo.type,
       red: tileInfo.red === true,
       concealed: tileInfo.faceDown === true,
-      dora:
-        tileInfo.faceDown !== true && doraCounts.has(Number(tileInfo.type)),
+      dora: tileInfo.faceDown !== true && doraCounts.has(Number(tileInfo.type)),
     });
     tile.rotation.x = tileInfo.faceDown ? Math.PI / 2 : -Math.PI / 2;
     slot.add(tile);
     this.tiles.add(slot);
   }
 
-  frameHand(width) {
-    const viewWidth = Math.max(8.2, width + VIEW_PADDING);
-    const cameraPosition = resultHandCameraPosition(
-      resultHandCameraDistance(viewWidth),
-    );
-    this.camera.position.set(
-      cameraPosition.x,
-      cameraPosition.y,
-      cameraPosition.z,
-    );
-    this.camera.lookAt(CAMERA_TARGET);
-    this.camera.updateProjectionMatrix();
-  }
-
   clearTiles() {
     this.tiles.clear();
-    this.tiles.position.set(0, 0, 0);
+    this.tiles.position.set(0, 0, RESULT_HAND_Z);
+  }
+
+  hide() {
+    this.host.classList.remove("is-three-result-rendered");
+    this.handsHost?.classList.remove("is-three-rendered");
+    this.yakuHost?.classList.remove("is-paper-rendered");
+    this.paper?.hide();
+    this.renderer?.domElement.remove();
   }
 
   drawFrame() {
-    if (!this.ready || this.destroyed) return;
+    if (!this.ready || this.contextLost || this.destroyed) return;
     this.renderer.render(this.scene, this.camera);
   }
 
   resume() {
-    if (!this.ready || this.destroyed) return;
+    if (!this.ready || this.contextLost || this.destroyed) return;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.drawFrame();
   }
@@ -304,7 +336,17 @@ export class MahjongResultHandRenderer {
   destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.hide();
+    this.renderer?.domElement.removeEventListener(
+      "webglcontextlost",
+      this.onContextLost,
+    );
+    this.renderer?.domElement.removeEventListener(
+      "webglcontextrestored",
+      this.onContextRestored,
+    );
     this.tileFactory?.destroy();
+    this.paper?.destroy();
     this.shadowGeometry?.dispose();
     this.shadowMaterial?.dispose();
     this.renderer?.dispose();

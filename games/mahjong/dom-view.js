@@ -556,10 +556,10 @@ export class MahjongDomView {
     const winnerName = playerDisplayName(state, winnerIndex, playerName);
     elements.resultKicker.textContent =
       state.winType === "tsumo"
-        ? "自摸和牌"
+        ? "自摸"
         : state.winType === "nagashi"
-          ? "流局满贯"
-          : "荣和";
+          ? "流局"
+          : "和";
     elements.resultTitle.textContent = winnerName;
     const value = result.limit || `${result.han ?? 0} 番 ${result.fu ?? 0} 符`;
     elements.resultSummary.textContent = "";
@@ -663,9 +663,6 @@ function createResultHand(
 
   const tiles = document.createElement("div");
   tiles.className = "result-hand-tiles";
-  const threeViewport = document.createElement("div");
-  threeViewport.className = "result-hand-3d";
-  threeViewport.setAttribute("aria-hidden", "true");
   const concealed = asArray(state.revealedHands?.[playerId]).map(
     normalizeRevealedTile,
   );
@@ -690,7 +687,7 @@ function createResultHand(
     .map((meld) => createResultMeld(meld, winnerIndex, doraCounts))
     .reverse();
   tiles.append(...resultMelds);
-  row.append(threeViewport, tiles);
+  row.append(tiles);
   return row;
 }
 
