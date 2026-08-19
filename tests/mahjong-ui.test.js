@@ -16,6 +16,7 @@ import {
 import {
   automaticRiichiDiscard,
   blankDoubleClickAction,
+  clearedTableState,
   claimPreviewTiles,
   deferredHandInsertion,
   doraIndicatorSlots,
@@ -128,6 +129,67 @@ test("mahjong gives each new river tile one quiet perspective sound cue", () => 
   assert.ok(own.volume > opposite.volume);
   assert.ok(own.playbackRate >= 0.98 && own.playbackRate <= 1.02);
   assert.ok(opposite.playbackRate >= 0.98 && opposite.playbackRate <= 1.02);
+});
+
+test("mahjong clears the rendered table before dismissing a hand result", () => {
+  const cleared = clearedTableState({
+    phase: "hand_ended",
+    players: ["self", "right", "top", "left"],
+    ownHand: [1, 2, 3],
+    drawnTile: 4,
+    drawnPlayerIndex: 1,
+    handCounts: { self: 13, right: 12, top: 11, left: 10 },
+    discards: {
+      self: [{ type: 1 }],
+      right: [{ type: 2 }],
+      top: [{ type: 3 }],
+      left: [{ type: 4 }],
+    },
+    melds: {
+      self: [{ kind: "pon", tiles: [1, 1, 1] }],
+      right: [],
+      top: [],
+      left: [],
+    },
+    revealedHands: { self: [1, 2, 3] },
+    doraIndicators: [1],
+    doraIndicatorTiles: [{ type: 1 }],
+    legalActions: { canDiscard: true },
+    winners: ["self"],
+    winningTile: 4,
+    winningTileRed: true,
+    winType: "tsumo",
+    draw: true,
+  });
+
+  assert.deepEqual(cleared.ownHand, []);
+  assert.equal(cleared.drawnTile, 0);
+  assert.equal(cleared.drawnPlayerIndex, 0);
+  assert.deepEqual(cleared.handCounts, {
+    self: 0,
+    right: 0,
+    top: 0,
+    left: 0,
+  });
+  assert.deepEqual(cleared.discards, {
+    self: [],
+    right: [],
+    top: [],
+    left: [],
+  });
+  assert.deepEqual(cleared.melds, {
+    self: [],
+    right: [],
+    top: [],
+    left: [],
+  });
+  assert.deepEqual(cleared.revealedHands, {});
+  assert.deepEqual(cleared.doraIndicators, []);
+  assert.deepEqual(cleared.legalActions, {});
+  assert.deepEqual(cleared.winners, []);
+  assert.equal(cleared.winningTile, 0);
+  assert.equal(cleared.winType, "");
+  assert.equal(cleared.draw, false);
 });
 
 test("mahjong closes river gaps left by called discards", () => {
@@ -1063,7 +1125,7 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   assert.match(html, /id="result-hands"[\s\S]*?class="result-hands"/);
   assert.match(
     html,
-    /<section[\s\S]*?id="result-panel"[^>]*>\s*<div class="result-page-stage">\s*<div class="result-content">/,
+    /<section[\s\S]*?id="result-panel"[^>]*>\s*<div class="result-page-stage">\s*<div class="result-page-track">\s*<div class="result-content">/,
   );
   assert.ok(
     html.indexOf('id="result-panel"') > html.indexOf('class="player-dock"'),
@@ -1127,8 +1189,18 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     /border(?:-radius)?:|background:|box-shadow:|backdrop-filter:/,
   );
   assert.match(resultStyles, /@keyframes result-content-grow/);
-  assert.match(resultStyles, /translateX\(-72px\)/);
-  assert.match(resultStyles, /translateX\(72px\)/);
+  assert.match(resultStyles, /@keyframes result-page-step/);
+  assert.match(resultStyles, /@keyframes result-page-step-previous/);
+  assert.match(resultStyles, /@keyframes result-page-step-current/);
+  assert.doesNotMatch(resultStyles, /translateX\(-100%\)/);
+  assert.doesNotMatch(resultStyles, /result-page-enter|result-page-leave/);
+  assert.match(main, /outgoing\.classList\.add\("is-step-previous"\)/);
+  assert.match(main, /elements\.resultTrack\.prepend\(outgoing\)/);
+  assert.match(main, /elements\.resultTrack\.classList\.add\("is-step-advancing"\)/);
+  assert.match(
+    main,
+    /elements\.result\.addEventListener\("dblclick", \(event\) => \{\s*if \(!isResultBlankSpace\(event\.target\)\) return;\s*void continueResult\(\);\s*}\);/s,
+  );
   assert.match(resultStyles, /@keyframes result-screen-exit/);
 });
 
@@ -2192,7 +2264,7 @@ test("mahjong uses one fixed 16:9 logical viewport without a top status bar", ()
   );
   assert.match(
     html,
-    /id="pass-claims-button"[^>]*aria-pressed="false"[\s\S]*?pass-claims-icon-mask/,
+    /id="pass-claims-button"[^>]*aria-pressed="false"[\s\S]*?data-icon="bell-off"/,
   );
   assert.match(
     html,

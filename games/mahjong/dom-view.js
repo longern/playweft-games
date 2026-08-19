@@ -55,6 +55,7 @@ export class MahjongDomView {
     playerName,
     {
       showResult = true,
+      preserveResult = false,
       resultPage = 0,
       riichiMode = false,
       defaultNames = {},
@@ -110,7 +111,9 @@ export class MahjongDomView {
     this.renderMelds(state);
     this.renderActions(state, selectedTileId, riichiMode);
     this.renderStatus(state, events, playerName);
-    this.renderResult(state, playerName, showResult, resultPage);
+    if (!preserveResult) {
+      this.renderResult(state, playerName, showResult, resultPage);
+    }
   }
 
   renderSelection(
@@ -787,6 +790,7 @@ function collectElements() {
     hand: document.querySelector("#hand-bottom"),
     result: document.querySelector("#result-panel"),
     resultStage: document.querySelector(".result-page-stage"),
+    resultTrack: document.querySelector(".result-page-track"),
     resultContent: document.querySelector(".result-content"),
     resultKicker: document.querySelector("#result-kicker"),
     resultTitle: document.querySelector("#result-title"),

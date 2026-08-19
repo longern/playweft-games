@@ -17,6 +17,7 @@ import {
   asArray,
   automaticRiichiDiscard,
   blankDoubleClickAction,
+  clearedTableState,
   deferredHandInsertion,
   errorMessage,
   exhaustiveDrawPresentation,
@@ -144,7 +145,7 @@ let destroyed = false;
 let hasPlatformAvatar = false;
 const MATCH_MUSIC_FADE_DURATION_MS = 800;
 const SETUP_EXIT_DURATION_MS = 560;
-const RESULT_PAGE_TRANSITION_MS = 260;
+const RESULT_PAGE_TRANSITION_MS = 300;
 const RESULT_EXIT_DURATION_MS = 320;
 const matchMusic = new Audio();
 matchMusic.loop = true;
@@ -354,6 +355,10 @@ elements.tsumo.addEventListener("click", () => dispatch({ type: "tsumo" }));
 elements.riichi.addEventListener("click", enterRiichiMode);
 elements.cancelRiichi.addEventListener("click", cancelRiichiMode);
 elements.rematch.addEventListener("click", () => void continueResult());
+elements.result.addEventListener("dblclick", (event) => {
+  if (!isResultBlankSpace(event.target)) return;
+  void continueResult();
+});
 elements.autoWin.addEventListener("click", () => toggleAutoAction("autoWin"));
 elements.passClaims.addEventListener("click", () =>
   toggleAutoAction("passClaims"),
@@ -1237,6 +1242,41 @@ function renderCurrentState() {
   });
 }
 
+function renderClearedTableForResultExit() {
+  const clearedState = clearedTableState(state);
+  visibleEvents = [];
+  selectedTileId = 0;
+  riichiMode = false;
+  domView.render(clearedState, [], selectedTileId, playerName, {
+    preserveResult: true,
+    riichiMode,
+    defaultNames: getMahjongDefaultNames(),
+    playerNameIsAuthoritative: hasPlatformName,
+  });
+  applyPackAvatars(clearedState);
+  visualRenderer.render(clearedState, [], {
+    ...domView.visualUi(playerName, selectedTileId),
+    riichiMode,
+    riichiCandidateTiles: [],
+    revealPlayerIndices: [],
+    coveredPlayerIndices: [],
+    handRevealKey: "",
+    animateHandReveal: false,
+    delayHandRevealForCallout: false,
+    deferredHandInsertionSeat: 0,
+    deferredHandInsertionIndex: 0,
+  });
+}
+
+function isResultBlankSpace(target) {
+  return (
+    target === elements.result ||
+    target === elements.resultStage ||
+    target === elements.resultTrack ||
+    target === elements.resultContent
+  );
+}
+
 async function continueResult() {
   if (
     resultPageAnimating ||
@@ -1255,20 +1295,23 @@ async function continueResult() {
       for (const node of [outgoing, ...outgoing.querySelectorAll("[id]")]) {
         node.removeAttribute("id");
       }
-      outgoing.classList.add("is-page-leaving");
-      elements.resultStage.append(outgoing);
+      outgoing.classList.add("is-step-previous");
+      outgoing.setAttribute("aria-hidden", "true");
+      elements.resultTrack.prepend(outgoing);
       resultPageIndex += 1;
       domView.renderResult(state, playerName, true, resultPageIndex);
       resultHandRenderer.render(state, resultPageIndex);
-      elements.resultContent.classList.add("is-page-entering");
+      void elements.resultTrack.offsetWidth;
+      elements.resultTrack.classList.add("is-step-advancing");
       await waitForAnimation(
-        elements.resultContent,
-        "result-page-enter",
+        elements.resultTrack,
+        "result-page-step",
         RESULT_PAGE_TRANSITION_MS,
       );
       return;
     }
 
+    renderClearedTableForResultExit();
     elements.result.classList.add("is-exiting");
     await waitForAnimation(
       elements.result,
@@ -1279,10 +1322,7 @@ async function continueResult() {
   } finally {
     resultPageAnimating = false;
     elements.rematch.disabled = false;
-    elements.resultContent.classList.remove("is-page-entering");
-    elements.resultStage
-      .querySelectorAll(".is-page-leaving")
-      .forEach((page) => page.remove());
+    resetResultPageTrack();
     if (state?.phase === "hand_ended") {
       elements.result.classList.remove("is-exiting");
     }
@@ -1318,10 +1358,18 @@ function syncResultPage(current) {
   resultPageAnimating = false;
   elements.rematch.disabled = false;
   elements.result.classList.remove("is-exiting");
-  elements.resultContent.classList.remove("is-page-entering");
-  elements.resultStage
-    .querySelectorAll(".is-page-leaving")
+  resetResultPageTrack();
+}
+
+function resetResultPageTrack() {
+  const { resultTrack } = elements;
+  resultTrack.classList.add("is-step-resetting");
+  resultTrack
+    .querySelectorAll(".is-step-previous")
     .forEach((page) => page.remove());
+  resultTrack.classList.remove("is-step-advancing");
+  void resultTrack.offsetWidth;
+  resultTrack.classList.remove("is-step-resetting");
 }
 
 function waitForAnimation(element, animationName, duration) {

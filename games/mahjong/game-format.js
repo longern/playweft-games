@@ -10,6 +10,32 @@ export function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+export function clearedTableState(state) {
+  const players = asArray(state?.players);
+  const emptyPlayerCollections = () =>
+    Object.fromEntries(players.map((playerId) => [playerId, []]));
+  return {
+    ...state,
+    ownHand: [],
+    drawnTile: 0,
+    drawnPlayerIndex: 0,
+    handCounts: Object.fromEntries(
+      players.map((playerId) => [playerId, 0]),
+    ),
+    discards: emptyPlayerCollections(),
+    melds: emptyPlayerCollections(),
+    revealedHands: {},
+    doraIndicators: [],
+    doraIndicatorTiles: [],
+    legalActions: {},
+    winners: [],
+    winningTile: 0,
+    winningTileRed: false,
+    winType: "",
+    draw: false,
+  };
+}
+
 export function riverDisplayEntries(river) {
   return asArray(river)
     .map((discard, sourceIndex) => ({ discard, sourceIndex }))

@@ -102,14 +102,15 @@
         </button>
         <button id="pass-claims-button" class="auto-action-control" type="button" aria-pressed="false"
           aria-label="放弃鸣牌" title="放弃鸣牌">
-          <svg class="auto-action-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <svg class="auto-action-icon" data-icon="bell-off" viewBox="0 0 24 24" aria-hidden="true">
             <defs>
-              <mask id="pass-claims-icon-mask">
+              <mask id="pass-claims-bell-mask">
                 <rect width="24" height="24" fill="white"/>
-                <path d="M5.2 5.2 18.8 18.8" stroke="black" stroke-width="3.2" stroke-linecap="round"/>
+                <path d="M4.8 4.8 19.2 19.2" stroke="black" stroke-width="3" stroke-linecap="round"/>
               </mask>
             </defs>
-            <circle cx="12" cy="12" r="9.5" mask="url(#pass-claims-icon-mask)"/>
+            <path mask="url(#pass-claims-bell-mask)"
+              d="M18 16.25v-5.5c0-3.03-1.75-5.57-4.75-6.25v-.75a1.25 1.25 0 0 0-2.5 0v.75C7.75 5.18 6 7.72 6 10.75v5.5l-2 2V20h16v-1.75l-2-2Zm-6 7.25c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2Z"/>
           </svg>
         </button>
         <button id="auto-tsumogiri-button" class="auto-action-control" type="button" aria-pressed="false"
@@ -285,19 +286,21 @@
 
       <section id="result-panel" class="result-panel" aria-live="assertive" hidden>
         <div class="result-page-stage">
-          <div class="result-content">
-            <div class="result-heading">
-              <strong id="result-title">自摸</strong>
-              <span id="result-kicker">本局结束</span>
-            </div>
-            <p id="result-summary"></p>
-            <div id="result-hands" class="result-hands" aria-label="胡牌牌型"></div>
-            <div id="result-yaku" class="result-yaku"></div>
-            <b id="result-delta" class="result-delta"></b>
-            <div class="result-footer">
-              <strong id="result-value" class="result-value" hidden></strong>
-              <strong id="result-total" class="result-total" hidden></strong>
-              <button id="rematch-button" type="button">继续</button>
+          <div class="result-page-track">
+            <div class="result-content">
+              <div class="result-heading">
+                <strong id="result-title">自摸</strong>
+                <span id="result-kicker">本局结束</span>
+              </div>
+              <p id="result-summary"></p>
+              <div id="result-hands" class="result-hands" aria-label="胡牌牌型"></div>
+              <div id="result-yaku" class="result-yaku"></div>
+              <b id="result-delta" class="result-delta"></b>
+              <div class="result-footer">
+                <strong id="result-value" class="result-value" hidden></strong>
+                <strong id="result-total" class="result-total" hidden></strong>
+                <button id="rematch-button" type="button">继续</button>
+              </div>
             </div>
           </div>
         </div>
