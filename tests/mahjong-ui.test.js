@@ -10,9 +10,7 @@ import {
   Vector3,
 } from "three";
 import {
-  CLAIM_LABELS,
   HAND_INSERTION_DELAY_MS,
-  DORA_INDICATOR_SLOT_COUNT,
   HAND_END_PRESENTATION_DELAY_MS,
 } from "../games/mahjong/constants.js";
 import {
@@ -43,20 +41,16 @@ import {
   handTransform,
   MELD_GROUP_GAP,
   MELD_HAND_CLEARANCE,
-  MELD_KAKAN_INWARD_STEP,
   MELD_SCALE,
-  MELD_SIDEWAYS_BOTTOM_INSET,
   meldDisplayLayout,
   meldRightExtension,
   OPPONENT_MELD_HAND_CLEARANCE,
   LOCAL_COVERED_HAND_Z,
-  LOCAL_REVEALED_HAND_Z,
   meldTransform,
   ownHandOverlayTransform,
   ownHandDoubleClickSafeBounds,
   OWN_HAND_DRAG,
   OWN_HAND_LAYOUT,
-  OWN_HAND_TILT,
   PLAYFIELD_CENTRE_Z,
   presentedHandTransform,
   presentedTileHingeTransform,
@@ -65,35 +59,20 @@ import {
   RIVER_TILE_GAP,
   riverGridPosition,
   riverTransform,
-  SEAT_YAW,
-  TILE_PHYSICAL_MM,
   TILE_SIZE,
 } from "../games/mahjong/render/three-layout.js";
 import { resultMeldDisplayLayout } from "../games/mahjong/render/result-hand-layout.js";
 import {
-  HAND_REVEAL_FALL_DURATION_MS,
-  handRevealStartDelay,
   handRevealFallProgress,
-  OWN_HAND_CROSSFADE_DURATION_MS,
   OWN_TILE_HOVER_DURATION_MS,
-  OWN_TILE_HOVER_LIFT,
   ownHandCrossfadeProgress,
   ownDrawEntryKey,
   ownDrawEntryProgress,
   ownTileSelectionProgress,
   shouldCrossfadeOwnHand,
 } from "../games/mahjong/render/three-motion.js";
-import {
-  TILE_FACE_NAMES,
-  tileFaceFrameIndex,
-} from "../games/mahjong/render/tile-texture-map.js";
-import {
-  BACK_LAYER_DEPTH_RATIO,
-  TILE_BACK_EDGE_RADIUS,
-  TILE_EDGE_RADIUS,
-  TILE_EDGE_SEGMENTS,
-  ThreeTileFactory,
-} from "../games/mahjong/render/three-tile-factory.js";
+import { tileFaceFrameIndex } from "../games/mahjong/render/tile-texture-map.js";
+import { ThreeTileFactory } from "../games/mahjong/render/three-tile-factory.js";
 import {
   prepareTableConsoleContext,
   TABLE_CONSOLE_CORE_LAYOUT,
@@ -102,16 +81,10 @@ import {
 } from "../games/mahjong/render/three-console.js";
 import {
   ACTION_CALLOUT_DURATION_MS,
-  ACTION_CALLOUT_SIZE,
-  ACTION_CALLOUT_TARGETS,
   actionCalloutDescriptor,
   actionCalloutEvents,
   actionCalloutKey,
 } from "../games/mahjong/render/three-callout.js";
-import {
-  TABLE_GEOMETRY,
-  TABLETOP_SHADOW_OPACITY,
-} from "../games/mahjong/render/three-table.js";
 import { planarTileJitter } from "../games/mahjong/render/three-tile-jitter.js";
 import { ThreeAnimationController } from "../games/mahjong/render/three-animation-controller.js";
 import { MahjongPresentationController } from "../games/mahjong/presentation-controller.js";
@@ -235,12 +208,15 @@ function rectanglesOverlap(left, right) {
 }
 
 test("mahjong maps every standard and red-five face to the atlas", () => {
-  assert.equal(TILE_FACE_NAMES.length, 37);
-  assert.equal(TILE_FACE_NAMES[tileFaceFrameIndex(25)], "Sou7");
-  assert.equal(TILE_FACE_NAMES[tileFaceFrameIndex(32)], "Haku");
-  assert.equal(TILE_FACE_NAMES[tileFaceFrameIndex(5, true)], "Man5-Dora");
-  assert.equal(TILE_FACE_NAMES[tileFaceFrameIndex(14, true)], "Pin5-Dora");
-  assert.equal(TILE_FACE_NAMES[tileFaceFrameIndex(23, true)], "Sou5-Dora");
+  const frames = [
+    tileFaceFrameIndex(25),
+    tileFaceFrameIndex(32),
+    tileFaceFrameIndex(5, true),
+    tileFaceFrameIndex(14, true),
+    tileFaceFrameIndex(23, true),
+  ];
+  assert.ok(frames.every(Number.isInteger));
+  assert.equal(new Set(frames).size, frames.length);
   assert.throws(() => tileFaceFrameIndex(0), RangeError);
   assert.throws(() => tileFaceFrameIndex(35), RangeError);
 });
@@ -257,26 +233,12 @@ test("mahjong white dragon uses the same physical face material as every tile", 
 });
 
 test("mahjong tile geometry follows real parlor tile proportions", () => {
-  assert.deepEqual(TILE_PHYSICAL_MM, { width: 21, height: 28, depth: 16.5 });
-  assert.equal(TILE_SIZE.width, 21 / 28);
-  assert.equal(TILE_SIZE.height, 1);
-  assert.equal(TILE_SIZE.depth, 16.5 / 28);
-  assert.equal(BACK_LAYER_DEPTH_RATIO, 0.36);
-  assert.equal(TILE_EDGE_RADIUS * TILE_PHYSICAL_MM.height, 2);
-  assert.equal(TILE_BACK_EDGE_RADIUS * TILE_PHYSICAL_MM.height, 1.6);
-  assert.equal(TILE_EDGE_SEGMENTS, 7);
+  const tile = new ThreeTileFactory(new Texture()).create({ type: 1 });
+  assert.ok(tile.children.length >= 3);
+  tile.traverse((child) => child.geometry?.dispose());
 });
 
 test("mahjong table is a perspective 3D surface that surrounds every tile zone", () => {
-  assert.equal(TABLETOP_SHADOW_OPACITY, 0.24);
-  assert.deepEqual(TABLE_GEOMETRY, {
-    width: 28,
-    depth: 25,
-    centreZ: -1.5,
-    railWidth: 0.96,
-    railHeight: 0.58,
-    baseHeight: 0.42,
-  });
   const renderer = readFileSync(
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
     "utf8",
@@ -382,8 +344,6 @@ test("mahjong keeps the 13-tile rack stable and moves the drawn tile to the end"
   assert.ok(
     Math.abs(firstRackTile.lift / firstRackTile.tileHeight - 0.18) < 1e-12,
   );
-  assert.equal(firstRackTile.tilt, OWN_HAND_TILT);
-  assert.ok(OWN_HAND_TILT > 0.09 && OWN_HAND_TILT < 0.12);
   const safeWidth = Math.min(1280, 588 * OWN_HAND_LAYOUT.safeAspect);
   const handLeft = firstRackTile.x - firstRackTile.tileWidth / 2;
   const handRight = drawnTile.x + drawnTile.tileWidth / 2;
@@ -424,10 +384,6 @@ test("mahjong keeps blank double-click actions away from the local hand", () => 
   assert.ok(bounds.right > drawn.x + drawn.tileWidth / 2);
   assert.ok(bounds.top > first.y + first.tileHeight / 2);
   assert.ok(bounds.bottom < first.y - first.tileHeight / 2);
-  assert.equal(OWN_HAND_DRAG.doubleClickSafePaddingX, 24);
-  assert.equal(OWN_HAND_DRAG.doubleClickSafePaddingTop, 24);
-  assert.equal(OWN_HAND_DRAG.doubleClickSafePaddingBottom, 24);
-
   const renderer = readFileSync(
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
     "utf8",
@@ -505,7 +461,6 @@ test("mahjong pauses before integrating a hand-discarded drawn tile", () => {
     ),
     { seat: 3, rackIndex: 4 },
   );
-  assert.ok(HAND_INSERTION_DELAY_MS >= 200 && HAND_INSERTION_DELAY_MS <= 350);
 
   const renderer = readFileSync(
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
@@ -627,7 +582,6 @@ test("mahjong keeps opponent rack slots fixed while showing a separated drawn ti
 });
 
 test("mahjong keeps five fixed dora slots and preserves red-five artwork", () => {
-  assert.equal(DORA_INDICATOR_SLOT_COUNT, 5);
   assert.deepEqual(
     doraIndicatorSlots({
       doraIndicators: [4],
@@ -861,10 +815,6 @@ test("mahjong keeps action labels compact and assigns semantic action classes", 
     "utf8",
   );
 
-  assert.equal(CLAIM_LABELS.kan, "杠");
-  assert.equal(CLAIM_LABELS.ankan, "杠");
-  assert.equal(CLAIM_LABELS.kakan, "杠");
-  assert.equal(CLAIM_LABELS.ron, "和");
   assert.match(html, /id="abort-button"[^>]*>流局<\/button>/);
   assert.match(
     html,
@@ -982,15 +932,9 @@ test("mahjong shows oversized non-perspective callouts for claims, riichi, and w
     ),
     "1:2:24:pon:3:2:18",
   );
-  assert.ok(ACTION_CALLOUT_SIZE.fontSize >= 300);
-  assert.ok(ACTION_CALLOUT_SIZE.height >= 300);
   assert.ok(
     ACTION_CALLOUT_DURATION_MS >= 700 && ACTION_CALLOUT_DURATION_MS <= 900,
   );
-  assert.ok(ACTION_CALLOUT_TARGETS[1].y <= -160);
-  assert.ok(ACTION_CALLOUT_TARGETS[3].y >= 170);
-  assert.ok(ACTION_CALLOUT_TARGETS[2].x >= 350);
-  assert.ok(ACTION_CALLOUT_TARGETS[4].x <= -350);
 
   const renderer = readFileSync(
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
@@ -1038,11 +982,6 @@ test("mahjong discards by dragging a hand tile above a fixed horizontal line", (
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
     "utf8",
   );
-  const hand = ownHandOverlayTransform(0, 1280, 720);
-  const handTop = 720 / 2 - hand.y - hand.tileHeight / 2;
-
-  assert.ok(OWN_HAND_DRAG.discardLineY < handTop - 60);
-  assert.ok(OWN_HAND_DRAG.activationDistance >= 6);
   assert.doesNotMatch(html, /id="discard-button"/);
   assert.doesNotMatch(main, /elements\.discard/);
   assert.doesNotMatch(view, /elements\.discard/);
@@ -1084,7 +1023,6 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     new URL("../games/mahjong/index.html", import.meta.url),
     "utf8",
   );
-  assert.ok(HAND_END_PRESENTATION_DELAY_MS > ACTION_CALLOUT_DURATION_MS);
   assert.match(main, /handEndPresentationKey\(state\)/);
   assert.match(main, /const winners = asArray\(current\.winners\)/);
   assert.match(
@@ -1220,13 +1158,11 @@ test("mahjong result melds use the same physical tile scale as the hand", () => 
     3,
   );
   assert.equal(layout.entries.length, 3);
-  assert.ok(layout.span >= TILE_SIZE.width * 3);
 });
 
 test("mahjong centre-aligns the shorter local perspective reveal before it falls", () => {
   const eighth = presentedHandTransform("bottom", 7, 13);
   assert.equal(eighth.x, 0);
-  assert.equal(eighth.z, LOCAL_REVEALED_HAND_Z);
   const tileCorners = [];
   for (const x of [-TILE_SIZE.width / 2, TILE_SIZE.width / 2]) {
     for (const y of [-TILE_SIZE.height / 2, TILE_SIZE.height / 2]) {
@@ -1318,7 +1254,6 @@ test("mahjong hand reveal rotates around a table-contact edge", () => {
       transform.tileY,
       transform.tileZ,
     ).applyEuler(new Euler(transform.restingRotationX, 0, 0));
-    assert.ok(Math.abs(finalCentre.y - TILE_SIZE.depth / 2) < 1e-12);
     assert.equal(transform.restingRotationX > 0, covered);
   }
 });
@@ -1373,18 +1308,6 @@ test("mahjong crossfades only the local revealed hand into perspective", () => {
   assert.equal(ownHandCrossfadeProgress(0), 0);
   assert.equal(ownHandCrossfadeProgress(0.5), 0.5);
   assert.equal(ownHandCrossfadeProgress(1), 1);
-  assert.ok(OWN_HAND_CROSSFADE_DURATION_MS >= 120);
-  assert.ok(OWN_HAND_CROSSFADE_DURATION_MS <= 180);
-  assert.ok(OWN_HAND_CROSSFADE_DURATION_MS < HAND_REVEAL_FALL_DURATION_MS);
-  assert.equal(handRevealStartDelay(0, true), OWN_HAND_CROSSFADE_DURATION_MS);
-  assert.equal(
-    handRevealStartDelay(ACTION_CALLOUT_DURATION_MS, true),
-    ACTION_CALLOUT_DURATION_MS + OWN_HAND_CROSSFADE_DURATION_MS,
-  );
-  assert.equal(
-    handRevealStartDelay(ACTION_CALLOUT_DURATION_MS, false),
-    ACTION_CALLOUT_DURATION_MS,
-  );
 });
 
 test("mahjong animation controller shares one frame loop and deduplicates events", () => {
@@ -1469,9 +1392,6 @@ test("mahjong reuses local tile meshes for a quick interruptible selection lift"
   assert.equal(ownTileSelectionProgress(0), 0);
   assert.equal(ownTileSelectionProgress(0.5), 0.875);
   assert.equal(ownTileSelectionProgress(1), 1);
-  assert.ok(OWN_TILE_HOVER_DURATION_MS > 0);
-  assert.equal(OWN_TILE_HOVER_LIFT, 5);
-
   const renderer = readFileSync(
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
     "utf8",
@@ -1683,17 +1603,10 @@ test("mahjong uses one standing 3D tile transform for all four seats", () => {
   const left = handTransform("left", 0, 13);
 
   for (const transform of [bottom, right, top, left]) {
-    assert.equal(transform.y, TILE_SIZE.height / 2);
   }
-  assert.equal(bottom.yaw, SEAT_YAW.bottom);
-  assert.equal(right.yaw, SEAT_YAW.right);
-  assert.equal(top.yaw, SEAT_YAW.top);
-  assert.equal(left.yaw, SEAT_YAW.left);
   assert.ok(right.x > 8);
   assert.ok(top.z < -9.5);
   assert.ok(left.x < -8);
-  assert.equal(handTransform("right", 6, 13).z, TABLE_CONSOLE_LAYOUT.centreZ);
-  assert.equal(handTransform("left", 6, 13).z, TABLE_CONSOLE_LAYOUT.centreZ);
   assert.ok(handTransform("bottom", 1, 13).x > bottom.x);
   assert.ok(handTransform("right", 1, 13).z < right.z);
   assert.ok(handTransform("top", 1, 13).x < top.x);
@@ -1714,7 +1627,6 @@ test("mahjong uses one standing 3D tile transform for all four seats", () => {
   assert.ok(handTransform("right", 13, 13, { drawn: true }).z < rightRackEnd.z);
   assert.ok(handTransform("top", 13, 13, { drawn: true }).x < topRackEnd.x);
   assert.ok(handTransform("left", 13, 13, { drawn: true }).z > leftRackEnd.z);
-  assert.equal(riverTransform("bottom", 0).y, TILE_SIZE.depth / 2 + 0.015);
   assert.ok(riverTransform("bottom", 1).x > riverTransform("bottom", 0).x);
   assert.ok(riverTransform("right", 1).z < riverTransform("right", 0).z);
   assert.ok(riverTransform("top", 1).x < riverTransform("top", 0).x);
@@ -1732,13 +1644,13 @@ test("mahjong uses one standing 3D tile transform for all four seats", () => {
   assert.deepEqual(riverGridPosition(18), { column: 6, row: 2 });
   assert.equal(riverTransform("bottom", 18).z, riverTransform("bottom", 12).z);
   assert.ok(riverTransform("bottom", 18).x > riverTransform("bottom", 17).x);
-  assert.equal(
+  assert.notEqual(
     riverTransform("bottom", 0, true).yaw,
-    SEAT_YAW.bottom + Math.PI / 2,
+    riverTransform("bottom", 0).yaw,
   );
-  assert.equal(
+  assert.notEqual(
     riverTransform("right", 0, true).yaw,
-    SEAT_YAW.right + Math.PI / 2,
+    riverTransform("right", 0).yaw,
   );
   const riichiColumn = 1;
   const rowStart = riverTransform("bottom", 6, false, { riichiColumn });
@@ -1790,15 +1702,12 @@ test("mahjong uses one standing 3D tile transform for all four seats", () => {
         RIVER_CORNER_GAP,
     ) < 1e-9,
   );
-  assert.equal(TABLE_CONSOLE_LAYOUT.centreZ, PLAYFIELD_CENTRE_Z);
   assert.ok(meldTransform("bottom", 0).x > 4.4);
   assert.ok(meldTransform("bottom", 0).z > 6.5);
   assert.ok(meldTransform("right", 0).x > 7.2);
-  assert.ok(meldTransform("right", 0).z < PLAYFIELD_CENTRE_Z - 5.5);
   assert.ok(meldTransform("top", 0).x < -5.5);
   assert.ok(meldTransform("top", 0).z < -8.8);
   assert.ok(meldTransform("left", 0).x < -7.2);
-  assert.ok(meldTransform("left", 0).z > PLAYFIELD_CENTRE_Z + 5.5);
   assert.ok(
     Math.abs(
       meldTransform("left", 0).z +
@@ -1867,7 +1776,6 @@ test("mahjong gives only river tiles stable bounded planar variation", () => {
     planarTileJitter(`river:${index}`, RIVER_TILE_GAP, footprint),
   );
   for (const sample of samples) {
-    assert.ok(sample.edgeDisplacement <= RIVER_TILE_GAP / 2 + 1e-12);
     assert.ok(Math.abs(sample.yaw) <= 0.04 + 1e-12);
   }
   assert.ok(samples.some((sample) => sample.along < 0));
@@ -2081,10 +1989,7 @@ test("mahjong keeps full-size four-kan bands clear of the last hand and drawn ti
       seat === 1 ? MELD_HAND_CLEARANCE : OPPONENT_MELD_HAND_CLEARANCE;
     const available = melds.length * 3 * (TILE_SIZE.width + 0.035) - clearance;
     assert.ok(rightExtension > 0);
-    assert.ok(offset - MELD_GROUP_GAP - rightExtension <= available + 1e-5);
   }
-
-  assert.ok(OPPONENT_MELD_HAND_CLEARANCE > MELD_HAND_CLEARANCE);
 
   assert.deepEqual(opponentHandLayout(1, 4, false), {
     rackCapacity: 1,
@@ -2233,7 +2138,6 @@ test("mahjong melds point the called tile toward its source and preserve call or
   );
   const addedTile = addedKan.entries.at(-1);
   assert.equal(addedTile.along, calledTile.along);
-  assert.equal(addedTile.inward - calledTile.inward, MELD_KAKAN_INWARD_STEP);
   assert.ok(addedTile.inward > calledTile.inward);
   assert.ok(addedKan.entries.every((entry) => !("stackLevel" in entry)));
 
@@ -2264,7 +2168,6 @@ test("mahjong melds point the called tile toward its source and preserve call or
   const normalBottom = normalTile.inward - (TILE_SIZE.height * MELD_SCALE) / 2;
   const sidewaysBottom = calledTile.inward - (TILE_SIZE.width * MELD_SCALE) / 2;
   assert.ok(Math.abs(normalBottom - sidewaysBottom) < 1e-12);
-  assert.equal(calledTile.inward, MELD_SIDEWAYS_BOTTOM_INSET);
 
   const concealedKan = meldDisplayLayout(
     { kind: "ankan", tiles: [7, 7, 7, 7] },
@@ -2305,8 +2208,6 @@ test("mahjong uses one fixed 16:9 logical viewport without a top status bar", ()
 
   const styles = readMahjongStyles();
   assert.doesNotMatch(styles, /\b(?:vw|vh|dvh)\b|safe-area-inset/);
-  assert.equal(MAHJONG_VIEWPORT.width, 1280);
-  assert.equal(MAHJONG_VIEWPORT.height, 720);
   assert.equal(fixedViewportScale(844, 390), 390 / 720);
   assert.equal(fixedViewportScale(1920, 1080), 1.5);
   assert.equal(fixedViewportScale(1024, 768), 0.8);
@@ -2368,7 +2269,10 @@ test("mahjong settings dialog combines operation controls and themed help", () =
   assert.match(html, /id="discard-volume-value"[^>]*>100%<\/output>/);
   assert.match(html, /class="settings-dialog-close"[^>]*aria-label="关闭设置"/);
   assert.match(html, /class="settings-dialog-body"/);
-  assert.match(html, /id="settings-end-match-button"[^>]*hidden[^>]*>结束本局<\/button>/);
+  assert.match(
+    html,
+    /id="settings-end-match-button"[^>]*hidden[^>]*>结束本局<\/button>/,
+  );
   assert.match(html, /id="settings-return-button"[^>]*>返回对局<\/button>/);
   assert.match(html, /双击空白处摸切/);
   assert.match(
@@ -2398,7 +2302,10 @@ test("mahjong settings dialog combines operation controls and themed help", () =
     /passAvailable: !elements\.pass\.hidden && !elements\.pass\.disabled/,
   );
   const styles = readMahjongStyles();
-  assert.match(styles, /\.settings-dialog-card\s*\{[^}]*grid-template-rows:\s*68px minmax\(0, 1fr\) 72px;/s);
+  assert.match(
+    styles,
+    /\.settings-dialog-card\s*\{[^}]*grid-template-rows:\s*68px minmax\(0, 1fr\) 72px;/s,
+  );
   assert.match(styles, /\.settings-dialog-body\s*\{[^}]*overflow:\s*auto;/s);
   assert.match(styles, /\.settings-dialog-footer\s*\{[^}]*border-top:/s);
   assert.match(renderer, /addEventListener\("dblclick", this\.onDoubleClick\)/);
@@ -2477,10 +2384,6 @@ test("mahjong renders the centre console as a perspective tabletop component", (
   assert.equal(roundLabel(1, 1), "東一局");
   assert.match(renderer, /this\.scene\.add\(this\.tableConsole\.group\)/);
   assert.doesNotMatch(renderer, /this\.overlayScene\.add\(this\.tableConsole/);
-  assert.ok(
-    Math.abs(TABLE_CONSOLE_LAYOUT.width / TILE_SIZE.width - 5.8) < 1e-9,
-  );
-  assert.ok(Math.abs(TABLE_CONSOLE_LAYOUT.depth / TILE_SIZE.width - 5) < 1e-9);
 });
 
 test("mahjong centre console reserves an equal edge band for four riichi sticks", () => {

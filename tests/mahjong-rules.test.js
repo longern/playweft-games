@@ -681,6 +681,149 @@ test("Mahjong AI does not treat a potential flush as a guaranteed open yaku", as
   assert.ok(result.yakuhaiGuaranteed >= 1);
 });
 
+test("Mahjong early-outer confidence follows its distance from riichi", async () => {
+  const result = await runScenario(`
+    function river(size, source)
+      local result = {}
+      for index = 1, size do
+        result[index] = {
+          tile = ((index == source and 4 or 12) - 1) * 4 + 1,
+          claimed = false,
+          riichi = index == size,
+        }
+      end
+      return result
+    end
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000072" } })
+    state.riichi.p1 = true
+    state.discards.p1 = river(6, 1)
+    local early = early_outer_factor(state, "p1", 1)
+    state.discards.p1 = river(6, 5)
+    local just_before_riichi = early_outer_factor(state, "p1", 1)
+    state.discards.p1 = river(12, 6)
+    local late_riichi = early_outer_factor(state, "p1", 1)
+    result = {
+      early = early,
+      justBeforeRiichi = just_before_riichi,
+      lateRiichi = late_riichi,
+    }
+  `);
+
+  assert.ok(result.early < 0.65);
+  assert.ok(result.justBeforeRiichi > 0.94);
+  assert.ok(result.lateRiichi < 0.60);
+  assert.ok(result.early < result.lateRiichi + 0.08);
+});
+
+test("Mahjong AI values wait quality, future safety, and placement pressure", async () => {
+  const result = await runScenario(`
+    function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000073", settings = { matchType = "east" } } })
+    state.hands.p2 = ids({ 2,3,4, 6,7,8, 11,12,13, 20,21,22, 26 })
+    state.discards.p2 = { { tile = ids({ 5 })[1], claimed = false } }
+    local visible = visible_type_counts(state, "p2", state.hands.p2, {})
+    local ryanmen = tenpai_wait_profile(state, 2,
+      ids({ 2,3,4, 6,7,8, 11,12,13, 20,21,22, 26 }), {}, visible)
+    local kanchan = tenpai_wait_profile(state, 2,
+      ids({ 2,3,4, 6,7,8, 11,12,13, 20,22,23, 26 }), {}, visible)
+
+    state.riichi.p1 = true
+    state.discards.p1 = { { tile = ids({ 9 })[1], claimed = false, riichi = true } }
+    local danger_cache = {}
+    local reserve = future_safe_reserve(state, 2,
+      ids({ 9, 28, 1,2,3, 10,11,12, 19,20,21, 25 }), visible, danger_cache)
+    local no_reserve = future_safe_reserve(state, 2,
+      ids({ 4,5,6, 13,14,15, 22,23,24, 25,26,27, 17 }), visible, {})
+
+    state.roundWind, state.handNumber = 1, 3
+    state.scores = { 25000, 24000, 26000, 25000 }
+    local chase = placement_push_value(state, 2, endgame_objective(state, 2))
+    state.scores = { 25000, 26000, 24000, 25000 }
+    local protect = placement_push_value(state, 2, endgame_objective(state, 2))
+    result = {
+      ryanmen = ryanmen.quality,
+      kanchan = kanchan.quality,
+      reserve = reserve,
+      noReserve = no_reserve,
+      chase = chase,
+      protect = protect,
+    }
+  `);
+
+  assert.ok(result.ryanmen > result.kanchan);
+  assert.ok(result.reserve > result.noReserve);
+  assert.ok(result.chase > 0);
+  assert.ok(result.protect < 0);
+});
+
+test("Mahjong AI profiles public threat value and late formal tenpai", async () => {
+  const result = await runScenario(`
+    function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000074", settings = { matchType = "east" } } })
+    state.dealerIndex = 1
+    state.discards.p1 = {
+      { tile = ids({ 1 })[1], claimed = false, tsumogiri = false },
+      { tile = ids({ 9 })[1], claimed = false, tsumogiri = true },
+      { tile = ids({ 15 })[1], claimed = false, tsumogiri = true, riichi = true },
+    }
+    state.riichi.p1 = true
+    local riichi_profile = opponent_profile(state, "p1")
+    local riichi_loss = opponent_dealin_loss(state, "p1")
+
+    state.riichi.p1 = false
+    state.melds.p1 = {
+      { kind = "pon", tiles = ids({ 32,32,32 }) },
+      { kind = "pon", tiles = ids({ 5,5,5 }) },
+    }
+    state.discards.p1 = {
+      { tile = ids({ 1 })[1], claimed = false, tsumogiri = false },
+      { tile = ids({ 9 })[1], claimed = false, tsumogiri = false },
+      { tile = ids({ 18 })[1], claimed = false, tsumogiri = false },
+      { tile = ids({ 27 })[1], claimed = false, tsumogiri = false },
+      { tile = ids({ 10 })[1], claimed = false, tsumogiri = false },
+      { tile = ids({ 19 })[1], claimed = false, tsumogiri = false },
+      { tile = ids({ 28 })[1], claimed = false, tsumogiri = false },
+    }
+    local open_profile = opponent_profile(state, "p1")
+    local open_loss = opponent_dealin_loss(state, "p1")
+
+    state.wall = { 1,2,3,4,5,6 }
+    state.roundWind, state.handNumber = 1, 3
+    state.scores = { 25000, 26000, 24000, 25000 }
+    local formal = endgame_tenpai_value(state, { shanten = 0 }, endgame_objective(state, 2))
+    local noten = endgame_tenpai_value(state, { shanten = 1 }, endgame_objective(state, 2))
+    result = {
+      riichiSpeed = riichi_profile.speed,
+      openValue = open_profile.value,
+      riichiLoss = riichi_loss,
+      openLoss = open_loss,
+      formal = formal,
+      noten = noten,
+    }
+  `);
+
+  assert.ok(result.riichiSpeed > 0.9);
+  assert.ok(result.openValue > 0.5);
+  assert.ok(result.riichiLoss > 5000);
+  assert.ok(result.openLoss > 3000);
+  assert.ok(result.formal > 50);
+  assert.equal(result.noten, 0);
+});
+
 test("Mahjong riichi costs 1000 points and own discards cause furiten", async () => {
   const result = await runScenario(`
     state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000005b", settings = { matchType = "east" } } })
