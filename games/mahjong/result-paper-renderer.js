@@ -24,7 +24,7 @@ const PAPER_MARGIN_X = 54;
 const PAPER_HEADING_Y = 76;
 const PAPER_TABLE_TOP = 120;
 const PAPER_TABLE_BOTTOM = 396;
-const PAPER_SCORE_TOP = 416;
+const PAPER_SCORE_TOP = 444;
 const PAPER_SCORE_HEIGHT = 58;
 const PAPER_TEXTURE_SCALE = 2;
 const PAPER_TEXT_SIZE = 50;
@@ -230,7 +230,7 @@ function drawResultScore(context, width, { fu, han, total }) {
   const fields = [
     { value: fu, unit: "符", lineWidth: 104, numberSize: 30 },
     { value: han, unit: "番", lineWidth: 104, numberSize: 30 },
-    { value: total, unit: "点", lineWidth: 176, numberSize: 46 },
+    { value: total, unit: "点", lineWidth: 204, numberSize: 64 },
   ];
   const unitSize = 22;
   const gap = 34;
@@ -253,7 +253,7 @@ function drawResultScore(context, width, { fu, han, total }) {
     context.lineTo(lineRight, lineY);
     context.stroke();
 
-    context.fillStyle = PAPER_TEXT_COLOR;
+    context.fillStyle = PAPER_VALUE_COLOR;
     context.textAlign = "center";
     context.font = paperNumberFont(field.numberSize);
     context.fillText(
@@ -263,6 +263,7 @@ function drawResultScore(context, width, { fu, han, total }) {
     );
 
     context.textAlign = "left";
+    context.fillStyle = PAPER_TEXT_COLOR;
     context.font = paperFont(unitSize);
     context.fillText(field.unit, lineRight + 10, lineY - 7);
     left = lineRight + unitWidth + 10 + (index < fields.length - 1 ? gap : 0);
@@ -319,8 +320,8 @@ function drawScoreSheet(context, width, { playerNames, rows }) {
       context,
       header.label,
       header.width - 22,
-      20,
-      14,
+      24,
+      16,
     );
     context.fillText(
       header.label,
@@ -490,14 +491,15 @@ function drawYakuTable(context, yaku, width) {
   }
   context.stroke();
 
-  const preferredNameSize = groupCount === 2 ? PAPER_TEXT_SIZE : 36;
+  const preferredNameSize = groupCount === 2 ? 46 : 34;
   const preferredValueSize = groupCount === 2 ? 29 : 23;
+  const preferredNumberSize = groupCount === 2 ? 33 : 26;
+  const numberBaselineOffset = groupCount === 2 ? 4 : 3;
   entries.forEach((item, index) => {
     const column = index % groupCount;
     const row = Math.floor(index / groupCount);
     const left = PAPER_MARGIN_X + column * groupWidth;
     const baseline = PAPER_TABLE_TOP + row * rowHeight + rowHeight / 2;
-    const value = item.han >= 13 ? "役满" : `${item.han ?? 0}番`;
     const nameInset = groupCount === 2 ? 18 : 13;
     const valueInset = groupCount === 2 ? 18 : 12;
 
@@ -509,14 +511,32 @@ function drawYakuTable(context, yaku, width) {
       name,
       nameWidth - nameInset * 2,
       preferredNameSize,
-      groupCount === 2 ? 28 : 24,
+      groupCount === 2 ? 27 : 23,
     );
     context.fillText(name, left + nameWidth - nameInset, baseline);
 
-    context.fillStyle = PAPER_VALUE_COLOR;
     context.textAlign = "right";
+    const valueRight = left + groupWidth - valueInset;
+    if (item.han >= 13) {
+      context.fillStyle = PAPER_VALUE_COLOR;
+      context.font = paperFont(preferredValueSize);
+      context.fillText("役满", valueRight, baseline);
+      return;
+    }
+
+    context.fillStyle = PAPER_TEXT_COLOR;
     context.font = paperFont(preferredValueSize);
-    context.fillText(value, left + groupWidth - valueInset, baseline);
+    const unit = "番";
+    const unitWidth = context.measureText(unit).width;
+    const spaceWidth = context.measureText(" ").width + 4;
+    context.fillText(unit, valueRight, baseline);
+    context.fillStyle = PAPER_VALUE_COLOR;
+    context.font = paperNumberFont(preferredNumberSize);
+    context.fillText(
+      String(item.han ?? 0),
+      valueRight - unitWidth - spaceWidth,
+      baseline + numberBaselineOffset,
+    );
   });
 }
 
