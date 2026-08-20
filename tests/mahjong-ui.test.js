@@ -1251,6 +1251,19 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   assert.match(resultStyles, /@keyframes result-page-step/);
   assert.match(resultStyles, /@keyframes result-page-step-previous/);
   assert.match(resultStyles, /@keyframes result-page-step-current/);
+  assert.match(
+    resultStyles,
+    /result-page-step 920ms linear both/,
+  );
+  assert.match(
+    resultStyles,
+    /result-page-step-previous 560ms cubic-bezier\(0\.32, 0, 0\.2, 1\) both/,
+  );
+  assert.match(
+    resultStyles,
+    /result-page-step-current 560ms cubic-bezier\(0\.22, 0\.61, 0\.36, 1\) 360ms both/,
+  );
+  assert.match(main, /const RESULT_PAGE_TRANSITION_MS = 920;/);
   assert.doesNotMatch(resultStyles, /translateX\(-100%\)/);
   assert.doesNotMatch(resultStyles, /result-page-enter|result-page-leave/);
   assert.match(main, /outgoing\.classList\.add\("is-step-previous"\)/);
@@ -1278,6 +1291,88 @@ test("mahjong blank result double-click starts the button animation before advan
     },
   });
   assert.deepEqual(calls, ["button-animation", "result-step"]);
+});
+
+test("mahjong keeps the result start button aligned across detail and score pages", () => {
+  const renderer = readFileSync(
+    new URL("../games/mahjong/result-hand-renderer.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(renderer, /this\.host\.prepend\(this\.renderer\.domElement\);/);
+  assert.match(
+    renderer,
+    /this\.scoreHost\.prepend\(this\.renderer\.domElement\);/,
+  );
+  assert.match(
+    renderer,
+    /const RESULT_START_BUTTON_HOME = new Vector3\(6\.45, 0, 2\.9\);/,
+  );
+  assert.doesNotMatch(renderer, /anchorStartButtonToResultPanel/);
+  const resultStyles = readFileSync(
+    new URL("../games/mahjong/styles/result.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    resultStyles,
+    /\.result-detail-content:not\(\.is-three-result-rendered\)\s*\{\s*--result-content-offset-y: -42px;/,
+  );
+});
+
+test("mahjong result fu and han values are at least half the point-value size", () => {
+  const paperRenderer = readFileSync(
+    new URL("../games/mahjong/result-paper-renderer.js", import.meta.url),
+    "utf8",
+  );
+  const scoreFields = paperRenderer.match(
+    /const fields = \[([\s\S]*?)\];/,
+  )?.[1];
+  const values = [...(scoreFields?.matchAll(/numberSize: (\d+)/g) ?? [])].map(
+    (match) => Number(match[1]),
+  );
+  assert.deepEqual(values, [36, 36, 64]);
+  assert.ok(values[0] >= values[2] / 2);
+  assert.ok(values[1] >= values[2] / 2);
+});
+
+test("mahjong result yaku names are no more than 1.4 times the han-unit size", () => {
+  const paperRenderer = readFileSync(
+    new URL("../games/mahjong/result-paper-renderer.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    paperRenderer,
+    /const preferredNameSize = groupCount === 2 \? 40 : 32;/,
+  );
+  assert.match(
+    paperRenderer,
+    /const preferredValueSize = groupCount === 2 \? 29 : 23;/,
+  );
+  assert.ok(40 / 29 <= 1.4);
+  assert.ok(32 / 23 <= 1.4);
+});
+
+test("mahjong score-sheet instant photos use distinct subtle tilts", () => {
+  const paperRenderer = readFileSync(
+    new URL("../games/mahjong/result-paper-renderer.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    paperRenderer,
+    /const INSTANT_PHOTO_TILT_RADIANS = Object\.freeze\(\[\s*-0\.021,\s*0\.014,\s*-0\.01,\s*0\.017,\s*\]\);/,
+  );
+  assert.match(
+    paperRenderer,
+    /card\.rotation\.y = INSTANT_PHOTO_TILT_RADIANS\[index\];/,
+  );
+  assert.match(
+    paperRenderer,
+    /const INSTANT_PHOTO_POSITION_OFFSETS = Object\.freeze\(\[\s*Object\.freeze\(\{ x: -0\.028, z: 0\.014 \}\),\s*Object\.freeze\(\{ x: 0\.018, z: -0\.011 \}\),\s*Object\.freeze\(\{ x: -0\.013, z: 0\.021 \}\),\s*Object\.freeze\(\{ x: 0\.024, z: 0\.007 \}\),\s*\]\);/,
+  );
+  assert.match(
+    paperRenderer,
+    /scoreSheetPlayerCentre\(index\) \+ offset\.x/,
+  );
+  assert.match(paperRenderer, /INSTANT_PHOTO_EDGE_OVERLAP \+\s*offset\.z/);
 });
 
 test("mahjong defers default decorative images until after window load", () => {

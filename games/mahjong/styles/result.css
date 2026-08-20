@@ -71,7 +71,7 @@
 }
 
 .result-page-track.is-step-advancing {
-  animation: result-page-step 300ms linear both;
+  animation: result-page-step 920ms linear both;
 }
 
 .result-page-track.is-step-resetting {
@@ -96,7 +96,7 @@
   will-change: opacity, transform;
 }
 
-.result-detail-content {
+.result-detail-content:not(.is-three-result-rendered) {
   --result-content-offset-y: -42px;
 }
 
@@ -105,11 +105,11 @@
 }
 
 .result-page-track.is-step-advancing .result-content.is-step-previous {
-  animation: result-page-step-previous 300ms cubic-bezier(0.22, 0.72, 0.18, 1) both;
+  animation: result-page-step-previous 560ms cubic-bezier(0.32, 0, 0.2, 1) both;
 }
 
 .result-page-track.is-step-advancing .result-content:not(.is-step-previous):not([hidden]) {
-  animation: result-page-step-current 300ms cubic-bezier(0.16, 0.82, 0.2, 1) both;
+  animation: result-page-step-current 560ms cubic-bezier(0.22, 0.61, 0.36, 1) 360ms both;
 }
 
 .result-panel.is-exiting {
@@ -160,10 +160,6 @@
     opacity: 1;
     transform: translateY(var(--result-content-offset-y, 0));
   }
-  48% {
-    opacity: 0;
-    transform: translate(-88px, var(--result-content-offset-y, 0));
-  }
   to {
     opacity: 0;
     transform: translate(-88px, var(--result-content-offset-y, 0));
@@ -172,10 +168,6 @@
 
 @keyframes result-page-step-current {
   from {
-    opacity: 0;
-    transform: translate(112px, var(--result-content-offset-y, 0));
-  }
-  28% {
     opacity: 0;
     transform: translate(112px, var(--result-content-offset-y, 0));
   }
@@ -371,7 +363,7 @@
 
 .result-scene-canvas {
   position: absolute;
-  z-index: 0;
+  z-index: 1;
   inset: 0;
   display: block;
   width: 100%;

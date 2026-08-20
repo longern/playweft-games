@@ -44,6 +44,13 @@ const INSTANT_PHOTO_HEIGHT =
 const INSTANT_PHOTO_EDGE_OVERLAP = 0.7;
 const INSTANT_PHOTO_THICKNESS = 0.022;
 const INSTANT_PHOTO_PAPER_CLEARANCE = 0.024;
+const INSTANT_PHOTO_TILT_RADIANS = Object.freeze([-0.021, 0.014, -0.01, 0.017]);
+const INSTANT_PHOTO_POSITION_OFFSETS = Object.freeze([
+  Object.freeze({ x: -0.028, z: 0.014 }),
+  Object.freeze({ x: 0.018, z: -0.011 }),
+  Object.freeze({ x: -0.013, z: 0.021 }),
+  Object.freeze({ x: 0.024, z: 0.007 }),
+]);
 const INSTANT_PHOTO_TEXTURE_SIZE = Object.freeze({ width: 216, height: 258 });
 const INSTANT_PHOTO_IMAGE_INSET = Object.freeze({
   left: 15,
@@ -103,13 +110,16 @@ export class MahjongResultPaper {
 
     for (let index = 0; index < 4; index += 1) {
       const card = new Group();
+      const offset = INSTANT_PHOTO_POSITION_OFFSETS[index];
       card.position.set(
-        scoreSheetPlayerCentre(index),
+        scoreSheetPlayerCentre(index) + offset.x,
         INSTANT_PHOTO_PAPER_CLEARANCE,
         -RESULT_PAPER_DEPTH / 2 -
           INSTANT_PHOTO_HEIGHT / 2 +
-          INSTANT_PHOTO_EDGE_OVERLAP,
+          INSTANT_PHOTO_EDGE_OVERLAP +
+          offset.z,
       );
+      card.rotation.y = INSTANT_PHOTO_TILT_RADIANS[index];
       const photo = new Mesh(this.photoBodyGeometry, [
         this.photoBodyMaterial,
         this.photoBodyMaterial,
@@ -228,8 +238,8 @@ function scoreSheetPlayerCentre(index) {
 
 function drawResultScore(context, width, { fu, han, total }) {
   const fields = [
-    { value: fu, unit: "符", lineWidth: 104, numberSize: 30 },
-    { value: han, unit: "番", lineWidth: 104, numberSize: 30 },
+    { value: fu, unit: "符", lineWidth: 104, numberSize: 36 },
+    { value: han, unit: "番", lineWidth: 104, numberSize: 36 },
     { value: total, unit: "点", lineWidth: 204, numberSize: 64 },
   ];
   const unitSize = 22;
@@ -491,7 +501,7 @@ function drawYakuTable(context, yaku, width) {
   }
   context.stroke();
 
-  const preferredNameSize = groupCount === 2 ? 46 : 34;
+  const preferredNameSize = groupCount === 2 ? 40 : 32;
   const preferredValueSize = groupCount === 2 ? 29 : 23;
   const preferredNumberSize = groupCount === 2 ? 33 : 26;
   const numberBaselineOffset = groupCount === 2 ? 4 : 3;
@@ -549,8 +559,7 @@ function paperFont(size) {
 
 function yakuFont(size) {
   return (
-    `700 ${size}px "Mahjong Yaku Xingshu", "Playweft Mahjong Xingshu", ` +
-    '"FZKai-Z03", STKaiti, KaiTi, serif'
+    `700 ${size}px "Mahjong Brush", ` + '"FZKai-Z03", STKaiti, KaiTi, serif'
   );
 }
 

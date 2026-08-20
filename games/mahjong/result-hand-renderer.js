@@ -66,6 +66,7 @@ const RESULT_HAND_Z = -1.25;
 const RESULT_INDICATORS_Z = -2.65;
 const RESULT_PAPER_Z = 3.45;
 const RESULT_SCORE_PAPER_Z = 1.3;
+const RESULT_START_BUTTON_HOME = new Vector3(6.45, 0, 2.9);
 const RESULT_INDICATOR_SCALE = 1;
 const RESULT_INDICATOR_GAP = 0.01;
 const RESULT_INDICATOR_GROUP_GAP = 0.42;
@@ -808,7 +809,7 @@ class MahjongResultStartButton {
     // Set just beyond the lower-right corner of the score sheet. Because this
     // lives in the result scene, it inherits the same camera perspective as
     // the paper and the felt rather than behaving like a flat HUD control.
-    this.object.position.set(6.45, 0, 2.9);
+    this.object.position.copy(RESULT_START_BUTTON_HOME);
     this.object.visible = false;
 
     this.baseGeometry = new CylinderGeometry(0.53, 0.56, 0.07, 48);
