@@ -360,6 +360,21 @@ export function resultScoreRows(state, playerName) {
   });
 }
 
+export function matchResultRows(state, playerName) {
+  return asArray(state?.scores)
+    .slice(0, 4)
+    .map((score, index) => ({
+      seat: index + 1,
+      name:
+        index === 0
+          ? playerName
+          : state.playerNames?.[index] ?? PLAYERS[index].name,
+      score: Number(score) || 0,
+    }))
+    .sort((left, right) => right.score - left.score || left.seat - right.seat)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+}
+
 export function resultScoreSheetRows(state) {
   const history = asArray(state?.scoreHistory)
     .map((entry) => ({

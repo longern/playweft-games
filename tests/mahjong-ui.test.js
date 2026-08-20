@@ -25,6 +25,7 @@ import {
   doraIndicatorSlots,
   doraTypeCounts,
   exhaustiveDrawPresentation,
+  matchResultRows,
   opponentHandLayout,
   orderedHand,
   partitionClaimActions,
@@ -1603,6 +1604,33 @@ test("mahjong result pages separate winners before the score summary", () => {
     { name: "织羽", before: 22_000, delta: -4_000, after: 18_000 },
     { name: "墨池", before: 24_000, delta: 6_000, after: 30_000 },
   ]);
+  assert.deepEqual(matchResultRows(state, "你"), [
+    { seat: 2, name: "青岚", score: 31_000, rank: 1 },
+    { seat: 4, name: "墨池", score: 30_000, rank: 2 },
+    { seat: 1, name: "你", score: 21_000, rank: 3 },
+    { seat: 3, name: "织羽", score: 18_000, rank: 4 },
+  ]);
+  const main = readFileSync(
+    new URL("../games/mahjong/main.js", import.meta.url),
+    "utf8",
+  );
+  const html = readFileSync(
+    new URL("../games/mahjong/index.html", import.meta.url),
+    "utf8",
+  );
+  const resultStyles = readFileSync(
+    new URL("../games/mahjong/styles/result.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(main, /if \(state\.matchEnded\) \{\s*showMatchSummary\(\);\s*return;/s);
+  assert.match(main, /dispatch\(\{ type: "new_match" \}\)/);
+  assert.match(main, /function returnToSetupFromSummary\(\)/);
+  assert.match(
+    html,
+    /id="match-summary"[\s\S]*?id="match-summary-rows"[\s\S]*?再来一局[\s\S]*?返回大厅/,
+  );
+  assert.match(resultStyles, /\.match-summary\s*\{[\s\S]*?backdrop-filter: blur\(18px\)/);
+  assert.match(resultStyles, /\.match-summary-photo\s*\{[\s\S]*?padding: 18px 18px 78px;/);
 });
 
 test("mahjong score sheets retain the latest scored hands and show each change from the prior row", () => {

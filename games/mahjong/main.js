@@ -24,6 +24,7 @@ import {
   deferredHandInsertion,
   errorMessage,
   exhaustiveDrawPresentation,
+  matchResultRows,
   resultDetailPageCount,
 } from "./game-format.js";
 import { MahjongThreeRenderer } from "./three-renderer.js";
@@ -164,6 +165,7 @@ let state;
 let resultPageIndex = 0;
 let resultPageKey = "";
 let resultPageAnimating = false;
+let matchSummaryVisible = false;
 let selectedTileId = 0;
 let riichiMode = false;
 let selectionBeforeRiichi = 0;
@@ -179,6 +181,13 @@ const SETUP_EXIT_DURATION_MS = 560;
 const RESULT_PAGE_TRANSITION_MS = 920;
 const RESULT_EXIT_DURATION_MS = 320;
 const KAN_DRAW_PAUSE_MS = 300;
+const MATCH_SUMMARY_PORTRAIT_POSITIONS = [
+  "0% 0%",
+  "100% 0%",
+  "0% 100%",
+  "100% 100%",
+];
+const MATCH_SUMMARY_POSITIONS = ["bottom", "right", "top", "left"];
 const matchMusic = new Audio();
 matchMusic.loop = true;
 matchMusic.preload = "metadata";
@@ -396,6 +405,12 @@ elements.tsumo.addEventListener("click", () => dispatch({ type: "tsumo" }));
 elements.riichi.addEventListener("click", enterRiichiMode);
 elements.cancelRiichi.addEventListener("click", cancelRiichiMode);
 elements.rematch.addEventListener("click", () => void continueResult());
+elements.matchSummaryRematch.addEventListener("click", () =>
+  void restartMatchFromSummary(),
+);
+elements.matchSummarySetup.addEventListener("click", () =>
+  void returnToSetupFromSummary(),
+);
 elements.result.addEventListener("dblclick", (event) => {
   if (!isResultBlankSpace(event.target)) return;
   resultHandRenderer.playStartButtonActivation(() => void continueResult());
@@ -1287,7 +1302,12 @@ function renderCurrentState() {
     defaultNames: getMahjongDefaultNames(),
     playerNameIsAuthoritative: hasPlatformName,
   });
-  resultHandRenderer.render(renderState, resultPageIndex, playerName);
+  if (matchSummaryVisible) {
+    resultHandRenderer.hide();
+    renderMatchSummary();
+  } else {
+    resultHandRenderer.render(renderState, resultPageIndex, playerName);
+  }
   applyPackAvatars(renderState);
   visualRenderer.render(renderState, visibleEvents, {
     ...domView.visualUi(playerName, selectedTileId),
@@ -1378,6 +1398,11 @@ async function continueResult() {
       return;
     }
 
+    if (state.matchEnded) {
+      showMatchSummary();
+      return;
+    }
+
     renderClearedTableForResultExit();
     elements.result.classList.add("is-exiting");
     await waitForAnimation(
@@ -1423,9 +1448,147 @@ function syncResultPage(current) {
   resultPageKey = key;
   resultPageIndex = 0;
   resultPageAnimating = false;
+  hideMatchSummary();
   elements.rematch.disabled = false;
   elements.result.classList.remove("is-exiting");
   resetResultPageTrack();
+}
+
+function showMatchSummary() {
+  if (!state?.matchEnded) return;
+  matchSummaryVisible = true;
+  elements.result.classList.add("is-match-summary");
+  elements.matchSummary.hidden = false;
+  resultHandRenderer.hide();
+  renderMatchSummary();
+}
+
+function hideMatchSummary() {
+  matchSummaryVisible = false;
+  elements.result.classList.remove("is-match-summary");
+  elements.matchSummary.hidden = true;
+}
+
+function renderMatchSummary() {
+  const rows = matchResultRows(state, playerName);
+  const winner = rows[0];
+  if (!winner) return;
+  elements.matchSummaryRows.replaceChildren(
+    ...rows.map((entry) => {
+      const row = document.createElement("tr");
+      for (const value of [`${entry.rank}位`, entry.name, String(entry.score)]) {
+        const cell = document.createElement("td");
+        cell.textContent = value;
+        row.append(cell);
+      }
+      return row;
+    }),
+  );
+  renderMatchSummaryPortrait(winner.seat);
+}
+
+function renderMatchSummaryPortrait(seat) {
+  const index = Number(seat) - 1;
+  const position = MATCH_SUMMARY_POSITIONS[index] || "bottom";
+  const stationImage = elements.stations[position]?.querySelector(
+    "[data-player-avatar]",
+  );
+  const source = stationImage?.dataset.source || "";
+  const crop = elements.matchSummaryPhotoCrop;
+  const image = elements.matchSummaryPhotoImage;
+  crop.style.setProperty(
+    "--match-summary-portrait-position",
+    MATCH_SUMMARY_PORTRAIT_POSITIONS[index] || "0% 0%",
+  );
+  if (!source) {
+    crop.classList.remove("is-custom");
+    image.hidden = true;
+    image.removeAttribute("src");
+    delete image.dataset.source;
+    return;
+  }
+  if (image.dataset.source === source && !image.hidden) return;
+  crop.classList.remove("is-custom");
+  image.hidden = true;
+  image.dataset.source = source;
+  image.onload = () => {
+    if (image.dataset.source !== source) return;
+    crop.classList.add("is-custom");
+    image.hidden = false;
+  };
+  image.onerror = () => {
+    if (image.dataset.source !== source) return;
+    crop.classList.remove("is-custom");
+    image.hidden = true;
+    image.removeAttribute("src");
+  };
+  image.src = source;
+}
+
+async function restartMatchFromSummary() {
+  if (!matchSummaryVisible || !state?.matchEnded || resultPageAnimating) return;
+  resultPageAnimating = true;
+  elements.matchSummaryRematch.disabled = true;
+  elements.matchSummarySetup.disabled = true;
+  try {
+    hideMatchSummary();
+    renderClearedTableForResultExit();
+    elements.result.classList.add("is-exiting");
+    await waitForAnimation(
+      elements.result,
+      "result-screen-exit",
+      RESULT_EXIT_DURATION_MS,
+    );
+    dispatch({ type: "new_match" });
+  } finally {
+    resultPageAnimating = false;
+    elements.matchSummaryRematch.disabled = false;
+    elements.matchSummarySetup.disabled = false;
+    resetResultPageTrack();
+    if (state?.phase === "hand_ended") {
+      elements.result.classList.remove("is-exiting");
+    }
+  }
+}
+
+async function returnToSetupFromSummary() {
+  if (!matchSummaryVisible || !state?.matchEnded || resultPageAnimating) return;
+  resultPageAnimating = true;
+  elements.matchSummaryRematch.disabled = true;
+  elements.matchSummarySetup.disabled = true;
+  try {
+    hideMatchSummary();
+    renderClearedTableForResultExit();
+    elements.result.classList.add("is-exiting");
+    await waitForAnimation(
+      elements.result,
+      "result-screen-exit",
+      RESULT_EXIT_DURATION_MS,
+    );
+    window.clearTimeout(aiTimer);
+    presentation.suspend();
+    game?.close();
+    game = undefined;
+    state = undefined;
+    visibleEvents = [];
+    selectedTileId = 0;
+    riichiMode = false;
+    selectionBeforeRiichi = 0;
+    resultPageIndex = 0;
+    resultPageKey = "";
+    syncMatchMusic({ start: false });
+    elements.result.hidden = true;
+    elements.loading.hidden = true;
+    showSetup();
+    settingsDialog.setSoloMatchActive(false);
+    clearSoloSave();
+  } finally {
+    resultPageAnimating = false;
+    elements.matchSummaryRematch.disabled = false;
+    elements.matchSummarySetup.disabled = false;
+    resetResultPageTrack();
+    elements.result.classList.remove("is-exiting");
+  }
 }
 
 function resetResultPageTrack() {

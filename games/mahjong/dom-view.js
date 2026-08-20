@@ -798,6 +798,12 @@ function collectElements() {
     resultDetailYaku: document.querySelector("#result-yaku"),
     rematch: document.querySelector("#rematch-button"),
     rematchLabel: document.querySelector("#rematch-button-label"),
+    matchSummary: document.querySelector("#match-summary"),
+    matchSummaryRows: document.querySelector("#match-summary-rows"),
+    matchSummaryPhotoCrop: document.querySelector("#match-summary-photo-crop"),
+    matchSummaryPhotoImage: document.querySelector("#match-summary-photo-image"),
+    matchSummaryRematch: document.querySelector("#match-summary-rematch"),
+    matchSummarySetup: document.querySelector("#match-summary-setup"),
     setup: document.querySelector("#setup-panel"),
     opponentHands: {
       top: document.querySelector("#hand-top"),
