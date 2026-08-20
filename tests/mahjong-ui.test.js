@@ -10,6 +10,9 @@ import {
   Vector3,
 } from "three";
 import {
+  DRAW_REVEAL_CARD_DELAY_MS,
+  DRAW_REVEAL_VISIBLE_BASE_MS,
+  DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS,
   HAND_INSERTION_DELAY_MS,
   HAND_END_PRESENTATION_DELAY_MS,
 } from "../games/mahjong/constants.js";
@@ -553,6 +556,11 @@ test("mahjong pauses before integrating a hand-discarded drawn tile", () => {
 });
 
 test("mahjong presentation scheduling cancels insertion before terminal reveal", () => {
+  assert.equal(
+    DRAW_REVEAL_VISIBLE_BASE_MS,
+    HAND_END_PRESENTATION_DELAY_MS - DRAW_REVEAL_CARD_DELAY_MS,
+  );
+  assert.equal(DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS, 450);
   let nextTimer = 0;
   const timers = new Map();
   const schedule = (callback, delay) => {
@@ -566,11 +574,13 @@ test("mahjong presentation scheduling cancels insertion before terminal reveal",
   };
   let insertionReady = 0;
   let kanDrawReady = 0;
+  let drawRevealReady = 0;
   let resultReady = 0;
   const presentation = new MahjongPresentationController(
     {
       onHandInsertionReady: () => (insertionReady += 1),
       onKanDrawReady: () => (kanDrawReady += 1),
+      onDrawRevealReady: () => (drawRevealReady += 1),
       onResultReady: () => (resultReady += 1),
     },
     { schedule, cancel },
@@ -606,6 +616,23 @@ test("mahjong presentation scheduling cancels insertion before terminal reveal",
   timers.get(resultTimer).callback();
   assert.equal(presentation.resultVisible, true);
   assert.equal(resultReady, 1);
+
+  presentation.syncDrawReveal(
+    "10:exhaustive-draw",
+    DRAW_REVEAL_CARD_DELAY_MS,
+  );
+  const drawRevealTimer = presentation.drawRevealTimer;
+  assert.equal(presentation.drawRevealVisible, false);
+  presentation.syncDrawReveal(
+    "10:exhaustive-draw",
+    DRAW_REVEAL_CARD_DELAY_MS,
+  );
+  assert.equal(presentation.drawRevealTimer, drawRevealTimer);
+  timers.get(drawRevealTimer).callback();
+  assert.equal(presentation.drawRevealVisible, true);
+  assert.equal(drawRevealReady, 1);
+  presentation.syncDrawReveal("", DRAW_REVEAL_CARD_DELAY_MS);
+  assert.equal(presentation.drawRevealVisible, false);
 });
 
 test("mahjong puts a post-call draw in the slot after the shortened rack", () => {
@@ -711,7 +738,7 @@ test("mahjong keeps five fixed dora slots and preserves red-five artwork", () =>
   ]);
 });
 
-test("mahjong reveals ura indicators only on the riichi winner's result page", () => {
+test("mahjong reveals ura indicators only on a riichi win result page", () => {
   const state = {
     doraIndicatorTiles: [{ type: 5, red: true }],
     uraDoraIndicatorTiles: [{ type: 14, red: false }],
@@ -728,6 +755,10 @@ test("mahjong reveals ura indicators only on the riichi winner's result page", (
     null,
     null,
   ]);
+  assert.deepEqual(
+    resultIndicatorSlots({ ...state, winType: "nagashi" }, "p2").ura,
+    [null, null, null, null, null],
+  );
 });
 
 test("mahjong derives visible dora with suit, wind, and dragon wrapping", () => {
@@ -1162,7 +1193,16 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     /return asArray\(current\?\.winners\)\s*\.map\(\(id\) => asArray\(current\.players\)\.indexOf\(id\) \+ 1\)/s,
   );
   assert.match(main, /handEndPresentationDelay\(state\)/);
-  assert.match(main, /showDrawReveal: isDrawRevealState\(state\) && !presentation\.resultVisible/);
+  assert.match(main, /isExhaustiveDrawRevealState\(current\)/);
+  assert.match(main, /drawRevealVisibleDuration\(current\)/);
+  assert.match(main, /DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS/);
+  assert.match(
+    main,
+    /asArray\(current\?\.result\?\.tenpaiWaits\)\s*\.filter\(\(waits\) => asArray\(waits\)\.length > 0\)/s,
+  );
+  assert.match(main, /presentation\.syncDrawReveal\(/);
+  assert.match(main, /DRAW_REVEAL_CARD_DELAY_MS/);
+  assert.match(main, /presentation\.drawRevealVisible/);
   assert.match(main, /current\.result\?\.abortive === true/);
   assert.match(main, /abortive-draw/);
   assert.match(
@@ -1176,6 +1216,8 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     /id="draw-reveal"[\s\S]*?<div class="draw-reveal-card">[\s\S]*?data-draw-tenpai-seat="3"[\s\S]*?id="draw-reveal-reason"/,
   );
   assert.match(view, /renderDrawReveal\(state, showDrawReveal\)/);
+  assert.match(view, /const nagashi = state\?\.winType === "nagashi"/);
+  assert.match(view, /!abortive && !exhaustive && !nagashi/);
   assert.match(view, /state\.abortiveReason \|\| state\.result\?\.reason \|\| "途中流局"/);
   assert.match(view, /const waitsBySeat = exhaustive\s*\? asArray\(state\.result\?\.tenpaiWaits\)/s);
   assert.match(view, /label\.hidden = waits\.length === 0/);
@@ -1191,6 +1233,19 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   assert.match(drawRevealStyles, /inset: 0 0 10px;[\s\S]*?filter: blur\(18px\)/);
   assert.match(drawRevealStyles, /draw-reveal-card strong\s*\{[\s\S]*?"Mahjong Brush"/s);
   assert.match(view, /traditionalDrawReason\(/);
+  assert.match(resultRenderer, /const results = asArray\(state\.results\)\.length/);
+  assert.doesNotMatch(
+    resultRenderer,
+    /if \(state\.winType === "nagashi"\) \{\s*this\.hide\(\);/s,
+  );
+  const paperRenderer = readFileSync(
+    new URL("../games/mahjong/result-paper-renderer.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(paperRenderer, /drawYakuTable\(context, yaku, logicalWidth, \{ winType \}\)/);
+  assert.match(paperRenderer, /value: nagashi \? "" : fu/);
+  assert.match(paperRenderer, /value: nagashi \? "" : han/);
+  assert.match(paperRenderer, /context\.fillText\("滿貫", valueRight, baseline\)/);
   assert.match(drawRevealStyles, /flex-wrap: wrap;[\s\S]*?max-width: 230px;[\s\S]*?max-height: 187px;/);
   assert.match(drawRevealStyles, /draw-reveal-tenpai-top\s*\{\s*top: 20px;/);
   assert.match(drawRevealStyles, /draw-reveal-tenpai-right\s*\{[\s\S]*?right: 60px;/);

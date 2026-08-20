@@ -565,7 +565,7 @@ export class MahjongDomView {
       Number(state.winnerIndex) ||
       1;
     const winnerName = playerDisplayName(state, winnerIndex, playerName);
-    elements.resultDetailHands.hidden = state.winType === "nagashi";
+    elements.resultDetailHands.hidden = false;
     elements.resultDetailHands.replaceChildren(
       createResultHand(state, winnerIndex, winnerName, false, this.doraCounts),
     );
@@ -576,7 +576,11 @@ export class MahjongDomView {
         const name = document.createElement("i");
         const yakuValue = document.createElement("b");
         name.textContent = traditionalYakuName(yaku.name);
-        yakuValue.textContent = yaku.han >= 13 ? "役满" : `${yaku.han}番`;
+        yakuValue.textContent = state.winType === "nagashi"
+          ? "滿貫"
+          : yaku.han >= 13
+            ? "役满"
+            : `${yaku.han}番`;
         item.append(name, yakuValue);
         return item;
       }),
@@ -586,10 +590,11 @@ export class MahjongDomView {
   renderDrawReveal(state, visible = false) {
     const { elements } = this;
     const abortive = state?.result?.abortive === true;
+    const nagashi = state?.winType === "nagashi";
     const exhaustive = state?.phase === "hand_ended" &&
       state?.draw === true &&
       !abortive;
-    elements.drawReveal.hidden = !visible || (!abortive && !exhaustive);
+    elements.drawReveal.hidden = !visible || (!abortive && !exhaustive && !nagashi);
     if (elements.drawReveal.hidden) return;
     elements.drawRevealReason.textContent = traditionalDrawReason(
       abortive

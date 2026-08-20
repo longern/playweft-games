@@ -1,6 +1,6 @@
 export class MahjongPresentationController {
   constructor(
-    { onHandInsertionReady, onKanDrawReady, onResultReady },
+    { onHandInsertionReady, onKanDrawReady, onDrawRevealReady, onResultReady },
     {
       schedule = (callback, delay) => window.setTimeout(callback, delay),
       cancel = (timer) => window.clearTimeout(timer),
@@ -8,6 +8,7 @@ export class MahjongPresentationController {
   ) {
     this.onHandInsertionReady = onHandInsertionReady;
     this.onKanDrawReady = onKanDrawReady;
+    this.onDrawRevealReady = onDrawRevealReady;
     this.onResultReady = onResultReady;
     this.schedule = schedule;
     this.cancel = cancel;
@@ -20,6 +21,9 @@ export class MahjongPresentationController {
     this.resultKey = "";
     this.resultVisible = true;
     this.resultTimer = 0;
+    this.drawRevealKey = "";
+    this.drawRevealVisible = false;
+    this.drawRevealTimer = 0;
   }
 
   syncResult(key, delay) {
@@ -38,6 +42,25 @@ export class MahjongPresentationController {
       this.resultTimer = 0;
       this.resultVisible = true;
       this.onResultReady?.();
+    }, delay);
+  }
+
+  syncDrawReveal(key, delay) {
+    const presentationKey = String(key || "");
+    if (!presentationKey) {
+      this.cancelDrawRevealTimer();
+      this.drawRevealKey = "";
+      this.drawRevealVisible = false;
+      return;
+    }
+    if (presentationKey === this.drawRevealKey) return;
+    this.cancelDrawRevealTimer();
+    this.drawRevealKey = presentationKey;
+    this.drawRevealVisible = false;
+    this.drawRevealTimer = this.schedule(() => {
+      this.drawRevealTimer = 0;
+      this.drawRevealVisible = true;
+      this.onDrawRevealReady?.();
     }, delay);
   }
 
@@ -89,11 +112,19 @@ export class MahjongPresentationController {
     this.resultTimer = 0;
   }
 
+  cancelDrawRevealTimer() {
+    if (this.drawRevealTimer) this.cancel(this.drawRevealTimer);
+    this.drawRevealTimer = 0;
+  }
+
   suspend() {
     this.cancelHandInsertion();
     this.cancelKanDraw();
     this.cancelResultTimer();
+    this.cancelDrawRevealTimer();
     this.resultVisible = true;
+    this.drawRevealVisible = false;
+    this.drawRevealKey = "";
   }
 
   destroy() {

@@ -44,7 +44,12 @@ const INSTANT_PHOTO_HEIGHT =
 const INSTANT_PHOTO_EDGE_OVERLAP = 0.7;
 const INSTANT_PHOTO_THICKNESS = 0.022;
 const INSTANT_PHOTO_PAPER_CLEARANCE = 0.024;
-const INSTANT_PHOTO_TILT_RADIANS = Object.freeze([-0.021, 0.014, -0.01, 0.017]);
+const INSTANT_PHOTO_TILT_RADIANS = Object.freeze([
+  -0.021,
+  0.014,
+  -0.01,
+  0.017,
+]);
 const INSTANT_PHOTO_POSITION_OFFSETS = Object.freeze([
   Object.freeze({ x: -0.028, z: 0.014 }),
   Object.freeze({ x: 0.018, z: -0.011 }),
@@ -184,8 +189,8 @@ export class MahjongResultPaper {
 
     context.textBaseline = "middle";
     drawResultHeading(context, logicalWidth, winnerName, winType);
-    drawYakuTable(context, yaku, logicalWidth);
-    drawResultScore(context, logicalWidth, { fu, han, total });
+    drawYakuTable(context, yaku, logicalWidth, { winType });
+    drawResultScore(context, logicalWidth, { fu, han, total, winType });
     this.paperTexture.needsUpdate = true;
     this.paper.visible = true;
     this.photoCards.visible = false;
@@ -236,10 +241,21 @@ function scoreSheetPlayerCentre(index) {
   return (logicalX / PAPER_TEXTURE_VIEWPORT.width - 0.5) * RESULT_PAPER_WIDTH;
 }
 
-function drawResultScore(context, width, { fu, han, total }) {
+function drawResultScore(context, width, { fu, han, total, winType }) {
+  const nagashi = winType === "nagashi";
   const fields = [
-    { value: fu, unit: "符", lineWidth: 104, numberSize: 36 },
-    { value: han, unit: "番", lineWidth: 104, numberSize: 36 },
+    {
+      value: nagashi ? "" : fu,
+      unit: nagashi ? "" : "符",
+      lineWidth: 104,
+      numberSize: 36,
+    },
+    {
+      value: nagashi ? "" : han,
+      unit: nagashi ? "" : "番",
+      lineWidth: 104,
+      numberSize: 36,
+    },
     { value: total, unit: "点", lineWidth: 204, numberSize: 64 },
   ];
   const unitSize = 22;
@@ -466,7 +482,7 @@ function drawResultCheckbox(context, x, y, { label, selected }) {
   context.fillText(label, x + size + 10, y);
 }
 
-function drawYakuTable(context, yaku, width) {
+function drawYakuTable(context, yaku, width, { winType = "" } = {}) {
   const entries = yaku;
   const groupCount = entries.length >= 11 ? 3 : 2;
   const rowCount = Math.max(5, Math.ceil(entries.length / groupCount));
@@ -527,6 +543,12 @@ function drawYakuTable(context, yaku, width) {
 
     context.textAlign = "right";
     const valueRight = left + groupWidth - valueInset;
+    if (winType === "nagashi") {
+      context.fillStyle = PAPER_VALUE_COLOR;
+      context.font = paperFont(preferredValueSize);
+      context.fillText("滿貫", valueRight, baseline);
+      return;
+    }
     if (item.han >= 13) {
       context.fillStyle = PAPER_VALUE_COLOR;
       context.font = paperFont(preferredValueSize);

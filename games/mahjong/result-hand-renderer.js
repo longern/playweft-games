@@ -377,11 +377,6 @@ export class MahjongResultHandRenderer {
     }
     this.cancelScoreSheetRender();
     this.hideScorePortraitOverlay();
-    if (state.winType === "nagashi") {
-      this.hide();
-      return;
-    }
-
     const results = asArray(state.results).length
       ? asArray(state.results)
       : [state.result ?? {}];

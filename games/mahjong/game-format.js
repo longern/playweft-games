@@ -222,7 +222,7 @@ export function doraIndicatorSlots(state) {
 }
 
 export function resultIndicatorSlots(state, playerId) {
-  const uraIndicators = state?.riichi?.[playerId] === true
+  const uraIndicators = state?.winType !== "nagashi" && state?.riichi?.[playerId] === true
     ? asArray(state?.uraDoraIndicatorTiles).map((indicator) => ({
       type: Number(indicator?.type),
       red: indicator?.red === true,

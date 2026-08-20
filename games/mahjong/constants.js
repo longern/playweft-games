@@ -23,4 +23,11 @@ export const AI_DELAY_MS = 680;
 export const AUTO_RIICHI_DISCARD_DELAY_MS = 520;
 export const HAND_INSERTION_DELAY_MS = 260;
 export const HAND_END_PRESENTATION_DELAY_MS = 2700;
+// Let the end-of-hand table state settle before the draw reason card appears.
+export const DRAW_REVEAL_CARD_DELAY_MS = 760;
+// Keep an all-noten draw at the existing pace, then allow time to inspect
+// each additional player's waits around the table.
+export const DRAW_REVEAL_VISIBLE_BASE_MS =
+  HAND_END_PRESENTATION_DELAY_MS - DRAW_REVEAL_CARD_DELAY_MS;
+export const DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS = 450;
 export const LOCAL_WIN_PRESENTATION_DELAY_MS = 1000;

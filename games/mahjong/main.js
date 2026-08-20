@@ -4,6 +4,9 @@ import { Cog, X, createIcons } from "lucide";
 import {
   AI_DELAY_MS,
   AUTO_RIICHI_DISCARD_DELAY_MS,
+  DRAW_REVEAL_CARD_DELAY_MS,
+  DRAW_REVEAL_VISIBLE_BASE_MS,
+  DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS,
   HAND_INSERTION_DELAY_MS,
   HAND_END_PRESENTATION_DELAY_MS,
   HUMAN_ID,
@@ -283,6 +286,7 @@ const presentation = new MahjongPresentationController({
     scheduleAi();
   },
   onResultReady: refresh,
+  onDrawRevealReady: renderCurrentState,
 });
 const visualRendererReady = visualRenderer.init().catch((error) => {
   console.error("Mahjong renderer failed", error);
@@ -1260,6 +1264,10 @@ function refresh({ ownDiscardedTile = 0 } = {}) {
   queueHandInsertion(previousState, events, ownDiscardedTile);
   const revealKey = handEndPresentationKey(state);
   presentation.syncResult(revealKey, handEndPresentationDelay(state));
+  presentation.syncDrawReveal(
+    isDrawRevealState(state) ? revealKey : "",
+    DRAW_REVEAL_CARD_DELAY_MS,
+  );
   renderCurrentState();
   playRiverTileSound(events);
 }
@@ -1270,7 +1278,10 @@ function renderCurrentState() {
   const coveredPlayerIndices = handCoveredPlayerIndices(state);
   domView.render(renderState, visibleEvents, selectedTileId, playerName, {
     showResult: presentation.resultVisible,
-    showDrawReveal: isDrawRevealState(state) && !presentation.resultVisible,
+    showDrawReveal:
+      isDrawRevealState(state) &&
+      presentation.drawRevealVisible &&
+      !presentation.resultVisible,
     resultPage: resultPageIndex,
     riichiMode,
     defaultNames: getMahjongDefaultNames(),
@@ -1539,7 +1550,10 @@ function handEndPresentationKey(current) {
   if (exhaustive.revealed.length + exhaustive.covered.length > 0) {
     return `${current.moveCount}:exhaustive-draw`;
   }
-  if (current.draw || current.winType === "nagashi") return "";
+  if (current.winType === "nagashi") {
+    return `${current.moveCount}:nagashi:${asArray(current.winners).join(",")}`;
+  }
+  if (current.draw) return "";
   const winners = asArray(current.winners);
   if (!winners.length) return "";
   return `${current.moveCount}:${current.winType}:${winners.join(",")}`;
@@ -1547,15 +1561,36 @@ function handEndPresentationKey(current) {
 
 function isDrawRevealState(current) {
   return current?.phase === "hand_ended" &&
+    (current.winType === "nagashi" ||
+      (current.draw === true &&
+        (current.result?.abortive === true ||
+          isExhaustiveDrawRevealState(current))));
+}
+
+function isExhaustiveDrawRevealState(current) {
+  return current?.phase === "hand_ended" &&
     current.draw === true &&
-    (current.result?.abortive === true || Array.isArray(current.result?.tenpai));
+    current.result?.abortive !== true &&
+    Array.isArray(current.result?.tenpai);
 }
 
 function handEndPresentationDelay(current) {
+  if (isExhaustiveDrawRevealState(current)) {
+    return DRAW_REVEAL_CARD_DELAY_MS + drawRevealVisibleDuration(current);
+  }
   return current?.phase === "hand_ended" ? HAND_END_PRESENTATION_DELAY_MS : 0;
 }
 
+function drawRevealVisibleDuration(current) {
+  const tenpaiPlayerCount = asArray(current?.result?.tenpaiWaits)
+    .filter((waits) => asArray(waits).length > 0)
+    .length;
+  return DRAW_REVEAL_VISIBLE_BASE_MS +
+    tenpaiPlayerCount * DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS;
+}
+
 function handRevealPlayerIndices(current) {
+  if (current?.winType === "nagashi") return [];
   const exhaustive = exhaustiveDrawPresentation(current);
   if (exhaustive.revealed.length + exhaustive.covered.length > 0) {
     return exhaustive.revealed;
