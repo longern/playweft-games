@@ -15,6 +15,7 @@ const games = [
   "xiangqi",
   "mahjong",
 ];
+const THREE_VENDOR_CHUNK = "three-r185.1";
 
 const input = {
   index: resolve(import.meta.dirname, "index.html"),
@@ -33,6 +34,18 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input,
+      output: {
+        manualChunks(id) {
+          return id.includes("/node_modules/three/")
+            ? THREE_VENDOR_CHUNK
+            : undefined;
+        },
+        chunkFileNames(chunk) {
+          return chunk.name === THREE_VENDOR_CHUNK
+            ? `assets/vendor/${THREE_VENDOR_CHUNK}-[hash].js`
+            : "assets/[name]-[hash].js";
+        },
+      },
     },
   },
 });

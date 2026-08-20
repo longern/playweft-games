@@ -36,10 +36,15 @@ export const DEFAULT_TABLE_THEME = Object.freeze({
   trim: "#9b7443",
 });
 
+// Measured from felt-skin-moonwave-v1.jpg. This is the no-request first frame
+// while its photographic texture is intentionally loaded after window.load.
+export const DEFAULT_FELT_AVERAGE_COLOR = "#163523";
+
 export class ThreeMahjongTable {
   constructor({
     anisotropy = 1,
     feltTexture,
+    feltColor = DEFAULT_FELT_AVERAGE_COLOR,
     theme = DEFAULT_TABLE_THEME,
   } = {}) {
     this.group = new Group();
@@ -48,13 +53,7 @@ export class ThreeMahjongTable {
     this.materials = [];
     this.textures = [];
 
-    if (!feltTexture) throw new Error("A photographic felt texture is required");
-    feltTexture.colorSpace = SRGBColorSpace;
-    feltTexture.anisotropy = anisotropy;
-    feltTexture.wrapS = RepeatWrapping;
-    feltTexture.wrapT = RepeatWrapping;
-    feltTexture.repeat.set(1, 1);
-    this.textures.push(feltTexture);
+    this.anisotropy = anisotropy;
 
     const woodTexture = createWoodTexture(theme);
     woodTexture.anisotropy = anisotropy;
@@ -64,8 +63,8 @@ export class ThreeMahjongTable {
     this.textures.push(woodTexture);
 
     const feltMaterial = this.trackMaterial(new MeshPhysicalMaterial({
-      color: new Color("#edf2ec"),
-      map: feltTexture,
+      color: new Color(feltColor),
+      map: null,
       emissive: new Color("#104c40"),
       emissiveIntensity: 0.34,
       roughness: 0.93,
@@ -80,8 +79,10 @@ export class ThreeMahjongTable {
       depthWrite: false,
     }));
     this.feltMaterial = feltMaterial;
-    this.defaultFeltTexture = feltTexture;
+    this.feltColor = new Color(feltColor);
+    this.defaultFeltTexture = null;
     this.customFeltTexture = null;
+    if (feltTexture) this.setDefaultFeltTexture(feltTexture);
     const woodMaterial = this.trackMaterial(new MeshPhysicalMaterial({
       color: new Color("#ffffff"),
       map: woodTexture,
@@ -224,16 +225,39 @@ export class ThreeMahjongTable {
       this.customFeltTexture.dispose();
     }
     this.customFeltTexture = texture ?? null;
-    const next = texture ?? this.defaultFeltTexture;
-    if (texture) {
-      texture.colorSpace = SRGBColorSpace;
-      texture.anisotropy = this.defaultFeltTexture.anisotropy;
-      texture.wrapS = RepeatWrapping;
-      texture.wrapT = RepeatWrapping;
-      texture.repeat.set(1, 1);
+    if (texture) this.configureFeltTexture(texture);
+    this.applyFeltTexture(texture ?? this.defaultFeltTexture);
+  }
+
+  setDefaultFeltTexture(texture) {
+    if (this.defaultFeltTexture && this.defaultFeltTexture !== texture) {
+      this.defaultFeltTexture.dispose();
+      this.textures = this.textures.filter(
+        (current) => current !== this.defaultFeltTexture,
+      );
     }
-    this.feltMaterial.map = next;
-    this.feltMaterial.bumpMap = next;
+    this.defaultFeltTexture = texture ?? null;
+    if (texture) {
+      this.configureFeltTexture(texture);
+      this.textures.push(texture);
+    }
+    if (!this.customFeltTexture) this.applyFeltTexture(this.defaultFeltTexture);
+  }
+
+  configureFeltTexture(texture) {
+    texture.colorSpace = SRGBColorSpace;
+    texture.anisotropy = this.anisotropy;
+    texture.wrapS = RepeatWrapping;
+    texture.wrapT = RepeatWrapping;
+    texture.repeat.set(1, 1);
+  }
+
+  applyFeltTexture(texture) {
+    this.feltMaterial.map = texture ?? null;
+    this.feltMaterial.bumpMap = texture ?? null;
+    this.feltMaterial.color.copy(
+      texture ? new Color("#edf2ec") : this.feltColor,
+    );
     this.feltMaterial.needsUpdate = true;
   }
 

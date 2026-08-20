@@ -40,7 +40,10 @@ import {
   fixedViewportScale,
   MAHJONG_VIEWPORT,
 } from "../games/mahjong/fixed-viewport.js";
-import { deferMahjongDecorativeAssets } from "../games/mahjong/deferred-visual-assets.js";
+import {
+  deferMahjongDecorativeAssets,
+  deferMahjongImageAssets,
+} from "../games/mahjong/deferred-visual-assets.js";
 import {
   handTransform,
   MELD_GROUP_GAP,
@@ -1446,6 +1449,70 @@ test("mahjong defers default decorative images until after window load", () => {
     styles,
     /url\("\.\.\/assets\/(?:player-portraits-v1|moonlit-table-v3|felt-skin-moonwave-v1|tiles\/riichi-faces)/,
   );
+});
+
+test("mahjong defers lobby signpost image until after window load", () => {
+  const listeners = new Map();
+  const image = {
+    dataset: { deferredImage: "signpost" },
+    removeAttribute(name) {
+      delete this.dataset[name.replace("data-", "").replace(/-([a-z])/g, (_, char) => char.toUpperCase())];
+    },
+  };
+  const document = {
+    readyState: "loading",
+    querySelectorAll: () => [image],
+  };
+  const window = {
+    addEventListener: (type, listener) => listeners.set(type, listener),
+    setTimeout: (callback) => callback(),
+  };
+  deferMahjongImageAssets({
+    document,
+    window,
+    urls: { signpost: "/signpost.webp" },
+  });
+  assert.equal(image.src, undefined);
+  listeners.get("load")();
+  assert.equal(image.src, "/signpost.webp");
+  assert.equal(image.dataset.deferredImage, undefined);
+
+  const html = readFileSync(
+    new URL("../games/mahjong/index.html", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(html, /rel="preload"[^>]+waiting-(?:evening|signpost)/);
+  assert.match(html, /data-deferred-image="signpost"/);
+});
+
+test("mahjong starts with an inline low-resolution tile atlas and a sampled felt colour", () => {
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
+  );
+  const resultRenderer = readFileSync(
+    new URL("../games/mahjong/result-hand-renderer.js", import.meta.url),
+    "utf8",
+  );
+  const table = readFileSync(
+    new URL("../games/mahjong/render/three-table.js", import.meta.url),
+    "utf8",
+  );
+  const placeholder = readFileSync(
+    new URL(
+      "../games/mahjong/assets/tiles/riichi-faces-placeholder.webp",
+      import.meta.url,
+    ),
+  );
+
+  assert.ok(placeholder.byteLength < 4_096);
+  assert.match(renderer, /riichi-faces-placeholder\.webp\?url/);
+  assert.match(renderer, /this\.deferDefaultTextures\(\)/);
+  assert.match(renderer, /afterWindowLoad\(/);
+  assert.match(resultRenderer, /riichi-faces-placeholder\.webp\?url/);
+  assert.match(resultRenderer, /this\.deferFaceAtlas\(\)/);
+  assert.match(table, /DEFAULT_FELT_AVERAGE_COLOR = "#163523"/);
+  assert.match(table, /setDefaultFeltTexture\(texture\)/);
 });
 
 test("mahjong retries restored match music on the first user gesture", () => {

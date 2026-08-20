@@ -16,7 +16,9 @@ import {
   WebGLRenderer,
 } from "three";
 import tileFacesUrl from "./assets/tiles/riichi-faces.webp?url";
+import tileFacesPlaceholderUrl from "./assets/tiles/riichi-faces-placeholder.webp?url";
 import feltSkinUrl from "./assets/felt-skin-moonwave-v1.jpg?url";
+import { afterWindowLoad } from "./deferred-visual-assets.js";
 import { POSITIONS } from "./constants.js";
 import { MAHJONG_VIEWPORT } from "./fixed-viewport.js";
 import {
@@ -164,16 +166,12 @@ export class MahjongThreeRenderer {
       `400 300px "Mahjong Brush"`,
       "吃碰杠立直和自摸",
     );
-    const [faceAtlas, feltSkin] = await Promise.all([
-      textureLoader.loadAsync(tileFacesUrl),
-      textureLoader.loadAsync(feltSkinUrl),
-    ]);
+    const faceAtlas = await textureLoader.loadAsync(tileFacesPlaceholderUrl);
 
     this.addLighting();
     this.addOverlayLighting();
     this.table = new ThreeMahjongTable({
       anisotropy: Math.min(8, this.renderer.capabilities.getMaxAnisotropy()),
-      feltTexture: feltSkin,
     });
     this.scene.add(this.table.group);
     this.dynamic = new Group();
@@ -192,6 +190,7 @@ export class MahjongThreeRenderer {
       this.renderer.capabilities.getMaxAnisotropy(),
     );
     this.tileFactory = new ThreeTileFactory(faceAtlas);
+    this.deferDefaultTextures();
 
     this.onPointerDown = (event) => this.handlePointerDown(event);
     this.onPointerMove = (event) => this.handlePointerMove(event);
@@ -225,6 +224,39 @@ export class MahjongThreeRenderer {
     this.ready = true;
     if (this.pendingRender) this.render(...this.pendingRender);
     else this.drawFrame();
+  }
+
+  deferDefaultTextures() {
+    afterWindowLoad({
+      document,
+      window,
+      callback: () => {
+        void this.loadDefaultTextures().catch((error) => {
+          console.warn("Mahjong table textures failed to load", error);
+        });
+      },
+    });
+  }
+
+  async loadDefaultTextures() {
+    const loader = new TextureLoader();
+    const [faceAtlas, feltSkin] = await Promise.all([
+      loader.loadAsync(tileFacesUrl),
+      loader.loadAsync(feltSkinUrl),
+    ]);
+    if (this.destroyed) {
+      faceAtlas.dispose();
+      feltSkin.dispose();
+      return;
+    }
+    faceAtlas.anisotropy = Math.min(
+      8,
+      this.renderer.capabilities.getMaxAnisotropy(),
+    );
+    this.tileFactory.setFaceAtlas(faceAtlas);
+    this.table.setDefaultFeltTexture(feltSkin);
+    this.renderer.shadowMap.needsUpdate = true;
+    this.drawFrame();
   }
 
   async setAppearance({ tablecloth = "", tileBack = "" } = {}) {

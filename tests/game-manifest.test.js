@@ -188,6 +188,25 @@ test("Cloudflare Pages limits static CORS to browser-fetched JSON", async () => 
   assert.doesNotMatch(headers, /game\.lua/);
 });
 
+test("Mahjong keeps its versioned Three.js vendor chunk immutable", async () => {
+  const [headers, viteConfig] = await Promise.all([
+    readFile("public/_headers", "utf8"),
+    readFile("vite.config.js", "utf8"),
+  ]);
+
+  assert.match(headers, /^\/assets\/vendor\/\*\s*$/m);
+  assert.match(
+    headers,
+    /^\s+Cache-Control: public, max-age=31536000, immutable$/m,
+  );
+  assert.match(viteConfig, /const THREE_VENDOR_CHUNK = "three-r185\.1"/);
+  assert.match(viteConfig, /id\.includes\("\/node_modules\/three\/"\)/);
+  assert.match(
+    viteConfig,
+    /assets\/vendor\/\$\{THREE_VENDOR_CHUNK\}-\[hash\]\.js/,
+  );
+});
+
 test("Werewolf dealer keeps visible rem text at least 0.75rem", async () => {
   const files = [
     "games/werewolf-dealer/styles.css",

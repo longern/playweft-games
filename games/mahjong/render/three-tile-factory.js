@@ -24,9 +24,7 @@ export const TILE_BACK_EDGE_RADIUS = 1.6 / 28;
 
 export class ThreeTileFactory {
   constructor(faceAtlas) {
-    faceAtlas.colorSpace = SRGBColorSpace;
-    faceAtlas.anisotropy = 8;
-    this.faceAtlas = faceAtlas;
+    this.faceAtlas = null;
     this.shellGeometry = new RoundedBoxGeometry(
       TILE_SIZE.width,
       TILE_SIZE.height,
@@ -59,7 +57,7 @@ export class ThreeTileFactory {
     this.defaultBackColor = this.backMaterial.color.clone();
     this.customBackTexture = null;
     this.faceMaterial = new MeshPhysicalMaterial({
-      map: faceAtlas,
+      map: null,
       transparent: true,
       alphaTest: 0.025,
       color: new Color("#e7e7e4"),
@@ -101,6 +99,20 @@ export class ThreeTileFactory {
       TILE_EDGE_RADIUS + 0.006,
     );
     this.faceGeometries = TILE_FACE_NAMES.map((_, index) => createFaceGeometry(index));
+    this.setFaceAtlas(faceAtlas);
+  }
+
+  setFaceAtlas(faceAtlas) {
+    if (this.faceAtlas && this.faceAtlas !== faceAtlas) {
+      this.faceAtlas.dispose();
+    }
+    this.faceAtlas = faceAtlas ?? null;
+    if (this.faceAtlas) {
+      this.faceAtlas.colorSpace = SRGBColorSpace;
+      this.faceAtlas.anisotropy = 8;
+    }
+    this.faceMaterial.map = this.faceAtlas;
+    this.faceMaterial.needsUpdate = true;
   }
 
   create({
@@ -203,7 +215,7 @@ export class ThreeTileFactory {
     this.matchHighlightMaterial.dispose();
     this.doraWashMaterial.dispose();
     this.disabledWashMaterial.dispose();
-    this.faceAtlas.dispose();
+    this.faceAtlas?.dispose();
     this.customBackTexture?.dispose();
   }
 }

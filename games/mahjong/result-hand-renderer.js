@@ -26,7 +26,9 @@ import {
   WebGLRenderer,
 } from "three";
 import tileFacesUrl from "./assets/tiles/riichi-faces.webp?url";
+import tileFacesPlaceholderUrl from "./assets/tiles/riichi-faces-placeholder.webp?url";
 import playerPortraitsUrl from "./assets/player-portraits-v1.jpg?url";
+import { afterWindowLoad } from "./deferred-visual-assets.js";
 import {
   asArray,
   doraTypeCounts,
@@ -247,12 +249,13 @@ export class MahjongResultHandRenderer {
     this.startControlHost?.classList.add("is-three-button");
     this.createScorePortraitOverlay();
 
-    const atlas = await new TextureLoader().loadAsync(tileFacesUrl);
+    const atlas = await new TextureLoader().loadAsync(tileFacesPlaceholderUrl);
     atlas.anisotropy = Math.min(
       8,
       this.renderer.capabilities.getMaxAnisotropy(),
     );
     this.tileFactory = new ThreeTileFactory(atlas);
+    this.deferFaceAtlas();
     await Promise.all([
       document.fonts?.load('400 28px "Kalam Score"'),
       document.fonts?.load('400 26px "Mahjong Brush"'),
@@ -260,6 +263,32 @@ export class MahjongResultHandRenderer {
     ]);
     this.ready = true;
     if (this.pendingRender) this.render(...this.pendingRender);
+  }
+
+  deferFaceAtlas() {
+    afterWindowLoad({
+      document,
+      window,
+      callback: () => {
+        void this.loadFaceAtlas().catch((error) => {
+          console.warn("Mahjong result tile atlas failed to load", error);
+        });
+      },
+    });
+  }
+
+  async loadFaceAtlas() {
+    const atlas = await new TextureLoader().loadAsync(tileFacesUrl);
+    if (this.destroyed) {
+      atlas.dispose();
+      return;
+    }
+    atlas.anisotropy = Math.min(
+      8,
+      this.renderer.capabilities.getMaxAnisotropy(),
+    );
+    this.tileFactory.setFaceAtlas(atlas);
+    this.drawFrame();
   }
 
   addLighting() {

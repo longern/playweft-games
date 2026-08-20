@@ -27,12 +27,16 @@ import { MahjongThreeRenderer } from "./three-renderer.js";
 import { MahjongResultHandRenderer } from "./result-hand-renderer.js";
 import { MahjongPresentationController } from "./presentation-controller.js";
 import { createMahjongSettingsDialog } from "./settings-dialog.js";
-import { deferMahjongDecorativeAssets } from "./deferred-visual-assets.js";
+import {
+  deferMahjongDecorativeAssets,
+  deferMahjongImageAssets,
+} from "./deferred-visual-assets.js";
 import discardSoundSource from "./assets/audio/discard-sound.js";
 import defaultTableBackgroundUrl from "./assets/moonlit-table-v3.jpg?url";
 import defaultPortraitsUrl from "./assets/player-portraits-v1.jpg?url";
 import defaultResultTableclothUrl from "./assets/felt-skin-moonwave-v1.jpg?url";
 import defaultLobbyBackgroundUrl from "./assets/waiting-evening-v1.jpg?url";
+import defaultLobbySignpostUrl from "./assets/waiting-signpost-v3.webp?url";
 import defaultTileFacesUrl from "./assets/tiles/riichi-faces.webp?url";
 import { riverTileSoundCue } from "./render/audio-cues.js";
 import {
@@ -138,6 +142,11 @@ deferMahjongDecorativeAssets({
     "--mahjong-setup-background-image": defaultLobbyBackgroundUrl,
     "--mahjong-tile-face-image": defaultTileFacesUrl,
   },
+});
+deferMahjongImageAssets({
+  document,
+  window,
+  urls: { signpost: defaultLobbySignpostUrl },
 });
 
 document.querySelector("#theme-json-example").textContent = JSON.stringify(

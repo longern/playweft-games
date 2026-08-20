@@ -6,8 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#083f38" />
   <link rel="icon" type="image/svg+xml" href="/mahjong.svg" />
-  <link rel="preload" as="image" href="./assets/waiting-evening-v1.jpg" type="image/jpeg" fetchpriority="high" />
-  <link rel="preload" as="image" href="./assets/waiting-signpost-v3.webp" type="image/webp" />
   <meta name="description" content="Playweft 麻将：摸牌、鸣牌、立直和牌，来一场紧张刺激的日式麻将。" />
   <title>麻将 | Playweft</title>
   <style>
@@ -314,7 +312,7 @@
       <section id="setup-panel" class="setup-panel" aria-label="选择对局长度">
         <div class="setup-scene">
           <div id="setup-signpost-stage" class="setup-signpost" aria-label="选择东风场或南风场">
-            <img class="setup-signpost-image" src="./assets/waiting-signpost-v3.webp" alt="" aria-hidden="true" />
+            <img class="setup-signpost-image" data-deferred-image="signpost" alt="" aria-hidden="true" />
             <button class="setup-route-sign setup-route-east" type="button" data-match-type="east"
               aria-label="东风场，东一局至东四局"><span>東風場</span></button>
             <button class="setup-route-sign setup-route-south" type="button" data-match-type="hanchan"
