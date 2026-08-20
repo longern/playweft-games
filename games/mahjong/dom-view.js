@@ -541,9 +541,11 @@ export class MahjongDomView {
     const ended = state.phase === "hand_ended";
     elements.result.hidden = !ended || !showResult;
     if (!ended) return;
-    elements.rematch.textContent = "继续";
     const detailCount = resultDetailPageCount(state);
     const safePage = Math.max(0, Math.min(detailCount, Number(pageIndex) || 0));
+    const rematchLabel = "继续";
+    elements.rematch.setAttribute("aria-label", rematchLabel);
+    elements.rematchLabel.textContent = rematchLabel;
     if (safePage >= detailCount) {
       this.renderResultScores(state, playerName);
       return;
@@ -747,6 +749,7 @@ function collectElements() {
     resultDetailHands: document.querySelector("#result-hands"),
     resultDetailYaku: document.querySelector("#result-yaku"),
     rematch: document.querySelector("#rematch-button"),
+    rematchLabel: document.querySelector("#rematch-button-label"),
     setup: document.querySelector("#setup-panel"),
     opponentHands: {
       top: document.querySelector("#hand-top"),

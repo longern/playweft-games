@@ -1,17 +1,27 @@
 import {
   ACESFilmicToneMapping,
   AmbientLight,
+  CanvasTexture,
+  CylinderGeometry,
+  DoubleSide,
   Group,
   HemisphereLight,
   Mesh,
+  MeshBasicMaterial,
+  MeshPhysicalMaterial,
+  MeshStandardMaterial,
   PCFShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
   PointLight,
   Scene,
   ShadowMaterial,
+  Raycaster,
   SRGBColorSpace,
+  SphereGeometry,
   TextureLoader,
+  TorusGeometry,
+  Vector2,
   Vector3,
   WebGLRenderer,
 } from "three";
@@ -42,6 +52,7 @@ import {
   resultHandCameraPosition,
   resultHandVerticalFov,
 } from "./render/result-hand-camera.js";
+import { activateResultStartControl } from "./result-start-control.js";
 import { YAKU_FONT_TEXT } from "./yaku-display.js";
 
 const VIEWPORT = Object.freeze({ width: 1280, height: 720 });
@@ -66,21 +77,30 @@ const RESULT_KEY_LIGHT_REFERENCE_DISTANCE = Math.hypot(
   RESULT_HAND_KEY_LIGHT_POSITION.z - RESULT_HAND_Z,
 );
 const RESULT_KEY_LIGHT_POINT_INTENSITY =
-  RESULT_KEY_LIGHT_DIRECTIONAL_INTENSITY * RESULT_KEY_LIGHT_REFERENCE_DISTANCE ** 2;
+  RESULT_KEY_LIGHT_DIRECTIONAL_INTENSITY *
+  RESULT_KEY_LIGHT_REFERENCE_DISTANCE ** 2;
 const SCORE_PORTRAIT_IMAGE_ASPECT = 1;
-const DEFAULT_PORTRAIT_POSITIONS = [
-  "0% 0%",
-  "100% 0%",
-  "0% 100%",
-  "100% 100%",
-];
+const DEFAULT_PORTRAIT_POSITIONS = ["0% 0%", "100% 0%", "0% 100%", "100% 100%"];
 
 export class MahjongResultHandRenderer {
-  constructor(host, { handsHost, yakuHost, scoreHost } = {}) {
+  constructor(
+    host,
+    {
+      handsHost,
+      yakuHost,
+      scoreHost,
+      startControlHost,
+      onStartButtonClick,
+      onBlankDoubleClick,
+    } = {},
+  ) {
     this.host = host;
     this.handsHost = handsHost;
     this.yakuHost = yakuHost;
     this.scoreHost = scoreHost;
+    this.startControlHost = startControlHost;
+    this.onStartButtonClick = onStartButtonClick;
+    this.onBlankDoubleClick = onBlankDoubleClick;
     this.ready = false;
     this.destroyed = false;
     this.pendingRender = null;
@@ -105,6 +125,62 @@ export class MahjongResultHandRenderer {
     this.renderer.shadowMap.type = PCFShadowMap;
     this.renderer.domElement.className = "result-scene-canvas";
     this.renderer.domElement.setAttribute("aria-hidden", "true");
+    this.raycaster = new Raycaster();
+    this.pointer = new Vector2();
+    this.onResultScenePointerMove = (event) => {
+      if (!this.startButton?.object3d.visible) return;
+      const hit = this.resultButtonHit(event);
+      this.renderer.domElement.style.cursor = hit ? "pointer" : "default";
+    };
+    this.onResultScenePointerDown = (event) => {
+      if (!this.resultButtonHit(event)) return;
+      event.preventDefault();
+      this.resultButtonPointerId = event.pointerId;
+      this.renderer.domElement.setPointerCapture?.(event.pointerId);
+      this.animateStartButton(true, () => this.releaseStartButtonAfterPress());
+    };
+    this.onResultScenePointerUp = (event) => {
+      if (this.resultButtonPointerId !== event.pointerId) return;
+      this.resultButtonPointerId = null;
+      this.renderer.domElement.releasePointerCapture?.(event.pointerId);
+      const shouldContinue = this.resultButtonHit(event);
+      this.startButtonReleasePending = shouldContinue;
+      if (this.startButtonAnimationTarget !== true) {
+        this.releaseStartButtonAfterPress();
+      }
+    };
+    this.onResultScenePointerCancel = (event) => {
+      if (this.resultButtonPointerId !== event.pointerId) return;
+      this.resultButtonPointerId = null;
+      this.startButtonReleasePending = false;
+      if (this.startButtonAnimationTarget !== true) {
+        this.releaseStartButtonAfterPress();
+      }
+    };
+    this.onResultSceneDoubleClick = (event) => {
+      if (this.resultButtonHit(event)) return;
+      this.playStartButtonActivation(() => this.onBlankDoubleClick?.());
+    };
+    this.renderer.domElement.addEventListener(
+      "pointerdown",
+      this.onResultScenePointerDown,
+    );
+    this.renderer.domElement.addEventListener(
+      "pointermove",
+      this.onResultScenePointerMove,
+    );
+    this.renderer.domElement.addEventListener(
+      "pointerup",
+      this.onResultScenePointerUp,
+    );
+    this.renderer.domElement.addEventListener(
+      "pointercancel",
+      this.onResultScenePointerCancel,
+    );
+    this.renderer.domElement.addEventListener(
+      "dblclick",
+      this.onResultSceneDoubleClick,
+    );
     this.onContextLost = (event) => {
       event.preventDefault();
       this.contextLost = true;
@@ -163,6 +239,11 @@ export class MahjongResultHandRenderer {
     );
     this.paper.object3d.position.z = RESULT_PAPER_Z;
     this.scene.add(this.paper.object3d);
+    this.startButton = new MahjongResultStartButton(
+      this.renderer.capabilities.getMaxAnisotropy(),
+    );
+    this.scene.add(this.startButton.object3d);
+    this.startControlHost?.classList.add("is-three-button");
     this.createScorePortraitOverlay();
 
     const atlas = await new TextureLoader().loadAsync(tileFacesUrl);
@@ -257,6 +338,8 @@ export class MahjongResultHandRenderer {
       return;
     }
     if (this.contextLost) return;
+
+    this.showStartButton("继续");
 
     if (safePage >= detailCount) {
       this.renderScoreSheet(state, playerName);
@@ -440,6 +523,7 @@ export class MahjongResultHandRenderer {
   }
 
   hide() {
+    this.cancelStartButtonAnimation();
     this.cancelScoreSheetRender();
     this.hideScorePortraitOverlay();
     this.host.classList.remove("is-three-result-rendered");
@@ -447,7 +531,89 @@ export class MahjongResultHandRenderer {
     this.handsHost?.classList.remove("is-three-rendered");
     this.yakuHost?.classList.remove("is-paper-rendered");
     this.paper?.hide();
+    this.startButton?.hide();
+    this.startControlHost?.style.setProperty("visibility", "hidden");
     this.renderer?.domElement.remove();
+  }
+
+  showStartButton(label) {
+    if (!this.startButton?.object3d.visible) {
+      this.cancelStartButtonAnimation();
+      this.startButton?.setPressAmount(0);
+    }
+    this.startButton?.show(label);
+    this.startControlHost?.style.setProperty("visibility", "visible");
+  }
+
+  animateStartButton(pressed, onComplete) {
+    if (!this.startButton || this.destroyed) return;
+    this.cancelStartButtonAnimation();
+    const from = this.startButton.pressAmount;
+    const to = pressed ? 1 : 0;
+    const duration = pressed ? 70 : 115;
+    this.startButtonAnimationTarget = pressed;
+    const startedAt = performance.now();
+    const step = (now) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = pressed ? 1 - (1 - progress) ** 3 : 1 - (1 - progress) ** 2;
+      this.startButton.setPressAmount(from + (to - from) * eased);
+      this.drawFrame();
+      if (progress < 1) {
+        this.startButtonAnimation = requestAnimationFrame(step);
+        return;
+      }
+      this.startButtonAnimation = 0;
+      this.startButtonAnimationTarget = null;
+      onComplete?.();
+    };
+    this.startButtonAnimation = requestAnimationFrame(step);
+  }
+
+  cancelStartButtonAnimation() {
+    if (!this.startButtonAnimation) return;
+    cancelAnimationFrame(this.startButtonAnimation);
+    this.startButtonAnimation = 0;
+    this.startButtonAnimationTarget = null;
+  }
+
+  releaseStartButtonAfterPress() {
+    if (this.startButtonReleasePending == null) return;
+    const shouldContinue = this.startButtonReleasePending;
+    this.startButtonReleasePending = null;
+    this.animateStartButton(false, () => {
+      if (shouldContinue) this.onStartButtonClick?.();
+    });
+  }
+
+  playStartButtonActivation(onComplete) {
+    if (!this.startButton?.object3d.visible) {
+      onComplete?.();
+      return;
+    }
+    activateResultStartControl({
+      startAnimation: () => {
+        this.animateStartButton(true, () => {
+          this.animateStartButton(false);
+        });
+      },
+      onContinue: onComplete,
+    });
+  }
+
+  resultButtonHit(event) {
+    if (!this.renderer || !this.camera || !this.startButton?.object3d.visible) {
+      return false;
+    }
+    const bounds = this.renderer.domElement.getBoundingClientRect();
+    this.pointer.set(
+      ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+      -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    return (
+      this.raycaster.intersectObjects(this.startButton.hitTargets, false)
+        .length > 0
+    );
   }
 
   cancelScoreSheetRender() {
@@ -563,6 +729,26 @@ export class MahjongResultHandRenderer {
       "webglcontextrestored",
       this.onContextRestored,
     );
+    this.renderer?.domElement.removeEventListener(
+      "pointermove",
+      this.onResultScenePointerMove,
+    );
+    this.renderer?.domElement.removeEventListener(
+      "pointerdown",
+      this.onResultScenePointerDown,
+    );
+    this.renderer?.domElement.removeEventListener(
+      "pointerup",
+      this.onResultScenePointerUp,
+    );
+    this.renderer?.domElement.removeEventListener(
+      "pointercancel",
+      this.onResultScenePointerCancel,
+    );
+    this.renderer?.domElement.removeEventListener(
+      "dblclick",
+      this.onResultSceneDoubleClick,
+    );
     document.removeEventListener(
       "mahjong:player-avatar-changed",
       this.onStationAvatarChanged,
@@ -570,6 +756,8 @@ export class MahjongResultHandRenderer {
     this.scorePortraitOverlay?.remove();
     this.tileFactory?.destroy();
     this.paper?.destroy();
+    this.startButton?.destroy();
+    this.startControlHost?.classList.remove("is-three-button");
     this.shadowGeometry?.dispose();
     this.shadowMaterial?.dispose();
     this.renderer?.dispose();
@@ -591,8 +779,14 @@ function scorePortraitCropRect(points) {
   if (!Array.isArray(points) || points.length !== 4) return null;
   const centreX = points.reduce((sum, point) => sum + point.x, 0) / 4;
   const centreY = points.reduce((sum, point) => sum + point.y, 0) / 4;
-  const width = (distanceBetween(points[0], points[1]) + distanceBetween(points[3], points[2])) / 2;
-  const height = (distanceBetween(points[0], points[3]) + distanceBetween(points[1], points[2])) / 2;
+  const width =
+    (distanceBetween(points[0], points[1]) +
+      distanceBetween(points[3], points[2])) /
+    2;
+  const height =
+    (distanceBetween(points[0], points[3]) +
+      distanceBetween(points[1], points[2])) /
+    2;
   if (width <= 0 || height <= 0) return null;
   const cropWidth = Math.max(width, height * SCORE_PORTRAIT_IMAGE_ASPECT);
   const cropHeight = cropWidth / SCORE_PORTRAIT_IMAGE_ASPECT;
@@ -606,6 +800,147 @@ function scorePortraitCropRect(points) {
 
 function distanceBetween(first, second) {
   return Math.hypot(second.x - first.x, second.y - first.y);
+}
+
+class MahjongResultStartButton {
+  constructor(maxAnisotropy = 1) {
+    this.object = new Group();
+    // Set just beyond the lower-right corner of the score sheet. Because this
+    // lives in the result scene, it inherits the same camera perspective as
+    // the paper and the felt rather than behaving like a flat HUD control.
+    this.object.position.set(6.45, 0, 2.9);
+    this.object.visible = false;
+
+    this.baseGeometry = new CylinderGeometry(0.53, 0.56, 0.07, 48);
+    this.baseMaterial = new MeshStandardMaterial({
+      color: 0x101514,
+      roughness: 0.34,
+      metalness: 0.72,
+    });
+    this.base = new Mesh(this.baseGeometry, this.baseMaterial);
+    this.base.position.y = 0.035;
+    this.base.castShadow = true;
+    this.base.receiveShadow = true;
+    this.object.add(this.base);
+
+    this.ringGeometry = new TorusGeometry(0.39, 0.045, 12, 48);
+    this.ringMaterial = new MeshStandardMaterial({
+      color: 0x252b2a,
+      roughness: 0.25,
+      metalness: 0.84,
+    });
+    this.ring = new Mesh(this.ringGeometry, this.ringMaterial);
+    this.ring.rotation.x = Math.PI / 2;
+    this.ring.position.y = 0.078;
+    this.ring.castShadow = true;
+    this.object.add(this.ring);
+
+    this.capGeometry = new SphereGeometry(
+      0.35,
+      48,
+      20,
+      0,
+      Math.PI * 2,
+      0,
+      Math.PI / 2,
+    );
+    this.capMaterial = new MeshPhysicalMaterial({
+      color: 0xc70c0c,
+      roughness: 0.31,
+      metalness: 0,
+      clearcoat: 0.7,
+      clearcoatRoughness: 0.2,
+      emissive: 0x130000,
+      emissiveIntensity: 0.08,
+    });
+    this.cap = new Mesh(this.capGeometry, this.capMaterial);
+    this.capRestY = 0.09;
+    this.capPressedY = 0.043;
+    this.capRestScaleY = 0.42;
+    this.capPressedScaleY = 0.3;
+    this.pressAmount = 0;
+    this.setPressAmount(0);
+    this.cap.castShadow = true;
+    this.cap.receiveShadow = true;
+    this.object.add(this.cap);
+    this.hitTargets = [this.base, this.ring, this.cap];
+
+    this.labelTexture = createResultStartLabelTexture(maxAnisotropy);
+    this.labelGeometry = new PlaneGeometry(1.8, 0.42);
+    this.labelMaterial = new MeshBasicMaterial({
+      map: this.labelTexture,
+      transparent: true,
+      side: DoubleSide,
+      depthWrite: false,
+    });
+    this.label = new Mesh(this.labelGeometry, this.labelMaterial);
+    this.label.rotation.x = -Math.PI / 2;
+    this.label.position.set(0, 0.012, 0.9);
+    this.object.add(this.label);
+    this.setLabel("继续");
+  }
+
+  get object3d() {
+    return this.object;
+  }
+
+  show(label) {
+    this.setLabel(label);
+    this.object.visible = true;
+  }
+
+  hide() {
+    this.object.visible = false;
+  }
+
+  setLabel(label) {
+    const context = this.labelTexture.image.getContext("2d");
+    if (!context) return;
+    const { width, height } = this.labelTexture.image;
+    context.clearRect(0, 0, width, height);
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.font =
+      '600 72px "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif';
+    context.lineWidth = 4;
+    context.strokeStyle = "rgba(3, 14, 12, 0.78)";
+    context.strokeText(label, width / 2, height / 2 + 1);
+    context.fillStyle = "#e8e2cf";
+    context.fillText(label, width / 2, height / 2);
+    this.labelTexture.needsUpdate = true;
+  }
+
+  setPressAmount(amount) {
+    this.pressAmount = Math.max(0, Math.min(1, amount));
+    this.cap.position.y =
+      this.capRestY + (this.capPressedY - this.capRestY) * this.pressAmount;
+    this.cap.scale.y =
+      this.capRestScaleY +
+      (this.capPressedScaleY - this.capRestScaleY) * this.pressAmount;
+    this.capMaterial.emissiveIntensity = 0.08 - this.pressAmount * 0.045;
+  }
+
+  destroy() {
+    this.baseGeometry.dispose();
+    this.baseMaterial.dispose();
+    this.ringGeometry.dispose();
+    this.ringMaterial.dispose();
+    this.capGeometry.dispose();
+    this.capMaterial.dispose();
+    this.labelGeometry.dispose();
+    this.labelMaterial.dispose();
+    this.labelTexture.dispose();
+  }
+}
+
+function createResultStartLabelTexture(maxAnisotropy) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 128;
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  texture.anisotropy = Math.min(8, maxAnisotropy);
+  return texture;
 }
 
 function normalizeTile(tile) {

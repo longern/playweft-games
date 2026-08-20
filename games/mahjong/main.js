@@ -244,6 +244,9 @@ const resultHandRenderer = new MahjongResultHandRenderer(
     handsHost: elements.resultDetailHands,
     yakuHost: elements.resultDetailYaku,
     scoreHost: elements.resultScoreContent,
+    startControlHost: elements.rematch,
+    onStartButtonClick: () => void continueResult(),
+    onBlankDoubleClick: () => void continueResult(),
   },
 );
 const presentation = new MahjongPresentationController({
@@ -364,7 +367,7 @@ elements.cancelRiichi.addEventListener("click", cancelRiichiMode);
 elements.rematch.addEventListener("click", () => void continueResult());
 elements.result.addEventListener("dblclick", (event) => {
   if (!isResultBlankSpace(event.target)) return;
-  void continueResult();
+  resultHandRenderer.playStartButtonActivation(() => void continueResult());
 });
 elements.autoWin.addEventListener("click", () => toggleAutoAction("autoWin"));
 elements.passClaims.addEventListener("click", () =>

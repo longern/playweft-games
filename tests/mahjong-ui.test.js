@@ -65,6 +65,7 @@ import {
   TILE_SIZE,
 } from "../games/mahjong/render/three-layout.js";
 import { resultMeldDisplayLayout } from "../games/mahjong/render/result-hand-layout.js";
+import { activateResultStartControl } from "../games/mahjong/result-start-control.js";
 import {
   handRevealFallProgress,
   OWN_TILE_HOVER_DURATION_MS,
@@ -1129,6 +1130,10 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
     "utf8",
   );
+  const resultRenderer = readFileSync(
+    new URL("../games/mahjong/result-hand-renderer.js", import.meta.url),
+    "utf8",
+  );
   const format = readFileSync(
     new URL("../games/mahjong/game-format.js", import.meta.url),
     "utf8",
@@ -1191,7 +1196,11 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     html,
     /id="result-score-content" class="result-content result-score-content" aria-label="记分纸" hidden><\/div>[\s\S]*class="result-footer"[\s\S]*id="rematch-button"/,
   );
-  assert.match(html, /id="rematch-button"[^>]*>继续<\/button>/);
+  assert.match(
+    html,
+    /id="rematch-button" class="result-start-control"[^>]*aria-label="继续"[\s\S]*?id="rematch-button-label"[^>]*>继续<\/span>/,
+  );
+  assert.match(view, /const rematchLabel = "继续"/);
   assert.doesNotMatch(view, /你赢了/);
   assert.doesNotMatch(html, /id="result-heading"|id="result-score-list"|id="result-score-delta"/);
   assert.match(view, /this\.renderResultScores\(state, playerName\)/);
@@ -1248,9 +1257,26 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   assert.match(main, /elements\.resultTrack\.classList\.add\("is-step-advancing"\)/);
   assert.match(
     main,
-    /elements\.result\.addEventListener\("dblclick", \(event\) => \{\s*if \(!isResultBlankSpace\(event\.target\)\) return;\s*void continueResult\(\);\s*}\);/s,
+    /elements\.result\.addEventListener\("dblclick", \(event\) => \{\s*if \(!isResultBlankSpace\(event\.target\)\) return;\s*resultHandRenderer\.playStartButtonActivation\(\(\) => void continueResult\(\)\);\s*}\);/s,
+  );
+  assert.match(
+    resultRenderer,
+    /this\.onResultSceneDoubleClick = \(event\) => \{\s*if \(this\.resultButtonHit\(event\)\) return;\s*this\.playStartButtonActivation\(\(\) => this\.onBlankDoubleClick\?\.\(\)\);\s*};/s,
   );
   assert.match(resultStyles, /@keyframes result-screen-exit/);
+});
+
+test("mahjong blank result double-click starts the button animation before advancing", () => {
+  const calls = [];
+  activateResultStartControl({
+    startAnimation() {
+      calls.push("button-animation");
+    },
+    onContinue() {
+      calls.push("result-step");
+    },
+  });
+  assert.deepEqual(calls, ["button-animation", "result-step"]);
 });
 
 test("mahjong result pages separate winners before the score summary", () => {
