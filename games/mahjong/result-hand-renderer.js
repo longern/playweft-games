@@ -136,6 +136,10 @@ export class MahjongResultHandRenderer {
       this.renderer.capabilities.getMaxAnisotropy(),
     );
     this.tileFactory = new ThreeTileFactory(atlas);
+    await Promise.all([
+      document.fonts?.load('400 28px "Kalam Score"'),
+      document.fonts?.load('400 26px "Playweft Mahjong Xingshu"'),
+    ]);
     this.ready = true;
     if (this.pendingRender) this.render(...this.pendingRender);
   }

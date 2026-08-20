@@ -1,3 +1,10 @@
+@font-face {
+  font-family: "Kalam Score";
+  font-style: normal;
+  font-weight: 400;
+  src: url("../assets/fonts/kalam-score.woff2") format("woff2");
+}
+
 .result-panel {
   position: absolute;
   z-index: 90;

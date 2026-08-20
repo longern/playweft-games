@@ -233,22 +233,59 @@ function drawScoreSheet(context, width, { playerNames, rows }) {
     cursor = left;
     context.fillStyle = PAPER_TEXT_COLOR;
     context.textAlign = "center";
-    context.font = paperFont(23);
-    context.fillText(String(row.round ?? ""), cursor + roundWidth / 2, y);
+    const round = String(row.round ?? "");
+    const wind = round.slice(0, 1);
+    const hand = round.slice(1);
+    const windFont = scoreSheetWindFont(32);
+    const handFont = scoreSheetNumberFont(36);
+    context.font = windFont;
+    const windWidth = context.measureText(wind).width;
+    context.font = handFont;
+    const handWidth = context.measureText(hand).width;
+    const roundLeft = cursor + (roundWidth - windWidth - handWidth) / 2;
+    context.textAlign = "left";
+    context.textBaseline = "alphabetic";
+    context.font = windFont;
+    context.fillText(
+      wind,
+      roundLeft,
+      scoreSheetWindBaseline(context, y, windFont),
+    );
+    context.font = handFont;
+    context.fillText(
+      hand,
+      roundLeft + windWidth,
+      scoreSheetInkBaseline(context, hand, y),
+    );
+    context.textBaseline = "middle";
     cursor += roundWidth;
-    context.font = paperFont(22);
-    context.fillText(String(row.honba ?? 0), cursor + honbaWidth / 2, y);
+    context.font = scoreSheetNumberFont(36);
+    const honba = String(row.honba ?? 0);
+    context.textBaseline = "alphabetic";
+    context.fillText(
+      honba,
+      cursor + honbaWidth / 2,
+      scoreSheetInkBaseline(context, honba, y),
+    );
+    context.textBaseline = "middle";
     cursor += honbaWidth;
     for (let seat = 0; seat < 4; seat += 1) {
       const score = Number(row.scores?.[seat]) || 0;
+      const scoreText = String(score);
       const delta = Number(row.deltas?.[seat]) || 0;
       context.fillStyle = PAPER_TEXT_COLOR;
-      context.font = paperNumberFont(28);
+      context.font = scoreSheetNumberFont(36);
       context.textAlign = "center";
-      context.fillText(String(score), cursor + scoreWidth / 2, y);
+      context.textBaseline = "alphabetic";
+      context.fillText(
+        scoreText,
+        cursor + scoreWidth / 2,
+        scoreSheetInkBaseline(context, scoreText, y),
+      );
+      context.textBaseline = "middle";
       if (delta) {
         context.fillStyle = PAPER_VALUE_COLOR;
-        context.font = paperFont(14);
+        context.font = scoreSheetNumberFont(16);
         context.textAlign = "left";
         context.fillText(
           `${delta > 0 ? "+" : ""}${delta}`,
@@ -386,7 +423,32 @@ function paperFont(size) {
 }
 
 function paperNumberFont(size) {
-  return `700 ${size}px "Bradley Hand", "Segoe Print", "Chalkboard SE", cursive`;
+  return scoreSheetNumberFont(size);
+}
+
+function scoreSheetNumberFont(size) {
+  return `400 ${size}px "Kalam Score", cursive`;
+}
+
+function scoreSheetWindFont(size) {
+  return `400 ${size}px "Playweft Mahjong Xingshu", "FZKai-Z03", STKaiti, KaiTi, serif`;
+}
+
+function scoreSheetWindBaseline(context, centreY, font) {
+  context.font = font;
+  const winds = ["東", "南", "西", "北"];
+  const centreOffset = winds.reduce((sum, wind) => {
+    const metrics = context.measureText(wind);
+    return sum + (metrics.actualBoundingBoxDescent - metrics.actualBoundingBoxAscent) / 2;
+  }, 0) / winds.length;
+  return centreY - centreOffset;
+}
+
+function scoreSheetInkBaseline(context, text, centreY) {
+  const metrics = context.measureText(text);
+  const centreOffset =
+    (metrics.actualBoundingBoxDescent - metrics.actualBoundingBoxAscent) / 2;
+  return centreY - centreOffset;
 }
 
 function fittedPaperFont(context, text, maxWidth, preferredSize, minimumSize) {
