@@ -5,7 +5,8 @@
   display: grid;
   place-items: center;
   padding: 24px;
-  background: url("../assets/waiting-evening-v1.jpg") center / cover no-repeat;
+  background:
+    #071713 var(--mahjong-setup-background-image, none) center / cover no-repeat;
 }
 
 :root[data-mahjong-has-lobby] .setup-panel {

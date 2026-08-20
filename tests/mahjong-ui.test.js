@@ -40,6 +40,7 @@ import {
   fixedViewportScale,
   MAHJONG_VIEWPORT,
 } from "../games/mahjong/fixed-viewport.js";
+import { deferMahjongDecorativeAssets } from "../games/mahjong/deferred-visual-assets.js";
 import {
   handTransform,
   MELD_GROUP_GAP,
@@ -1277,6 +1278,63 @@ test("mahjong blank result double-click starts the button animation before advan
     },
   });
   assert.deepEqual(calls, ["button-animation", "result-step"]);
+});
+
+test("mahjong defers default decorative images until after window load", () => {
+  const properties = new Map();
+  const listeners = new Map();
+  const document = {
+    readyState: "loading",
+    documentElement: {
+      style: { setProperty: (name, value) => properties.set(name, value) },
+      dataset: {},
+    },
+  };
+  const window = {
+    addEventListener: (type, listener) => listeners.set(type, listener),
+    setTimeout: (callback) => callback(),
+  };
+  deferMahjongDecorativeAssets({
+    document,
+    window,
+    urls: { "--mahjong-default-portrait-image": "/portraits.jpg" },
+  });
+  assert.equal(properties.size, 0);
+  listeners.get("load")();
+  assert.equal(
+    properties.get("--mahjong-default-portrait-image"),
+    'url("/portraits.jpg")',
+  );
+  assert.equal(document.documentElement.dataset.mahjongDecorativeAssets, "ready");
+
+  const styles = [
+    "../games/mahjong/styles/setup.css",
+    "../games/mahjong/styles/table.css",
+    "../games/mahjong/styles/controls.css",
+    "../games/mahjong/styles/result.css",
+  ]
+    .map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
+    .join("\n");
+  assert.doesNotMatch(
+    styles,
+    /url\("\.\.\/assets\/(?:player-portraits-v1|moonlit-table-v3|felt-skin-moonwave-v1|tiles\/riichi-faces)/,
+  );
+});
+
+test("mahjong retries restored match music on the first user gesture", () => {
+  const main = readFileSync(
+    new URL("../games/mahjong/main.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    main,
+    /document\.addEventListener\("pointerdown", resumeMatchMusic, \{ passive: true \}\);/,
+  );
+  assert.match(main, /document\.addEventListener\("keydown", resumeMatchMusic\);/);
+  assert.match(
+    main,
+    /function resumeMatchMusic\(\) \{\s*if \(!musicNeedsGesture \|\| !game \|\| state\?\.phase === "hand_ended"\) return;\s*syncMatchMusic\(\{ fadeIn: matchMusicGain === 0 \}\);\s*}/s,
+  );
 });
 
 test("mahjong result pages separate winners before the score summary", () => {

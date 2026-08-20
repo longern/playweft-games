@@ -27,7 +27,13 @@ import { MahjongThreeRenderer } from "./three-renderer.js";
 import { MahjongResultHandRenderer } from "./result-hand-renderer.js";
 import { MahjongPresentationController } from "./presentation-controller.js";
 import { createMahjongSettingsDialog } from "./settings-dialog.js";
+import { deferMahjongDecorativeAssets } from "./deferred-visual-assets.js";
 import discardSoundSource from "./assets/audio/discard-sound.js";
+import defaultTableBackgroundUrl from "./assets/moonlit-table-v3.jpg?url";
+import defaultPortraitsUrl from "./assets/player-portraits-v1.jpg?url";
+import defaultResultTableclothUrl from "./assets/felt-skin-moonwave-v1.jpg?url";
+import defaultLobbyBackgroundUrl from "./assets/waiting-evening-v1.jpg?url";
+import defaultTileFacesUrl from "./assets/tiles/riichi-faces.webp?url";
 import { riverTileSoundCue } from "./render/audio-cues.js";
 import {
   activateMahjongAssetPack,
@@ -121,6 +127,18 @@ const THEME_JSON_EXAMPLE = {
 };
 
 createIcons({ icons: { Cog, X } });
+
+deferMahjongDecorativeAssets({
+  document,
+  window,
+  urls: {
+    "--mahjong-default-portrait-image": defaultPortraitsUrl,
+    "--mahjong-default-table-background-image": defaultTableBackgroundUrl,
+    "--mahjong-result-tablecloth-image": defaultResultTableclothUrl,
+    "--mahjong-setup-background-image": defaultLobbyBackgroundUrl,
+    "--mahjong-tile-face-image": defaultTileFacesUrl,
+  },
+});
 
 document.querySelector("#theme-json-example").textContent = JSON.stringify(
   THEME_JSON_EXAMPLE,
@@ -386,6 +404,8 @@ for (const button of elements.setup.querySelectorAll("[data-match-type]")) {
 window.addEventListener("pagehide", handlePageHide);
 window.addEventListener("pageshow", handlePageShow);
 document.addEventListener("visibilitychange", handleVisibilityChange);
+document.addEventListener("pointerdown", resumeMatchMusic, { passive: true });
+document.addEventListener("keydown", resumeMatchMusic);
 
 const soloClient = createPlayweftSoloClient({
   onReady(context) {
@@ -545,7 +565,8 @@ function syncMatchMusic({ start = Boolean(game), fadeIn = false } = {}) {
 }
 
 function resumeMatchMusic() {
-  if (musicNeedsGesture) syncMatchMusic({ fadeIn: matchMusicGain === 0 });
+  if (!musicNeedsGesture || !game || state?.phase === "hand_ended") return;
+  syncMatchMusic({ fadeIn: matchMusicGain === 0 });
 }
 
 function syncMatchMusicForHandState(previousState, currentState) {
@@ -1679,6 +1700,8 @@ function destroy() {
   window.removeEventListener("pagehide", handlePageHide);
   window.removeEventListener("pageshow", handlePageShow);
   document.removeEventListener("visibilitychange", handleVisibilityChange);
+  document.removeEventListener("pointerdown", resumeMatchMusic);
+  document.removeEventListener("keydown", resumeMatchMusic);
   releaseFixedViewport();
   settingsDialog.destroy();
   visualRenderer.destroy();

@@ -38,7 +38,10 @@
       transparent 48%
     ),
     linear-gradient(145deg, rgba(5, 34, 29, 0.18), rgba(1, 15, 14, 0.44)),
-    var(--result-tablecloth-image, url("../assets/felt-skin-moonwave-v1.jpg"));
+    var(
+      --result-tablecloth-image,
+      var(--mahjong-result-tablecloth-image, none)
+    );
   background-position: center;
   background-size: cover;
   content: "";
@@ -269,7 +272,7 @@
   border: 1px solid rgba(116, 114, 104, 0.75);
   border-radius: 3px;
   background-color: #e7e7e4;
-  background-image: url("../assets/tiles/riichi-faces.webp");
+  background-image: var(--mahjong-tile-face-image, none);
   background-position: calc(var(--tile-column) * 100% / 7)
     calc(var(--tile-row) * 100% / 4);
   background-size: 800% 500%;

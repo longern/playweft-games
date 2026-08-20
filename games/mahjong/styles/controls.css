@@ -176,7 +176,7 @@
   border: 1px solid rgba(121, 116, 96, 0.72);
   border-radius: 3px;
   background-color: #e9e3cf;
-  background-image: url("../assets/tiles/riichi-faces.webp");
+  background-image: var(--mahjong-tile-face-image, none);
   background-position: calc(var(--tile-column) * 100% / 7)
     calc(var(--tile-row) * 100% / 4);
   background-size: 800% 500%;

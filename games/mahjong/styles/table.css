@@ -245,7 +245,7 @@ a {
   border: 1px solid rgba(121, 116, 96, 0.72);
   border-radius: 3px;
   background-color: #e7e7e4;
-  background-image: url("../assets/tiles/riichi-faces.webp");
+  background-image: var(--mahjong-tile-face-image, none);
   background-position: calc(var(--tile-column) * 100% / 7)
     calc(var(--tile-row) * 100% / 4);
   background-size: 800% 500%;
@@ -324,7 +324,7 @@ a {
       transparent 18% 82%,
       rgba(14, 6, 3, 0.12)
     ),
-    url("../assets/moonlit-table-v3.jpg") center / cover no-repeat;
+    var(--mahjong-default-table-background-image, none) center / cover no-repeat;
 }
 
 :root[data-mahjong-has-background] .table-shell {
@@ -418,7 +418,7 @@ a {
   aspect-ratio: 1;
   border: 2px solid rgba(235, 207, 139, 0.82);
   border-radius: 12px;
-  background-image: url("../assets/player-portraits-v1.jpg");
+  background-image: var(--mahjong-default-portrait-image, none);
   background-repeat: no-repeat;
   background-size: 200% 200%;
   box-shadow:
