@@ -161,7 +161,7 @@ export class MahjongThreeRenderer {
 
     const textureLoader = new TextureLoader();
     await document.fonts?.load?.(
-      `400 300px "Playweft Mahjong Xingshu"`,
+      `400 300px "Mahjong Brush"`,
       "吃碰杠立直和自摸",
     );
     const [faceAtlas, feltSkin] = await Promise.all([

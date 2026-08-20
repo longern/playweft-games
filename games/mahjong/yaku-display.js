@@ -27,6 +27,13 @@ const TRADITIONAL_YAKU_NAMES = Object.freeze({
   "宝牌": "寶牌",
 });
 
+const TRADITIONAL_DRAW_REASONS = Object.freeze({
+  "九种九牌": "九種九牌",
+  "四风连打": "四風連打",
+  "四杠散了": "四槓散了",
+  "流局满贯": "流局滿貫",
+});
+
 export const YAKU_FONT_TEXT = [
   "兩立直", "立直", "一發", "門前清自摸和", "嶺上開花", "搶槓",
   "海底摸月", "河底撈魚", "天和", "地和", "九蓮寶燈", "斷幺九",
@@ -40,4 +47,9 @@ export const YAKU_FONT_TEXT = [
 export function traditionalYakuName(name) {
   const source = String(name ?? "");
   return TRADITIONAL_YAKU_NAMES[source] ?? source;
+}
+
+export function traditionalDrawReason(reason) {
+  const source = String(reason ?? "");
+  return TRADITIONAL_DRAW_REASONS[source] ?? source;
 }

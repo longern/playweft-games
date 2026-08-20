@@ -95,10 +95,15 @@ import { ThreeAnimationController } from "../games/mahjong/render/three-animatio
 import { MahjongPresentationController } from "../games/mahjong/presentation-controller.js";
 import { riverTileSoundCue } from "../games/mahjong/render/audio-cues.js";
 import { normalizeDiscardVolume } from "../games/mahjong/settings-dialog.js";
-import { traditionalYakuName } from "../games/mahjong/yaku-display.js";
+import {
+  traditionalDrawReason,
+  traditionalYakuName,
+} from "../games/mahjong/yaku-display.js";
 
 const MAHJONG_STYLE_MODULES = [
+  "fonts.css",
   "table.css",
+  "draw-reveal.css",
   "controls.css",
   "settings.css",
   "result.css",
@@ -1082,7 +1087,7 @@ test("mahjong shows oversized non-perspective callouts for claims, riichi, and w
   assert.equal((callout.match(/this\.animations\.play\(\{/g) ?? []).length, 1);
   assert.match(callout, /new CanvasTexture\(canvas\)/);
   assert.match(callout, /new Sprite\(material\)/);
-  assert.match(callout, /Playweft Mahjong Xingshu/);
+  assert.match(callout, /Mahjong Brush/);
 });
 
 test("mahjong discards by dragging a hand tile above a fixed horizontal line", () => {
@@ -1154,12 +1159,39 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     /return asArray\(current\?\.winners\)\s*\.map\(\(id\) => asArray\(current\.players\)\.indexOf\(id\) \+ 1\)/s,
   );
   assert.match(main, /handEndPresentationDelay\(state\)/);
+  assert.match(main, /showDrawReveal: isDrawRevealState\(state\) && !presentation\.resultVisible/);
+  assert.match(main, /current\.result\?\.abortive === true/);
+  assert.match(main, /abortive-draw/);
   assert.match(
     main,
     /return current\?\.phase === "hand_ended"\s*\? HAND_END_PRESENTATION_DELAY_MS\s*:\s*0/s,
   );
   assert.match(main, /current\.abortiveReason === "九种九牌"/);
   assert.match(main, /exhaustive-draw/);
+  assert.match(
+    html,
+    /id="draw-reveal"[\s\S]*?<div class="draw-reveal-card">[\s\S]*?data-draw-tenpai-seat="3"[\s\S]*?id="draw-reveal-reason"/,
+  );
+  assert.match(view, /renderDrawReveal\(state, showDrawReveal\)/);
+  assert.match(view, /state\.abortiveReason \|\| state\.result\?\.reason \|\| "途中流局"/);
+  assert.match(view, /const waitsBySeat = exhaustive\s*\? asArray\(state\.result\?\.tenpaiWaits\)/s);
+  assert.match(view, /label\.hidden = waits\.length === 0/);
+  assert.match(view, /createTile\(type, "draw-reveal-wait"\)/);
+  assert.doesNotMatch(html, /data-draw-tenpai-seat="[1-4]" hidden>听牌/);
+  const drawRevealStyles = readFileSync(
+    new URL("../games/mahjong/styles/draw-reveal.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(drawRevealStyles, /mask-image: url\("data:image\/svg\+xml/);
+  assert.match(drawRevealStyles, /width: 720px;\s*height: 500px;/s);
+  assert.match(drawRevealStyles, /inset: -20px -20px 0;/);
+  assert.match(drawRevealStyles, /inset: 0 0 10px;[\s\S]*?filter: blur\(18px\)/);
+  assert.match(drawRevealStyles, /draw-reveal-card strong\s*\{[\s\S]*?"Mahjong Brush"/s);
+  assert.match(view, /traditionalDrawReason\(/);
+  assert.match(drawRevealStyles, /flex-wrap: wrap;[\s\S]*?max-width: 230px;[\s\S]*?max-height: 187px;/);
+  assert.match(drawRevealStyles, /draw-reveal-tenpai-top\s*\{\s*top: 20px;/);
+  assert.match(drawRevealStyles, /draw-reveal-tenpai-right\s*\{[\s\S]*?right: 60px;/);
+  assert.match(drawRevealStyles, /\.draw-reveal-tenpai \.mahjong-tile\s*\{[^}]*width: 42px;[^}]*height: 59px;/s);
   assert.match(main, /revealPlayerIndices: revealedPlayerIndices/);
   assert.match(main, /coveredPlayerIndices,/);
   assert.match(
@@ -2687,7 +2719,7 @@ test("mahjong renders the centre console as a perspective tabletop component", (
   assert.doesNotMatch(consoleRenderer, /y: edgeInset,[^}]*rotation: Math\.PI/s);
   assert.match(consoleRenderer, /rotation: -Math\.PI \/ 2/);
   assert.doesNotMatch(consoleRenderer, /本场|供托/);
-  assert.match(consoleRenderer, /"Playweft Mahjong Xingshu"/);
+  assert.match(consoleRenderer, /"Mahjong Brush"/);
   assert.ok(
     TABLE_CONSOLE_CORE_LAYOUT.roundFontSize >
       TABLE_CONSOLE_CORE_LAYOUT.wallFontSize,
@@ -2848,11 +2880,18 @@ test("mahjong renders a compact fixed five-slot dora rack", () => {
     tileFactory,
     /backMaterial = new MeshPhysicalMaterial\(\{\s*color: new Color\("#1b569c"\)/s,
   );
-  const interfaceFont = readFileSync(
+  const mahjongBrushFont = readFileSync(
     new URL(
-      "../games/mahjong/assets/fonts/bakudai-mahjong-ui.woff2",
+      "../games/mahjong/assets/fonts/bakudai-mahjong.woff2",
       import.meta.url,
     ),
+  );
+  const mahjongBrushText = readFileSync(
+    new URL(
+      "../games/mahjong/assets/fonts/mahjong-brush-text.txt",
+      import.meta.url,
+    ),
+    "utf8",
   );
   const interfaceFontNotice = readFileSync(
     new URL(
@@ -2862,34 +2901,28 @@ test("mahjong renders a compact fixed five-slot dora rack", () => {
     "utf8",
   );
   assert.ok(
-    interfaceFont.byteLength > 1_000 && interfaceFont.byteLength < 15_000,
+    mahjongBrushFont.byteLength > 20_000 && mahjongBrushFont.byteLength < 60_000,
   );
   assert.match(interfaceFontNotice, /Bakudai Brush Font/);
   assert.match(interfaceFontNotice, /SIL Open Font License 1\.1/);
+  assert.match(interfaceFontNotice, /one WOFF2 subset/);
+  for (const label of ["荒牌流局", "九種九牌", "四風連打"]) {
+    assert.ok(
+      [...label].every((character) => mahjongBrushText.includes(character)),
+      `${label} is included in the unified font subset`,
+    );
+  }
+  assert.equal(traditionalDrawReason("九种九牌"), "九種九牌");
+  assert.equal(traditionalDrawReason("四风连打"), "四風連打");
   assert.match(view, /state\.matchType === "hanchan" \? "四人南" : "四人東"/);
 
   const styles = readMahjongStyles();
-  for (const codePoint of [
-    "U+002B",
-    "U+0030-0039",
-    "U+4E00",
-    "U+4E8C",
-    "U+5317",
-    "U+5834",
-    "U+897F",
-    "U+98A8",
-  ]) {
-    assert.ok(
-      styles.includes(codePoint),
-      `${codePoint} is included in the UI font`,
-    );
-  }
-  for (const codePoint of ["U+4E1C", "U+573A", "U+98CE"]) {
-    assert.ok(
-      !styles.includes(codePoint),
-      `${codePoint} is excluded from the UI font`,
-    );
-  }
+  const entry = readFileSync(
+    new URL("../games/mahjong/styles.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(entry, /@import "\.\/styles\/fonts\.css"/);
+  assert.match(styles, /font-family: "Mahjong Brush"/);
 });
 
 test("mahjong player nameplates leave scoring to the centre console", () => {

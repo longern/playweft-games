@@ -213,6 +213,15 @@
         <div class="table-rim" aria-hidden="true"></div>
         <div class="table-surface">
           <div id="mahjong-stage" class="mahjong-stage"></div>
+          <section id="draw-reveal" class="draw-reveal" aria-live="assertive" hidden>
+            <div class="draw-reveal-card">
+              <span class="draw-reveal-tenpai draw-reveal-tenpai-top" data-draw-tenpai-seat="3" hidden></span>
+              <span class="draw-reveal-tenpai draw-reveal-tenpai-right" data-draw-tenpai-seat="2" hidden></span>
+              <span class="draw-reveal-tenpai draw-reveal-tenpai-bottom" data-draw-tenpai-seat="1" hidden></span>
+              <span class="draw-reveal-tenpai draw-reveal-tenpai-left" data-draw-tenpai-seat="4" hidden></span>
+              <strong id="draw-reveal-reason">荒牌流局</strong>
+            </div>
+          </section>
           <div id="hand-top" class="opponent-hand hand-top" aria-label="上家手牌"></div>
           <div id="hand-right" class="opponent-hand hand-right" aria-label="右家手牌"></div>
           <div id="hand-left" class="opponent-hand hand-left" aria-label="左家手牌"></div>

@@ -183,7 +183,7 @@ function drawCore(context, state, ui) {
 
   drawText(context, ui.roundLabel, 320, centreY - 34, {
     color: "#f2d17d",
-    font: `400 ${roundFontSize}px "Playweft Mahjong Xingshu", "FZKai-Z03", STKaiti, KaiTi, serif`,
+    font: `400 ${roundFontSize}px "Mahjong Brush", "FZKai-Z03", STKaiti, KaiTi, serif`,
   });
   drawText(context, `余牌 ${Number(state.wallCount) || 0}`, 320, centreY + 42, {
     color: "#fff1c9",

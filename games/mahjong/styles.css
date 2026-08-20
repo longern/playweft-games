@@ -1,4 +1,6 @@
+@import "./styles/fonts.css";
 @import "./styles/table.css";
+@import "./styles/draw-reveal.css";
 @import "./styles/controls.css";
 @import "./styles/settings.css";
 @import "./styles/result.css";

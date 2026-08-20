@@ -24,7 +24,7 @@ import {
   TILE_SIZE,
 } from "./render/three-layout.js";
 import { tileFaceFrameIndex } from "./render/tile-texture-map.js";
-import { traditionalYakuName } from "./yaku-display.js";
+import { traditionalDrawReason, traditionalYakuName } from "./yaku-display.js";
 
 const RESULT_TILE_WIDTH_PX = 33;
 const RESULT_TILE_HEIGHT_PX = 47;
@@ -54,6 +54,7 @@ export class MahjongDomView {
     playerName,
     {
       showResult = true,
+      showDrawReveal = false,
       preserveResult = false,
       resultPage = 0,
       riichiMode = false,
@@ -110,6 +111,7 @@ export class MahjongDomView {
     this.renderMelds(state);
     this.renderActions(state, selectedTileId, riichiMode);
     this.renderStatus(state, events, playerName);
+    this.renderDrawReveal(state, showDrawReveal);
     if (!preserveResult) {
       this.renderResult(state, playerName, showResult, resultPage);
     }
@@ -581,6 +583,42 @@ export class MahjongDomView {
     );
   }
 
+  renderDrawReveal(state, visible = false) {
+    const { elements } = this;
+    const abortive = state?.result?.abortive === true;
+    const exhaustive = state?.phase === "hand_ended" &&
+      state?.draw === true &&
+      !abortive;
+    elements.drawReveal.hidden = !visible || (!abortive && !exhaustive);
+    if (elements.drawReveal.hidden) return;
+    elements.drawRevealReason.textContent = traditionalDrawReason(
+      abortive
+        ? state.abortiveReason || state.result?.reason || "途中流局"
+        : "荒牌流局",
+    );
+    const waitsBySeat = exhaustive
+      ? asArray(state.result?.tenpaiWaits)
+      : [];
+    elements.drawRevealTenpai.forEach((label) => {
+      const seat = Number(label.dataset.drawTenpaiSeat);
+      const waits = asArray(waitsBySeat[seat - 1]).map(Number);
+      label.hidden = waits.length === 0;
+      label.replaceChildren(
+        ...waits.map((type) => {
+          const tile = createTile(type, "draw-reveal-wait");
+          tile.setAttribute("aria-hidden", "true");
+          return tile;
+        }),
+      );
+      if (!label.hidden) {
+        label.setAttribute(
+          "aria-label",
+          `听牌：${waits.map((type) => tileFace(type).label).join("、")}`,
+        );
+      }
+    });
+  }
+
   renderResultScores(state, playerName) {
     const { elements } = this;
     elements.resultDetailContent.hidden = true;
@@ -742,6 +780,11 @@ function collectElements() {
     furiten: document.querySelector("#furiten-badge"),
     hand: document.querySelector("#hand-bottom"),
     result: document.querySelector("#result-panel"),
+    drawReveal: document.querySelector("#draw-reveal"),
+    drawRevealReason: document.querySelector("#draw-reveal-reason"),
+    drawRevealTenpai: [
+      ...document.querySelectorAll("[data-draw-tenpai-seat]"),
+    ],
     resultStage: document.querySelector(".result-page-stage"),
     resultTrack: document.querySelector(".result-page-track"),
     resultDetailContent: document.querySelector("#result-detail-content"),

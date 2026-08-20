@@ -572,7 +572,7 @@ function scoreSheetNumberFont(size) {
 }
 
 function scoreSheetWindFont(size) {
-  return `400 ${size}px "Playweft Mahjong Xingshu", "FZKai-Z03", STKaiti, KaiTi, serif`;
+  return `400 ${size}px "Mahjong Brush", "FZKai-Z03", STKaiti, KaiTi, serif`;
 }
 
 function scoreSheetWindBaseline(context, centreY, font) {

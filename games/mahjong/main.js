@@ -1261,6 +1261,7 @@ function renderCurrentState() {
   const coveredPlayerIndices = handCoveredPlayerIndices(state);
   domView.render(renderState, visibleEvents, selectedTileId, playerName, {
     showResult: presentation.resultVisible,
+    showDrawReveal: isDrawRevealState(state) && !presentation.resultVisible,
     resultPage: resultPageIndex,
     riichiMode,
     defaultNames: getMahjongDefaultNames(),
@@ -1516,6 +1517,9 @@ function queueHandInsertion(previousState, events, ownDiscardedTile = 0) {
 
 function handEndPresentationKey(current) {
   if (current?.phase !== "hand_ended") return "";
+  if (current.result?.abortive === true) {
+    return `${current.moveCount}:abortive-draw:${current.abortiveReason || current.result.reason || "unknown"}`;
+  }
   if (
     current.abortiveReason === "九种九牌" &&
     Number(current.abortivePlayerIndex) > 0
@@ -1530,6 +1534,12 @@ function handEndPresentationKey(current) {
   const winners = asArray(current.winners);
   if (!winners.length) return "";
   return `${current.moveCount}:${current.winType}:${winners.join(",")}`;
+}
+
+function isDrawRevealState(current) {
+  return current?.phase === "hand_ended" &&
+    current.draw === true &&
+    (current.result?.abortive === true || Array.isArray(current.result?.tenpai));
 }
 
 function handEndPresentationDelay(current) {

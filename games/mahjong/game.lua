@@ -1404,9 +1404,11 @@ finish_exhaustive_draw = function(state)
 			return
 		end
 	end
-	local tenpai, count = {}, 0
+	local tenpai, tenpai_waits, count = {}, {}, 0
 	for seat, player_id in ipairs(state.players) do
-		tenpai[seat] = #waiting_types(state.hands[player_id], state.melds[player_id]) > 0
+		local waits = waiting_types(state.hands[player_id], state.melds[player_id])
+		tenpai[seat] = #waits > 0
+		tenpai_waits[seat] = waits
 		if tenpai[seat] then
 			count = count + 1
 		end
@@ -1424,6 +1426,7 @@ finish_exhaustive_draw = function(state)
 	state.phase, state.draw = "hand_ended", true
 	state.result = {
 		tenpai = tenpai,
+		tenpaiWaits = tenpai_waits,
 		deltas = deltas,
 		payment = count == 0 or count == 4 and "不听罚符 0点" or "不听罚符 3000点",
 	}

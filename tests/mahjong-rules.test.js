@@ -371,6 +371,35 @@ test("Mahjong projects waits and remaining copies for every tenpai discard", asy
   });
 });
 
+test("Mahjong records each exhaustive-draw tenpai player's waiting tile types", async () => {
+  const result = await runScenario(`
+    function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000055" } })
+    state.hands.p1 = ids({ 1,2,3, 4,5,6, 10,11,12, 19,20,21, 28 })
+    state.hands.p2, state.hands.p3, state.hands.p4 = {}, {}, {}
+    finish_exhaustive_draw(state)
+    result = {
+      tenpai = state.result.tenpai,
+      firstWaits = state.result.tenpaiWaits[1],
+      secondWaits = state.result.tenpaiWaits[2],
+    }
+  `);
+
+  assert.deepEqual(result, {
+    tenpai: [true, false, false, false],
+    firstWaits: [28],
+    secondWaits: {},
+  });
+});
+
 test("Mahjong terminal view reveals tile faces and red-five identity", async () => {
   const result = await runScenario(`
     state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000007" } })

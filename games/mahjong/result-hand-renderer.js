@@ -255,8 +255,8 @@ export class MahjongResultHandRenderer {
     this.tileFactory = new ThreeTileFactory(atlas);
     await Promise.all([
       document.fonts?.load('400 28px "Kalam Score"'),
-      document.fonts?.load('400 26px "Playweft Mahjong Xingshu"'),
-      document.fonts?.load('700 32px "Mahjong Yaku Xingshu"', YAKU_FONT_TEXT),
+      document.fonts?.load('400 26px "Mahjong Brush"'),
+      document.fonts?.load('400 32px "Mahjong Brush"', YAKU_FONT_TEXT),
     ]);
     this.ready = true;
     if (this.pendingRender) this.render(...this.pendingRender);

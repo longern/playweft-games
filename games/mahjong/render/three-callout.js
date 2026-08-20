@@ -247,7 +247,7 @@ function drawCallout(context, descriptor) {
   const fontSize = descriptor.label.length > 1
     ? ACTION_CALLOUT_SIZE.fontSize * 0.76
     : ACTION_CALLOUT_SIZE.fontSize;
-  context.font = `400 ${fontSize}px "Playweft Mahjong Xingshu", serif`;
+  context.font = `400 ${fontSize}px "Mahjong Brush", serif`;
   context.lineJoin = "round";
   context.miterLimit = 2;
   context.shadowColor = descriptor.glow;
