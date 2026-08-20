@@ -29,6 +29,7 @@ import {
   roundLabel,
   resultBasePaymentTotal,
   resultDetailPageCount,
+  resultIndicatorSlots,
   resultScoreSheetRows,
   resultScoreRows,
   riverDisplayEntries,
@@ -92,6 +93,7 @@ import { ThreeAnimationController } from "../games/mahjong/render/three-animatio
 import { MahjongPresentationController } from "../games/mahjong/presentation-controller.js";
 import { riverTileSoundCue } from "../games/mahjong/render/audio-cues.js";
 import { normalizeDiscardVolume } from "../games/mahjong/settings-dialog.js";
+import { traditionalYakuName } from "../games/mahjong/yaku-display.js";
 
 const MAHJONG_STYLE_MODULES = [
   "table.css",
@@ -654,6 +656,31 @@ test("mahjong keeps opponent rack slots fixed while showing a separated drawn ti
   });
 });
 
+test("mahjong writes every result-sheet yaku in traditional form", () => {
+  assert.deepEqual(
+    [
+      "门前清自摸和",
+      "海底捞鱼",
+      "河底捞鱼",
+      "三色同顺",
+      "九莲宝灯",
+      "混全带幺九",
+      "国士无双",
+      "宝牌",
+    ].map(traditionalYakuName),
+    [
+      "門前清自摸和",
+      "海底撈魚",
+      "河底撈魚",
+      "三色同順",
+      "九蓮寶燈",
+      "混全帶幺九",
+      "國士無雙",
+      "寶牌",
+    ],
+  );
+});
+
 test("mahjong keeps five fixed dora slots and preserves red-five artwork", () => {
   assert.deepEqual(
     doraIndicatorSlots({
@@ -667,6 +694,25 @@ test("mahjong keeps five fixed dora slots and preserves red-five artwork", () =>
   );
   assert.deepEqual(doraIndicatorSlots({ doraIndicators: [4] }), [
     { type: 4, red: false },
+    null,
+    null,
+    null,
+    null,
+  ]);
+});
+
+test("mahjong reveals ura indicators only on the riichi winner's result page", () => {
+  const state = {
+    doraIndicatorTiles: [{ type: 5, red: true }],
+    uraDoraIndicatorTiles: [{ type: 14, red: false }],
+    riichi: { p1: false, p2: true },
+  };
+  assert.deepEqual(resultIndicatorSlots(state, "p2"), {
+    dora: [{ type: 5, red: true }, null, null, null, null],
+    ura: [{ type: 14, red: false }, null, null, null, null],
+  });
+  assert.deepEqual(resultIndicatorSlots(state, "p1").ura, [
+    null,
     null,
     null,
     null,

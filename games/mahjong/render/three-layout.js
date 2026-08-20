@@ -11,7 +11,7 @@ export const TILE_SIZE = Object.freeze({
   depth: TILE_PHYSICAL_MM.depth / TILE_PHYSICAL_MM.height,
 });
 
-export const MELD_SCALE = 0.78;
+export const MELD_SCALE = 0.82;
 export const MELD_GROUP_GAP = 0.075;
 export const MELD_HAND_CLEARANCE = 0.14;
 export const OPPONENT_MELD_HAND_CLEARANCE = 0.42;

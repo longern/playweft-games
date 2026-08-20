@@ -27,6 +27,7 @@ export function clearedTableState(state) {
     revealedHands: {},
     doraIndicators: [],
     doraIndicatorTiles: [],
+    uraDoraIndicatorTiles: [],
     legalActions: {},
     winners: [],
     winningTile: 0,
@@ -218,6 +219,22 @@ export function doraIndicatorSlots(state) {
     { length: DORA_INDICATOR_SLOT_COUNT },
     (_, index) => indicators[index] ?? null,
   );
+}
+
+export function resultIndicatorSlots(state, playerId) {
+  const uraIndicators = state?.riichi?.[playerId] === true
+    ? asArray(state?.uraDoraIndicatorTiles).map((indicator) => ({
+      type: Number(indicator?.type),
+      red: indicator?.red === true,
+    }))
+    : [];
+  return {
+    dora: doraIndicatorSlots(state),
+    ura: Array.from(
+      { length: DORA_INDICATOR_SLOT_COUNT },
+      (_, index) => uraIndicators[index] ?? null,
+    ),
+  };
 }
 
 export function nextDoraType(indicatorType) {

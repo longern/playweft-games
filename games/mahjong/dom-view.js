@@ -24,6 +24,7 @@ import {
   TILE_SIZE,
 } from "./render/three-layout.js";
 import { tileFaceFrameIndex } from "./render/tile-texture-map.js";
+import { traditionalYakuName } from "./yaku-display.js";
 
 const RESULT_TILE_WIDTH_PX = 33;
 const RESULT_TILE_HEIGHT_PX = 47;
@@ -201,6 +202,7 @@ export class MahjongDomView {
       image.hidden = true;
       image.removeAttribute("src");
       delete image.dataset.source;
+      document.dispatchEvent(new Event("mahjong:player-avatar-changed"));
       return;
     }
     if (image.dataset.source === nextSource) return;
@@ -215,8 +217,10 @@ export class MahjongDomView {
       image.hidden = true;
       image.removeAttribute("src");
       delete image.dataset.source;
+      document.dispatchEvent(new Event("mahjong:player-avatar-changed"));
     };
     image.src = nextSource;
+    document.dispatchEvent(new Event("mahjong:player-avatar-changed"));
   }
 
   renderStations(
@@ -567,7 +571,7 @@ export class MahjongDomView {
         const item = document.createElement("span");
         const name = document.createElement("i");
         const yakuValue = document.createElement("b");
-        name.textContent = yaku.name;
+        name.textContent = traditionalYakuName(yaku.name);
         yakuValue.textContent = yaku.han >= 13 ? "役满" : `${yaku.han}番`;
         item.append(name, yakuValue);
         return item;

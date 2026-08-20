@@ -375,6 +375,7 @@ test("Mahjong terminal view reveals tile faces and red-five identity", async () 
   const result = await runScenario(`
     state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000007" } })
     state.phase, state.winningTile = "hand_ended", 17
+    state.deadWall[1], state.deadWall[2] = 17, 21
     state.hands.p2 = { 17, 18, 21 }
     result = view(state, {}, {
       viewer = { id = "p1", seat = 1, role = "player", isOwner = true }
@@ -388,6 +389,8 @@ test("Mahjong terminal view reveals tile faces and red-five identity", async () 
   ]);
   assert.equal(result.winningTile, 5);
   assert.equal(result.winningTileRed, true);
+  assert.deepEqual(result.doraIndicatorTiles, [{ type: 5, red: true }]);
+  assert.deepEqual(result.uraDoraIndicatorTiles, [{ type: 6, red: false }]);
 });
 
 test("Mahjong chi options distinguish red fives without duplicating identical copies", async () => {
@@ -973,6 +976,7 @@ test("Mahjong supports concealed kan and reveals an extra dora indicator", async
       handCount = #state.hands.p1,
       indicators = #projected.doraIndicators,
       visualIndicators = #projected.doraIndicatorTiles,
+      uraIndicators = #projected.uraDoraIndicatorTiles,
       firstIndicatorType = projected.doraIndicatorTiles[1].type,
       firstIndicatorRed = projected.doraIndicatorTiles[1].red,
       drew = state.drawnTile > 0,
@@ -985,6 +989,7 @@ test("Mahjong supports concealed kan and reveals an extra dora indicator", async
   assert.equal(result.handCount, 10);
   assert.equal(result.indicators, 2);
   assert.equal(result.visualIndicators, 2);
+  assert.equal(result.uraIndicators, 0);
   assert.equal(result.firstIndicatorType, 5);
   assert.equal(result.firstIndicatorRed, true);
   assert.equal(result.drew, true);

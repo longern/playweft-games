@@ -21,13 +21,20 @@
 }
 
 .action-bar > .furiten-badge {
+  position: fixed;
+  right: 0;
+  bottom: 128px;
   min-width: 0;
-  padding: 5px 9px;
-  border: 1px solid rgba(255, 125, 105, 0.52);
-  border-radius: 999px;
-  color: #ffb0a2;
+  padding: 7px 13px 7px 12px;
+  border-radius: 999px 0 0 999px;
+  background: rgba(194, 151, 74, 0.26);
+  color: #f5d898;
+  font-size: 22px;
   font-weight: 850;
+  line-height: 1;
+  letter-spacing: 0.08em;
   text-align: center;
+  pointer-events: none;
 }
 
 .claim-actions {

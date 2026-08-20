@@ -1,12 +1,16 @@
 import {
+  BoxGeometry,
   CanvasTexture,
   DoubleSide,
+  Group,
   Mesh,
   MeshStandardMaterial,
   PlaneGeometry,
   SRGBColorSpace,
+  Vector3,
 } from "three";
 import { TILE_PHYSICAL_MM } from "./render/three-layout.js";
+import { traditionalYakuName } from "./yaku-display.js";
 
 const A4_WIDTH_MM = 297;
 const A4_HEIGHT_MM = 210;
@@ -23,8 +27,8 @@ const PAPER_TABLE_BOTTOM = 396;
 const PAPER_SCORE_TOP = 416;
 const PAPER_SCORE_HEIGHT = 58;
 const PAPER_TEXTURE_SCALE = 2;
-const PAPER_TEXT_SIZE = 32;
-const PAPER_TEXT_COLOR = "#1d1c18";
+const PAPER_TEXT_SIZE = 50;
+const PAPER_TEXT_COLOR = "#11100e";
 const PAPER_VALUE_COLOR = "#173f61";
 const PAPER_GRID_COLOR = "rgba(78, 96, 102, 0.3)";
 const PAPER_GRID_EDGE_COLOR = "rgba(78, 96, 102, 0.38)";
@@ -32,6 +36,20 @@ const SCORE_SHEET_TOP = 72;
 const SCORE_SHEET_BOTTOM = 634;
 const SCORE_SHEET_HEADER_HEIGHT = 54;
 const SCORE_SHEET_ROW_COUNT = 8;
+const INSTANT_PHOTO_SCALE = 0.675;
+const INSTANT_PHOTO_WIDTH =
+  (72 / TILE_PHYSICAL_MM.height) * INSTANT_PHOTO_SCALE;
+const INSTANT_PHOTO_HEIGHT =
+  (86 / TILE_PHYSICAL_MM.height) * INSTANT_PHOTO_SCALE;
+const INSTANT_PHOTO_EDGE_OVERLAP = 0.7;
+const INSTANT_PHOTO_THICKNESS = 0.022;
+const INSTANT_PHOTO_PAPER_CLEARANCE = 0.024;
+const INSTANT_PHOTO_TEXTURE_SIZE = Object.freeze({ width: 216, height: 258 });
+const INSTANT_PHOTO_IMAGE_INSET = Object.freeze({
+  left: 15,
+  right: 15,
+  top: 15,
+});
 export class MahjongResultPaper {
   constructor(maxAnisotropy = 1) {
     this.destroyed = false;
@@ -60,10 +78,77 @@ export class MahjongResultPaper {
     this.paper.receiveShadow = true;
     this.paper.position.y = 0.004;
     this.paper.visible = false;
+    this.photoCards = new Group();
+    this.photoCards.visible = false;
+    this.object = new Group();
+    this.object.add(this.paper, this.photoCards);
+    this.createInstantPhotos();
   }
 
   get object3d() {
-    return this.paper;
+    return this.object;
+  }
+
+  createInstantPhotos() {
+    this.photoBodyGeometry = new BoxGeometry(
+      INSTANT_PHOTO_WIDTH,
+      INSTANT_PHOTO_THICKNESS,
+      INSTANT_PHOTO_HEIGHT,
+    );
+    this.photoBodyMaterial = new MeshStandardMaterial({
+      color: "#f4f1e7",
+      roughness: 0.92,
+      metalness: 0,
+    });
+
+    for (let index = 0; index < 4; index += 1) {
+      const card = new Group();
+      card.position.set(
+        scoreSheetPlayerCentre(index),
+        INSTANT_PHOTO_PAPER_CLEARANCE,
+        -RESULT_PAPER_DEPTH / 2 -
+          INSTANT_PHOTO_HEIGHT / 2 +
+          INSTANT_PHOTO_EDGE_OVERLAP,
+      );
+      const photo = new Mesh(this.photoBodyGeometry, [
+        this.photoBodyMaterial,
+        this.photoBodyMaterial,
+        this.photoBodyMaterial,
+        this.photoBodyMaterial,
+        this.photoBodyMaterial,
+        this.photoBodyMaterial,
+      ]);
+      photo.position.y = INSTANT_PHOTO_THICKNESS / 2;
+      photo.castShadow = true;
+      photo.receiveShadow = true;
+      card.add(photo);
+      this.photoCards.add(card);
+    }
+  }
+
+  instantPhotoWindowCorners(index) {
+    const card = this.photoCards.children[index];
+    if (!card) return [];
+    const left =
+      -INSTANT_PHOTO_WIDTH / 2 +
+      (INSTANT_PHOTO_IMAGE_INSET.left / INSTANT_PHOTO_TEXTURE_SIZE.width) *
+        INSTANT_PHOTO_WIDTH;
+    const right =
+      INSTANT_PHOTO_WIDTH / 2 -
+      (INSTANT_PHOTO_IMAGE_INSET.right / INSTANT_PHOTO_TEXTURE_SIZE.width) *
+        INSTANT_PHOTO_WIDTH;
+    const top =
+      -INSTANT_PHOTO_HEIGHT / 2 +
+      (INSTANT_PHOTO_IMAGE_INSET.top / INSTANT_PHOTO_TEXTURE_SIZE.height) *
+        INSTANT_PHOTO_HEIGHT;
+    const bottom = top + right - left;
+    const surfaceY = INSTANT_PHOTO_THICKNESS;
+    return [
+      card.localToWorld(new Vector3(left, surfaceY, top)),
+      card.localToWorld(new Vector3(right, surfaceY, top)),
+      card.localToWorld(new Vector3(right, surfaceY, bottom)),
+      card.localToWorld(new Vector3(left, surfaceY, bottom)),
+    ];
   }
 
   render({
@@ -93,6 +178,7 @@ export class MahjongResultPaper {
     drawResultScore(context, logicalWidth, { fu, han, total });
     this.paperTexture.needsUpdate = true;
     this.paper.visible = true;
+    this.photoCards.visible = false;
   }
 
   renderScoreSheet({ playerNames = [], rows = [] } = {}) {
@@ -112,10 +198,12 @@ export class MahjongResultPaper {
     drawScoreSheet(context, logicalWidth, { playerNames, rows });
     this.paperTexture.needsUpdate = true;
     this.paper.visible = true;
+    this.photoCards.visible = true;
   }
 
   hide() {
     this.paper.visible = false;
+    this.photoCards.visible = false;
   }
 
   destroy() {
@@ -126,7 +214,16 @@ export class MahjongResultPaper {
     this.paperTopMaterial?.dispose();
     this.paperTexture?.dispose();
     this.paperSurfaceTexture?.dispose();
+    this.photoBodyGeometry?.dispose();
+    this.photoBodyMaterial?.dispose();
   }
+}
+
+function scoreSheetPlayerCentre(index) {
+  const tableWidth = PAPER_TEXTURE_VIEWPORT.width - PAPER_MARGIN_X * 2;
+  const scoreWidth = (tableWidth - 96 - 74) / 4;
+  const logicalX = PAPER_MARGIN_X + 96 + 74 + scoreWidth * (index + 0.5);
+  return (logicalX / PAPER_TEXTURE_VIEWPORT.width - 0.5) * RESULT_PAPER_WIDTH;
 }
 
 function drawResultScore(context, width, { fu, han, total }) {
@@ -159,7 +256,11 @@ function drawResultScore(context, width, { fu, han, total }) {
     context.fillStyle = PAPER_TEXT_COLOR;
     context.textAlign = "center";
     context.font = paperNumberFont(field.numberSize);
-    context.fillText(String(field.value ?? 0), left + field.lineWidth / 2, lineY - 6);
+    context.fillText(
+      String(field.value ?? 0),
+      left + field.lineWidth / 2,
+      lineY - 6,
+    );
 
     context.textAlign = "left";
     context.font = paperFont(unitSize);
@@ -176,7 +277,8 @@ function drawScoreSheet(context, width, { playerNames, rows }) {
   const roundWidth = 96;
   const honbaWidth = 74;
   const scoreWidth = (tableWidth - roundWidth - honbaWidth) / 4;
-  const rowHeight = (tableHeight - SCORE_SHEET_HEADER_HEIGHT) / SCORE_SHEET_ROW_COUNT;
+  const rowHeight =
+    (tableHeight - SCORE_SHEET_HEADER_HEIGHT) / SCORE_SHEET_ROW_COUNT;
   const headers = [
     { label: "局", width: roundWidth },
     { label: "本场", width: honbaWidth },
@@ -229,9 +331,13 @@ function drawScoreSheet(context, width, { playerNames, rows }) {
   });
 
   rows.slice(0, SCORE_SHEET_ROW_COUNT).forEach((row, rowIndex) => {
+    const isLatestRow =
+      rowIndex === Math.min(rows.length, SCORE_SHEET_ROW_COUNT) - 1;
+    const inkColor = isLatestRow ? PAPER_TEXT_COLOR : "#4a5051";
+    const valueColor = isLatestRow ? PAPER_VALUE_COLOR : "#4a6c7c";
     const y = headerBottom + rowHeight * (rowIndex + 0.5);
     cursor = left;
-    context.fillStyle = PAPER_TEXT_COLOR;
+    context.fillStyle = inkColor;
     context.textAlign = "center";
     const round = String(row.round ?? "");
     const wind = round.slice(0, 1);
@@ -273,7 +379,7 @@ function drawScoreSheet(context, width, { playerNames, rows }) {
       const score = Number(row.scores?.[seat]) || 0;
       const scoreText = String(score);
       const delta = Number(row.deltas?.[seat]) || 0;
-      context.fillStyle = PAPER_TEXT_COLOR;
+      context.fillStyle = inkColor;
       context.font = scoreSheetNumberFont(36);
       context.textAlign = "center";
       context.textBaseline = "alphabetic";
@@ -284,7 +390,7 @@ function drawScoreSheet(context, width, { playerNames, rows }) {
       );
       context.textBaseline = "middle";
       if (delta) {
-        context.fillStyle = PAPER_VALUE_COLOR;
+        context.fillStyle = valueColor;
         context.font = scoreSheetNumberFont(16);
         context.textAlign = "left";
         context.fillText(
@@ -305,13 +411,7 @@ function drawResultHeading(context, width, winnerName, winType) {
   context.fillText("和了人", PAPER_MARGIN_X, PAPER_HEADING_Y);
 
   context.fillStyle = PAPER_TEXT_COLOR;
-  context.font = fittedPaperFont(
-    context,
-    String(winnerName),
-    380,
-    34,
-    20,
-  );
+  context.font = fittedPaperFont(context, String(winnerName), 380, 34, 20);
   context.fillText(String(winnerName), PAPER_MARGIN_X + 102, PAPER_HEADING_Y);
 
   const checkboxes = [
@@ -333,7 +433,9 @@ function drawResultHeading(context, width, winnerName, winType) {
 function drawResultCheckbox(context, x, y, { label, selected }) {
   const size = 22;
   const boxY = y - size / 2;
-  context.fillStyle = selected ? "rgba(43, 104, 116, 0.1)" : "rgba(75, 82, 79, 0.06)";
+  context.fillStyle = selected
+    ? "rgba(43, 104, 116, 0.1)"
+    : "rgba(75, 82, 79, 0.06)";
   context.fillRect(x, boxY, size, size);
   context.strokeStyle = selected ? PAPER_TEXT_COLOR : "rgba(75, 82, 79, 0.32)";
   context.lineWidth = 1.35;
@@ -388,7 +490,7 @@ function drawYakuTable(context, yaku, width) {
   }
   context.stroke();
 
-  const preferredNameSize = groupCount === 2 ? PAPER_TEXT_SIZE : 25;
+  const preferredNameSize = groupCount === 2 ? PAPER_TEXT_SIZE : 36;
   const preferredValueSize = groupCount === 2 ? 29 : 23;
   entries.forEach((item, index) => {
     const column = index % groupCount;
@@ -399,16 +501,17 @@ function drawYakuTable(context, yaku, width) {
     const nameInset = groupCount === 2 ? 18 : 13;
     const valueInset = groupCount === 2 ? 18 : 12;
 
+    const name = traditionalYakuName(item.name);
     context.fillStyle = PAPER_TEXT_COLOR;
     context.textAlign = "right";
-    context.font = fittedPaperFont(
+    context.font = fittedYakuFont(
       context,
-      String(item.name ?? ""),
+      name,
       nameWidth - nameInset * 2,
       preferredNameSize,
-      17,
+      groupCount === 2 ? 28 : 24,
     );
-    context.fillText(String(item.name ?? ""), left + nameWidth - nameInset, baseline);
+    context.fillText(name, left + nameWidth - nameInset, baseline);
 
     context.fillStyle = PAPER_VALUE_COLOR;
     context.textAlign = "right";
@@ -418,8 +521,17 @@ function drawYakuTable(context, yaku, width) {
 }
 
 function paperFont(size) {
-  return `700 ${size}px system-ui, -apple-system, BlinkMacSystemFont, `
-    + '"Segoe UI", "Microsoft YaHei", sans-serif';
+  return (
+    `700 ${size}px system-ui, -apple-system, BlinkMacSystemFont, ` +
+    '"Segoe UI", "Microsoft YaHei", sans-serif'
+  );
+}
+
+function yakuFont(size) {
+  return (
+    `700 ${size}px "Mahjong Yaku Xingshu", "Playweft Mahjong Xingshu", ` +
+    '"FZKai-Z03", STKaiti, KaiTi, serif'
+  );
 }
 
 function paperNumberFont(size) {
@@ -437,10 +549,14 @@ function scoreSheetWindFont(size) {
 function scoreSheetWindBaseline(context, centreY, font) {
   context.font = font;
   const winds = ["東", "南", "西", "北"];
-  const centreOffset = winds.reduce((sum, wind) => {
-    const metrics = context.measureText(wind);
-    return sum + (metrics.actualBoundingBoxDescent - metrics.actualBoundingBoxAscent) / 2;
-  }, 0) / winds.length;
+  const centreOffset =
+    winds.reduce((sum, wind) => {
+      const metrics = context.measureText(wind);
+      return (
+        sum +
+        (metrics.actualBoundingBoxDescent - metrics.actualBoundingBoxAscent) / 2
+      );
+    }, 0) / winds.length;
   return centreY - centreOffset;
 }
 
@@ -460,6 +576,15 @@ function fittedPaperFont(context, text, maxWidth, preferredSize, minimumSize) {
   return paperFont(minimumSize);
 }
 
+function fittedYakuFont(context, text, maxWidth, preferredSize, minimumSize) {
+  for (let size = preferredSize; size > minimumSize; size -= 1) {
+    const font = yakuFont(size);
+    context.font = font;
+    if (context.measureText(text).width <= maxWidth) return font;
+  }
+  return yakuFont(minimumSize);
+}
+
 function createWarpedPaperGeometry(depth) {
   const geometry = new PlaneGeometry(RESULT_PAPER_WIDTH, depth, 32, 24);
   const positions = geometry.attributes.position;
@@ -471,15 +596,15 @@ function createWarpedPaperGeometry(depth) {
     const xEdgeVariation = 0.68 + Math.sin(y * 0.81 + 0.7) * 0.22;
     const yEdgeVariation = 0.62 + Math.sin(x * 0.73 - 0.45) * 0.24;
     const edgeLift =
-      Math.pow(nx, 10) * PAPER_EDGE_LIFT * xEdgeVariation
-      + Math.pow(ny, 10) * PAPER_EDGE_LIFT * yEdgeVariation;
+      Math.pow(nx, 10) * PAPER_EDGE_LIFT * xEdgeVariation +
+      Math.pow(ny, 10) * PAPER_EDGE_LIFT * yEdgeVariation;
     const cornerLift =
-      Math.pow(nx * ny, 5)
-      * PAPER_CORNER_LIFT
-      * (0.82 + Math.sin(x * 0.91 + y * 0.63) * 0.18);
+      Math.pow(nx * ny, 5) *
+      PAPER_CORNER_LIFT *
+      (0.82 + Math.sin(x * 0.91 + y * 0.63) * 0.18);
     const surfaceWave =
-      Math.sin(x * 1.7 + y * 0.45) * 0.00055
-      + Math.sin(y * 2.1 - x * 0.28) * 0.00035;
+      Math.sin(x * 1.7 + y * 0.45) * 0.00055 +
+      Math.sin(y * 2.1 - x * 0.28) * 0.00035;
     positions.setZ(index, Math.max(0, edgeLift + cornerLift + surfaceWave));
   }
   geometry.computeVertexNormals();
@@ -499,8 +624,8 @@ function createPaperSurfaceTexture(maxAnisotropy) {
     for (let x = 0; x < size; x += 1) {
       const index = (y * size + x) * 4;
       const fibre =
-        Math.sin(y * 0.52 + x * 0.037) * 3.2
-        + Math.sin(y * 0.13 - x * 0.071) * 1.8;
+        Math.sin(y * 0.52 + x * 0.037) * 3.2 +
+        Math.sin(y * 0.13 - x * 0.071) * 1.8;
       const value = Math.max(
         198,
         Math.min(246, Math.round(226 + fibre + (random() - 0.5) * 22)),

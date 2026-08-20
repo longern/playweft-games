@@ -5,6 +5,13 @@
   src: url("../assets/fonts/kalam-score.woff2") format("woff2");
 }
 
+@font-face {
+  font-family: "Mahjong Yaku Xingshu";
+  font-style: normal;
+  font-weight: 400;
+  src: url("../assets/fonts/bakudai-mahjong-yaku.woff2") format("woff2");
+}
+
 .result-panel {
   position: absolute;
   z-index: 90;
@@ -345,7 +352,10 @@
 
 .result-yaku span i {
   overflow: hidden;
+  font-family: "Mahjong Yaku Xingshu", "Playweft Mahjong Xingshu", serif;
   font-style: normal;
+  font-synthesis: weight;
+  font-weight: 700;
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -379,6 +389,46 @@
 
 .result-score-content {
   padding: 0;
+}
+
+.result-score-portrait-overlay {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.result-score-portrait {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 720px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  will-change: clip-path;
+}
+
+.result-score-portrait-crop {
+  position: absolute;
+  background-repeat: no-repeat;
+  background-size: 200% 200%;
+}
+
+.result-score-portrait-crop:not(.is-default-portrait) {
+  background-image: none !important;
+}
+
+.result-score-portrait-crop > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.result-score-portrait-crop > img[hidden] {
+  display: none;
 }
 
 .result-footer {

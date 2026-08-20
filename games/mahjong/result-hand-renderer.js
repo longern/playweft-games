@@ -1,13 +1,13 @@
 import {
   ACESFilmicToneMapping,
   AmbientLight,
-  DirectionalLight,
   Group,
   HemisphereLight,
   Mesh,
   PCFShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
+  PointLight,
   Scene,
   ShadowMaterial,
   SRGBColorSpace,
@@ -16,11 +16,13 @@ import {
   WebGLRenderer,
 } from "three";
 import tileFacesUrl from "./assets/tiles/riichi-faces.webp?url";
+import playerPortraitsUrl from "./assets/player-portraits-v1.jpg?url";
 import {
   asArray,
   doraTypeCounts,
   resultDetailPageCount,
   resultBasePaymentTotal,
+  resultIndicatorSlots,
   resultScoreSheetRows,
 } from "./game-format.js";
 import { MELD_GROUP_GAP, TILE_SIZE } from "./render/three-layout.js";
@@ -40,17 +42,38 @@ import {
   resultHandCameraPosition,
   resultHandVerticalFov,
 } from "./render/result-hand-camera.js";
+import { YAKU_FONT_TEXT } from "./yaku-display.js";
 
 const VIEWPORT = Object.freeze({ width: 1280, height: 720 });
-const TILE_GAP = 0.035;
+const TILE_GAP = 0.01;
 const WINNING_TILE_GAP = 0.24;
 const MELD_GAP = 0.34;
 const VIEW_ASPECT = VIEWPORT.width / VIEWPORT.height;
-const VIEW_WIDTH = 14.4;
+const VIEW_WIDTH = 16.8;
 const CAMERA_TARGET = new Vector3(0, 0.08, 0.8);
 const RESULT_HAND_Z = -1.25;
+const RESULT_INDICATORS_Z = -2.65;
 const RESULT_PAPER_Z = 3.45;
-const RESULT_SCORE_PAPER_Z = 1.6;
+const RESULT_SCORE_PAPER_Z = 1.3;
+const RESULT_INDICATOR_SCALE = 1;
+const RESULT_INDICATOR_GAP = 0.01;
+const RESULT_INDICATOR_GROUP_GAP = 0.42;
+const RESULT_INDICATOR_SLOT_COUNT = 5;
+const RESULT_KEY_LIGHT_DIRECTIONAL_INTENSITY = 4.6;
+const RESULT_KEY_LIGHT_REFERENCE_DISTANCE = Math.hypot(
+  RESULT_HAND_KEY_LIGHT_POSITION.x,
+  RESULT_HAND_KEY_LIGHT_POSITION.y,
+  RESULT_HAND_KEY_LIGHT_POSITION.z - RESULT_HAND_Z,
+);
+const RESULT_KEY_LIGHT_POINT_INTENSITY =
+  RESULT_KEY_LIGHT_DIRECTIONAL_INTENSITY * RESULT_KEY_LIGHT_REFERENCE_DISTANCE ** 2;
+const SCORE_PORTRAIT_IMAGE_ASPECT = 1;
+const DEFAULT_PORTRAIT_POSITIONS = [
+  "0% 0%",
+  "100% 0%",
+  "0% 100%",
+  "100% 100%",
+];
 
 export class MahjongResultHandRenderer {
   constructor(host, { handsHost, yakuHost, scoreHost } = {}) {
@@ -99,6 +122,14 @@ export class MahjongResultHandRenderer {
       "webglcontextrestored",
       this.onContextRestored,
     );
+    this.onStationAvatarChanged = () => {
+      if (this.destroyed || !this.paper?.photoCards.visible) return;
+      this.syncScorePortraitOverlay(renderedStationPortraitSources());
+    };
+    document.addEventListener(
+      "mahjong:player-avatar-changed",
+      this.onStationAvatarChanged,
+    );
 
     this.scene = new Scene();
     this.camera = new PerspectiveCamera(
@@ -121,6 +152,9 @@ export class MahjongResultHandRenderer {
     this.tiles = new Group();
     this.tiles.position.z = RESULT_HAND_Z;
     this.scene.add(this.tiles);
+    this.indicators = new Group();
+    this.indicators.position.z = RESULT_INDICATORS_Z;
+    this.scene.add(this.indicators);
     this.addLighting();
     this.addShadowPlane();
 
@@ -129,6 +163,7 @@ export class MahjongResultHandRenderer {
     );
     this.paper.object3d.position.z = RESULT_PAPER_Z;
     this.scene.add(this.paper.object3d);
+    this.createScorePortraitOverlay();
 
     const atlas = await new TextureLoader().loadAsync(tileFacesUrl);
     atlas.anisotropy = Math.min(
@@ -139,6 +174,7 @@ export class MahjongResultHandRenderer {
     await Promise.all([
       document.fonts?.load('400 28px "Kalam Score"'),
       document.fonts?.load('400 26px "Playweft Mahjong Xingshu"'),
+      document.fonts?.load('700 32px "Mahjong Yaku Xingshu"', YAKU_FONT_TEXT),
     ]);
     this.ready = true;
     if (this.pendingRender) this.render(...this.pendingRender);
@@ -149,7 +185,12 @@ export class MahjongResultHandRenderer {
       new HemisphereLight(0xfff4dc, 0x31564e, 2.2),
       new AmbientLight(0xdde5df, 1.05),
     );
-    this.keyLight = new DirectionalLight(0xffe8c6, 4.6);
+    this.keyLight = new PointLight(
+      0xffe8c6,
+      RESULT_KEY_LIGHT_POINT_INTENSITY,
+      0,
+      2,
+    );
     this.keyLight.position.set(
       RESULT_HAND_KEY_LIGHT_POSITION.x,
       RESULT_HAND_KEY_LIGHT_POSITION.y,
@@ -157,10 +198,6 @@ export class MahjongResultHandRenderer {
     );
     this.keyLight.castShadow = true;
     this.keyLight.shadow.mapSize.set(1536, 1536);
-    this.keyLight.shadow.camera.left = -11;
-    this.keyLight.shadow.camera.right = 11;
-    this.keyLight.shadow.camera.top = 5;
-    this.keyLight.shadow.camera.bottom = -5;
     this.keyLight.shadow.camera.near = 1;
     this.keyLight.shadow.camera.far = 28;
     this.keyLight.shadow.bias = -0.00012;
@@ -225,6 +262,8 @@ export class MahjongResultHandRenderer {
       this.renderScoreSheet(state, playerName);
       return;
     }
+    this.cancelScoreSheetRender();
+    this.hideScorePortraitOverlay();
     if (state.winType === "nagashi") {
       this.hide();
       return;
@@ -253,6 +292,7 @@ export class MahjongResultHandRenderer {
     this.yakuHost?.classList.add("is-paper-rendered");
     this.clearTiles();
     this.buildHand(state, playerId, winnerIndex);
+    this.buildIndicators(state, playerId);
     this.paper.render({
       yaku: asArray(result.yaku),
       winnerName: state.playerNames?.[winnerIndex - 1] || `玩家${winnerIndex}`,
@@ -276,7 +316,7 @@ export class MahjongResultHandRenderer {
     this.paper.object3d.position.z = RESULT_SCORE_PAPER_Z;
     this.scoreHost.prepend(this.renderer.domElement);
     this.scoreHost.classList.add("is-three-result-rendered");
-    this.paper.renderScoreSheet({
+    const sheet = {
       playerNames: [
         playerName,
         ...Array.from(
@@ -285,7 +325,11 @@ export class MahjongResultHandRenderer {
         ),
       ],
       rows: resultScoreSheetRows(state),
-    });
+      portraitSources: renderedStationPortraitSources(),
+    };
+    this.scoreSheetRenderVersion = (this.scoreSheetRenderVersion ?? 0) + 1;
+    this.paper.renderScoreSheet(sheet);
+    this.syncScorePortraitOverlay(sheet.portraitSources);
     this.drawFrame();
   }
 
@@ -339,6 +383,39 @@ export class MahjongResultHandRenderer {
     return cursor;
   }
 
+  buildIndicators(state, playerId) {
+    const { dora, ura } = resultIndicatorSlots(state, playerId);
+    const tileWidth = TILE_SIZE.width * RESULT_INDICATOR_SCALE;
+    const groupWidth =
+      tileWidth * RESULT_INDICATOR_SLOT_COUNT +
+      RESULT_INDICATOR_GAP * (RESULT_INDICATOR_SLOT_COUNT - 1);
+    const totalWidth = groupWidth * 2 + RESULT_INDICATOR_GROUP_GAP;
+    let cursor = -totalWidth / 2;
+
+    [dora, ura].forEach((indicators, groupIndex) => {
+      for (let index = 0; index < RESULT_INDICATOR_SLOT_COUNT; index += 1) {
+        const indicator = indicators[index] ?? null;
+        const slot = new Group();
+        slot.position.set(
+          cursor + tileWidth / 2,
+          (TILE_SIZE.depth * RESULT_INDICATOR_SCALE) / 2,
+          0,
+        );
+        slot.scale.setScalar(RESULT_INDICATOR_SCALE);
+        const tile = this.tileFactory.create({
+          type: indicator?.type,
+          red: indicator?.red === true,
+          concealed: indicator == null,
+        });
+        tile.rotation.x = indicator == null ? Math.PI / 2 : -Math.PI / 2;
+        slot.add(tile);
+        this.indicators.add(slot);
+        cursor += tileWidth + RESULT_INDICATOR_GAP;
+      }
+      if (groupIndex === 0) cursor += RESULT_INDICATOR_GROUP_GAP;
+    });
+  }
+
   addTile(tileInfo, x, z, scale, doraCounts) {
     const slot = new Group();
     slot.position.set(x, (TILE_SIZE.depth * scale) / 2, z);
@@ -358,15 +435,109 @@ export class MahjongResultHandRenderer {
   clearTiles() {
     this.tiles.clear();
     this.tiles.position.set(0, 0, RESULT_HAND_Z);
+    this.indicators?.clear();
+    this.indicators?.position.set(0, 0, RESULT_INDICATORS_Z);
   }
 
   hide() {
+    this.cancelScoreSheetRender();
+    this.hideScorePortraitOverlay();
     this.host.classList.remove("is-three-result-rendered");
     this.scoreHost?.classList.remove("is-three-result-rendered");
     this.handsHost?.classList.remove("is-three-rendered");
     this.yakuHost?.classList.remove("is-paper-rendered");
     this.paper?.hide();
     this.renderer?.domElement.remove();
+  }
+
+  cancelScoreSheetRender() {
+    this.scoreSheetRenderVersion = (this.scoreSheetRenderVersion ?? 0) + 1;
+  }
+
+  createScorePortraitOverlay() {
+    if (!this.scoreHost) return;
+    this.scorePortraitOverlay = document.createElement("div");
+    this.scorePortraitOverlay.className = "result-score-portrait-overlay";
+    this.scorePortraitOverlay.setAttribute("aria-hidden", "true");
+    this.scorePortraitOverlay.hidden = true;
+    this.scorePortraitFrames = Array.from({ length: 4 }, (_, index) => {
+      const frame = document.createElement("div");
+      frame.className = "result-score-portrait";
+      const crop = document.createElement("div");
+      crop.className = "result-score-portrait-crop";
+      crop.style.backgroundPosition = DEFAULT_PORTRAIT_POSITIONS[index];
+      const image = document.createElement("img");
+      image.alt = "";
+      image.decoding = "async";
+      image.addEventListener("error", () => {
+        crop.classList.add("is-default-portrait");
+        crop.style.backgroundImage = `url(${JSON.stringify(playerPortraitsUrl)})`;
+        image.hidden = true;
+        image.removeAttribute("src");
+        delete image.dataset.source;
+      });
+      crop.append(image);
+      frame.append(crop);
+      this.scorePortraitOverlay.append(frame);
+      return { frame, crop, image };
+    });
+    this.scoreHost.append(this.scorePortraitOverlay);
+  }
+
+  syncScorePortraitOverlay(sources = []) {
+    if (!this.scorePortraitOverlay || !this.paper?.photoCards.visible) return;
+    this.scorePortraitOverlay.hidden = false;
+    this.scorePortraitFrames.forEach(({ crop, image }, index) => {
+      const source = typeof sources[index] === "string" ? sources[index] : "";
+      const useDefault = !source;
+      crop.classList.toggle("is-default-portrait", useDefault);
+      crop.style.backgroundImage = useDefault
+        ? `url(${JSON.stringify(playerPortraitsUrl)})`
+        : "";
+      if (useDefault) {
+        image.hidden = true;
+        image.removeAttribute("src");
+        delete image.dataset.source;
+      } else {
+        image.hidden = false;
+        if (image.dataset.source !== source) {
+          image.dataset.source = source;
+          image.src = source;
+        }
+      }
+    });
+    this.positionScorePortraitOverlay();
+  }
+
+  positionScorePortraitOverlay() {
+    if (!this.scorePortraitOverlay || !this.paper?.photoCards.visible) return;
+    this.scene.updateMatrixWorld(true);
+    this.camera.updateMatrixWorld(true);
+    this.scorePortraitFrames.forEach(({ frame, crop }, index) => {
+      const corners = this.paper.instantPhotoWindowCorners(index);
+      const quad = corners.map((corner) => {
+        const point = corner.clone().project(this.camera);
+        return {
+          x: ((point.x + 1) / 2) * VIEWPORT.width,
+          y: ((1 - point.y) / 2) * VIEWPORT.height,
+        };
+      });
+      const cropRect = scorePortraitCropRect(quad);
+      if (!cropRect) {
+        frame.hidden = true;
+        return;
+      }
+      frame.hidden = false;
+      frame.style.clipPath = `polygon(${quad.map(({ x, y }) => `${x}px ${y}px`).join(", ")})`;
+      crop.style.left = `${cropRect.left}px`;
+      crop.style.top = `${cropRect.top}px`;
+      crop.style.width = `${cropRect.width}px`;
+      crop.style.height = `${cropRect.height}px`;
+    });
+  }
+
+  hideScorePortraitOverlay() {
+    if (this.scorePortraitOverlay) this.scorePortraitOverlay.hidden = true;
   }
 
   drawFrame() {
@@ -392,6 +563,11 @@ export class MahjongResultHandRenderer {
       "webglcontextrestored",
       this.onContextRestored,
     );
+    document.removeEventListener(
+      "mahjong:player-avatar-changed",
+      this.onStationAvatarChanged,
+    );
+    this.scorePortraitOverlay?.remove();
     this.tileFactory?.destroy();
     this.paper?.destroy();
     this.shadowGeometry?.dispose();
@@ -399,6 +575,37 @@ export class MahjongResultHandRenderer {
     this.renderer?.dispose();
     this.renderer?.domElement.remove();
   }
+}
+
+function renderedStationPortraitSources() {
+  return ["bottom", "right", "top", "left"].map((position) => {
+    const image = document.querySelector(
+      `.player-${position} [data-player-avatar]`,
+    );
+    if (!image) return "";
+    return image.dataset.source || image.currentSrc || "";
+  });
+}
+
+function scorePortraitCropRect(points) {
+  if (!Array.isArray(points) || points.length !== 4) return null;
+  const centreX = points.reduce((sum, point) => sum + point.x, 0) / 4;
+  const centreY = points.reduce((sum, point) => sum + point.y, 0) / 4;
+  const width = (distanceBetween(points[0], points[1]) + distanceBetween(points[3], points[2])) / 2;
+  const height = (distanceBetween(points[0], points[3]) + distanceBetween(points[1], points[2])) / 2;
+  if (width <= 0 || height <= 0) return null;
+  const cropWidth = Math.max(width, height * SCORE_PORTRAIT_IMAGE_ASPECT);
+  const cropHeight = cropWidth / SCORE_PORTRAIT_IMAGE_ASPECT;
+  return {
+    left: centreX - cropWidth / 2,
+    top: centreY - cropHeight / 2,
+    width: cropWidth,
+    height: cropHeight,
+  };
+}
+
+function distanceBetween(first, second) {
+  return Math.hypot(second.x - first.x, second.y - first.y);
 }
 
 function normalizeTile(tile) {

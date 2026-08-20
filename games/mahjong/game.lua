@@ -495,10 +495,11 @@ local function indicator_types(state, ura)
 	return result
 end
 
-local function visible_indicator_tiles(state)
+local function indicator_tiles(state, ura)
 	local result = {}
+	local offset = ura and 2 or 1
 	for index = 1, state.kanCount + 1 do
-		local tile = state.deadWall[(index - 1) * 2 + 1]
+		local tile = state.deadWall[(index - 1) * 2 + offset]
 		if tile then
 			result[#result + 1] = {
 				type = tile_type(tile),
@@ -3682,7 +3683,10 @@ function view(state, events, context)
 	for _, kind in ipairs(indicator_types(state, false)) do
 		indicators[#indicators + 1] = kind
 	end
-	local indicator_tiles = visible_indicator_tiles(state)
+	local visible_indicator_tiles = indicator_tiles(state, false)
+	local ura_indicator_tiles = state.phase == "hand_ended"
+		and indicator_tiles(state, true)
+		or {}
 	return {
 		state = {
 			players = state.players,
@@ -3701,7 +3705,8 @@ function view(state, events, context)
 			drawnPlayerIndex = state.drawnTile > 0 and state.turnIndex or 0,
 			wallCount = #state.wall,
 			doraIndicators = indicators,
-			doraIndicatorTiles = indicator_tiles,
+			doraIndicatorTiles = visible_indicator_tiles,
+			uraDoraIndicatorTiles = ura_indicator_tiles,
 			ownHand = own_hand,
 			handCounts = hand_counts,
 			discards = visible_discards(state),
