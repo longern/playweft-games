@@ -400,20 +400,27 @@ a {
   pointer-events: none;
 }
 
-.player-station::before {
+.player-avatar {
+  position: relative;
+  z-index: 1;
   width: 78px;
   aspect-ratio: 1;
   border: 2px solid rgba(235, 207, 139, 0.82);
   border-radius: 12px;
-  background-image: var(--mahjong-default-portrait-image, none);
+  background: #092725;
   background-repeat: no-repeat;
-  background-size: 200% 200%;
+  background-position: center;
+  background-size: cover;
   box-shadow:
     0 0 0 2px rgba(3, 24, 22, 0.94),
     0 0 0 3px rgba(222, 183, 91, 0.28),
     inset 0 0 0 1px rgba(255, 255, 255, 0.16);
   filter: brightness(1.1) saturate(1.04);
-  content: "";
+}
+
+.player-avatar.is-default-portrait {
+  background-image: var(--mahjong-default-portrait-image, none);
+  background-size: 200% 200%;
 }
 
 .player-station > span:not(.wind-badge) {
@@ -467,40 +474,13 @@ a {
   text-shadow: 0 1px rgba(255, 197, 116, 0.28);
 }
 
-.player-station.is-active::before {
+.player-station.is-active .player-avatar {
   border-color: #ffe492;
   box-shadow:
     0 0 0 2px rgba(44, 29, 7, 0.9),
     0 0 0 3px rgba(255, 223, 128, 0.52),
     0 0 18px rgba(255, 201, 74, 0.48),
     inset 0 0 0 1px rgba(255, 255, 255, 0.18);
-}
-.platform-player-avatar {
-  position: absolute;
-  z-index: 1;
-  top: 0;
-  left: 50%;
-  width: 78px;
-  aspect-ratio: 1;
-  border: 2px solid rgba(235, 207, 139, 0.82);
-  border-radius: 12px;
-  background: #092725;
-  box-shadow:
-    0 0 0 2px rgba(3, 24, 22, 0.94),
-    0 0 0 3px rgba(222, 183, 91, 0.28),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.16);
-  object-fit: cover;
-  transform: translateX(-50%);
-}
-.player-station.is-active .platform-player-avatar {
-  border-color: #ffe38c;
-  box-shadow:
-    0 0 0 2px rgba(44, 29, 7, 0.9),
-    0 0 0 3px rgba(255, 223, 128, 0.52),
-    0 0 18px rgba(255, 201, 74, 0.48);
-}
-.platform-player-avatar[hidden] {
-  display: none;
 }
 .player-bottom {
   bottom: 151px;
@@ -518,16 +498,16 @@ a {
   top: 223px;
   left: 24px;
 }
-.player-bottom::before {
+.player-bottom .player-avatar.is-default-portrait {
   background-position: 0 0;
 }
-.player-right::before {
+.player-right .player-avatar.is-default-portrait {
   background-position: 100% 0;
 }
-.player-top::before {
+.player-top .player-avatar.is-default-portrait {
   background-position: 0 100%;
 }
-.player-left::before {
+.player-left .player-avatar.is-default-portrait {
   background-position: 100% 100%;
 }
 

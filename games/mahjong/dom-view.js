@@ -216,34 +216,40 @@ export class MahjongDomView {
   }
 
   setPlayerAvatar(position, source) {
-    const image = this.elements.stations[position]?.querySelector(
+    const avatar = this.elements.stations[position]?.querySelector(
       "[data-player-avatar]",
     );
-    if (!image) return;
+    if (!avatar) return;
     const nextSource = typeof source === "string" && source ? source : "";
     if (!nextSource) {
-      image.hidden = true;
-      image.removeAttribute("src");
-      delete image.dataset.source;
+      avatar.classList.add("is-default-portrait");
+      avatar.style.removeProperty("background-image");
+      delete avatar.dataset.source;
+      delete avatar.dataset.pendingSource;
       document.dispatchEvent(new Event("mahjong:player-avatar-changed"));
       return;
     }
-    if (image.dataset.source === nextSource) return;
+    if (
+      avatar.dataset.source === nextSource ||
+      avatar.dataset.pendingSource === nextSource
+    )
+      return;
 
-    image.hidden = true;
-    image.dataset.source = nextSource;
-    image.onload = () => {
-      if (image.dataset.source === nextSource) image.hidden = false;
-    };
-    image.onerror = () => {
-      if (image.dataset.source !== nextSource) return;
-      image.hidden = true;
-      image.removeAttribute("src");
-      delete image.dataset.source;
+    avatar.dataset.pendingSource = nextSource;
+    const preload = new Image();
+    preload.onload = () => {
+      if (avatar.dataset.pendingSource !== nextSource) return;
+      avatar.dataset.source = nextSource;
+      delete avatar.dataset.pendingSource;
+      avatar.classList.remove("is-default-portrait");
+      avatar.style.backgroundImage = `url(${JSON.stringify(nextSource)})`;
       document.dispatchEvent(new Event("mahjong:player-avatar-changed"));
     };
-    image.src = nextSource;
-    document.dispatchEvent(new Event("mahjong:player-avatar-changed"));
+    preload.onerror = () => {
+      if (avatar.dataset.pendingSource !== nextSource) return;
+      delete avatar.dataset.pendingSource;
+    };
+    preload.src = nextSource;
   }
 
   renderStations(

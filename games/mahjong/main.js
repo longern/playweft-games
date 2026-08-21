@@ -1364,7 +1364,6 @@ function renderCurrentState({ animateDealIn = false } = {}) {
       playerNameIsAuthoritative: hasPlatformName,
     });
   }
-  applyPackAvatars(renderState);
   visualRenderer.render(renderState, visibleEvents, {
     ...domView.visualUi(playerName, selectedTileId),
     dealInKey: animateDealIn ? handDealInKey(state) : "",
@@ -1410,7 +1409,6 @@ function renderResultExitTable(tableState) {
     },
   );
   const staticState = { ...renderState, legalActions: {} };
-  applyPackAvatars(staticState);
   visualRenderer.render(staticState, [], {
     ...domView.visualUi(playerName, selectedTileId),
     riichiMode,

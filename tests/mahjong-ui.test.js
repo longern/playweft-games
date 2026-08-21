@@ -3469,6 +3469,7 @@ test("mahjong prefers the platform avatar for the local player", () => {
   assert.match(main, /getUserProfile\(\{ fields: \["avatar"\] \}\)/);
   assert.match(main, /const source = profile\?\.avatar\?\.src;/);
   assert.match(main, /setPlayerAvatar\("bottom", source\)/);
-  assert.match(view, /image\.onload = \(\) =>/);
-  assert.match(view, /image\.onerror = \(\) =>/);
+  assert.match(html, /class="player-avatar is-default-portrait"[^>]*data-player-avatar/);
+  assert.match(view, /const preload = new Image\(\)/);
+  assert.match(view, /avatar\.classList\.remove\("is-default-portrait"\)/);
 });
