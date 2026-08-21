@@ -377,8 +377,11 @@ export class MahjongThreeRenderer {
     if (!dealInKey) this.animations.resetKey("new-hand-deal");
     this.state = state;
     this.ui = ui;
+    this.showGameHints = ui.showGameHints !== false;
     this.highlightedType =
-      Number(ui.selectedTileId) > 0 ? tileType(ui.selectedTileId) : 0;
+      this.showGameHints && Number(ui.selectedTileId) > 0
+        ? tileType(ui.selectedTileId)
+        : 0;
     this.doraCounts = doraTypeCounts(state);
     this.pickableTiles.length = 0;
     this.cancelHandReveal();
@@ -438,8 +441,11 @@ export class MahjongThreeRenderer {
       return;
     }
     this.ui = { ...this.ui, ...ui };
+    this.showGameHints = this.ui.showGameHints !== false;
     this.highlightedType =
-      Number(this.ui.selectedTileId) > 0 ? tileType(this.ui.selectedTileId) : 0;
+      this.showGameHints && Number(this.ui.selectedTileId) > 0
+        ? tileType(this.ui.selectedTileId)
+        : 0;
     this.cancelOwnTileMotion();
     this.queueOwnTileMotions();
     this.updateTypeHighlights();
@@ -712,7 +718,10 @@ export class MahjongThreeRenderer {
       type: tileInfo.type,
       red: tileInfo.red,
       concealed: covered,
-      dora: !covered && this.doraCounts.has(Number(tileInfo.type)),
+      dora:
+        this.showGameHints &&
+        !covered &&
+        this.doraCounts.has(Number(tileInfo.type)),
     });
     const hingeTransform = presentedTileHingeTransform(covered);
     const hinge = new Group();
@@ -836,7 +845,7 @@ export class MahjongThreeRenderer {
           : this.highlightedType === tileType(tileId)
             ? "match"
             : "",
-      dora: this.doraCounts.has(tileType(tileId)),
+      dora: this.showGameHints && this.doraCounts.has(tileType(tileId)),
       dimmed,
     };
     const visualKey = JSON.stringify({ ...visualState, highlight: undefined });
@@ -999,7 +1008,8 @@ export class MahjongThreeRenderer {
             riichiColumn: riichiColumns.get(row) ?? -1,
           },
         );
-        const dora = this.doraCounts.has(Number(discard.type));
+        const dora =
+          this.showGameHints && this.doraCounts.has(Number(discard.type));
         const highlight =
           this.highlightedType === Number(discard.type) ? "match" : "";
         riverEntries.push({
@@ -1015,9 +1025,9 @@ export class MahjongThreeRenderer {
             red: discard.red === true,
             highlight,
             dora,
-            tsumogiri: discard.tsumogiri === true,
+            tsumogiri: this.showGameHints && discard.tsumogiri === true,
           },
-          visualKey: `${discard.type}:${discard.red === true}:${dora}:${discard.tsumogiri === true}`,
+          visualKey: `${discard.type}:${discard.red === true}:${dora}:${this.showGameHints && discard.tsumogiri === true}`,
         });
       });
     }
@@ -1089,7 +1099,10 @@ export class MahjongThreeRenderer {
               !entry.faceDown && this.highlightedType === Number(entry.type)
                 ? "match"
                 : "",
-            dora: !entry.faceDown && this.doraCounts.has(Number(entry.type)),
+            dora:
+              this.showGameHints &&
+              !entry.faceDown &&
+              this.doraCounts.has(Number(entry.type)),
           });
           tile.rotation.x = entry.faceDown ? Math.PI / 2 : -Math.PI / 2;
           slot.add(tile);

@@ -59,11 +59,13 @@ export class MahjongDomView {
       preserveResult = false,
       resultPage = 0,
       riichiMode = false,
+      showGameHints = true,
       defaultNames = {},
       playerNameIsAuthoritative = false,
     } = {},
   ) {
     const { elements } = this;
+    this.showGameHints = showGameHints;
     this.doraCounts = doraTypeCounts(state);
     elements.message.classList.remove("is-error");
     const currentRound = roundLabel(state.roundWind, state.handNumber);
@@ -122,9 +124,10 @@ export class MahjongDomView {
     state,
     selectedTileId,
     playerName,
-    { riichiMode = false } = {},
+    { riichiMode = false, showGameHints = true } = {},
   ) {
     this.riichiMode = riichiMode;
+    this.showGameHints = showGameHints;
     this.updateHandSelection(selectedTileId);
     this.renderTypeHighlights(selectedTileId);
     this.renderTenpaiPreview(state, selectedTileId);
@@ -132,12 +135,17 @@ export class MahjongDomView {
   }
 
   renderTenpaiPreview(state, selectedTileId) {
+    if (!this.showGameHints) {
+      this.elements.tenpaiPreview.hidden = true;
+      return;
+    }
     const waits = tenpaiWaitsForDiscard(state?.legalActions, selectedTileId);
     const { tenpaiPreview, tenpaiWaits } = this.elements;
     tenpaiPreview.hidden = waits.length === 0;
     tenpaiPreview.classList.toggle(
       "is-furiten",
-      waits.length > 0 && tenpaiDiscardFuriten(state?.legalActions, selectedTileId),
+      waits.length > 0 &&
+        tenpaiDiscardFuriten(state?.legalActions, selectedTileId),
     );
     tenpaiWaits.style.setProperty(
       "--tenpai-wait-columns",
@@ -172,7 +180,8 @@ export class MahjongDomView {
       tile.classList.toggle("is-selected", tileId === selectedTileId);
       tile.classList.toggle(
         "is-type-match",
-        tileId !== selectedTileId &&
+        this.showGameHints &&
+          tileId !== selectedTileId &&
           selectedType > 0 &&
           tileType(tileId) === selectedType,
       );
@@ -184,7 +193,7 @@ export class MahjongDomView {
     for (const tile of this.elements.dora.querySelectorAll("[data-type]")) {
       tile.classList.toggle(
         "is-type-match",
-        Number(tile.dataset.type) === selectedType,
+        this.showGameHints && Number(tile.dataset.type) === selectedType,
       );
     }
   }
@@ -417,7 +426,7 @@ export class MahjongDomView {
     elements.tsumo.hidden = !legal.canTsumo;
     elements.riichi.hidden = !legal.canRiichi;
     elements.riichi.disabled = false;
-    elements.furiten.hidden = !state.furiten;
+    elements.furiten.hidden = !this.showGameHints || !state.furiten;
     elements.actionHint.textContent = canClaim
       ? "有人打出了你需要的牌"
       : legal.canDiscard
@@ -472,7 +481,7 @@ export class MahjongDomView {
       choice.append(
         ...preview.map((tile) => {
           const element = createTile(tile.type, "claim-choice", tile.red);
-          markDora(element, tile.type, this.doraCounts);
+          if (this.showGameHints) markDora(element, tile.type, this.doraCounts);
           element.setAttribute("aria-hidden", "true");
           return element;
         }),
@@ -537,9 +546,10 @@ export class MahjongDomView {
       void this.elements.message.offsetWidth;
       this.elements.message.classList.add("is-pulsing");
     } else if (!event) {
-      this.elements.message.textContent = state.furiten
-        ? "振听中：不能荣和，但仍可自摸"
-        : "一番缚 · 赤宝牌各一枚";
+      this.elements.message.textContent =
+        this.showGameHints && state.furiten
+          ? "振听中：不能荣和，但仍可自摸"
+          : "一番缚 · 赤宝牌各一枚";
     }
   }
 
@@ -581,11 +591,12 @@ export class MahjongDomView {
         const name = document.createElement("i");
         const yakuValue = document.createElement("b");
         name.textContent = traditionalYakuName(yaku.name);
-        yakuValue.textContent = state.winType === "nagashi"
-          ? "滿貫"
-          : yaku.han >= 13
-            ? "役满"
-            : `${yaku.han}番`;
+        yakuValue.textContent =
+          state.winType === "nagashi"
+            ? "滿貫"
+            : yaku.han >= 13
+              ? "役满"
+              : `${yaku.han}番`;
         item.append(name, yakuValue);
         return item;
       }),
@@ -596,19 +607,17 @@ export class MahjongDomView {
     const { elements } = this;
     const abortive = state?.result?.abortive === true;
     const nagashi = state?.winType === "nagashi";
-    const exhaustive = state?.phase === "hand_ended" &&
-      state?.draw === true &&
-      !abortive;
-    elements.drawReveal.hidden = !visible || (!abortive && !exhaustive && !nagashi);
+    const exhaustive =
+      state?.phase === "hand_ended" && state?.draw === true && !abortive;
+    elements.drawReveal.hidden =
+      !visible || (!abortive && !exhaustive && !nagashi);
     if (elements.drawReveal.hidden) return;
     elements.drawRevealReason.textContent = traditionalDrawReason(
       abortive
         ? state.abortiveReason || state.result?.reason || "途中流局"
         : "荒牌流局",
     );
-    const waitsBySeat = exhaustive
-      ? asArray(state.result?.tenpaiWaits)
-      : [];
+    const waitsBySeat = exhaustive ? asArray(state.result?.tenpaiWaits) : [];
     elements.drawRevealTenpai.forEach((label) => {
       const seat = Number(label.dataset.drawTenpaiSeat);
       const waits = asArray(waitsBySeat[seat - 1]).map(Number);
@@ -753,6 +762,7 @@ function collectElements() {
     settingsEndMatch: document.querySelector("#settings-end-match-button"),
     settingsTabs: [...document.querySelectorAll("[data-settings-tab]")],
     settingsPanels: [...document.querySelectorAll("[data-settings-panel]")],
+    gameHints: document.querySelector("#game-hints-setting"),
     doubleClickTsumogiri: document.querySelector(
       "#double-click-tsumogiri-setting",
     ),
@@ -792,9 +802,7 @@ function collectElements() {
     result: document.querySelector("#result-panel"),
     drawReveal: document.querySelector("#draw-reveal"),
     drawRevealReason: document.querySelector("#draw-reveal-reason"),
-    drawRevealTenpai: [
-      ...document.querySelectorAll("[data-draw-tenpai-seat]"),
-    ],
+    drawRevealTenpai: [...document.querySelectorAll("[data-draw-tenpai-seat]")],
     resultStage: document.querySelector(".result-page-stage"),
     resultTrack: document.querySelector(".result-page-track"),
     resultDetailContent: document.querySelector("#result-detail-content"),
@@ -806,7 +814,9 @@ function collectElements() {
     matchSummary: document.querySelector("#match-summary"),
     matchSummaryRows: document.querySelector("#match-summary-rows"),
     matchSummaryPhotoCrop: document.querySelector("#match-summary-photo-crop"),
-    matchSummaryPhotoImage: document.querySelector("#match-summary-photo-image"),
+    matchSummaryPhotoImage: document.querySelector(
+      "#match-summary-photo-image",
+    ),
     matchSummaryRematch: document.querySelector("#match-summary-rematch"),
     matchSummarySetup: document.querySelector("#match-summary-setup"),
     setup: document.querySelector("#setup-panel"),

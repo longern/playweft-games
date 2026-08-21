@@ -1,5 +1,6 @@
 const DOUBLE_CLICK_TSUMOGIRI_KEY = "playweft.mahjong.double-click-tsumogiri";
 const DOUBLE_CLICK_PASS_KEY = "playweft.mahjong.double-click-pass";
+const GAME_HINTS_KEY = "playweft.mahjong.game-hints";
 const DISCARD_VOLUME_KEY = "playweft.mahjong.discard-volume";
 const MUSIC_VOLUME_KEY = "playweft.mahjong.music-volume";
 const DEFAULT_DISCARD_VOLUME = 100;
@@ -15,6 +16,7 @@ export function createMahjongSettingsDialog({
   endMatchButton,
   tabButtons,
   tabPanels,
+  gameHints,
   doubleClickTsumogiri,
   doubleClickPass,
   discardVolume,
@@ -22,6 +24,7 @@ export function createMahjongSettingsDialog({
   musicVolume,
   musicVolumeValue,
   onMusicVolumeChange,
+  onGameHintsChange,
   onEndMatch,
 }) {
   let returnFocus = null;
@@ -29,6 +32,7 @@ export function createMahjongSettingsDialog({
   let openingFrame = 0;
   let closingTimer = 0;
   let restoreFocusAfterClose = true;
+  gameHints.checked = readBooleanSetting(GAME_HINTS_KEY, true);
   doubleClickTsumogiri.checked = readBooleanSetting(
     DOUBLE_CLICK_TSUMOGIRI_KEY,
     false,
@@ -89,7 +93,9 @@ export function createMahjongSettingsDialog({
   }
 
   function motionReduced() {
-    return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+    return (
+      window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true
+    );
   }
 
   function setOpen(nextOpen, { restoreFocus = true, animate = true } = {}) {
@@ -129,7 +135,10 @@ export function createMahjongSettingsDialog({
       finishClose();
       return;
     }
-    closingTimer = window.setTimeout(finishClose, DIALOG_TRANSITION_FALLBACK_MS);
+    closingTimer = window.setTimeout(
+      finishClose,
+      DIALOG_TRANSITION_FALLBACK_MS,
+    );
   }
 
   function onRootClick(event) {
@@ -137,7 +146,11 @@ export function createMahjongSettingsDialog({
   }
 
   function onSurfaceTransitionEnd(event) {
-    if (!open && event.target === surface && event.propertyName === "transform") {
+    if (
+      !open &&
+      event.target === surface &&
+      event.propertyName === "transform"
+    ) {
       finishClose();
     }
   }
@@ -150,9 +163,11 @@ export function createMahjongSettingsDialog({
       return;
     }
     if (event.key !== "Tab") return;
-    const focusable = [...surface.querySelectorAll(
-      'button:not([disabled]):not([tabindex="-1"]), input:not([disabled]), iframe',
-    )].filter((element) => !element.closest("[hidden]"));
+    const focusable = [
+      ...surface.querySelectorAll(
+        'button:not([disabled]):not([tabindex="-1"]), input:not([disabled]), iframe',
+      ),
+    ].filter((element) => !element.closest("[hidden]"));
     if (!focusable.length) return;
     const first = focusable[0];
     const last = focusable.at(-1);
@@ -170,13 +185,22 @@ export function createMahjongSettingsDialog({
     event.preventDefault();
     const current = tabButtons.indexOf(event.currentTarget);
     const direction = event.key === "ArrowRight" ? 1 : -1;
-    const next = tabButtons[(current + direction + tabButtons.length) % tabButtons.length];
+    const next =
+      tabButtons[(current + direction + tabButtons.length) % tabButtons.length];
     setTab(next.dataset.settingsTab);
     next.focus();
   }
 
   function onTsumogiriSettingChange() {
-    writeBooleanSetting(DOUBLE_CLICK_TSUMOGIRI_KEY, doubleClickTsumogiri.checked);
+    writeBooleanSetting(
+      DOUBLE_CLICK_TSUMOGIRI_KEY,
+      doubleClickTsumogiri.checked,
+    );
+  }
+
+  function onGameHintsSettingChange() {
+    writeBooleanSetting(GAME_HINTS_KEY, gameHints.checked);
+    onGameHintsChange?.();
   }
 
   function onPassSettingChange() {
@@ -216,6 +240,7 @@ export function createMahjongSettingsDialog({
   root.addEventListener("click", onRootClick);
   surface.addEventListener("transitionend", onSurfaceTransitionEnd);
   document.addEventListener("keydown", onKeyDown);
+  gameHints.addEventListener("change", onGameHintsSettingChange);
   doubleClickTsumogiri.addEventListener("change", onTsumogiriSettingChange);
   doubleClickPass.addEventListener("change", onPassSettingChange);
   discardVolume.addEventListener("input", onDiscardVolumeInput);
@@ -226,6 +251,9 @@ export function createMahjongSettingsDialog({
   }
 
   return {
+    get gameHintsEnabled() {
+      return gameHints.checked;
+    },
     get doubleClickTsumogiriEnabled() {
       return doubleClickTsumogiri.checked;
     },
@@ -254,7 +282,11 @@ export function createMahjongSettingsDialog({
       root.removeEventListener("click", onRootClick);
       surface.removeEventListener("transitionend", onSurfaceTransitionEnd);
       document.removeEventListener("keydown", onKeyDown);
-      doubleClickTsumogiri.removeEventListener("change", onTsumogiriSettingChange);
+      gameHints.removeEventListener("change", onGameHintsSettingChange);
+      doubleClickTsumogiri.removeEventListener(
+        "change",
+        onTsumogiriSettingChange,
+      );
       doubleClickPass.removeEventListener("change", onPassSettingChange);
       discardVolume.removeEventListener("input", onDiscardVolumeInput);
       musicVolume.removeEventListener("input", onMusicVolumeInput);
@@ -265,7 +297,10 @@ export function createMahjongSettingsDialog({
   };
 }
 
-export function normalizeDiscardVolume(value, fallback = DEFAULT_DISCARD_VOLUME) {
+export function normalizeDiscardVolume(
+  value,
+  fallback = DEFAULT_DISCARD_VOLUME,
+) {
   return normalizeVolume(value, fallback);
 }
 

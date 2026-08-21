@@ -92,33 +92,35 @@
       </nav>
 
       <nav id="auto-action-controls" class="auto-action-controls" aria-label="自动操作">
-        <button id="auto-win-button" class="auto-action-control" type="button" aria-pressed="false"
-          aria-label="自动胡牌" title="自动胡牌">
+        <button id="auto-win-button" class="auto-action-control" type="button" aria-pressed="false" aria-label="自动胡牌"
+          title="自动胡牌">
           <svg class="auto-action-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M6 3h12v3.5a5.9 5.9 0 0 1-4.9 5.81V16h3.25a1 1 0 1 1 0 2H7.65a1 1 0 1 1 0-2H10.9v-3.69A5.9 5.9 0 0 1 6 6.5V3Zm-3 2h2v2.05A3.98 3.98 0 0 1 2 10.9V8a3 3 0 0 1 1-2.24V5Zm16 0h2v.76A3 3 0 0 1 22 8v2.9a3.98 3.98 0 0 1-3-3.85V5Z"/>
+            <path
+              d="M6 3h12v3.5a5.9 5.9 0 0 1-4.9 5.81V16h3.25a1 1 0 1 1 0 2H7.65a1 1 0 1 1 0-2H10.9v-3.69A5.9 5.9 0 0 1 6 6.5V3Zm-3 2h2v2.05A3.98 3.98 0 0 1 2 10.9V8a3 3 0 0 1 1-2.24V5Zm16 0h2v.76A3 3 0 0 1 22 8v2.9a3.98 3.98 0 0 1-3-3.85V5Z" />
           </svg>
         </button>
-        <button id="pass-claims-button" class="auto-action-control" type="button" aria-pressed="false"
-          aria-label="放弃鸣牌" title="放弃鸣牌">
+        <button id="pass-claims-button" class="auto-action-control" type="button" aria-pressed="false" aria-label="放弃鸣牌"
+          title="放弃鸣牌">
           <svg class="auto-action-icon" data-icon="bell-off" viewBox="0 0 24 24" aria-hidden="true">
             <defs>
               <mask id="pass-claims-bell-mask">
-                <rect width="24" height="24" fill="white"/>
-                <path d="M4.8 4.8 19.2 19.2" stroke="black" stroke-width="3" stroke-linecap="round"/>
+                <rect width="24" height="24" fill="white" />
+                <path d="M4.8 4.8 19.2 19.2" stroke="black" stroke-width="3" stroke-linecap="round" />
               </mask>
             </defs>
             <path mask="url(#pass-claims-bell-mask)"
-              d="M18 16.25v-5.5c0-3.03-1.75-5.57-4.75-6.25v-.75a1.25 1.25 0 0 0-2.5 0v.75C7.75 5.18 6 7.72 6 10.75v5.5l-2 2V20h16v-1.75l-2-2Zm-6 7.25c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2Z"/>
+              d="M18 16.25v-5.5c0-3.03-1.75-5.57-4.75-6.25v-.75a1.25 1.25 0 0 0-2.5 0v.75C7.75 5.18 6 7.72 6 10.75v5.5l-2 2V20h16v-1.75l-2-2Zm-6 7.25c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2Z" />
           </svg>
         </button>
         <button id="auto-tsumogiri-button" class="auto-action-control" type="button" aria-pressed="false"
           aria-label="自动摸切" title="自动摸切">
           <svg class="auto-action-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="3" y="3" width="7.5" height="10" rx="1.4"/>
-            <path d="m11.25 8.4 4.5 4.5v-2.15a1 1 0 1 1 2 0v4.55a1 1 0 0 1-1 1h-4.55a1 1 0 1 1 0-2h2.15l-4.5-4.5a1 1 0 0 1 1.4-1.4Z"/>
-            <rect x="3" y="17" width="5" height="4" rx=".8"/>
-            <rect x="9.5" y="17" width="5" height="4" rx=".8"/>
-            <rect x="16" y="17" width="5" height="4" rx=".8"/>
+            <rect x="3" y="3" width="7.5" height="10" rx="1.4" />
+            <path
+              d="m11.25 8.4 4.5 4.5v-2.15a1 1 0 1 1 2 0v4.55a1 1 0 0 1-1 1h-4.55a1 1 0 1 1 0-2h2.15l-4.5-4.5a1 1 0 0 1 1.4-1.4Z" />
+            <rect x="3" y="17" width="5" height="4" rx=".8" />
+            <rect x="9.5" y="17" width="5" height="4" rx=".8" />
+            <rect x="16" y="17" width="5" height="4" rx=".8" />
           </svg>
         </button>
       </nav>
@@ -143,6 +145,10 @@
           <div class="settings-dialog-body">
             <div id="settings-operation-panel" class="settings-tab-panel settings-operation-panel" role="tabpanel"
               aria-labelledby="settings-operation-tab" data-settings-panel="operation">
+              <label class="settings-option" for="game-hints-setting">
+                <input id="game-hints-setting" type="checkbox" />
+                <strong>显示对局提示</strong>
+              </label>
               <label class="settings-option" for="double-click-tsumogiri-setting">
                 <input id="double-click-tsumogiri-setting" type="checkbox" />
                 <strong>双击空白处摸切</strong>
@@ -179,7 +185,8 @@
               </details>
               <label class="settings-pack-upload" for="settings-pack-upload">
                 <span>选择 .zip 素材包</span>
-                <input id="settings-pack-upload" type="file" accept=".zip,application/zip,application/x-zip-compressed" />
+                <input id="settings-pack-upload" type="file"
+                  accept=".zip,application/zip,application/x-zip-compressed" />
               </label>
               <p id="settings-pack-feedback" class="settings-pack-feedback" role="status" aria-live="polite"></p>
               <ul id="settings-pack-list" class="settings-pack-list" aria-label="素材包列表"></ul>

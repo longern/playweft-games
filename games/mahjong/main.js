@@ -246,6 +246,7 @@ const settingsDialog = createMahjongSettingsDialog({
   endMatchButton: elements.settingsEndMatch,
   tabButtons: elements.settingsTabs,
   tabPanels: elements.settingsPanels,
+  gameHints: elements.gameHints,
   doubleClickTsumogiri: elements.doubleClickTsumogiri,
   doubleClickPass: elements.doubleClickPass,
   discardVolume: elements.riverTileVolume,
@@ -254,6 +255,9 @@ const settingsDialog = createMahjongSettingsDialog({
   musicVolumeValue: elements.musicVolumeValue,
   onMusicVolumeChange() {
     applyMatchMusicVolume();
+  },
+  onGameHintsChange() {
+    if (state) renderCurrentState();
   },
   onEndMatch() {
     void endSoloMatch();
@@ -410,11 +414,13 @@ elements.tsumo.addEventListener("click", () => dispatch({ type: "tsumo" }));
 elements.riichi.addEventListener("click", enterRiichiMode);
 elements.cancelRiichi.addEventListener("click", cancelRiichiMode);
 elements.rematch.addEventListener("click", () => void continueResult());
-elements.matchSummaryRematch.addEventListener("click", () =>
-  void restartMatchFromSummary(),
+elements.matchSummaryRematch.addEventListener(
+  "click",
+  () => void restartMatchFromSummary(),
 );
-elements.matchSummarySetup.addEventListener("click", () =>
-  void returnToSetupFromSummary(),
+elements.matchSummarySetup.addEventListener(
+  "click",
+  () => void returnToSetupFromSummary(),
 );
 elements.result.addEventListener("dblclick", (event) => {
   if (!isResultBlankSpace(event.target)) return;
@@ -1262,29 +1268,34 @@ function scheduleAi({ afterDealIn = false } = {}) {
     const isVisibleTileDecision = ["claim", "tsumo", "discard"].includes(
       autoAction.type,
     );
-    aiTimer = window.setTimeout(() => {
-      const currentAction = automaticMahjongAction(state, autoActions, {
-        riichiMode,
-      });
-      if (sameMahjongAction(currentAction, autoAction)) dispatch(currentAction);
-    },
-    isVisibleTileDecision
-      ? Math.max(
-          visualDelay,
-          autoAction.type === "claim" ? 0 : OWN_DRAW_ENTRY_DURATION_MS,
-        ) + AUTO_DECISION_DELAY_MS
-      : 0);
+    aiTimer = window.setTimeout(
+      () => {
+        const currentAction = automaticMahjongAction(state, autoActions, {
+          riichiMode,
+        });
+        if (sameMahjongAction(currentAction, autoAction))
+          dispatch(currentAction);
+      },
+      isVisibleTileDecision
+        ? Math.max(
+            visualDelay,
+            autoAction.type === "claim" ? 0 : OWN_DRAW_ENTRY_DURATION_MS,
+          ) + AUTO_DECISION_DELAY_MS
+        : 0,
+    );
     return;
   }
   const automaticTile = automaticRiichiDiscard(state, HUMAN_ID);
   if (automaticTile) {
-    aiTimer = window.setTimeout(() => {
-      if (automaticRiichiDiscard(state, HUMAN_ID) === automaticTile) {
-        dispatch({ type: "discard", tileId: automaticTile });
-      }
-    },
-    Math.max(visualDelay, OWN_DRAW_ENTRY_DURATION_MS) +
-      AUTO_DECISION_DELAY_MS);
+    aiTimer = window.setTimeout(
+      () => {
+        if (automaticRiichiDiscard(state, HUMAN_ID) === automaticTile) {
+          dispatch({ type: "discard", tileId: automaticTile });
+        }
+      },
+      Math.max(visualDelay, OWN_DRAW_ENTRY_DURATION_MS) +
+        AUTO_DECISION_DELAY_MS,
+    );
     return;
   }
   if (state.phase === "claiming") {
@@ -1332,6 +1343,7 @@ function renderCurrentState({ animateDealIn = false } = {}) {
   const coveredPlayerIndices = handCoveredPlayerIndices(state);
   domView.render(renderState, visibleEvents, selectedTileId, playerName, {
     showResult: presentation.resultVisible,
+    showGameHints: settingsDialog.gameHintsEnabled,
     showDrawReveal:
       isDrawRevealState(state) &&
       presentation.drawRevealVisible &&
@@ -1356,6 +1368,7 @@ function renderCurrentState({ animateDealIn = false } = {}) {
     animateDealIn,
     riichiMode,
     riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),
+    showGameHints: settingsDialog.gameHintsEnabled,
     revealPlayerIndices: revealedPlayerIndices,
     coveredPlayerIndices,
     handRevealKey: handEndPresentationKey(state),
@@ -1517,7 +1530,11 @@ function renderMatchSummary() {
   elements.matchSummaryRows.replaceChildren(
     ...rows.map((entry) => {
       const row = document.createElement("tr");
-      for (const value of [`${entry.rank}位`, entry.name, String(entry.score)]) {
+      for (const value of [
+        `${entry.rank}位`,
+        entry.name,
+        String(entry.score),
+      ]) {
         const cell = document.createElement("td");
         cell.textContent = value;
         row.append(cell);
@@ -1804,18 +1821,22 @@ function handDealInKey(current) {
 }
 
 function isDrawRevealState(current) {
-  return current?.phase === "hand_ended" &&
+  return (
+    current?.phase === "hand_ended" &&
     (current.winType === "nagashi" ||
       (current.draw === true &&
         (current.result?.abortive === true ||
-          isExhaustiveDrawRevealState(current))));
+          isExhaustiveDrawRevealState(current))))
+  );
 }
 
 function isExhaustiveDrawRevealState(current) {
-  return current?.phase === "hand_ended" &&
+  return (
+    current?.phase === "hand_ended" &&
     current.draw === true &&
     current.result?.abortive !== true &&
-    Array.isArray(current.result?.tenpai);
+    Array.isArray(current.result?.tenpai)
+  );
 }
 
 function handEndPresentationDelay(current) {
@@ -1826,12 +1847,14 @@ function handEndPresentationDelay(current) {
 }
 
 function drawRevealVisibleDuration(current) {
-  const tenpaiPlayerCount = asArray(current?.result?.tenpaiWaits)
-    .filter((waits) => asArray(waits).length > 0)
-    .length;
-  return DRAW_REVEAL_VISIBLE_BASE_MS +
+  const tenpaiPlayerCount = asArray(current?.result?.tenpaiWaits).filter(
+    (waits) => asArray(waits).length > 0,
+  ).length;
+  return (
+    DRAW_REVEAL_VISIBLE_BASE_MS +
     DRAW_REVEAL_VISIBLE_EXTENSION_MS +
-    tenpaiPlayerCount * DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS;
+    tenpaiPlayerCount * DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS
+  );
 }
 
 function handRevealPlayerIndices(current) {
@@ -1891,11 +1914,13 @@ function restoreSelectedTilePreview() {
 function renderTileSelection(renderState) {
   const ui = domView.renderSelection(renderState, selectedTileId, playerName, {
     riichiMode,
+    showGameHints: settingsDialog.gameHintsEnabled,
   });
   visualRenderer.updateSelection({
     ...ui,
     riichiMode,
     riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),
+    showGameHints: settingsDialog.gameHintsEnabled,
     deferredHandInsertionSeat: Number(presentation.handInsertion?.seat) || 0,
     deferredHandInsertionIndex:
       Number(presentation.handInsertion?.rackIndex) || 0,

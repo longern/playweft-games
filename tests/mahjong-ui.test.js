@@ -880,7 +880,7 @@ test("mahjong previews waits and visible-copy counts for the selected discard", 
   assert.match(view, /renderTenpaiPreview\(state, selectedTileId\)/);
   assert.match(
     view,
-    /waits\.length > 0 && tenpaiDiscardFuriten\(state\?\.legalActions, selectedTileId\)/s,
+    /waits\.length > 0\s*&&\s*tenpaiDiscardFuriten\(state\?\.legalActions, selectedTileId\)/s,
   );
   assert.match(view, /count\.textContent = `\$\{wait\.remaining\} 张`/);
   assert.match(
@@ -1221,7 +1221,7 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   assert.match(main, /DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS/);
   assert.match(
     main,
-    /asArray\(current\?\.result\?\.tenpaiWaits\)\s*\.filter\(\(waits\) => asArray\(waits\)\.length > 0\)/s,
+    /asArray\(current\?\.result\?\.tenpaiWaits\)\s*\.filter\(\s*\(waits\) => asArray\(waits\)\.length > 0/s,
   );
   assert.match(main, /presentation\.syncDrawReveal\(/);
   assert.match(main, /DRAW_REVEAL_CARD_DELAY_MS/);
@@ -2563,7 +2563,10 @@ test("mahjong highlights matching visible tile types without adding count text",
   assert.ok(doraEmission);
   assert.equal(doraLightbox.position.z, 0);
   assert.ok(doraLightbox.geometry === factory.doraLightboxGeometry);
-  assert.equal(factory.doraLightboxMaterial.uniforms.lightColor.value.getHexString(), "ffe16a");
+  assert.equal(
+    factory.doraLightboxMaterial.uniforms.lightColor.value.getHexString(),
+    "ffe16a",
+  );
   assert.equal(factory.doraLightboxMaterial.depthWrite, false);
   assert.equal(factory.doraLightboxMaterial.uniforms.intensity.value, 0);
   assert.equal(factory.doraEmissionMaterial.blending, AdditiveBlending);
@@ -2620,12 +2623,18 @@ test("mahjong highlights matching visible tile types without adding count text",
   );
   assert.match(renderer, /this\.highlightedType === Number\(entry\.type\)/);
   assert.match(renderer, /this\.doraCounts = doraTypeCounts\(state\)/);
-  assert.match(renderer, /dora: this\.doraCounts\.has\(tileType\(tileId\)\)/);
   assert.match(
     renderer,
-    /const dora = this\.doraCounts\.has\(Number\(discard\.type\)\)/,
+    /dora:\s*this\.showGameHints\s*&&\s*this\.doraCounts\.has\(tileType\(tileId\)\)/s,
   );
-  assert.match(renderer, /dora: !entry\.faceDown && this\.doraCounts\.has/);
+  assert.match(
+    renderer,
+    /const dora =\s*this\.showGameHints\s*&&\s*this\.doraCounts\.has\(Number\(discard\.type\)\)/s,
+  );
+  assert.match(
+    renderer,
+    /dora:\s*this\.showGameHints\s*&&\s*!entry\.faceDown\s*&&\s*this\.doraCounts\.has/s,
+  );
   assert.match(renderer, /this\.tileFactory\.beginFrame\(\)/);
   assert.match(renderer, /this\.syncDoraBreathing\(\)/);
   assert.match(renderer, /this\.animations\.has\("dora-breath"\)/);
