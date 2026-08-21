@@ -24,6 +24,7 @@ import {
   asArray,
   automaticRiichiDiscard,
   blankDoubleClickAction,
+  canDiscardHandTile,
   clearedTableState,
   deferredHandInsertion,
   errorMessage,
@@ -234,11 +235,7 @@ const releaseFixedViewport = bindFixedViewport(
 const domView = new MahjongDomView({
   onAction: dispatch,
   onSelectTile: selectTile,
-  onDiscardTile(tileId) {
-    if (!state?.legalActions?.canDiscard) return;
-    selectedTileId = tileId;
-    discardSelected();
-  },
+  onDiscardTile: discardOwnTile,
 });
 const { elements } = domView;
 const settingsDialog = createMahjongSettingsDialog({
@@ -276,11 +273,7 @@ const visualRenderer = new MahjongThreeRenderer(elements.stage, {
   onHandRevealComplete(key) {
     presentation.handRevealSettled(key);
   },
-  onDiscardTile(tileId) {
-    if (!state?.legalActions?.canDiscard) return;
-    selectedTileId = tileId;
-    discardSelected();
-  },
+  onDiscardTile: discardOwnTile,
   onDoubleClickBlank() {
     const action = blankDoubleClickAction({
       doubleClickPassEnabled: settingsDialog.doubleClickPassEnabled,
@@ -2020,6 +2013,20 @@ function discardSelected() {
     return;
   }
   dispatch({ type: "discard", tileId: selectedTileId });
+}
+
+function discardOwnTile(tileId) {
+  if (
+    !canDiscardHandTile({
+      canDiscard: state?.legalActions?.canDiscard,
+      riichiDeclared: state?.riichi?.[HUMAN_ID] === true,
+      drawnTile: state?.drawnTile,
+      tileId,
+    })
+  )
+    return;
+  selectedTileId = Number(tileId) || 0;
+  discardSelected();
 }
 
 function enterRiichiMode() {

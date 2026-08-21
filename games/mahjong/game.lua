@@ -1119,8 +1119,6 @@ local function mark_next_hand(state, dealer_repeats, was_draw)
 	end
 end
 
-local SCORE_HISTORY_LIMIT = 8
-
 local function copy_scores(scores)
 	return { scores[1], scores[2], scores[3], scores[4] }
 end
@@ -1149,9 +1147,6 @@ local function record_score_history(state)
 		honba = state.honba,
 		scores = copy_scores(state.scores),
 	}
-	while #history > SCORE_HISTORY_LIMIT do
-		table.remove(history, 1)
-	end
 	state.scoreHistory = history
 end
 
@@ -2266,6 +2261,10 @@ local function tenpai_discard_options(state, player_id, discard_waits, forbidden
 	local hand = hand_with_drawn(state, player_id)
 	local melds = state.melds[player_id]
 	local visible, result = visible_tile_type_counts(state, player_id), {}
+	local riichi_tiles = {}
+	for _, riichi_tile in ipairs(riichi_discards(state, player_id, discard_waits)) do
+		riichi_tiles[riichi_tile] = true
+	end
 	for _, entry in ipairs(discard_waits or tenpai_discard_waits(state, player_id)) do
 		local tile_id = entry.tileId
 		local allowed = not (forbidden and forbidden[tile_type(tile_id)])
@@ -2275,10 +2274,11 @@ local function tenpai_discard_options(state, player_id, discard_waits, forbidden
 			remove_tile(candidate_hand, tile_id)
 			local waits = {}
 			for _, kind in ipairs(entry.waits) do
+				local has_riichi_yaku = state.riichi[player_id] == true or riichi_tiles[tile_id] == true
 				waits[#waits + 1] = {
 					type = kind,
 					remaining = math.max(0, 4 - (visible[kind] or 0)),
-					noYaku = score_hand(
+					noYaku = not has_riichi_yaku and score_hand(
 						state,
 						seat,
 						(kind - 1) * 4 + 1,

@@ -2,6 +2,7 @@ import { CLAIM_LABELS, PLAYERS, POSITIONS } from "./constants.js";
 import {
   activeSeat,
   asArray,
+  canDiscardHandTile,
   claimPreviewTiles,
   doraIndicatorSlots,
   doraTypeCounts,
@@ -306,6 +307,7 @@ export class MahjongDomView {
     const riichiTiles = new Set(
       asArray(state.legalActions?.riichiTiles).map(Number),
     );
+    const riichiDeclared = state.riichi?.[state.players?.[0]] === true;
     this.elements.hand.replaceChildren(
       ...hand.map((tileId) => {
         const tile = createTile(tileType(tileId), "hand", isRedFive(tileId));
@@ -330,7 +332,12 @@ export class MahjongDomView {
           riichiMode && !riichiTiles.has(tileId),
         );
         const discardable =
-          state.legalActions?.canDiscard &&
+          canDiscardHandTile({
+            canDiscard: state.legalActions?.canDiscard,
+            riichiDeclared,
+            drawnTile: state.drawnTile,
+            tileId,
+          }) &&
           !forbiddenTypes.has(tileType(tileId)) &&
           (!riichiMode || riichiTiles.has(tileId));
         tile.setAttribute("aria-disabled", String(!discardable));

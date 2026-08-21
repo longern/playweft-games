@@ -23,6 +23,7 @@ import {
 import {
   automaticRiichiDiscard,
   blankDoubleClickAction,
+  canDiscardHandTile,
   clearedTableState,
   claimPreviewTiles,
   deferredHandInsertion,
@@ -46,6 +47,7 @@ import {
   splitRevealedHand,
   tenpaiDiscardFuriten,
   tenpaiWaitsForDiscard,
+  visibleScoreSheetRows,
 } from "../games/mahjong/game-format.js";
 
 import {
@@ -526,6 +528,36 @@ test("mahjong keeps blank double-click actions away from the local hand", () => 
   );
   assert.match(renderer, /ownHandDoubleClickSafeBounds/);
   assert.match(renderer, /pointer\.x >= safeBounds\.left/);
+});
+
+test("mahjong only permits the drawn tile to be discarded after riichi", () => {
+  assert.equal(
+    canDiscardHandTile({
+      canDiscard: true,
+      riichiDeclared: true,
+      drawnTile: 53,
+      tileId: 52,
+    }),
+    false,
+  );
+  assert.equal(
+    canDiscardHandTile({
+      canDiscard: true,
+      riichiDeclared: true,
+      drawnTile: 53,
+      tileId: 53,
+    }),
+    true,
+  );
+  assert.equal(
+    canDiscardHandTile({
+      canDiscard: true,
+      riichiDeclared: false,
+      drawnTile: 53,
+      tileId: 52,
+    }),
+    true,
+  );
 });
 
 test("mahjong aligns its rightmost action with the thirteenth hand tile", () => {
@@ -1581,6 +1613,18 @@ test("mahjong score-sheet instant photos use distinct subtle tilts", () => {
   assert.match(paperRenderer, /INSTANT_PHOTO_EDGE_OVERLAP \+\s*offset\.z/);
 });
 
+test("mahjong score-sheet deltas use a slightly heavier synthesized weight", () => {
+  const paperRenderer = readFileSync(
+    new URL("../games/mahjong/result-paper-renderer.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(paperRenderer, /scoreSheetNumberFont\(16, 600\)/);
+  assert.match(
+    paperRenderer,
+    /function scoreSheetNumberFont\(size, weight = 400\)[\s\S]*?return `\$\{weight\} \$\{size\}px/,
+  );
+});
+
 test("mahjong defers default decorative images until after window load", () => {
   const properties = new Map();
   const listeners = new Map();
@@ -1811,6 +1855,13 @@ test("mahjong score sheets retain the latest scored hands and show each change f
       deltas: [-1_000, 0, 0, 1_000],
     },
   ]);
+  assert.deepEqual(
+    visibleScoreSheetRows(
+      Array.from({ length: 9 }, (_, index) => ({ round: `東${index + 1}` })),
+      8,
+    ).map((row) => row.round),
+    ["東2", "東3", "東4", "東5", "東6", "東7", "東8", "東9"],
+  );
 });
 
 test("mahjong result melds use the same physical tile scale as the hand", () => {

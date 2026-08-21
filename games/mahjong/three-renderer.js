@@ -23,6 +23,7 @@ import { POSITIONS } from "./constants.js";
 import { MAHJONG_VIEWPORT } from "./fixed-viewport.js";
 import {
   asArray,
+  canDiscardHandTile,
   doraTypeCounts,
   isRedFive,
   opponentHandLayout,
@@ -546,6 +547,7 @@ export class MahjongThreeRenderer {
     const riichiTiles = new Set(
       asArray(this.ui?.riichiCandidateTiles).map(Number),
     );
+    const riichiDeclared = state.riichi?.[state.players?.[0]] === true;
     const ownInsertionDeferred =
       Number(this.ui?.deferredHandInsertionSeat) === 1;
     const deferredOwnRackIndex = Math.max(
@@ -569,7 +571,13 @@ export class MahjongThreeRenderer {
           slotIndex,
           false,
           selectedTileId,
-          !forbiddenTypes.has(tileType(tileId)) &&
+          canDiscardHandTile({
+            canDiscard: state.legalActions?.canDiscard,
+            riichiDeclared,
+            drawnTile: drawn,
+            tileId,
+          }) &&
+            !forbiddenTypes.has(tileType(tileId)) &&
             (!riichiMode || riichiTiles.has(tileId)),
           riichiMode && !riichiTiles.has(tileId),
         );
@@ -580,7 +588,13 @@ export class MahjongThreeRenderer {
           rack.length + (ownInsertionDeferred ? 1 : 0),
           true,
           selectedTileId,
-          !forbiddenTypes.has(tileType(drawn)) &&
+          canDiscardHandTile({
+            canDiscard: state.legalActions?.canDiscard,
+            riichiDeclared,
+            drawnTile: drawn,
+            tileId: drawn,
+          }) &&
+            !forbiddenTypes.has(tileType(drawn)) &&
             (!riichiMode || riichiTiles.has(drawn)),
           riichiMode && !riichiTiles.has(drawn),
           this.animateOwnDrawEntry,

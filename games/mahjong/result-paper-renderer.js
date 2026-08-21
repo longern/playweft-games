@@ -10,6 +10,7 @@ import {
   Vector3,
 } from "three";
 import { TILE_PHYSICAL_MM } from "./render/three-layout.js";
+import { visibleScoreSheetRows } from "./game-format.js";
 import { traditionalYakuName } from "./yaku-display.js";
 
 const A4_WIDTH_MM = 297;
@@ -357,9 +358,9 @@ function drawScoreSheet(context, width, { playerNames, rows }) {
     cursor += header.width;
   });
 
-  rows.slice(0, SCORE_SHEET_ROW_COUNT).forEach((row, rowIndex) => {
-    const isLatestRow =
-      rowIndex === Math.min(rows.length, SCORE_SHEET_ROW_COUNT) - 1;
+  const visibleRows = visibleScoreSheetRows(rows, SCORE_SHEET_ROW_COUNT);
+  visibleRows.forEach((row, rowIndex) => {
+    const isLatestRow = rowIndex === visibleRows.length - 1;
     const inkColor = isLatestRow ? PAPER_TEXT_COLOR : "#4a5051";
     const valueColor = isLatestRow ? PAPER_VALUE_COLOR : "#4a6c7c";
     const y = headerBottom + rowHeight * (rowIndex + 0.5);
@@ -418,7 +419,7 @@ function drawScoreSheet(context, width, { playerNames, rows }) {
       context.textBaseline = "middle";
       if (delta) {
         context.fillStyle = valueColor;
-        context.font = scoreSheetNumberFont(16);
+        context.font = scoreSheetNumberFont(16, 600);
         context.textAlign = "left";
         context.fillText(
           `${delta > 0 ? "+" : ""}${delta}`,
@@ -589,8 +590,8 @@ function paperNumberFont(size) {
   return scoreSheetNumberFont(size);
 }
 
-function scoreSheetNumberFont(size) {
-  return `400 ${size}px "Kalam Score", cursive`;
+function scoreSheetNumberFont(size, weight = 400) {
+  return `${weight} ${size}px "Kalam Score", cursive`;
 }
 
 function scoreSheetWindFont(size) {

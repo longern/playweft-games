@@ -96,6 +96,17 @@ export function tenpaiWaitsForDiscard(legalActions, tileId) {
     .filter((wait) => wait.type >= 1 && wait.type <= 34);
 }
 
+export function canDiscardHandTile({
+  canDiscard = false,
+  riichiDeclared = false,
+  drawnTile = 0,
+  tileId = 0,
+} = {}) {
+  const selectedTileId = Number(tileId) || 0;
+  if (!canDiscard || selectedTileId <= 0) return false;
+  return !riichiDeclared || selectedTileId === (Number(drawnTile) || 0);
+}
+
 export function activeSeat(state) {
   return Number(state.phase === "claiming" ? state.responseIndex : state.turnIndex);
 }
@@ -464,6 +475,11 @@ export function resultScoreSheetRows(state) {
       };
     })
     .slice(1);
+}
+
+export function visibleScoreSheetRows(rows, maxRows) {
+  const limit = Math.max(0, Math.trunc(Number(maxRows) || 0));
+  return limit > 0 ? asArray(rows).slice(-limit) : [];
 }
 
 function scoreSheetRoundLabel(roundWind, handNumber) {
