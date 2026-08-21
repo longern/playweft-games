@@ -468,7 +468,10 @@ export class MahjongResultHandRenderer {
       cursor -= TILE_GAP;
     }
 
-    const melds = asArray(state.melds?.[playerId]).reverse();
+    // The result row is drawn left-to-right, while meld history is stored in
+    // call order. Reverse a copy so this presentation step cannot mutate the
+    // shared state subsequently consumed by the table renderer.
+    const melds = [...asArray(state.melds?.[playerId])].reverse();
     if (melds.length) cursor += MELD_GAP;
     melds.forEach((meld, meldIndex) => {
       const display = resultMeldDisplayLayout(meld, winnerIndex);

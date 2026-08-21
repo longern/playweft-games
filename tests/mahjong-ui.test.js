@@ -2022,6 +2022,10 @@ test("mahjong result melds preserve call direction and kan presentation", () => 
     new URL("../games/mahjong/dom-view.js", import.meta.url),
     "utf8",
   );
+  const resultRenderer = readFileSync(
+    new URL("../games/mahjong/result-hand-renderer.js", import.meta.url),
+    "utf8",
+  );
   assert.match(view, /meldDisplayLayout\(meld, winnerIndex\)/);
   assert.match(
     view,
@@ -2031,6 +2035,14 @@ test("mahjong result melds preserve call direction and kan presentation", () => 
   assert.doesNotMatch(view, /is-stacked|stackLevel/);
   assert.match(view, /classList\.toggle\("is-face-down", entry\.faceDown\)/);
   assert.match(view, /--result-meld-inward/);
+  assert.match(
+    resultRenderer,
+    /const melds = \[\.\.\.asArray\(state\.melds\?\.\[playerId\]\)\]\.reverse\(\);/,
+  );
+  assert.doesNotMatch(
+    resultRenderer,
+    /const melds = asArray\(state\.melds\?\.\[playerId\]\)\.reverse\(\);/,
+  );
 
   const openKan = meldDisplayLayout(
     {
