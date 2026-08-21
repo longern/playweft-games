@@ -52,10 +52,15 @@ import {
   ACTION_CALLOUT_DURATION_MS,
   ThreeActionCallout,
 } from "./render/three-callout.js";
-import { ThreeTileFactory } from "./render/three-tile-factory.js";
+import {
+  doraBreathIntensity,
+  DORA_BREATH_DURATION_MS,
+  ThreeTileFactory,
+} from "./render/three-tile-factory.js";
 import { ThreeTableConsole } from "./render/three-console.js";
 import { ThreeMahjongTable } from "./render/three-table.js";
 import { ThreeAnimationController } from "./render/three-animation-controller.js";
+import { ThreeKeyedSceneLayer } from "./render/three-keyed-scene-layer.js";
 import {
   HAND_REVEAL_FALL_DURATION_MS,
   NEW_HAND_DEAL_DURATION_MS,
@@ -188,6 +193,7 @@ export class MahjongThreeRenderer {
         return [name, layer];
       }),
     );
+    this.riverLayer = new ThreeKeyedSceneLayer(this.layers.rivers);
 
     faceAtlas.anisotropy = Math.min(
       8,
@@ -386,7 +392,9 @@ export class MahjongThreeRenderer {
     // Keep the mesh's current height when a selection transition is
     // interrupted; reconciliation below uses it as the next animation origin.
     this.hoveredTile = null;
-    Object.values(this.layers).forEach(clearGroup);
+    this.tileFactory.beginFrame();
+    clearGroup(this.layers.hands);
+    clearGroup(this.layers.melds);
     this.activeOwnTileIds.clear();
     this.highlightableTiles.clear();
     this.tableConsole.update(state, ui);
@@ -394,6 +402,7 @@ export class MahjongThreeRenderer {
     if (!this.pendingOwnHandCrossfade) this.pruneOwnTiles();
     this.drawRivers(state);
     this.drawMelds(state);
+    this.syncDoraBreathing();
     this.actionCallout.showLatest(
       events,
       `${state.roundWind}:${state.handNumber}:${state.honba}:${state.moveCount}`,
@@ -444,6 +453,25 @@ export class MahjongThreeRenderer {
           Number(tile.userData.tileId) !== selectedTileId,
       );
     }
+  }
+
+  syncDoraBreathing() {
+    if (!this.tileFactory.hasDoraTiles()) {
+      this.tileFactory.setDoraGlowIntensity(0);
+      this.animations.cancel("dora-breath");
+      return;
+    }
+    // Redrawing after any discard must not replace this repeating track: doing
+    // so resets its phase and makes every visible dora flash back to the start.
+    if (this.animations.has("dora-breath")) return;
+    this.animations.play({
+      id: "dora-breath",
+      duration: DORA_BREATH_DURATION_MS,
+      repeat: true,
+      update: (progress) => {
+        this.tileFactory.setDoraGlowIntensity(doraBreathIntensity(progress));
+      },
+    });
   }
 
   createTile(options) {
@@ -811,6 +839,7 @@ export class MahjongThreeRenderer {
     const previousRecord = this.ownTileRecords.get(Number(tileId));
     const previousY = previousRecord?.tile.position.y;
     let record = previousRecord;
+    const reusesExistingTile = record?.visualKey === visualKey;
     if (!record || record.visualKey !== visualKey) {
       const tile = this.createTile(visualState);
       if (record) this.ownHandLayer.remove(record.tile);
@@ -825,6 +854,7 @@ export class MahjongThreeRenderer {
         this.dealInTiles.push({ kind: "fade", materials });
       }
     }
+    if (reusesExistingTile && visualState.dora) this.tileFactory.trackDoraTile();
     const { tile } = record;
     this.highlightableTiles.add(tile);
     this.tileFactory.setMatchHighlight(tile, visualState.highlight === "match");
@@ -943,6 +973,7 @@ export class MahjongThreeRenderer {
   }
 
   drawRivers(state) {
+    const riverEntries = [];
     for (let seat = 1; seat <= 4; seat += 1) {
       const position = POSITIONS[seat - 1];
       const river = asArray(state.discards?.[state.players[seat - 1]]);
@@ -964,30 +995,68 @@ export class MahjongThreeRenderer {
             riichiColumn: riichiColumns.get(row) ?? -1,
           },
         );
-        const slot = new Group();
-        slot.position.set(transform.x, transform.y, transform.z);
-        slot.rotation.y = transform.yaw;
-        applyPlanarJitter(
-          slot,
-          transform.yaw,
-          planarTileJitter(
+        const dora = this.doraCounts.has(Number(discard.type));
+        const highlight =
+          this.highlightedType === Number(discard.type) ? "match" : "";
+        riverEntries.push({
+          key: `${seat}:${sourceIndex}`,
+          transform,
+          jitter: planarTileJitter(
             `${seat}:river:${sourceIndex}:${discard.type}`,
             RIVER_TILE_GAP,
             { width: TILE_SIZE.width, height: TILE_SIZE.height },
           ),
-        );
-        const tile = this.createTile({
-          type: discard.type,
-          red: discard.red === true,
-          highlight:
-            this.highlightedType === Number(discard.type) ? "match" : "",
-          dora: this.doraCounts.has(Number(discard.type)),
+          options: {
+            type: discard.type,
+            red: discard.red === true,
+            highlight,
+            dora,
+            tsumogiri: discard.tsumogiri === true,
+          },
+          visualKey: `${discard.type}:${discard.red === true}:${dora}:${discard.tsumogiri === true}`,
         });
-        tile.rotation.x = -Math.PI / 2;
-        slot.add(tile);
-        this.layers.rivers.add(slot);
       });
     }
+    this.riverLayer.reconcile(riverEntries, {
+      keyOf: (entry) => entry.key,
+      create: (entry) => this.createRiverRecord(entry),
+      update: (record, entry, lifecycle) =>
+        this.updateRiverRecord(record, entry, lifecycle),
+    });
+  }
+
+  createRiverRecord(entry) {
+    const slot = new Group();
+    const tile = this.createTile(entry.options);
+    tile.rotation.x = -Math.PI / 2;
+    slot.add(tile);
+    return { node: slot, tile, visualKey: entry.visualKey };
+  }
+
+  updateRiverRecord(record, entry, { created }) {
+    if (!created && record.visualKey !== entry.visualKey) {
+      record.node.remove(record.tile);
+      record.tile = this.createTile(entry.options);
+      record.tile.rotation.x = -Math.PI / 2;
+      record.node.add(record.tile);
+      record.visualKey = entry.visualKey;
+    } else if (!created && entry.options.dora) {
+      // The factory counts dora on creation; retained tiles must be counted on
+      // later snapshots so the shared breathing track stays alive.
+      this.tileFactory.trackDoraTile();
+    }
+    this.highlightableTiles.add(record.tile);
+    this.tileFactory.setMatchHighlight(
+      record.tile,
+      entry.options.highlight === "match",
+    );
+    record.node.position.set(
+      entry.transform.x,
+      entry.transform.y,
+      entry.transform.z,
+    );
+    record.node.rotation.y = entry.transform.yaw;
+    applyPlanarJitter(record.node, entry.transform.yaw, entry.jitter);
   }
 
   drawMelds(state) {
@@ -1255,6 +1324,7 @@ export class MahjongThreeRenderer {
     this.cancelOwnDrawEntry();
     this.cancelOwnTileMotion();
     this.cancelDrag(false);
+    this.riverLayer?.clear();
     this.renderer?.domElement.removeEventListener(
       "pointerdown",
       this.onPointerDown,

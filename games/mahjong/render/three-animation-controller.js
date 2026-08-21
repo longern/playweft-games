@@ -29,12 +29,13 @@ export class ThreeAnimationController {
     this.lastKeys.delete(id);
   }
 
-  play({ id, delay = 0, duration, update, complete }) {
+  play({ id, delay = 0, duration, repeat = false, update, complete }) {
     if (this.destroyed) return false;
     const normalizedDuration = Math.max(1, Number(duration) || 1);
     this.tracks.set(id, {
       beginsAt: this.now() + Math.max(0, Number(delay) || 0),
       duration: normalizedDuration,
+      repeat: repeat === true,
       update,
       complete,
     });
@@ -80,12 +81,13 @@ export class ThreeAnimationController {
     let changed = false;
     for (const [id, track] of [...this.tracks]) {
       if (now < track.beginsAt) continue;
-      const progress = Math.max(
-        0,
-        Math.min(1, (now - track.beginsAt) / track.duration),
-      );
+      const elapsed = Math.max(0, now - track.beginsAt);
+      const progress = track.repeat
+        ? (elapsed % track.duration) / track.duration
+        : Math.min(1, elapsed / track.duration);
       track.update?.(progress);
       changed = true;
+      if (track.repeat) continue;
       if (progress < 1) continue;
       this.tracks.delete(id);
       track.complete?.();

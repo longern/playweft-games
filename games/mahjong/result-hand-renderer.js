@@ -43,7 +43,12 @@ import {
   RESULT_MELD_SCALE,
   resultMeldDisplayLayout,
 } from "./render/result-hand-layout.js";
-import { ThreeTileFactory } from "./render/three-tile-factory.js";
+import { ThreeAnimationController } from "./render/three-animation-controller.js";
+import {
+  doraBreathIntensity,
+  DORA_BREATH_DURATION_MS,
+  ThreeTileFactory,
+} from "./render/three-tile-factory.js";
 import {
   MahjongResultPaper,
   RESULT_PAPER_DEPTH,
@@ -110,6 +115,7 @@ export class MahjongResultHandRenderer {
     this.lastRender = null;
     this.contextLost = false;
     this.appearanceVersion = 0;
+    this.animations = new ThreeAnimationController(() => this.drawFrame());
   }
 
   async init() {
@@ -401,6 +407,7 @@ export class MahjongResultHandRenderer {
     this.clearTiles();
     this.buildHand(state, playerId, winnerIndex);
     this.buildIndicators(state, playerId);
+    this.syncDoraBreathing();
     this.paper.render({
       yaku: asArray(result.yaku),
       winnerName: state.playerNames?.[winnerIndex - 1] || `玩家${winnerIndex}`,
@@ -544,6 +551,8 @@ export class MahjongResultHandRenderer {
   }
 
   clearTiles() {
+    this.tileFactory?.beginFrame();
+    this.stopDoraBreathing();
     this.tiles.clear();
     this.tiles.position.set(0, 0, RESULT_HAND_Z);
     this.indicators?.clear();
@@ -551,6 +560,7 @@ export class MahjongResultHandRenderer {
   }
 
   hide() {
+    this.stopDoraBreathing();
     this.cancelStartButtonAnimation();
     this.cancelScoreSheetRender();
     this.hideScorePortraitOverlay();
@@ -562,6 +572,27 @@ export class MahjongResultHandRenderer {
     this.startButton?.hide();
     this.startControlHost?.style.setProperty("visibility", "hidden");
     this.renderer?.domElement.remove();
+  }
+
+  syncDoraBreathing() {
+    if (!this.tileFactory?.hasDoraTiles()) {
+      this.stopDoraBreathing();
+      return;
+    }
+    if (this.animations.has("dora-breath")) return;
+    this.animations.play({
+      id: "dora-breath",
+      duration: DORA_BREATH_DURATION_MS,
+      repeat: true,
+      update: (progress) => {
+        this.tileFactory.setDoraGlowIntensity(doraBreathIntensity(progress));
+      },
+    });
+  }
+
+  stopDoraBreathing() {
+    this.tileFactory?.setDoraGlowIntensity(0);
+    this.animations.cancel("dora-breath");
   }
 
   showStartButton(label) {
@@ -783,6 +814,7 @@ export class MahjongResultHandRenderer {
     );
     this.scorePortraitOverlay?.remove();
     this.tileFactory?.destroy();
+    this.animations.destroy();
     this.paper?.destroy();
     this.startButton?.destroy();
     this.startControlHost?.classList.remove("is-three-button");

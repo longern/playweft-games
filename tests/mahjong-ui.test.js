@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
+  AdditiveBlending,
   Euler,
   Group,
   OrthographicCamera,
@@ -86,7 +87,11 @@ import {
   shouldCrossfadeOwnHand,
 } from "../games/mahjong/render/three-motion.js";
 import { tileFaceFrameIndex } from "../games/mahjong/render/tile-texture-map.js";
-import { ThreeTileFactory } from "../games/mahjong/render/three-tile-factory.js";
+import {
+  doraBreathIntensity,
+  DORA_BREATH_DURATION_MS,
+  ThreeTileFactory,
+} from "../games/mahjong/render/three-tile-factory.js";
 import {
   prepareTableConsoleContext,
   TABLE_CONSOLE_CORE_LAYOUT,
@@ -101,6 +106,7 @@ import {
 } from "../games/mahjong/render/three-callout.js";
 import { planarTileJitter } from "../games/mahjong/render/three-tile-jitter.js";
 import { ThreeAnimationController } from "../games/mahjong/render/three-animation-controller.js";
+import { ThreeKeyedSceneLayer } from "../games/mahjong/render/three-keyed-scene-layer.js";
 import { MahjongPresentationController } from "../games/mahjong/presentation-controller.js";
 import { riverTileSoundCue } from "../games/mahjong/render/audio-cues.js";
 import { normalizeDiscardVolume } from "../games/mahjong/settings-dialog.js";
@@ -620,16 +626,10 @@ test("mahjong presentation scheduling cancels insertion before terminal reveal",
   assert.equal(presentation.resultVisible, true);
   assert.equal(resultReady, 1);
 
-  presentation.syncDrawReveal(
-    "10:exhaustive-draw",
-    DRAW_REVEAL_CARD_DELAY_MS,
-  );
+  presentation.syncDrawReveal("10:exhaustive-draw", DRAW_REVEAL_CARD_DELAY_MS);
   const drawRevealTimer = presentation.drawRevealTimer;
   assert.equal(presentation.drawRevealVisible, false);
-  presentation.syncDrawReveal(
-    "10:exhaustive-draw",
-    DRAW_REVEAL_CARD_DELAY_MS,
-  );
+  presentation.syncDrawReveal("10:exhaustive-draw", DRAW_REVEAL_CARD_DELAY_MS);
   assert.equal(presentation.drawRevealTimer, drawRevealTimer);
   timers.get(drawRevealTimer).callback();
   assert.equal(presentation.drawRevealVisible, true);
@@ -1221,8 +1221,14 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   assert.match(view, /renderDrawReveal\(state, showDrawReveal\)/);
   assert.match(view, /const nagashi = state\?\.winType === "nagashi"/);
   assert.match(view, /!abortive && !exhaustive && !nagashi/);
-  assert.match(view, /state\.abortiveReason \|\| state\.result\?\.reason \|\| "途中流局"/);
-  assert.match(view, /const waitsBySeat = exhaustive\s*\? asArray\(state\.result\?\.tenpaiWaits\)/s);
+  assert.match(
+    view,
+    /state\.abortiveReason \|\| state\.result\?\.reason \|\| "途中流局"/,
+  );
+  assert.match(
+    view,
+    /const waitsBySeat = exhaustive\s*\? asArray\(state\.result\?\.tenpaiWaits\)/s,
+  );
   assert.match(view, /label\.hidden = waits\.length === 0/);
   assert.match(view, /createTile\(type, "draw-reveal-wait"\)/);
   assert.doesNotMatch(html, /data-draw-tenpai-seat="[1-4]" hidden>听牌/);
@@ -1233,10 +1239,19 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   assert.match(drawRevealStyles, /mask-image: url\("data:image\/svg\+xml/);
   assert.match(drawRevealStyles, /width: 720px;\s*height: 500px;/s);
   assert.match(drawRevealStyles, /inset: -20px -20px 0;/);
-  assert.match(drawRevealStyles, /inset: 0 0 10px;[\s\S]*?filter: blur\(18px\)/);
-  assert.match(drawRevealStyles, /draw-reveal-card strong\s*\{[\s\S]*?"Mahjong Brush"/s);
+  assert.match(
+    drawRevealStyles,
+    /inset: 0 0 10px;[\s\S]*?filter: blur\(18px\)/,
+  );
+  assert.match(
+    drawRevealStyles,
+    /draw-reveal-card strong\s*\{[\s\S]*?"Mahjong Brush"/s,
+  );
   assert.match(view, /traditionalDrawReason\(/);
-  assert.match(resultRenderer, /const results = asArray\(state\.results\)\.length/);
+  assert.match(
+    resultRenderer,
+    /const results = asArray\(state\.results\)\.length/,
+  );
   assert.doesNotMatch(
     resultRenderer,
     /if \(state\.winType === "nagashi"\) \{\s*this\.hide\(\);/s,
@@ -1245,14 +1260,29 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     new URL("../games/mahjong/result-paper-renderer.js", import.meta.url),
     "utf8",
   );
-  assert.match(paperRenderer, /drawYakuTable\(context, yaku, logicalWidth, \{ winType \}\)/);
+  assert.match(
+    paperRenderer,
+    /drawYakuTable\(context, yaku, logicalWidth, \{ winType \}\)/,
+  );
   assert.match(paperRenderer, /value: nagashi \? "" : fu/);
   assert.match(paperRenderer, /value: nagashi \? "" : han/);
-  assert.match(paperRenderer, /context\.fillText\("滿貫", valueRight, baseline\)/);
-  assert.match(drawRevealStyles, /flex-wrap: wrap;[\s\S]*?max-width: 230px;[\s\S]*?max-height: 187px;/);
+  assert.match(
+    paperRenderer,
+    /context\.fillText\("滿貫", valueRight, baseline\)/,
+  );
+  assert.match(
+    drawRevealStyles,
+    /flex-wrap: wrap;[\s\S]*?max-width: 230px;[\s\S]*?max-height: 187px;/,
+  );
   assert.match(drawRevealStyles, /draw-reveal-tenpai-top\s*\{\s*top: 20px;/);
-  assert.match(drawRevealStyles, /draw-reveal-tenpai-right\s*\{[\s\S]*?right: 60px;/);
-  assert.match(drawRevealStyles, /\.draw-reveal-tenpai \.mahjong-tile\s*\{[^}]*width: 42px;[^}]*height: 59px;/s);
+  assert.match(
+    drawRevealStyles,
+    /draw-reveal-tenpai-right\s*\{[\s\S]*?right: 60px;/,
+  );
+  assert.match(
+    drawRevealStyles,
+    /\.draw-reveal-tenpai \.mahjong-tile\s*\{[^}]*width: 42px;[^}]*height: 59px;/s,
+  );
   assert.match(main, /revealPlayerIndices: revealedPlayerIndices/);
   assert.match(main, /coveredPlayerIndices,/);
   assert.match(
@@ -1296,7 +1326,10 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   );
   assert.match(view, /const rematchLabel = "继续"/);
   assert.doesNotMatch(view, /你赢了/);
-  assert.doesNotMatch(html, /id="result-heading"|id="result-score-list"|id="result-score-delta"/);
+  assert.doesNotMatch(
+    html,
+    /id="result-heading"|id="result-score-list"|id="result-score-delta"/,
+  );
   assert.match(view, /this\.renderResultScores\(state, playerName\)/);
   assert.match(view, /elements\.resultDetailContent\.hidden = false/);
   assert.match(view, /elements\.resultScoreContent\.hidden = false/);
@@ -1344,10 +1377,7 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   assert.match(resultStyles, /@keyframes result-page-step/);
   assert.match(resultStyles, /@keyframes result-page-step-previous/);
   assert.match(resultStyles, /@keyframes result-page-step-current/);
-  assert.match(
-    resultStyles,
-    /result-page-step 920ms linear both/,
-  );
+  assert.match(resultStyles, /result-page-step 920ms linear both/);
   assert.match(
     resultStyles,
     /result-page-step-previous 560ms cubic-bezier\(0\.32, 0, 0\.2, 1\) both/,
@@ -1361,7 +1391,10 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   assert.doesNotMatch(resultStyles, /result-page-enter|result-page-leave/);
   assert.match(main, /outgoing\.classList\.add\("is-step-previous"\)/);
   assert.match(main, /elements\.resultTrack\.prepend\(outgoing\)/);
-  assert.match(main, /elements\.resultTrack\.classList\.add\("is-step-advancing"\)/);
+  assert.match(
+    main,
+    /elements\.resultTrack\.classList\.add\("is-step-advancing"\)/,
+  );
   assert.match(
     main,
     /elements\.result\.addEventListener\("dblclick", \(event\) => \{\s*if \(!isResultBlankSpace\(event\.target\)\) return;\s*resultHandRenderer\.playStartButtonActivation\(\(\) => void continueResult\(\)\);\s*}\);/s,
@@ -1461,10 +1494,7 @@ test("mahjong score-sheet instant photos use distinct subtle tilts", () => {
     paperRenderer,
     /const INSTANT_PHOTO_POSITION_OFFSETS = Object\.freeze\(\[\s*Object\.freeze\(\{ x: -0\.028, z: 0\.014 \}\),\s*Object\.freeze\(\{ x: 0\.018, z: -0\.011 \}\),\s*Object\.freeze\(\{ x: -0\.013, z: 0\.021 \}\),\s*Object\.freeze\(\{ x: 0\.024, z: 0\.007 \}\),\s*\]\);/,
   );
-  assert.match(
-    paperRenderer,
-    /scoreSheetPlayerCentre\(index\) \+ offset\.x/,
-  );
+  assert.match(paperRenderer, /scoreSheetPlayerCentre\(index\) \+ offset\.x/);
   assert.match(paperRenderer, /INSTANT_PHOTO_EDGE_OVERLAP \+\s*offset\.z/);
 });
 
@@ -1493,7 +1523,10 @@ test("mahjong defers default decorative images until after window load", () => {
     properties.get("--mahjong-default-portrait-image"),
     'url("/portraits.jpg")',
   );
-  assert.equal(document.documentElement.dataset.mahjongDecorativeAssets, "ready");
+  assert.equal(
+    document.documentElement.dataset.mahjongDecorativeAssets,
+    "ready",
+  );
 
   const styles = [
     "../games/mahjong/styles/setup.css",
@@ -1514,7 +1547,11 @@ test("mahjong defers lobby signpost image until after window load", () => {
   const image = {
     dataset: { deferredImage: "signpost" },
     removeAttribute(name) {
-      delete this.dataset[name.replace("data-", "").replace(/-([a-z])/g, (_, char) => char.toUpperCase())];
+      delete this.dataset[
+        name
+          .replace("data-", "")
+          .replace(/-([a-z])/g, (_, char) => char.toUpperCase())
+      ];
     },
   };
   const document = {
@@ -1582,7 +1619,10 @@ test("mahjong retries restored match music on the first user gesture", () => {
     main,
     /document\.addEventListener\("pointerdown", resumeMatchMusic, \{ passive: true \}\);/,
   );
-  assert.match(main, /document\.addEventListener\("keydown", resumeMatchMusic\);/);
+  assert.match(
+    main,
+    /document\.addEventListener\("keydown", resumeMatchMusic\);/,
+  );
   assert.match(
     main,
     /function resumeMatchMusic\(\) \{\s*if \(!musicNeedsGesture \|\| !game \|\| state\?\.phase === "hand_ended"\) return;\s*syncMatchMusic\(\{ fadeIn: matchMusicGain === 0 \}\);\s*}/s,
@@ -1624,19 +1664,31 @@ test("mahjong result pages separate winners before the score summary", () => {
     new URL("../games/mahjong/styles/result.css", import.meta.url),
     "utf8",
   );
-  assert.match(main, /if \(state\.matchEnded\) \{\s*showMatchSummary\(\);\s*return;/s);
+  assert.match(
+    main,
+    /if \(state\.matchEnded\) \{\s*showMatchSummary\(\);\s*return;/s,
+  );
   assert.match(main, /await advanceFromResult\(\{ type: "new_match" \}\)/);
   assert.match(main, /function returnToSetupFromSummary\(\)/);
   assert.match(main, /renderClearedTableForResultExit\(\);/);
   assert.match(main, /await waitForDelay\(NEW_HAND_TABLE_PAUSE_MS\);/);
-  assert.match(main, /await refresh\(outcome\.projection, \{ animateDealIn: true \}\)/);
+  assert.match(
+    main,
+    /await refresh\(outcome\.projection, \{ animateDealIn: true \}\)/,
+  );
   assert.match(main, /showSetup\(\{ behindResult: true \}\)/);
   assert.match(
     html,
     /id="match-summary"[\s\S]*?id="match-summary-rows"[\s\S]*?再来一局[\s\S]*?返回大厅/,
   );
-  assert.match(resultStyles, /\.match-summary\s*\{[\s\S]*?backdrop-filter: blur\(18px\)/);
-  assert.match(resultStyles, /\.match-summary-photo\s*\{[\s\S]*?padding: 18px 18px 78px;/);
+  assert.match(
+    resultStyles,
+    /\.match-summary\s*\{[\s\S]*?backdrop-filter: blur\(18px\)/,
+  );
+  assert.match(
+    resultStyles,
+    /\.match-summary-photo\s*\{[\s\S]*?padding: 18px 18px 78px;/,
+  );
   const setupStyles = readFileSync(
     new URL("../games/mahjong/styles/setup.css", import.meta.url),
     "utf8",
@@ -1650,12 +1702,27 @@ test("mahjong result pages separate winners before the score summary", () => {
 test("mahjong score sheets retain the latest scored hands and show each change from the prior row", () => {
   const rows = resultScoreSheetRows({
     scoreHistory: [
-      { roundWind: 1, handNumber: 1, honba: 0, scores: [25_000, 25_000, 25_000, 25_000] },
-      { roundWind: 1, handNumber: 1, honba: 1, scores: [24_000, 25_000, 25_000, 26_000] },
+      {
+        roundWind: 1,
+        handNumber: 1,
+        honba: 0,
+        scores: [25_000, 25_000, 25_000, 25_000],
+      },
+      {
+        roundWind: 1,
+        handNumber: 1,
+        honba: 1,
+        scores: [24_000, 25_000, 25_000, 26_000],
+      },
     ],
   });
   assert.deepEqual(rows, [
-    { round: "東1", honba: 1, scores: [24_000, 25_000, 25_000, 26_000], deltas: [-1_000, 0, 0, 1_000] },
+    {
+      round: "東1",
+      honba: 1,
+      scores: [24_000, 25_000, 25_000, 26_000],
+      deltas: [-1_000, 0, 0, 1_000],
+    },
   ]);
 });
 
@@ -1865,9 +1932,30 @@ test("mahjong animation controller shares one frame loop and deduplicates events
   assert.equal(animations.has("action-callout"), false);
   assert.equal(pendingFrame, null);
 
+  const breath = [];
+  animations.play({
+    id: "dora-breath",
+    duration: 100,
+    repeat: true,
+    update: (progress) => breath.push(progress),
+  });
+  advance(225);
+  advance(350);
+  assert.deepEqual(breath, [0.25, 0.5]);
+  assert.equal(animations.has("dora-breath"), true);
+  animations.cancel("dora-breath");
+  assert.equal(pendingFrame, null);
+
   animations.resetKey("hand-reveal");
   assert.equal(animations.claim("hand-reveal", "draw:42"), true);
   animations.destroy();
+});
+
+test("mahjong keeps a gold dora lightbox lit between breaths", () => {
+  assert.equal(DORA_BREATH_DURATION_MS, 2800);
+  assert.equal(doraBreathIntensity(0), 0.5);
+  assert.equal(doraBreathIntensity(0.5), 1);
+  assert.equal(doraBreathIntensity(1), 0.5);
 });
 
 test("mahjong gives a newly drawn local tile a short falling fade-in", () => {
@@ -2337,6 +2425,37 @@ test("mahjong gives only river tiles stable bounded planar variation", () => {
   assert.doesNotMatch(meldSection, /planarTileJitter|applyPlanarJitter/);
 });
 
+test("mahjong retains keyed river scene nodes across snapshots", () => {
+  const group = new Group();
+  const layer = new ThreeKeyedSceneLayer(group);
+  const removed = [];
+  const reconcile = (entries) =>
+    layer.reconcile(entries, {
+      keyOf: (entry) => entry.id,
+      create: (entry) => ({ node: new Group(), value: entry.value }),
+      update: (record, entry) => {
+        record.value = entry.value;
+      },
+      remove: (record, key) => removed.push([key, record.value]),
+    });
+
+  reconcile([
+    { id: "1:0", value: "first" },
+    { id: "2:0", value: "second" },
+  ]);
+  const retained = layer.records.get("1:0");
+  reconcile([
+    { id: "1:0", value: "updated" },
+    { id: "1:1", value: "new" },
+  ]);
+
+  assert.strictEqual(layer.records.get("1:0"), retained);
+  assert.equal(retained.value, "updated");
+  assert.equal(group.children.includes(retained.node), true);
+  assert.equal(group.children.length, 2);
+  assert.deepEqual(removed, [["2:0", "second"]]);
+});
+
 test("mahjong highlights matching visible tile types without adding count text", () => {
   const factory = new ThreeTileFactory(new Texture());
   const selected = factory.create({ type: 5, tileId: 17 });
@@ -2348,6 +2467,7 @@ test("mahjong highlights matching visible tile types without adding count text",
   const ordinaryDora = factory.create({ type: 5, dora: true });
   const plainRedFive = factory.create({ type: 5, red: true });
   const doubleDoraRedFive = factory.create({ type: 5, red: true, dora: true });
+  const tsumogiriTile = factory.create({ type: 5, tsumogiri: true });
   const disabledRiichiTile = factory.create({ type: 5, dimmed: true });
   const concealed = factory.create({
     type: 5,
@@ -2367,8 +2487,32 @@ test("mahjong highlights matching visible tile types without adding count text",
     true,
   );
   assert.equal(factory.matchHighlightMaterial.transparent, true);
-  assert.ok(factory.matchHighlightMaterial.opacity >= 0.3);
-  assert.ok(factory.matchHighlightMaterial.opacity <= 0.35);
+  assert.equal(factory.matchHighlightMaterial.color.getHexString(), "4285f4");
+  assert.equal(factory.matchHighlightMaterial.opacity, 0.24);
+  assert.equal(factory.matchHighlightMaterial.depthWrite, false);
+  assert.equal(factory.matchHighlightMaterial.depthTest, true);
+  assert.equal(
+    matchingRedFive.children.find(
+      (child) => child.material === factory.matchHighlightMaterial,
+    )?.geometry,
+    factory.matchHighlightGeometry,
+  );
+  factory.matchHighlightGeometry.computeBoundingBox();
+  const matchingFace = matchingRedFive.children.find(
+    (child) => child.material === factory.faceMaterial,
+  );
+  assert.ok(
+    factory.matchHighlightGeometry.boundingBox.max.z > matchingFace.position.z,
+    "the full-body selection wash must be in front of the printed face",
+  );
+  factory.tsumogiriWashGeometry.computeBoundingBox();
+  const tsumogiriFace = tsumogiriTile.children.find(
+    (child) => child.material === factory.faceMaterial,
+  );
+  assert.ok(
+    factory.tsumogiriWashGeometry.boundingBox.max.z > tsumogiriFace.position.z,
+    "the full-body tsumogiri wash must be in front of the printed face",
+  );
   assert.equal(
     concealed.children.some(
       (child) => child.material === factory.matchHighlightMaterial,
@@ -2377,25 +2521,44 @@ test("mahjong highlights matching visible tile types without adding count text",
   );
   assert.equal(
     plainRedFive.children.some(
-      (child) => child.material === factory.doraWashMaterial,
+      (child) => child.material === factory.doraLightboxMaterial,
     ),
     false,
-  );
-  const doraWash = ordinaryDora.children.find(
-    (child) => child.material === factory.doraWashMaterial,
   );
   const doraFace = ordinaryDora.children.find(
     (child) => child.material === factory.faceMaterial,
   );
-  assert.ok(doraWash);
+  const doraLightbox = ordinaryDora.children.find(
+    (child) => child.material === factory.doraLightboxMaterial,
+  );
+  const doraHalo = ordinaryDora.children.find(
+    (child) => child.material === factory.doraHaloMaterial,
+  );
+  const doraEmission = ordinaryDora.children.find(
+    (child) => child.material === factory.doraEmissionMaterial,
+  );
   assert.ok(doraFace);
-  assert.ok(doraWash.position.z > doraFace.position.z);
-  assert.ok(doraWash.renderOrder > doraFace.renderOrder);
-  assert.ok(factory.doraWashMaterial.opacity >= 0.5);
-  assert.ok(factory.doraWashMaterial.opacity <= 0.58);
+  assert.ok(doraLightbox);
+  assert.ok(doraHalo);
+  assert.ok(doraEmission);
+  assert.equal(doraLightbox.position.z, 0);
+  assert.ok(doraLightbox.geometry === factory.doraLightboxGeometry);
+  assert.equal(factory.doraLightboxMaterial.uniforms.lightColor.value.getHexString(), "ffe16a");
+  assert.equal(factory.doraLightboxMaterial.depthWrite, false);
+  assert.equal(factory.doraLightboxMaterial.uniforms.intensity.value, 0);
+  assert.equal(factory.doraEmissionMaterial.blending, AdditiveBlending);
+  assert.equal(factory.doraEmissionMaterial.uniforms.intensity.value, 0);
+  assert.ok(doraHalo.position.z < doraFace.position.z);
+  assert.equal(factory.doraHaloMaterial.depthWrite, false);
+  assert.equal(factory.doraHaloMaterial.opacity, 0);
+  factory.setDoraGlowIntensity(1);
+  assert.equal(factory.doraLightboxMaterial.uniforms.intensity.value, 1);
+  assert.equal(factory.doraEmissionMaterial.uniforms.intensity.value, 1);
+  assert.equal(factory.doraHaloMaterial.opacity, 0.045);
+  factory.setDoraGlowIntensity(0);
   assert.ok(
     doubleDoraRedFive.children.some(
-      (child) => child.material === factory.doraWashMaterial,
+      (child) => child.material === factory.doraLightboxMaterial,
     ),
   );
   const disabledWash = disabledRiichiTile.children.find(
@@ -2440,9 +2603,12 @@ test("mahjong highlights matching visible tile types without adding count text",
   assert.match(renderer, /dora: this\.doraCounts\.has\(tileType\(tileId\)\)/);
   assert.match(
     renderer,
-    /dora: this\.doraCounts\.has\(Number\(discard\.type\)\)/,
+    /const dora = this\.doraCounts\.has\(Number\(discard\.type\)\)/,
   );
   assert.match(renderer, /dora: !entry\.faceDown && this\.doraCounts\.has/);
+  assert.match(renderer, /this\.tileFactory\.beginFrame\(\)/);
+  assert.match(renderer, /this\.syncDoraBreathing\(\)/);
+  assert.match(renderer, /this\.animations\.has\("dora-breath"\)/);
   assert.doesNotMatch(html, /visible-tile-count|已见|未见/);
   assert.doesNotMatch(view, /visibleTileTypeCount|已见|未见/);
 });
@@ -2820,7 +2986,10 @@ test("mahjong settings dialog combines operation controls and themed help", () =
     html,
     /id="settings-end-match-button"[^>]*hidden[^>]*>\s*结束本局\s*<\/button>/,
   );
-  assert.match(html, /id="settings-return-button"[^>]*>\s*返回对局\s*<\/button>/);
+  assert.match(
+    html,
+    /id="settings-return-button"[^>]*>\s*返回对局\s*<\/button>/,
+  );
   assert.match(html, /双击空白处摸切/);
   assert.match(
     html,
@@ -3151,7 +3320,8 @@ test("mahjong renders a compact fixed five-slot dora rack", () => {
     "utf8",
   );
   assert.ok(
-    mahjongBrushFont.byteLength > 20_000 && mahjongBrushFont.byteLength < 60_000,
+    mahjongBrushFont.byteLength > 20_000 &&
+      mahjongBrushFont.byteLength < 60_000,
   );
   assert.match(interfaceFontNotice, /Bakudai Brush Font/);
   assert.match(interfaceFontNotice, /SIL Open Font License 1\.1/);
