@@ -2445,6 +2445,7 @@ local function visible_discards(state)
 				red = RED_FIVES[discard.tile] == true,
 				claimed = discard.claimed == true,
 				riichi = discard.riichi == true,
+				tsumogiri = discard.tsumogiri == true,
 			}
 		end
 	end
@@ -2734,6 +2735,54 @@ local function block_shape_value(hand, melds, cache)
 		cache[key] = best
 	end
 	return best
+end
+
+-- A decomposition chooses disjoint blocks, so it deliberately regards 456 and
+-- 4556 as one completed block.  For an otherwise tied discard this loses a
+-- real tile-efficiency distinction: the repeated middle tile (and longer
+-- consecutive runs) keeps alternative two-block continuations after the next
+-- draw.  Count those overlapping *three-tile cores* only as a lexicographic
+-- tie-break below; using this globally would double-count the same tiles.
+local function sequence_core_value(hand)
+	local counts, total = type_counts(hand), 0
+	for suit = 0, 2 do
+		local first = suit * 9 + 1
+		for rank = 1, 7 do
+			local kind = first + rank - 1
+			if counts[kind] > 0 and counts[kind + 1] > 0 and counts[kind + 2] > 0 then
+				total = total + 1
+				-- A duplicate in the middle supports two adjacent runs (4556,
+				-- 3445, etc.); an end duplicate does not create that same fork.
+				if counts[kind + 1] >= 2 then
+					total = total + 1
+				end
+			end
+		end
+	end
+	return total
+end
+
+-- A pair next to a suited tile (334, 455, etc.) can keep the head while the
+-- neighbouring tile develops a sequence.  It is more concrete than a lone
+-- yakuhai: the pair is already present.  Like `sequence_core_value`, this is
+-- only a strict tie-break and never contributes a global shape weight.
+local function pair_extension_value(hand)
+	local counts, total = type_counts(hand), 0
+	for suit = 0, 2 do
+		local first = suit * 9 + 1
+		for rank = 1, 9 do
+			local kind = first + rank - 1
+			if counts[kind] >= 2 then
+				if rank > 1 and counts[kind - 1] > 0 then
+					total = total + 1
+				end
+				if rank < 9 and counts[kind + 1] > 0 then
+					total = total + 1
+				end
+			end
+		end
+	end
+	return total
 end
 
 local function visible_type_counts(state, player_id, own_hand, own_melds)
@@ -3275,7 +3324,7 @@ local function tile_dealin_risk(state, seat, tile, visible_counts)
 	return total
 end
 
-local function tile_keep_bonus(state, seat, tile)
+local function tile_keep_bonus(state, seat, tile, hand_counts, visible_counts, resulting_shanten)
 	local kind, bonus = tile_type(tile), 0
 	if RED_FIVES[tile] then
 		bonus = bonus + 7
@@ -3285,10 +3334,63 @@ local function tile_keep_bonus(state, seat, tile)
 			bonus = bonus + 6
 		end
 	end
+	local counts = hand_counts or {}
 	if value_honor_kind(state, seat, kind) then
-		bonus = bonus + 1.5
+		-- A value-honor pair is a real route, but a lone value honor is only a
+		-- speculative route.  The old flat bonus made the AI retain a visibly
+		-- depleted singleton while breaking a pair or a useful taatsu.
+		if (counts[kind] or 0) >= 2 then
+			bonus = bonus + 1.5
+		elseif
+			(counts[kind] or 0) == 1
+			and (resulting_shanten or 8) <= 1
+			and 4 - (visible_counts and visible_counts[kind] or 1) >= 2
+		then
+			bonus = bonus + 0.25
+		end
+	elseif not is_honor(kind) and (counts[kind] or 0) == 2 then
+		-- Preserve a non-honor pair slightly more often when it competes with
+		-- an isolated tile.  Shape scoring already sees a head, so this is a
+		-- small tie-break rather than a new search or a hard rule.
+		bonus = bonus + 0.35
 	end
 	return bonus
+end
+
+-- Keep this separate from `tile_keep_bonus`: it is only consulted when two
+-- discards are already near-equal.  That lets a live double-wind or a tile
+-- beside dora settle an otherwise arbitrary choice without reviving the old
+-- behaviour of breaking a real shape just to retain a speculative yakuhai.
+local function tile_close_score_keep_value(state, seat, tile, hand_counts, visible_counts)
+	local kind = tile_type(tile)
+	if (hand_counts[kind] or 0) ~= 1 then
+		return 0
+	end
+	local value = 0
+	if value_honor_kind(state, seat, kind) then
+		local remaining = math.max(0, 4 - (visible_counts[kind] or 0))
+		local seat_wind = 28 + ((seat - state.dealerIndex + 4) % 4)
+		local round_wind = 27 + state.roundWind
+		local double_wind = kind == seat_wind and kind == round_wind
+		-- One live copy of a normal yakuhai is not a route.  A fully live
+		-- double wind is materially better, but still only a close-score tie
+		-- breaker rather than a full efficiency bonus.
+		value = remaining * (double_wind and 0.24 or 0.09)
+	elseif kind <= 27 then
+		local suit, rank = math.floor((kind - 1) / 9), ((kind - 1) % 9) + 1
+		for _, indicator in ipairs(indicator_types(state, false)) do
+			local dora = next_dora(indicator)
+			if dora <= 27 and math.floor((dora - 1) / 9) == suit then
+				local distance = math.abs(rank - ((dora - 1) % 9 + 1))
+				if distance == 1 then
+					value = value + 0.16
+				elseif distance == 2 then
+					value = value + 0.05
+				end
+			end
+		end
+	end
+	return value
 end
 
 local function effective_tile_count(hand, melds, shanten, visible_counts, cache)
@@ -3301,29 +3403,6 @@ local function effective_tile_count(hand, melds, shanten, visible_counts, cache)
 			counts[kind] = counts[kind] - 1
 			if improves then
 				total = total + math.max(0, 4 - (visible_counts[kind] or 0))
-			end
-		end
-	end
-	return total
-end
-
-local function improvement_tile_count(hand, melds, shanten, visible_counts, cache, shape_cache)
-	-- Lightweight improvement tiles: keep shanten while improving the complete
-	-- hand shape.  A real draw-then-best-discard search turns one AI choice
-	-- from milliseconds into seconds, which is unsuitable for real-time play.
-	local counts, total = type_counts(hand), 0
-	local meld_count, current_shape = #(melds or {}), block_shape_value(hand, melds, shape_cache)
-	for kind = 1, 34 do
-		if counts[kind] < 4 and (visible_counts[kind] or 0) < 4 then
-			counts[kind] = counts[kind] + 1
-			local keeps_shanten = hand_shanten_counts(counts, meld_count, cache) == shanten
-			counts[kind] = counts[kind] - 1
-			if keeps_shanten then
-				local drawn = copy_array(hand)
-				drawn[#drawn + 1] = (kind - 1) * 4 + 1
-				if block_shape_value(drawn, melds, shape_cache) > current_shape then
-					total = total + math.max(0, 4 - (visible_counts[kind] or 0))
-				end
 			end
 		end
 	end
@@ -3415,6 +3494,13 @@ local function ai_push_mode(state, seat, minimum_shanten, best_value, pressure, 
 		return "push"
 	end
 	if minimum_shanten >= 2 then
+		-- A two-shanten hand usually folds to a real threat, but not when it has
+		-- already secured roughly three han and enough draws remain to realize
+		-- it.  Treat that as a mixed decision: safe tiles still win when danger
+		-- is substantial, while near-safe choices may keep a valuable live shape.
+		if pressure < 1.35 and best_value + placement >= 3 and #state.wall >= 32 then
+			return "mixed"
+		end
 		return pressure >= 0.92 and "fold" or "mixed"
 	end
 	if minimum_shanten <= 0 then
@@ -3550,10 +3636,14 @@ local function choose_ai_discard(state, seat, hand, allowed, forbidden, melds)
 	local ukeire_candidates = {}
 	for _, candidate in ipairs(candidates) do
 		candidate.ukeire = 0
-		if mode ~= "fold" and candidate.shanten == minimum_shanten then
+		-- Folding still compares ukeire in its score: when two discards are both
+		-- acceptably safe, preserve the hand that can recover fastest.  Populate
+		-- that existing term for the same bounded set of candidates instead of
+		-- silently treating every folding candidate as zero ukeire.
+		if candidate.shanten == minimum_shanten then
 			candidate.preliminary = block_shape_value(candidate.hand, melds, shape_cache) * 1.7
 				+ candidate.value * 18
-				- tile_keep_bonus(state, seat, candidate.tile) * 13
+					- tile_keep_bonus(state, seat, candidate.tile, base_counts, visible, candidate.shanten) * 13
 				+ math.max(0, 3 - candidate.special) * (#state.wall >= 36 and 12 or 4)
 			ukeire_candidates[#ukeire_candidates + 1] = candidate
 		end
@@ -3568,13 +3658,6 @@ local function choose_ai_discard(state, seat, hand, allowed, forbidden, melds)
 			candidate.wait = tenpai_wait_profile(state, seat, candidate.hand, melds, visible, tile_type(candidate.tile))
 			candidate.waitQuality = candidate.wait.quality
 		end
-		-- Full draw-then-best-discard improvement is expensive, so only the two
-		-- strongest efficiency candidates receive it.  The others still compare
-		-- through complete ukeire and shanten.
-		if index <= 2 then
-			candidate.improvement =
-				improvement_tile_count(candidate.hand, melds, candidate.shanten, visible, cache, shape_cache)
-		end
 	end
 	local best_ukeire = 0
 	for _, candidate in ipairs(candidates) do
@@ -3582,6 +3665,11 @@ local function choose_ai_discard(state, seat, hand, allowed, forbidden, melds)
 			best_ukeire = math.max(best_ukeire, candidate.ukeire or 0)
 		end
 	end
+	-- Do not reward the number of draws that improve a candidate relative to
+	-- its own current shape.  That metric perversely favours a discard which
+	-- first destroys a good block, because the damaged hand has more ways to
+	-- recover.  Complete ukeire and the decomposition-aware current shape are
+	-- comparable quantities; this raw recovery count is not.
 	-- A genuinely broad, valuable tenpai can press through a modest threat;
 	-- this happens after the light ukeire pass, without a draw/discard tree.
 	if
@@ -3604,21 +3692,23 @@ local function choose_ai_discard(state, seat, hand, allowed, forbidden, melds)
 		candidate.dealinRisk = tile_dealin_risk(state, seat, candidate.tile, visible)
 		candidate.futureSafeReserve = future_safe_reserve(state, seat, candidate.hand, visible, danger_cache)
 		candidate.endgameTenpai = endgame_tenpai_value(state, candidate, objective)
+		candidate.shapeValue = block_shape_value(candidate.hand, melds, shape_cache)
+		candidate.sequenceCore = sequence_core_value(candidate.hand)
+		candidate.pairExtension = pair_extension_value(candidate.hand)
 		local efficiency = -candidate.shanten * 300
 			+ candidate.ukeire * 7
 			+ (candidate.waitQuality or 0) * 6
-			+ (candidate.improvement or 0) * 1.8
-			+ block_shape_value(candidate.hand, melds, shape_cache) * 1.7
+			+ candidate.shapeValue * 1.7
 			+ candidate.value * 18
 			+ candidate.endgameTenpai
 			+ math.max(0, 3 - candidate.special) * (#state.wall >= 36 and 10 or 2)
-			- tile_keep_bonus(state, seat, candidate.tile) * 13
+				- tile_keep_bonus(state, seat, candidate.tile, base_counts, visible, candidate.shanten) * 13
 		if mode == "fold" then
 			candidate.score = -candidate.dealinRisk * 1050
 				- candidate.shanten * 28
 				+ candidate.ukeire * 1.5
 				+ candidate.futureSafeReserve * 28
-				- tile_keep_bonus(state, seat, candidate.tile) * 2
+					- tile_keep_bonus(state, seat, candidate.tile, base_counts, visible, candidate.shanten) * 2
 		elseif mode == "mixed" then
 			local viable = candidate.shanten == minimum_shanten
 				and ((candidate.ukeire or 0) >= best_ukeire * 0.78 or best_ukeire == 0)
@@ -3635,10 +3725,41 @@ local function choose_ai_discard(state, seat, hand, allowed, forbidden, melds)
 		local kind = tile_type(candidate.tile)
 		local rank = kind <= 27 and (((kind - 1) % 9) + 1) or 0
 		candidate.throw_order = kind >= 28 and 3 or (rank == 1 or rank == 9) and 2 or 1
+		candidate.closeScoreKeep = tile_close_score_keep_value(state, seat, candidate.tile, base_counts, visible)
 		if
 			not best
 			or candidate.score > best.score + 0.001
-			or (math.abs(candidate.score - best.score) <= 0.001 and candidate.throw_order > best.throw_order)
+			or (
+				-- When all scored quantities are exactly tied, preserve a real
+				-- pair-plus-neighbour extension before retaining a singleton
+				-- yakuhai merely as a close-score option.  The former already has
+				-- a head; the latter still needs a second copy to become a route.
+				pressure <= 0.35
+				and candidate.shanten == best.shanten
+				and math.abs(candidate.score - best.score) <= 0.001
+				and candidate.pairExtension > (best.pairExtension or 0)
+			)
+			or (
+				math.abs(candidate.score - best.score) <= 4
+				and candidate.closeScoreKeep < best.closeScoreKeep - 0.001
+			)
+		or (
+			-- At low pressure, one extra live copy is not enough to justify
+			-- breaking a strictly richer consecutive core when all first-order
+			-- quantities agree.  This is a shape dominance tie-break, not a
+			-- weighted adjacency bonus.
+			pressure <= 0.35
+			and candidate.shanten == best.shanten
+			and math.abs((candidate.ukeire or 0) - (best.ukeire or 0)) <= 1
+			and math.abs((candidate.shapeValue or 0) - (best.shapeValue or 0)) <= 0.001
+			and math.abs((candidate.value or 0) - (best.value or 0)) <= 0.001
+			and candidate.sequenceCore > (best.sequenceCore or 0)
+		)
+			or (
+				math.abs(candidate.score - best.score) <= 0.001
+				and math.abs(candidate.closeScoreKeep - best.closeScoreKeep) <= 0.001
+				and candidate.throw_order > best.throw_order
+			)
 		then
 			best = candidate
 		end
