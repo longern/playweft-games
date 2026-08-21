@@ -355,11 +355,14 @@ visualPackElements.list.addEventListener("click", async (event) => {
   const id = button?.dataset.packId;
   const action = button?.dataset.packAction;
   if (!id || !action) return;
-  if (
-    action === "delete" &&
-    !window.confirm("删除这个麻将素材包？此操作无法恢复。")
-  )
-    return;
+  if (action === "delete") {
+    const confirmation = "删除这个麻将素材包？此操作无法恢复。";
+    const confirmed =
+      window.parent === window
+        ? window.confirm(confirmation)
+        : await soloClient.confirm(confirmation);
+    if (!confirmed) return;
+  }
   visualPackElements.feedback.textContent =
     action === "delete" ? "正在删除…" : "正在切换…";
   try {

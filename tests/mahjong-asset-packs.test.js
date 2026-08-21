@@ -182,4 +182,8 @@ test("mahjong settings exposes its visual-pack tab and appearance choices", () =
   assert.match(main, /configureMahjongAssetPackAppearance/);
   assert.match(main, /角色语音/);
   assert.match(main, /name: "默认主题"/);
+  assert.match(
+    main,
+    /action === "delete"[\s\S]*?window\.parent === window[\s\S]*?window\.confirm\(confirmation\)[\s\S]*?await soloClient\.confirm\(confirmation\)/,
+  );
 });
