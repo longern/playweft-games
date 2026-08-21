@@ -13,6 +13,7 @@ import {
   roundLabel,
   resultDetailPageCount,
   seatWind,
+  tenpaiDiscardFuriten,
   tenpaiWaitsForDiscard,
   tileFace,
   tileType,
@@ -134,6 +135,10 @@ export class MahjongDomView {
     const waits = tenpaiWaitsForDiscard(state?.legalActions, selectedTileId);
     const { tenpaiPreview, tenpaiWaits } = this.elements;
     tenpaiPreview.hidden = waits.length === 0;
+    tenpaiPreview.classList.toggle(
+      "is-furiten",
+      waits.length > 0 && tenpaiDiscardFuriten(state?.legalActions, selectedTileId),
+    );
     tenpaiWaits.style.setProperty(
       "--tenpai-wait-columns",
       String(Math.min(7, waits.length)),

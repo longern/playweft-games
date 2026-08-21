@@ -2261,6 +2261,9 @@ local function visible_tile_type_counts(state, player_id)
 end
 
 local function tenpai_discard_options(state, player_id, discard_waits, forbidden)
+	local seat = player_index(state, player_id)
+	local hand = hand_with_drawn(state, player_id)
+	local melds = state.melds[player_id]
 	local visible, result = visible_tile_type_counts(state, player_id), {}
 	for _, entry in ipairs(discard_waits or tenpai_discard_waits(state, player_id)) do
 		local tile_id = entry.tileId
@@ -2274,7 +2277,21 @@ local function tenpai_discard_options(state, player_id, discard_waits, forbidden
 					remaining = math.max(0, 4 - (visible[kind] or 0)),
 				}
 			end
-			result[#result + 1] = { tileId = tile_id, waits = waits }
+			local candidate_hand = copy_array(hand)
+			remove_tile(candidate_hand, tile_id)
+			local profile = tenpai_wait_profile(
+				state,
+				seat,
+				candidate_hand,
+				melds,
+				visible,
+				tile_type(tile_id)
+			)
+			result[#result + 1] = {
+				tileId = tile_id,
+				waits = waits,
+				furiten = profile.furiten,
+			}
 		end
 	end
 	return result

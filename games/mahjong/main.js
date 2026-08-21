@@ -6,6 +6,7 @@ import {
   AUTO_DECISION_DELAY_MS,
   DRAW_REVEAL_CARD_DELAY_MS,
   DRAW_REVEAL_VISIBLE_BASE_MS,
+  DRAW_REVEAL_VISIBLE_EXTENSION_MS,
   DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS,
   HAND_INSERTION_DELAY_MS,
   HAND_END_PRESENTATION_DELAY_MS,
@@ -1361,6 +1362,9 @@ function renderCurrentState({ animateDealIn = false } = {}) {
     animateHandReveal:
       revealedPlayerIndices.length + coveredPlayerIndices.length > 0 &&
       !presentation.resultVisible,
+    handRevealDelay: isExhaustiveDrawRevealState(state)
+      ? AUTO_DECISION_DELAY_MS
+      : 0,
     delayHandRevealForCallout: visibleEvents.some(
       (event) => event.type === "won",
     ),
@@ -1826,6 +1830,7 @@ function drawRevealVisibleDuration(current) {
     .filter((waits) => asArray(waits).length > 0)
     .length;
   return DRAW_REVEAL_VISIBLE_BASE_MS +
+    DRAW_REVEAL_VISIBLE_EXTENSION_MS +
     tenpaiPlayerCount * DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS;
 }
 

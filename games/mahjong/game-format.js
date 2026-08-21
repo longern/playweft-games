@@ -69,12 +69,20 @@ export function claimPreviewTiles(claim) {
   return tiles.sort((left, right) => left.type - right.type);
 }
 
-export function tenpaiWaitsForDiscard(legalActions, tileId) {
+function tenpaiDiscardOption(legalActions, tileId) {
   const selectedTileId = Number(tileId) || 0;
-  if (!selectedTileId) return [];
-  const option = asArray(legalActions?.tenpaiDiscards).find(
+  if (!selectedTileId) return null;
+  return asArray(legalActions?.tenpaiDiscards).find(
     (candidate) => Number(candidate?.tileId) === selectedTileId,
   );
+}
+
+export function tenpaiDiscardFuriten(legalActions, tileId) {
+  return tenpaiDiscardOption(legalActions, tileId)?.furiten === true;
+}
+
+export function tenpaiWaitsForDiscard(legalActions, tileId) {
+  const option = tenpaiDiscardOption(legalActions, tileId);
   return asArray(option?.waits)
     .map((wait) => ({
       type: Number(wait?.type) || 0,

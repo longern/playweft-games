@@ -412,6 +412,7 @@ export class MahjongThreeRenderer {
     const revealDelay = ui.delayHandRevealForCallout
       ? ACTION_CALLOUT_DURATION_MS
       : 0;
+    const handRevealDelay = Math.max(0, Number(ui.handRevealDelay) || 0);
     const crossfadesOwnHand = Boolean(this.pendingOwnHandCrossfade);
     if (this.pendingOwnDrawEntryTile) this.startOwnDrawEntry();
     if (this.ownTileMotions.length) this.startOwnTileMotion();
@@ -420,7 +421,10 @@ export class MahjongThreeRenderer {
     }
     if (this.animateHandReveal && this.revealTiles.length) {
       this.startHandReveal(
-        handRevealStartDelay(revealDelay, crossfadesOwnHand),
+        handRevealStartDelay(
+          Math.max(revealDelay, handRevealDelay),
+          crossfadesOwnHand,
+        ),
       );
     }
     if (this.animateDealIn && this.dealInTiles.length) this.startDealIn();

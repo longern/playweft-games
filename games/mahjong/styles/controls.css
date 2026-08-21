@@ -1,3 +1,9 @@
+:root {
+  --mahjong-warning-fill: #fff4e5;
+  --mahjong-warning-text: #663c00;
+  --mahjong-warning-border: #ed6c02;
+}
+
 .action-bar {
   display: flex;
   min-height: 48px;
@@ -27,8 +33,8 @@
   min-width: 0;
   padding: 7px 13px 7px 12px;
   border-radius: 999px 0 0 999px;
-  background: rgba(194, 151, 74, 0.26);
-  color: #f5d898;
+  background: var(--mahjong-warning-fill);
+  color: var(--mahjong-warning-text);
   font-size: 22px;
   font-weight: 850;
   line-height: 1;
@@ -91,7 +97,8 @@
   left: 50%;
   display: grid;
   width: max-content;
-  padding: 9px;
+  gap: 16px;
+  padding: 24px 28px;
   border: 1px solid rgba(239, 207, 132, 0.62);
   border-radius: 12px;
   background: linear-gradient(
@@ -110,6 +117,20 @@
 
 .tenpai-preview[hidden] {
   display: none;
+}
+
+.tenpai-preview.is-furiten {
+  border-color: var(--mahjong-warning-border);
+  background: var(--mahjong-warning-fill);
+  color: var(--mahjong-warning-text);
+}
+
+.tenpai-preview.is-furiten .tenpai-wait-count {
+  color: var(--mahjong-warning-text);
+}
+
+.tenpai-preview.is-furiten .tenpai-wait-count.is-empty {
+  color: #8a5a10;
 }
 
 .tenpai-wait-list {

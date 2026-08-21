@@ -41,6 +41,7 @@ import {
   resultScoreRows,
   riverDisplayEntries,
   splitRevealedHand,
+  tenpaiDiscardFuriten,
   tenpaiWaitsForDiscard,
 } from "../games/mahjong/game-format.js";
 import {
@@ -848,6 +849,7 @@ test("mahjong previews waits and visible-copy counts for the selected discard", 
     tenpaiDiscards: [
       {
         tileId: 42,
+        furiten: true,
         waits: [
           { type: 9, remaining: 3 },
           { type: 28, remaining: 0 },
@@ -861,6 +863,8 @@ test("mahjong previews waits and visible-copy counts for the selected discard", 
   ]);
   assert.deepEqual(tenpaiWaitsForDiscard(legalActions, 41), []);
   assert.deepEqual(tenpaiWaitsForDiscard({}, 42), []);
+  assert.equal(tenpaiDiscardFuriten(legalActions, 42), true);
+  assert.equal(tenpaiDiscardFuriten(legalActions, 41), false);
 
   const html = readFileSync(
     new URL("../games/mahjong/index.html", import.meta.url),
@@ -874,6 +878,10 @@ test("mahjong previews waits and visible-copy counts for the selected discard", 
   assert.match(html, /id="tenpai-preview"[^>]*hidden/);
   assert.match(html, /id="tenpai-waits"/);
   assert.match(view, /renderTenpaiPreview\(state, selectedTileId\)/);
+  assert.match(
+    view,
+    /waits\.length > 0 && tenpaiDiscardFuriten\(state\?\.legalActions, selectedTileId\)/s,
+  );
   assert.match(view, /count\.textContent = `\$\{wait\.remaining\} 张`/);
   assert.match(
     view,
@@ -881,10 +889,22 @@ test("mahjong previews waits and visible-copy counts for the selected discard", 
   );
   assert.match(
     styles,
-    /\.tenpai-preview\s*\{[\s\S]*?bottom:\s*128px;[\s\S]*?left:\s*50%;/,
+    /\.tenpai-preview\s*\{[\s\S]*?bottom:\s*128px;[\s\S]*?left:\s*50%;[\s\S]*?gap:\s*16px;[\s\S]*?padding:\s*24px 28px;/,
   );
   assert.match(styles, /\.tenpai-wait-list\s*\{[\s\S]*?grid-template-columns:/);
   assert.match(styles, /\.tenpai-wait-count\.is-empty/);
+  assert.match(
+    styles,
+    /\.tenpai-preview\.is-furiten\s*\{[\s\S]*?background:\s*var\(--mahjong-warning-fill\);[\s\S]*?color:\s*var\(--mahjong-warning-text\);/,
+  );
+  assert.match(
+    styles,
+    /\.action-bar > \.furiten-badge\s*\{[\s\S]*?background:\s*var\(--mahjong-warning-fill\);[\s\S]*?color:\s*var\(--mahjong-warning-text\);/,
+  );
+  assert.match(
+    styles,
+    /\.tenpai-preview\.is-furiten \.tenpai-wait-count\s*\{[\s\S]*?color:\s*var\(--mahjong-warning-text\);/,
+  );
 });
 
 test("mahjong keeps action buttons in a fixed player-facing order", () => {
