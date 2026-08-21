@@ -186,6 +186,7 @@ test("mahjong clears the rendered table before dismissing a hand result", () => 
     winningTileRed: true,
     winType: "tsumo",
     draw: true,
+    riichi: { self: true, right: false, top: true, left: false },
   });
 
   assert.deepEqual(cleared.ownHand, []);
@@ -216,6 +217,12 @@ test("mahjong clears the rendered table before dismissing a hand result", () => 
   assert.equal(cleared.winningTile, 0);
   assert.equal(cleared.winType, "");
   assert.equal(cleared.draw, false);
+  assert.deepEqual(cleared.riichi, {
+    self: false,
+    right: false,
+    top: false,
+    left: false,
+  });
 });
 
 test("mahjong closes river gaps left by called discards", () => {
@@ -1690,7 +1697,11 @@ test("mahjong result pages separate winners before the score summary", () => {
   );
   assert.match(main, /await advanceFromResult\(\{ type: "new_match" \}\)/);
   assert.match(main, /function returnToSetupFromSummary\(\)/);
-  assert.match(main, /renderClearedTableForResultExit\(\);/);
+  assert.match(
+    main,
+    /renderResultExitTable\(outcome\.projection\?\.state\);/,
+  );
+  assert.match(main, /visualRenderer\.prepareDealIn\(\);/);
   assert.match(main, /await waitForDelay\(NEW_HAND_TABLE_PAUSE_MS\);/);
   assert.match(
     main,

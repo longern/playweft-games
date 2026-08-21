@@ -14,6 +14,9 @@ export function clearedTableState(state) {
   const players = asArray(state?.players);
   const emptyPlayerCollections = () =>
     Object.fromEntries(players.map((playerId) => [playerId, []]));
+  const clearedRiichi = Object.fromEntries(
+    players.map((playerId) => [playerId, false]),
+  );
   return {
     ...state,
     ownHand: [],
@@ -24,6 +27,7 @@ export function clearedTableState(state) {
     ),
     discards: emptyPlayerCollections(),
     melds: emptyPlayerCollections(),
+    riichi: clearedRiichi,
     revealedHands: {},
     doraIndicators: [],
     doraIndicatorTiles: [],

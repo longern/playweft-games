@@ -453,6 +453,21 @@ export class MahjongThreeRenderer {
     if (this.ownTileMotions.length) this.startOwnTileMotion();
   }
 
+  prepareDealIn() {
+    if (!this.ready) return;
+    this.cancelOwnHandCrossfade();
+    this.cancelOwnDrawEntry();
+    this.cancelOwnTileMotion();
+    this.cancelDrag(false);
+    for (const { tile } of this.ownTileRecords.values()) {
+      this.ownHandLayer.remove(tile);
+    }
+    this.ownTileRecords.clear();
+    this.activeOwnTileIds.clear();
+    this.pickableTiles.length = 0;
+    this.drawFrame();
+  }
+
   updateTypeHighlights() {
     const selectedTileId = Number(this.ui?.selectedTileId) || 0;
     for (const tile of this.highlightableTiles) {

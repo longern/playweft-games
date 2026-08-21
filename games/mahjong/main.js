@@ -1387,19 +1387,28 @@ function renderCurrentState({ animateDealIn = false } = {}) {
   });
 }
 
-function renderClearedTableForResultExit() {
-  const clearedState = clearedTableState(state);
+function renderResultExitTable(tableState) {
+  // Keep the next hand's metadata visible beneath the fading result sheet,
+  // but keep the table itself empty until the deal-in animation begins.
+  const renderState = clearedTableState(tableState ?? state);
   visibleEvents = [];
   selectedTileId = 0;
   riichiMode = false;
-  domView.render(clearedState, [], selectedTileId, playerName, {
-    preserveResult: true,
-    riichiMode,
-    defaultNames: getMahjongDefaultNames(),
-    playerNameIsAuthoritative: hasPlatformName,
-  });
-  applyPackAvatars(clearedState);
-  visualRenderer.render(clearedState, [], {
+  domView.render(
+    { ...renderState, legalActions: {} },
+    [],
+    selectedTileId,
+    playerName,
+    {
+      preserveResult: true,
+      riichiMode,
+      defaultNames: getMahjongDefaultNames(),
+      playerNameIsAuthoritative: hasPlatformName,
+    },
+  );
+  const staticState = { ...renderState, legalActions: {} };
+  applyPackAvatars(staticState);
+  visualRenderer.render(staticState, [], {
     ...domView.visualUi(playerName, selectedTileId),
     riichiMode,
     riichiCandidateTiles: [],
@@ -1659,7 +1668,7 @@ async function advanceFromResult(action) {
   riichiMode = false;
   selectionBeforeRiichi = 0;
   selectedTileId = 0;
-  renderClearedTableForResultExit();
+  renderResultExitTable(outcome.projection?.state);
   elements.result.classList.add("is-exiting");
   await waitForAnimation(
     elements.result,
@@ -1670,6 +1679,7 @@ async function advanceFromResult(action) {
   elements.result.hidden = true;
   elements.result.classList.remove("is-exiting");
   await waitForDelay(NEW_HAND_TABLE_PAUSE_MS);
+  visualRenderer.prepareDealIn();
   await refresh(outcome.projection, { animateDealIn: true });
   scheduleAi({ afterDealIn: true });
   return true;
