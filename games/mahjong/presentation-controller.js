@@ -24,43 +24,71 @@ export class MahjongPresentationController {
     this.drawRevealKey = "";
     this.drawRevealVisible = false;
     this.drawRevealTimer = 0;
+    this.handEndKey = "";
+    this.handEndPlan = null;
   }
 
-  syncResult(key, delay) {
-    const presentationKey = String(key || "");
-    if (!presentationKey) {
-      this.cancelResultTimer();
-      this.resultKey = "";
+  syncHandEnd(plan) {
+    const key = String(plan?.key || "");
+    if (!key) {
+      this.cancelHandEnd();
       this.resultVisible = true;
-      return;
-    }
-    if (presentationKey === this.resultKey) return;
-    this.cancelResultTimer();
-    this.resultKey = presentationKey;
-    this.resultVisible = false;
-    this.resultTimer = this.schedule(() => {
-      this.resultTimer = 0;
-      this.resultVisible = true;
-      this.onResultReady?.();
-    }, delay);
-  }
-
-  syncDrawReveal(key, delay) {
-    const presentationKey = String(key || "");
-    if (!presentationKey) {
-      this.cancelDrawRevealTimer();
-      this.drawRevealKey = "";
       this.drawRevealVisible = false;
       return;
     }
-    if (presentationKey === this.drawRevealKey) return;
-    this.cancelDrawRevealTimer();
-    this.drawRevealKey = presentationKey;
+    if (key === this.handEndKey) return;
+    this.cancelHandEnd();
+    this.handEndKey = key;
+    this.resultKey = key;
+    this.drawRevealKey = key;
+    this.resultVisible = false;
     this.drawRevealVisible = false;
+    this.handEndPlan = {
+      key,
+      waitForHandReveal: plan?.waitForHandReveal === true,
+      showDrawReveal: plan?.showDrawReveal === true,
+      drawRevealDelay: Math.max(0, Number(plan?.drawRevealDelay) || 0),
+      drawRevealDuration: Math.max(0, Number(plan?.drawRevealDuration) || 0),
+      resultDelay: Math.max(0, Number(plan?.resultDelay) || 0),
+    };
+    if (!this.handEndPlan.waitForHandReveal) this.advanceHandEnd(key);
+  }
+
+  handRevealSettled(key) {
+    const presentationKey = String(key || "");
+    if (
+      !this.handEndPlan ||
+      presentationKey !== this.handEndKey ||
+      !this.handEndPlan.waitForHandReveal
+    ) {
+      return;
+    }
+    this.handEndPlan.waitForHandReveal = false;
+    this.advanceHandEnd(presentationKey);
+  }
+
+  advanceHandEnd(key) {
+    if (!this.handEndPlan || key !== this.handEndKey) return;
+    if (!this.handEndPlan.showDrawReveal) {
+      this.scheduleResult(key, this.handEndPlan.resultDelay);
+      return;
+    }
     this.drawRevealTimer = this.schedule(() => {
+      if (key !== this.handEndKey) return;
       this.drawRevealTimer = 0;
       this.drawRevealVisible = true;
       this.onDrawRevealReady?.();
+      this.scheduleResult(key, this.handEndPlan.drawRevealDuration);
+    }, this.handEndPlan.drawRevealDelay);
+  }
+
+  scheduleResult(key, delay) {
+    this.cancelResultTimer();
+    this.resultTimer = this.schedule(() => {
+      if (key !== this.handEndKey) return;
+      this.resultTimer = 0;
+      this.resultVisible = true;
+      this.onResultReady?.();
     }, delay);
   }
 
@@ -117,11 +145,19 @@ export class MahjongPresentationController {
     this.drawRevealTimer = 0;
   }
 
+  cancelHandEnd() {
+    this.cancelResultTimer();
+    this.cancelDrawRevealTimer();
+    this.handEndKey = "";
+    this.handEndPlan = null;
+    this.resultKey = "";
+    this.drawRevealKey = "";
+  }
+
   suspend() {
     this.cancelHandInsertion();
     this.cancelKanDraw();
-    this.cancelResultTimer();
-    this.cancelDrawRevealTimer();
+    this.cancelHandEnd();
     this.resultVisible = true;
     this.drawRevealVisible = false;
     this.drawRevealKey = "";

@@ -5,6 +5,7 @@ import {
   AI_DELAY_MS,
   AUTO_DECISION_DELAY_MS,
   DRAW_REVEAL_CARD_DELAY_MS,
+  DRAW_REVEAL_CARD_GAP_MS,
   DRAW_REVEAL_VISIBLE_BASE_MS,
   DRAW_REVEAL_VISIBLE_EXTENSION_MS,
   DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS,
@@ -272,6 +273,9 @@ const visualRenderer = new MahjongThreeRenderer(elements.stage, {
   onClearSelection: clearSelectedTile,
   onPreviewDragTile: previewDraggedTile,
   onEndDragPreview: restoreSelectedTilePreview,
+  onHandRevealComplete(key) {
+    presentation.handRevealSettled(key);
+  },
   onDiscardTile(tileId) {
     if (!state?.legalActions?.canDiscard) return;
     selectedTileId = tileId;
@@ -306,8 +310,8 @@ const presentation = new MahjongPresentationController({
     renderCurrentState();
     scheduleAi();
   },
-  onResultReady: refresh,
-  onDrawRevealReady: renderCurrentState,
+  onResultReady: renderPresentationOverlays,
+  onDrawRevealReady: renderPresentationOverlays,
 });
 const visualRendererReady = visualRenderer.init().catch((error) => {
   console.error("Mahjong renderer failed", error);
@@ -1360,12 +1364,7 @@ async function refresh(
   playRoleVoices(events);
   queueKanDraw(events);
   queueHandInsertion(previousState, events, ownDiscardedTile);
-  const revealKey = handEndPresentationKey(state);
-  presentation.syncResult(revealKey, handEndPresentationDelay(state));
-  presentation.syncDrawReveal(
-    isDrawRevealState(state) ? revealKey : "",
-    DRAW_REVEAL_CARD_DELAY_MS,
-  );
+  presentation.syncHandEnd(handEndPresentationPlan(state));
   renderCurrentState({ animateDealIn });
   playRiverTileSound(events);
 }
@@ -1374,29 +1373,7 @@ function renderCurrentState({ animateDealIn = false } = {}) {
   const renderState = presentedState();
   const revealedPlayerIndices = handRevealPlayerIndices(state);
   const coveredPlayerIndices = handCoveredPlayerIndices(state);
-  domView.render(renderState, visibleEvents, selectedTileId, playerName, {
-    showResult: presentation.resultVisible,
-    showGameHints: settingsDialog.gameHintsEnabled,
-    showDrawReveal:
-      isDrawRevealState(state) &&
-      presentation.drawRevealVisible &&
-      !presentation.resultVisible,
-    resultPage: resultPageIndex,
-    dealInKey: animateDealIn ? handDealInKey(state) : "",
-    animateDealIn,
-    riichiMode,
-    defaultNames: getMahjongDefaultNames(),
-    playerNameIsAuthoritative: hasPlatformName,
-  });
-  if (matchSummaryVisible) {
-    resultHandRenderer.hide();
-    renderMatchSummary();
-  } else {
-    resultHandRenderer.render(renderState, resultPageIndex, playerName, {
-      defaultNames: getMahjongDefaultNames(),
-      playerNameIsAuthoritative: hasPlatformName,
-    });
-  }
+  renderPresentationOverlays(renderState, { animateDealIn });
   visualRenderer.render(renderState, visibleEvents, {
     ...domView.visualUi(playerName, selectedTileId),
     dealInKey: animateDealIn ? handDealInKey(state) : "",
@@ -1420,6 +1397,36 @@ function renderCurrentState({ animateDealIn = false } = {}) {
     deferredHandInsertionIndex:
       Number(presentation.handInsertion?.rackIndex) || 0,
   });
+}
+
+function renderPresentationOverlays(
+  renderState = presentedState(),
+  { animateDealIn = false } = {},
+) {
+  if (!renderState) return;
+  domView.render(renderState, visibleEvents, selectedTileId, playerName, {
+    showResult: presentation.resultVisible,
+    showGameHints: settingsDialog.gameHintsEnabled,
+    showDrawReveal:
+      isDrawRevealState(state) &&
+      presentation.drawRevealVisible &&
+      !presentation.resultVisible,
+    resultPage: resultPageIndex,
+    dealInKey: animateDealIn ? handDealInKey(state) : "",
+    animateDealIn,
+    riichiMode,
+    defaultNames: getMahjongDefaultNames(),
+    playerNameIsAuthoritative: hasPlatformName,
+  });
+  if (matchSummaryVisible) {
+    resultHandRenderer.hide();
+    renderMatchSummary();
+  } else {
+    resultHandRenderer.render(renderState, resultPageIndex, playerName, {
+      defaultNames: getMahjongDefaultNames(),
+      playerNameIsAuthoritative: hasPlatformName,
+    });
+  }
 }
 
 function renderResultExitTable(tableState) {
@@ -1893,11 +1900,24 @@ function isExhaustiveDrawRevealState(current) {
   );
 }
 
-function handEndPresentationDelay(current) {
-  if (isExhaustiveDrawRevealState(current)) {
-    return DRAW_REVEAL_CARD_DELAY_MS + drawRevealVisibleDuration(current);
-  }
-  return current?.phase === "hand_ended" ? HAND_END_PRESENTATION_DELAY_MS : 0;
+function handEndPresentationPlan(current) {
+  const key = handEndPresentationKey(current);
+  if (!key) return null;
+  const showDrawReveal = isDrawRevealState(current);
+  const handMotionCount =
+    handRevealPlayerIndices(current).length +
+    handCoveredPlayerIndices(current).length;
+  const waitForHandReveal = showDrawReveal && handMotionCount > 0;
+  return {
+    key,
+    waitForHandReveal,
+    showDrawReveal,
+    drawRevealDelay: waitForHandReveal
+      ? DRAW_REVEAL_CARD_GAP_MS
+      : DRAW_REVEAL_CARD_DELAY_MS,
+    drawRevealDuration: showDrawReveal ? drawRevealVisibleDuration(current) : 0,
+    resultDelay: HAND_END_PRESENTATION_DELAY_MS,
+  };
 }
 
 function drawRevealVisibleDuration(current) {

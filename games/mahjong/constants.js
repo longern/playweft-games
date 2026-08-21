@@ -27,8 +27,10 @@ export const NEW_HAND_DEAL_DURATION_MS = 460;
 export const OWN_DRAW_ENTRY_DURATION_MS = 180;
 export const HAND_INSERTION_DELAY_MS = 260;
 export const HAND_END_PRESENTATION_DELAY_MS = 2700;
-// Let the exhaustive-draw hand push finish before the draw reason card appears.
+// Keep the existing beat for draw outcomes that do not present any hand.
 export const DRAW_REVEAL_CARD_DELAY_MS = 960;
+// A presented hand gets a short breath after it has physically settled.
+export const DRAW_REVEAL_CARD_GAP_MS = 80;
 // Keep an all-noten draw at the existing pace, then allow time to inspect
 // each additional player's waits around the table.
 export const DRAW_REVEAL_VISIBLE_BASE_MS =

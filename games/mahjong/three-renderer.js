@@ -92,6 +92,7 @@ export class MahjongThreeRenderer {
     this.raycaster = new Raycaster();
     this.pickableTiles = [];
     this.revealTiles = [];
+    this.activeHandRevealKey = "";
     this.pendingOwnHandCrossfade = null;
     this.ownHandCrossfade = null;
     this.ownDrawAnimation = null;
@@ -343,7 +344,13 @@ export class MahjongThreeRenderer {
     this.overlayCamera.top = height / 2;
     this.overlayCamera.bottom = -height / 2;
     this.overlayCamera.updateProjectionMatrix();
-    if (viewportChanged && this.ready && this.state && this.ui) {
+    if (
+      viewportChanged &&
+      this.ready &&
+      this.state &&
+      this.ui &&
+      !this.animations.has("hand-reveal")
+    ) {
       this.render(this.state, [], this.ui);
       return;
     }
@@ -362,6 +369,15 @@ export class MahjongThreeRenderer {
     this.animateOwnDrawEntry = Boolean(this.state && newDrawEntry);
     if (!drawEntryKey) this.animations.resetKey("own-draw-entry");
     const handRevealKey = String(ui.handRevealKey || "");
+    if (
+      handRevealKey &&
+      handRevealKey === this.activeHandRevealKey &&
+      this.animations.has("hand-reveal")
+    ) {
+      this.state = state;
+      this.ui = { ...this.ui, ...ui };
+      return;
+    }
     this.animateHandReveal = this.animations.claim(
       "hand-reveal",
       handRevealKey,
@@ -428,6 +444,7 @@ export class MahjongThreeRenderer {
           Math.max(revealDelay, handRevealDelay),
           crossfadesOwnHand,
         ),
+        handRevealKey,
       );
     }
     if (this.animateDealIn && this.dealInTiles.length) this.startDealIn();
@@ -757,23 +774,30 @@ export class MahjongThreeRenderer {
     settlePresentedTile(hinge, covered);
   }
 
-  startHandReveal(delay = 0) {
+  startHandReveal(delay = 0, key = "") {
+    const revealTiles = this.revealTiles;
+    this.activeHandRevealKey = key;
     this.animations.play({
       id: "hand-reveal",
       delay,
       duration: HAND_REVEAL_FALL_DURATION_MS,
       update: (progress) => {
-        for (const { hinge, covered } of this.revealTiles) {
+        for (const { hinge, covered } of revealTiles) {
           const eased = handRevealFallProgress(progress);
           const { restingRotationX } = presentedTileHingeTransform(covered);
           hinge.rotation.x = restingRotationX * eased;
         }
+      },
+      complete: () => {
+        if (this.activeHandRevealKey !== key) return;
+        this.callbacks?.onHandRevealComplete?.(key);
       },
     });
   }
 
   cancelHandReveal() {
     this.animations.cancel("hand-reveal");
+    this.activeHandRevealKey = "";
   }
 
   prepareOwnHandCrossfade() {

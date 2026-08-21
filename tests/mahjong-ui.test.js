@@ -13,6 +13,7 @@ import {
 import {
   AUTO_DECISION_DELAY_MS,
   DRAW_REVEAL_CARD_DELAY_MS,
+  DRAW_REVEAL_CARD_GAP_MS,
   DRAW_REVEAL_VISIBLE_BASE_MS,
   DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS,
   HAND_INSERTION_DELAY_MS,
@@ -435,7 +436,7 @@ test("mahjong restores its canvas overlay after mobile suspension", () => {
   );
   assert.match(
     renderer,
-    /if \(viewportChanged && this\.ready && this\.state && this\.ui\)/,
+    /viewportChanged[\s\S]*?this\.ready[\s\S]*?this\.state[\s\S]*?this\.ui[\s\S]*?!this\.animations\.has\("hand-reveal"\)/,
   );
   assert.match(renderer, /this\.render\(this\.state, \[\], this\.ui\)/);
   assert.match(
@@ -665,24 +666,29 @@ test("mahjong presentation scheduling cancels insertion before terminal reveal",
   assert.equal(presentation.kanDrawPending, false);
   assert.equal(kanDrawReady, 1);
 
-  presentation.syncResult("10:exhaustive-draw", HAND_END_PRESENTATION_DELAY_MS);
-  const resultTimer = presentation.resultTimer;
+  presentation.syncHandEnd({
+    key: "10:exhaustive-draw",
+    waitForHandReveal: true,
+    showDrawReveal: true,
+    drawRevealDelay: DRAW_REVEAL_CARD_GAP_MS,
+    drawRevealDuration: 1200,
+  });
   assert.equal(presentation.resultVisible, false);
-  presentation.syncResult("10:exhaustive-draw", HAND_END_PRESENTATION_DELAY_MS);
-  assert.equal(presentation.resultTimer, resultTimer);
-  timers.get(resultTimer).callback();
-  assert.equal(presentation.resultVisible, true);
-  assert.equal(resultReady, 1);
-
-  presentation.syncDrawReveal("10:exhaustive-draw", DRAW_REVEAL_CARD_DELAY_MS);
-  const drawRevealTimer = presentation.drawRevealTimer;
   assert.equal(presentation.drawRevealVisible, false);
-  presentation.syncDrawReveal("10:exhaustive-draw", DRAW_REVEAL_CARD_DELAY_MS);
-  assert.equal(presentation.drawRevealTimer, drawRevealTimer);
+  presentation.handRevealSettled("other-hand");
+  assert.equal(presentation.drawRevealTimer, 0);
+  presentation.handRevealSettled("10:exhaustive-draw");
+  const drawRevealTimer = presentation.drawRevealTimer;
+  assert.equal(timers.get(drawRevealTimer).delay, DRAW_REVEAL_CARD_GAP_MS);
   timers.get(drawRevealTimer).callback();
   assert.equal(presentation.drawRevealVisible, true);
   assert.equal(drawRevealReady, 1);
-  presentation.syncDrawReveal("", DRAW_REVEAL_CARD_DELAY_MS);
+  const resultTimer = presentation.resultTimer;
+  assert.equal(timers.get(resultTimer).delay, 1200);
+  timers.get(resultTimer).callback();
+  assert.equal(presentation.resultVisible, true);
+  assert.equal(resultReady, 1);
+  presentation.syncHandEnd(null);
   assert.equal(presentation.drawRevealVisible, false);
 });
 
@@ -1262,7 +1268,7 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     main,
     /return asArray\(current\?\.winners\)\s*\.map\(\(id\) => asArray\(current\.players\)\.indexOf\(id\) \+ 1\)/s,
   );
-  assert.match(main, /handEndPresentationDelay\(state\)/);
+  assert.match(main, /handEndPresentationPlan\(state\)/);
   assert.match(main, /isExhaustiveDrawRevealState\(current\)/);
   assert.match(main, /drawRevealVisibleDuration\(current\)/);
   assert.match(main, /DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS/);
@@ -1270,15 +1276,17 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     main,
     /asArray\(current\?\.result\?\.tenpaiWaits\)\s*\.filter\(\s*\(waits\) => asArray\(waits\)\.length > 0/s,
   );
-  assert.match(main, /presentation\.syncDrawReveal\(/);
+  assert.match(main, /presentation\.syncHandEnd\(/);
+  assert.match(main, /presentation\.handRevealSettled\(key\)/);
+  assert.match(main, /renderPresentationOverlays/);
+  assert.match(renderer, /onHandRevealComplete\?\.\(key\)/);
+  assert.match(renderer, /this\.animations\.has\("hand-reveal"\)/);
+  assert.match(main, /DRAW_REVEAL_CARD_GAP_MS/);
   assert.match(main, /DRAW_REVEAL_CARD_DELAY_MS/);
   assert.match(main, /presentation\.drawRevealVisible/);
   assert.match(main, /current\.result\?\.abortive === true/);
   assert.match(main, /abortive-draw/);
-  assert.match(
-    main,
-    /return current\?\.phase === "hand_ended"\s*\? HAND_END_PRESENTATION_DELAY_MS\s*:\s*0/s,
-  );
+  assert.match(main, /resultDelay: HAND_END_PRESENTATION_DELAY_MS/);
   assert.match(main, /current\.abortiveReason === "九种九牌"/);
   assert.match(main, /exhaustive-draw/);
   assert.match(
@@ -1361,7 +1369,7 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     /function handCoveredPlayerIndices\(current\) \{[\s\S]*?return exhaustive\.covered;[\s\S]*?return \[\];\s*\}/,
   );
   assert.doesNotMatch(main, /!winners\.has\(playerId\)/);
-  assert.match(renderer, /startHandReveal\(delay = 0\)/);
+  assert.match(renderer, /startHandReveal\(delay = 0, key = ""\)/);
   assert.match(
     renderer,
     /this\.revealTiles\.push\(\{ hinge, delay: 0, covered \}\)/,
