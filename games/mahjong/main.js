@@ -1,4 +1,4 @@
-import { createLocalLuaGame } from "../../src/local-lua-game.js";
+import { createLocalLuaGame } from "./local-game-worker-client.js";
 import { createPlayweftSoloClient } from "../../src/playweft-solo-client.js";
 import { Cog, X, createIcons } from "lucide";
 import {
@@ -161,6 +161,7 @@ document.querySelector("#theme-json-example").textContent = JSON.stringify(
 
 let game;
 let gameInitializing = false;
+let actionInFlight = false;
 let state;
 let resultPageIndex = 0;
 let resultPageKey = "";
@@ -949,7 +950,7 @@ async function initialize(matchType = "east") {
       autoActions,
     });
     writeMahjongSoloSave(soloSave);
-    refresh();
+    await refresh(game.initialProjection);
     elements.app.setAttribute("aria-busy", "false");
     elements.setup.hidden = true;
     elements.loading.hidden = true;
@@ -988,20 +989,22 @@ async function resumeSavedMatch() {
       matchId: save.matchId,
       settings: { matchType: save.matchType, rules: save.rules },
     });
+    let projection = restored.initialProjection;
     for (const { action, actorId } of save.actions) {
-      const result = restored.action(action, actorId);
-      if (!result?.accepted) {
+      const outcome = await restored.action(action, actorId);
+      if (!outcome.result?.accepted) {
         throw new Error(
-          `saved action rejected: ${result?.error?.code || "unknown"}`,
+          `saved action rejected: ${outcome.result?.error?.code || "unknown"}`,
         );
       }
+      projection = outcome.projection;
     }
     await visualRendererReady;
     game = restored;
     if (save.playerName) playerName = save.playerName;
     autoActions = { ...save.autoActions };
     syncAutoActionControls();
-    refresh();
+    await refresh(projection);
     // Start BGM only after the restored game and its hand state are live.
     // Starting earlier can be overwritten by asset-pack initialization, and
     // a mid-hand restore has no hand-transition to start it again.
@@ -1166,68 +1169,82 @@ function showLoadingError(message) {
   elements.loadingMessage.hidden = false;
 }
 
-function dispatch(action) {
-  if (!game || !state) return;
+async function dispatch(action) {
+  if (!game || !state || actionInFlight) return;
+  const currentGame = game;
+  actionInFlight = true;
   window.clearTimeout(aiTimer);
-  const result = game.action(action, HUMAN_ID);
-  if (!result?.accepted) {
-    elements.message.textContent = errorMessage(result?.error?.code);
-    elements.message.classList.add("is-error");
-    return;
-  }
-  persistAcceptedAction(action, HUMAN_ID);
-  if (action.type === "next_hand" || action.type === "new_match") {
-    resetAutoActions();
-  }
-  riichiMode = false;
-  selectionBeforeRiichi = 0;
-  selectedTileId = 0;
-  refresh({
-    ownDiscardedTile:
-      action.type === "discard" || action.type === "riichi"
-        ? Number(action.tileId) || 0
-        : 0,
-  });
-  scheduleAi();
-}
-
-function runAiTurn() {
-  if (!game || !state || state.phase === "hand_ended") return;
-  if (state.phase === "claiming") {
-    // Claim-response identity is deliberately hidden from this projection.
-    // Probe the local AI seats; only the currently queried claimant returns an action.
-    for (const actorId of state.players.slice(1)) {
-      const action = game.aiAction(actorId);
-      if (!action) continue;
-      const result = game.action(action, actorId);
-      if (!result?.accepted) {
-        console.error("AI action rejected", actorId, action, result);
-        elements.message.textContent = "AI 动作未通过规则校验";
-        elements.message.classList.add("is-error");
-        return;
-      }
-      persistAcceptedAction(action, actorId);
-      refresh();
-      scheduleAi();
+  try {
+    const outcome = await currentGame.action(action, HUMAN_ID);
+    if (currentGame !== game) return;
+    if (!outcome.result?.accepted) {
+      elements.message.textContent = errorMessage(outcome.result?.error?.code);
+      elements.message.classList.add("is-error");
       return;
     }
-    return;
-  }
-  const seat = activeSeat(state);
-  if (seat === 1 || seat < 1) return;
-  const actorId = state.players[seat - 1];
-  const action = game.aiAction(actorId);
-  if (!action) return;
-  const result = game.action(action, actorId);
-  if (!result?.accepted) {
-    console.error("AI action rejected", actorId, action, result);
-    elements.message.textContent = "AI 动作未通过规则校验";
+    persistAcceptedAction(action, HUMAN_ID);
+    if (action.type === "next_hand" || action.type === "new_match") {
+      resetAutoActions();
+    }
+    riichiMode = false;
+    selectionBeforeRiichi = 0;
+    selectedTileId = 0;
+    await refresh(outcome.projection, {
+      ownDiscardedTile:
+        action.type === "discard" || action.type === "riichi"
+          ? Number(action.tileId) || 0
+          : 0,
+    });
+    scheduleAi();
+  } catch (error) {
+    if (currentGame !== game) return;
+    console.error("Mahjong action failed", error);
+    elements.message.textContent = "动作处理失败，请重试";
     elements.message.classList.add("is-error");
-    return;
+  } finally {
+    actionInFlight = false;
   }
-  persistAcceptedAction(action, actorId);
-  refresh();
-  scheduleAi();
+}
+
+async function runAiTurn() {
+  if (!game || !state || state.phase === "hand_ended" || actionInFlight) return;
+  const currentGame = game;
+  const actorIds =
+    state.phase === "claiming"
+      ? state.players.slice(1)
+      : (() => {
+          const seat = activeSeat(state);
+          return seat > 1 ? [state.players[seat - 1]] : [];
+        })();
+  if (!actorIds.length) return;
+  actionInFlight = true;
+  try {
+    // Claim-response identity is deliberately hidden from the projection. The
+    // worker probes the AI seats against its authoritative state atomically.
+    const outcome = await currentGame.aiTurn(actorIds);
+    if (currentGame !== game || !outcome.action) return;
+    if (!outcome.result?.accepted) {
+      console.error(
+        "AI action rejected",
+        outcome.actorId,
+        outcome.action,
+        outcome.result,
+      );
+      elements.message.textContent = "AI 动作未通过规则校验";
+      elements.message.classList.add("is-error");
+      return;
+    }
+    persistAcceptedAction(outcome.action, outcome.actorId);
+    await refresh(outcome.projection);
+    scheduleAi();
+  } catch (error) {
+    if (currentGame !== game) return;
+    console.error("Mahjong AI worker failed", error);
+    elements.message.textContent = "AI 思考失败，请刷新页面重试";
+    elements.message.classList.add("is-error");
+  } finally {
+    actionInFlight = false;
+  }
 }
 
 function scheduleAi() {
@@ -1262,9 +1279,11 @@ function scheduleAi() {
   aiTimer = window.setTimeout(runAiTurn, AI_DELAY_MS);
 }
 
-function refresh({ ownDiscardedTile = 0 } = {}) {
+async function refresh(projection, { ownDiscardedTile = 0 } = {}) {
+  const currentGame = game;
+  if (!projection) projection = await currentGame?.view(HUMAN_ID);
+  if (!projection || currentGame !== game) return;
   const previousState = state;
-  const projection = game.view(HUMAN_ID);
   state = projection.state;
   syncMatchMusicForHandState(previousState, state);
   if (riichiMode && !state.legalActions?.canRiichi) {
