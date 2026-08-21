@@ -98,7 +98,7 @@
   display: grid;
   width: max-content;
   gap: 16px;
-  padding: 24px 28px;
+  padding: 12px 28px;
   border: 1px solid rgba(239, 207, 132, 0.62);
   border-radius: 12px;
   background: linear-gradient(
@@ -110,6 +110,7 @@
     0 8px 24px rgba(0, 0, 0, 0.46),
     inset 0 0 0 2px rgba(255, 255, 255, 0.035);
   color: #f8edcf;
+  overflow: visible;
   pointer-events: none;
   backdrop-filter: blur(14px);
   transform: translateX(-50%);
@@ -140,14 +141,32 @@
 }
 
 .tenpai-wait {
+  position: relative;
   display: grid;
-  gap: 5px;
+  gap: 8px;
   justify-items: center;
+}
+
+.tenpai-no-yaku {
+  position: absolute;
+  z-index: 1;
+  top: -32px;
+  left: 50%;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #d32f2f;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translateX(-50%);
 }
 
 .tenpai-wait-count {
   color: #f5e8c8;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 750;
   line-height: 1;
   white-space: nowrap;

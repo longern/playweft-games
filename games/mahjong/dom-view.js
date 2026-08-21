@@ -164,7 +164,7 @@ export class MahjongDomView {
         item.className = "tenpai-wait";
         item.setAttribute(
           "aria-label",
-          `${tileFace(wait.type).label}，剩余 ${wait.remaining} 张`,
+          `${tileFace(wait.type).label}，剩余 ${wait.remaining} 张${wait.noYaku ? "，荣和无役" : ""}`,
         );
         const tile = createTile(wait.type, "tenpai-wait");
         markDora(tile, wait.type, this.doraCounts);
@@ -173,6 +173,13 @@ export class MahjongDomView {
         count.className = "tenpai-wait-count";
         count.classList.toggle("is-empty", wait.remaining === 0);
         count.textContent = `${wait.remaining} 张`;
+        if (wait.noYaku) {
+          const noYaku = document.createElement("small");
+          noYaku.className = "tenpai-no-yaku";
+          noYaku.textContent = "无役";
+          noYaku.setAttribute("aria-hidden", "true");
+          item.append(noYaku);
+        }
         item.append(tile, count);
         return item;
       }),

@@ -371,6 +371,45 @@ test("Mahjong projects waits and remaining copies for every tenpai discard", asy
   });
 });
 
+test("Mahjong marks waits that have no yaku on ron", async () => {
+  const result = await runScenario(`
+    function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+    function discard_option(legal, tile_id)
+      for _, option in ipairs(legal.tenpaiDiscards) do
+        if option.tileId == tile_id then return option end
+      end
+      return nil
+    end
+
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000055" } })
+    state.dealerIndex = 1
+    state.hands.p1 = ids({ 1,1,1, 11,11,11, 3,4,5, 30,30,31,31 })
+    state.drawnTile, state.turnIndex = 25, 1
+    local option = discard_option(legal_actions(state, "p1"), 25)
+    local waits = {}
+    for _, wait in ipairs(option.waits) do
+      waits[wait.type] = wait.noYaku
+    end
+    state.drawnTile = 117
+    result = {
+      ronWindHasNoYaku = waits[30] == true,
+      tsumoWindCanWin = legal_actions(state, "p1").canTsumo == true,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    ronWindHasNoYaku: true,
+    tsumoWindCanWin: true,
+  });
+});
+
 test("Mahjong records each exhaustive-draw tenpai player's waiting tile types", async () => {
   const result = await runScenario(`
     function ids(types)

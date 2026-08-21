@@ -904,15 +904,15 @@ test("mahjong previews waits and visible-copy counts for the selected discard", 
         tileId: 42,
         furiten: true,
         waits: [
-          { type: 9, remaining: 3 },
-          { type: 28, remaining: 0 },
+          { type: 9, remaining: 3, noYaku: true },
+          { type: 28, remaining: 0, noYaku: false },
         ],
       },
     ],
   };
   assert.deepEqual(tenpaiWaitsForDiscard(legalActions, 42), [
-    { type: 9, remaining: 3 },
-    { type: 28, remaining: 0 },
+    { type: 9, remaining: 3, noYaku: true },
+    { type: 28, remaining: 0, noYaku: false },
   ]);
   assert.deepEqual(tenpaiWaitsForDiscard(legalActions, 41), []);
   assert.deepEqual(tenpaiWaitsForDiscard({}, 42), []);
@@ -940,12 +940,20 @@ test("mahjong previews waits and visible-copy counts for the selected discard", 
     view,
     /count\.classList\.toggle\("is-empty", wait\.remaining === 0\)/,
   );
+  assert.match(view, /wait\.noYaku/);
+  assert.match(view, /noYaku\.className = "tenpai-no-yaku"/);
   assert.match(
     styles,
-    /\.tenpai-preview\s*\{[\s\S]*?bottom:\s*128px;[\s\S]*?left:\s*50%;[\s\S]*?gap:\s*16px;[\s\S]*?padding:\s*24px 28px;/,
+    /\.tenpai-preview\s*\{[\s\S]*?bottom:\s*128px;[\s\S]*?left:\s*50%;[\s\S]*?gap:\s*16px;[\s\S]*?padding:\s*12px 28px;/,
   );
   assert.match(styles, /\.tenpai-wait-list\s*\{[\s\S]*?grid-template-columns:/);
   assert.match(styles, /\.tenpai-wait-count\.is-empty/);
+  assert.match(
+    styles,
+    /\.tenpai-no-yaku\s*\{[\s\S]*?position: absolute;[\s\S]*?top: -32px;[\s\S]*?background: #d32f2f;[\s\S]*?color: #fff;[\s\S]*?font-size: 18px;/,
+  );
+  assert.match(styles, /\.tenpai-wait\s*\{[\s\S]*?gap: 8px;/);
+  assert.match(styles, /\.tenpai-wait-count\s*\{[\s\S]*?font-size: 18px;/);
   assert.match(
     styles,
     /\.tenpai-preview\.is-furiten\s*\{[\s\S]*?background:\s*var\(--mahjong-warning-fill\);[\s\S]*?color:\s*var\(--mahjong-warning-text\);/,

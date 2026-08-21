@@ -920,9 +920,10 @@ local function special_score(state, seat, hand, melds, method)
 	return { yaku = yaku, han = han, fu = 25, yakuman = yakuman }
 end
 
-local function score_hand(state, seat, winning_tile, method)
+local function score_hand(state, seat, winning_tile, method, hand_override, melds_override)
 	local player_id = state.players[seat]
-	local hand, melds = copy_array(state.hands[player_id]), state.melds[player_id]
+	local hand = copy_array(hand_override or state.hands[player_id])
+	local melds = melds_override or state.melds[player_id]
 	if method == "ron" then
 		hand[#hand + 1] = winning_tile
 	elseif state.drawnTile and state.drawnTile > 0 then
@@ -2270,15 +2271,23 @@ local function tenpai_discard_options(state, player_id, discard_waits, forbidden
 		local allowed = not (forbidden and forbidden[tile_type(tile_id)])
 			and (not state.riichi[player_id] or tile_id == state.drawnTile)
 		if allowed then
+			local candidate_hand = copy_array(hand)
+			remove_tile(candidate_hand, tile_id)
 			local waits = {}
 			for _, kind in ipairs(entry.waits) do
 				waits[#waits + 1] = {
 					type = kind,
 					remaining = math.max(0, 4 - (visible[kind] or 0)),
+					noYaku = score_hand(
+						state,
+						seat,
+						(kind - 1) * 4 + 1,
+						"ron",
+						candidate_hand,
+						melds
+					) == nil,
 				}
 			end
-			local candidate_hand = copy_array(hand)
-			remove_tile(candidate_hand, tile_id)
 			local profile = tenpai_wait_profile(
 				state,
 				seat,

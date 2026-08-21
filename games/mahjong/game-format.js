@@ -91,6 +91,7 @@ export function tenpaiWaitsForDiscard(legalActions, tileId) {
     .map((wait) => ({
       type: Number(wait?.type) || 0,
       remaining: Math.max(0, Math.min(4, Math.trunc(Number(wait?.remaining) || 0))),
+      noYaku: wait?.noYaku === true,
     }))
     .filter((wait) => wait.type >= 1 && wait.type <= 34);
 }
