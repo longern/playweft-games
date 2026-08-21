@@ -1359,7 +1359,10 @@ function renderCurrentState({ animateDealIn = false } = {}) {
     resultHandRenderer.hide();
     renderMatchSummary();
   } else {
-    resultHandRenderer.render(renderState, resultPageIndex, playerName);
+    resultHandRenderer.render(renderState, resultPageIndex, playerName, {
+      defaultNames: getMahjongDefaultNames(),
+      playerNameIsAuthoritative: hasPlatformName,
+    });
   }
   applyPackAvatars(renderState);
   visualRenderer.render(renderState, visibleEvents, {
@@ -1456,8 +1459,15 @@ async function continueResult() {
       outgoing.setAttribute("aria-hidden", "true");
       elements.resultTrack.prepend(outgoing);
       resultPageIndex += 1;
-      domView.renderResult(state, playerName, true, resultPageIndex);
-      resultHandRenderer.render(state, resultPageIndex, playerName);
+      const defaultNames = getMahjongDefaultNames();
+      domView.renderResult(state, playerName, true, resultPageIndex, {
+        defaultNames,
+        playerNameIsAuthoritative: hasPlatformName,
+      });
+      resultHandRenderer.render(state, resultPageIndex, playerName, {
+        defaultNames,
+        playerNameIsAuthoritative: hasPlatformName,
+      });
       void elements.resultTrack.offsetWidth;
       elements.resultTrack.classList.add("is-step-advancing");
       await waitForAnimation(
@@ -1533,7 +1543,10 @@ function hideMatchSummary() {
 }
 
 function renderMatchSummary() {
-  const rows = matchResultRows(state, playerName);
+  const rows = matchResultRows(state, playerName, {
+    defaultNames: getMahjongDefaultNames(),
+    playerNameIsAuthoritative: hasPlatformName,
+  });
   const winner = rows[0];
   if (!winner) return;
   elements.matchSummaryRows.replaceChildren(

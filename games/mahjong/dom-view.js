@@ -9,6 +9,7 @@ import {
   isRedFive,
   orderedHand,
   partitionClaimActions,
+  playerDisplayName,
   riverDisplayEntries,
   roundLabel,
   resultDetailPageCount,
@@ -113,10 +114,16 @@ export class MahjongDomView {
     this.renderRivers(state, events);
     this.renderMelds(state);
     this.renderActions(state, selectedTileId, riichiMode);
-    this.renderStatus(state, events, playerName);
+    this.renderStatus(state, events, playerName, {
+      defaultNames,
+      playerNameIsAuthoritative,
+    });
     this.renderDrawReveal(state, showDrawReveal);
     if (!preserveResult) {
-      this.renderResult(state, playerName, showResult, resultPage);
+      this.renderResult(state, playerName, showResult, resultPage, {
+        defaultNames,
+        playerNameIsAuthoritative,
+      });
     }
   }
 
@@ -513,13 +520,19 @@ export class MahjongDomView {
     return group;
   }
 
-  renderStatus(state, events, playerName) {
+  renderStatus(
+    state,
+    events,
+    playerName,
+    { defaultNames = {}, playerNameIsAuthoritative = false } = {},
+  ) {
     if (state.phase === "hand_ended") return;
     const seat = activeSeat(state);
-    const name =
-      seat === 1
-        ? playerName
-        : state.playerNames?.[seat - 1] || PLAYERS[seat - 1]?.name;
+    const name = playerDisplayName(state, seat, {
+      playerName,
+      defaultNames,
+      playerNameIsAuthoritative,
+    });
     this.elements.heading.textContent =
       state.phase === "claiming"
         ? seat === 1
@@ -541,6 +554,7 @@ export class MahjongDomView {
         state,
         event,
         playerName,
+        { defaultNames, playerNameIsAuthoritative },
       );
       this.elements.message.classList.remove("is-pulsing");
       void this.elements.message.offsetWidth;
@@ -553,7 +567,13 @@ export class MahjongDomView {
     }
   }
 
-  renderResult(state, playerName, showResult = true, pageIndex = 0) {
+  renderResult(
+    state,
+    playerName,
+    showResult = true,
+    pageIndex = 0,
+    { defaultNames = {}, playerNameIsAuthoritative = false } = {},
+  ) {
     const { elements } = this;
     const ended = state.phase === "hand_ended";
     elements.result.hidden = !ended || !showResult;
@@ -579,7 +599,11 @@ export class MahjongDomView {
       state.players.indexOf(state.winners?.[safePage]) + 1 ||
       Number(state.winnerIndex) ||
       1;
-    const winnerName = playerDisplayName(state, winnerIndex, playerName);
+    const winnerName = playerDisplayName(state, winnerIndex, {
+      playerName,
+      defaultNames,
+      playerNameIsAuthoritative,
+    });
     elements.resultDetailHands.hidden = false;
     elements.resultDetailHands.replaceChildren(
       createResultHand(state, winnerIndex, winnerName, false, this.doraCounts),
@@ -643,15 +667,6 @@ export class MahjongDomView {
     elements.resultDetailContent.hidden = true;
     elements.resultScoreContent.hidden = false;
   }
-}
-
-function playerDisplayName(state, winnerIndex, playerName) {
-  const index = Number(winnerIndex) - 1;
-  return index === 0
-    ? playerName
-    : state.playerNames?.[index] ||
-        PLAYERS[index]?.name ||
-        `玩家${winnerIndex}`;
 }
 
 function createResultHand(

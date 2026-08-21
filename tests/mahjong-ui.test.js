@@ -32,6 +32,8 @@ import {
   opponentHandLayout,
   orderedHand,
   partitionClaimActions,
+  playerDisplayName,
+  playerDisplayNames,
   nextDoraType,
   roundLabel,
   resultBasePaymentTotal,
@@ -44,6 +46,7 @@ import {
   tenpaiDiscardFuriten,
   tenpaiWaitsForDiscard,
 } from "../games/mahjong/game-format.js";
+
 import {
   fixedViewportScale,
   MAHJONG_VIEWPORT,
@@ -134,6 +137,43 @@ function readMahjongStyles() {
     ),
   ).join("\n");
 }
+
+test("mahjong shares asset-pack names across result views", () => {
+  const state = {
+    players: ["self", "right", "opposite", "left"],
+    playerNames: ["你", "青岚", "织羽", "墨池"],
+    scores: [25_000, 25_000, 25_000, 25_000],
+  };
+  const options = {
+    playerName: "平台昵称",
+    defaultNames: {
+      self: "诺亚",
+      right: "潮獭",
+      opposite: "兰",
+      left: "罗斯",
+    },
+    playerNameIsAuthoritative: false,
+  };
+  assert.equal(playerDisplayName(state, 3, options), "兰");
+  assert.deepEqual(playerDisplayNames(state, options), [
+    "诺亚",
+    "潮獭",
+    "兰",
+    "罗斯",
+  ]);
+  assert.deepEqual(
+    matchResultRows(state, "平台昵称", options).map((entry) => entry.name),
+    ["诺亚", "潮獭", "兰", "罗斯"],
+  );
+  assert.deepEqual(
+    resultScoreRows(
+      { ...state, result: { deltas: [0, 0, 0, 0] } },
+      "平台昵称",
+      options,
+    ).map((entry) => entry.name),
+    ["诺亚", "潮獭", "兰", "罗斯"],
+  );
+});
 
 test("mahjong gives each new river tile one quiet perspective sound cue", () => {
   const state = {

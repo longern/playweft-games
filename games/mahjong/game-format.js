@@ -321,10 +321,53 @@ export function roundLabel(roundWind, handNumber) {
   return `${roundWinds[Number(roundWind) - 1] ?? "東"}${["一", "二", "三", "四"][Number(handNumber) - 1] ?? "一"}局`;
 }
 
-export function eventMessage(state, event, playerName) {
-  const name = event.playerIndex === 1
-    ? playerName
-    : state.playerNames?.[event.playerIndex - 1] || PLAYERS[event.playerIndex - 1]?.name;
+const DEFAULT_NAME_SLOTS = ["self", "right", "opposite", "left"];
+
+export function playerDisplayName(
+  state,
+  seat,
+  {
+    playerName = "你",
+    defaultNames = {},
+    playerNameIsAuthoritative = true,
+  } = {},
+) {
+  const index = Number(seat) - 1;
+  if (index < 0 || index >= PLAYERS.length) return `玩家${seat}`;
+  if (index === 0 && playerNameIsAuthoritative && playerName) {
+    return playerName;
+  }
+  const stateName = state?.playerNames?.[index];
+  const builtInName = PLAYERS[index]?.name;
+  const packName = defaultNames?.[DEFAULT_NAME_SLOTS[index]];
+  if (stateName && stateName !== builtInName) return stateName;
+  return packName || stateName || builtInName || `玩家${seat}`;
+}
+
+export function playerDisplayNames(
+  state,
+  { playerName = "你", defaultNames = {}, playerNameIsAuthoritative = true } = {},
+) {
+  return PLAYERS.map((_, index) =>
+    playerDisplayName(state, index + 1, {
+      playerName,
+      defaultNames,
+      playerNameIsAuthoritative,
+    }),
+  );
+}
+
+export function eventMessage(
+  state,
+  event,
+  playerName,
+  { defaultNames = {}, playerNameIsAuthoritative = true } = {},
+) {
+  const name = playerDisplayName(state, event.playerIndex, {
+    playerName,
+    defaultNames,
+    playerNameIsAuthoritative,
+  });
   if (event.type === "discarded") return `${name} 打出 ${tileFace(event.tile).label}`;
   if (event.type === "claimed") return `${name} ${CLAIM_LABELS[event.kind] ?? "鸣牌"}`;
   if (event.type === "drew") return event.playerIndex === 1 ? "你摸了一张牌" : `${name} 摸牌`;
@@ -358,29 +401,39 @@ export function resultDetailPageCount(state) {
   return results.length || (state.result ? 1 : 0);
 }
 
-export function resultScoreRows(state, playerName) {
+export function resultScoreRows(
+  state,
+  playerName,
+  { defaultNames = {}, playerNameIsAuthoritative = true } = {},
+) {
   const scores = asArray(state?.scores);
   const deltas = asArray(state?.result?.deltas);
   return scores.map((score, index) => {
     const after = Number(score) || 0;
     const delta = Number(deltas[index]) || 0;
-    const name =
-      index === 0
-        ? playerName
-        : state.playerNames?.[index] ?? PLAYERS[index].name;
+    const name = playerDisplayName(state, index + 1, {
+      playerName,
+      defaultNames,
+      playerNameIsAuthoritative,
+    });
     return { name, before: after - delta, delta, after };
   });
 }
 
-export function matchResultRows(state, playerName) {
+export function matchResultRows(
+  state,
+  playerName,
+  { defaultNames = {}, playerNameIsAuthoritative = true } = {},
+) {
   return asArray(state?.scores)
     .slice(0, 4)
     .map((score, index) => ({
       seat: index + 1,
-      name:
-        index === 0
-          ? playerName
-          : state.playerNames?.[index] ?? PLAYERS[index].name,
+      name: playerDisplayName(state, index + 1, {
+        playerName,
+        defaultNames,
+        playerNameIsAuthoritative,
+      }),
       score: Number(score) || 0,
     }))
     .sort((left, right) => right.score - left.score || left.seat - right.seat)

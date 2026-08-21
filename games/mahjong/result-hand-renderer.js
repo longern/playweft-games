@@ -32,6 +32,8 @@ import { afterWindowLoad } from "./deferred-visual-assets.js";
 import {
   asArray,
   doraTypeCounts,
+  playerDisplayName,
+  playerDisplayNames,
   resultDetailPageCount,
   resultBasePaymentTotal,
   resultIndicatorSlots,
@@ -360,10 +362,16 @@ export class MahjongResultHandRenderer {
     this.drawFrame();
   }
 
-  render(state, pageIndex = 0, playerName = "你") {
-    this.lastRender = [state, pageIndex, playerName];
+  render(
+    state,
+    pageIndex = 0,
+    playerName = "你",
+    { defaultNames = {}, playerNameIsAuthoritative = false } = {},
+  ) {
+    const options = { defaultNames, playerNameIsAuthoritative };
+    this.lastRender = [state, pageIndex, playerName, options];
     if (!this.ready) {
-      this.pendingRender = [state, pageIndex, playerName];
+      this.pendingRender = [state, pageIndex, playerName, options];
       return;
     }
     this.pendingRender = null;
@@ -378,7 +386,7 @@ export class MahjongResultHandRenderer {
     this.showStartButton("继续");
 
     if (safePage >= detailCount) {
-      this.renderScoreSheet(state, playerName);
+      this.renderScoreSheet(state, playerName, options);
       return;
     }
     this.cancelScoreSheetRender();
@@ -410,7 +418,10 @@ export class MahjongResultHandRenderer {
     this.syncDoraBreathing();
     this.paper.render({
       yaku: asArray(result.yaku),
-      winnerName: state.playerNames?.[winnerIndex - 1] || `玩家${winnerIndex}`,
+      winnerName: playerDisplayName(state, winnerIndex, {
+        playerName,
+        ...options,
+      }),
       winType: state.winType,
       fu: result.fu,
       han: result.han,
@@ -419,7 +430,11 @@ export class MahjongResultHandRenderer {
     this.drawFrame();
   }
 
-  renderScoreSheet(state, playerName) {
+  renderScoreSheet(
+    state,
+    playerName,
+    { defaultNames = {}, playerNameIsAuthoritative = false } = {},
+  ) {
     if (!this.scoreHost) {
       this.hide();
       return;
@@ -432,13 +447,11 @@ export class MahjongResultHandRenderer {
     this.scoreHost.prepend(this.renderer.domElement);
     this.scoreHost.classList.add("is-three-result-rendered");
     const sheet = {
-      playerNames: [
+      playerNames: playerDisplayNames(state, {
         playerName,
-        ...Array.from(
-          { length: 3 },
-          (_, index) => state.playerNames?.[index + 1] ?? `玩家${index + 2}`,
-        ),
-      ],
+        defaultNames,
+        playerNameIsAuthoritative,
+      }),
       rows: resultScoreSheetRows(state),
       portraitSources: renderedStationPortraitSources(),
     };
