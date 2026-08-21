@@ -33,6 +33,12 @@ async function handle(type, payload) {
   }
   if (!game) throw new Error("Mahjong worker is not initialized");
   if (type === "view") return game.view(payload.viewerId);
+  if (type === "checkpoint") return game.checkpoint();
+  if (type === "restoreCheckpoint") {
+    return {
+      projection: game.restoreCheckpoint(payload.checkpoint, payload.viewerId),
+    };
+  }
   if (type === "action") {
     const result = game.action(payload.action, payload.actorId);
     return {

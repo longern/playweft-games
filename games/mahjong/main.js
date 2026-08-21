@@ -68,8 +68,11 @@ import {
   appendMahjongSoloAction,
   clearMahjongSoloSave,
   createMahjongSoloSave,
+  MAHJONG_SOLO_CHECKPOINT_VERSION,
+  MAHJONG_SOLO_ENGINE_CHECKPOINT_VERSION,
   readMahjongSoloSave,
   setMahjongSoloAutoActions,
+  setMahjongSoloCheckpoint,
   writeMahjongSoloSave,
 } from "./solo-save.js";
 import { mahjongInitialEntry } from "./entry-flow.js";
@@ -1000,7 +1003,17 @@ async function resumeSavedMatch() {
       settings: { matchType: save.matchType, rules: save.rules },
     });
     let projection = restored.initialProjection;
-    for (const { action, actorId } of save.actions) {
+    let actions = save.actions;
+    if (save.checkpoint) {
+      try {
+        const restoredCheckpoint = await restored.restoreCheckpoint(save.checkpoint);
+        projection = restoredCheckpoint.projection;
+        actions = save.actions.slice(save.checkpoint.actionIndex);
+      } catch (checkpointError) {
+        console.warn("Mahjong save checkpoint was unusable; replaying full log", checkpointError);
+      }
+    }
+    for (const { action, actorId } of actions) {
       const outcome = await restored.action(action, actorId);
       if (!outcome.result?.accepted) {
         throw new Error(
@@ -1035,10 +1048,25 @@ async function resumeSavedMatch() {
   }
 }
 
-function persistAcceptedAction(action, actorId) {
+async function persistAcceptedAction(action, actorId, projection, currentGame = game) {
   if (!soloSave) return;
-  const next = appendMahjongSoloAction(soloSave, action, actorId);
+  let next = appendMahjongSoloAction(soloSave, action, actorId);
   if (!next) return;
+  if (projection?.state?.phase === "hand_ended" && currentGame) {
+    try {
+      const snapshot = await currentGame.checkpoint();
+      next = setMahjongSoloCheckpoint(next, {
+        formatVersion: MAHJONG_SOLO_CHECKPOINT_VERSION,
+        actionIndex: next.actions.length,
+        state: snapshot.state,
+        events: snapshot.events,
+        engineVersion: MAHJONG_SOLO_ENGINE_CHECKPOINT_VERSION,
+        stateVersion: snapshot.version,
+      }) || next;
+    } catch (error) {
+      console.warn("Mahjong save checkpoint failed; keeping the action log", error);
+    }
+  }
   soloSave = next;
   writeMahjongSoloSave(soloSave);
 }
@@ -1193,7 +1221,7 @@ async function dispatch(action) {
       elements.message.classList.add("is-error");
       return;
     }
-    persistAcceptedAction(action, HUMAN_ID);
+    await persistAcceptedAction(action, HUMAN_ID, outcome.projection, currentGame);
     if (action.type === "next_hand" || action.type === "new_match") {
       resetAutoActions();
     }
@@ -1245,7 +1273,12 @@ async function runAiTurn() {
       elements.message.classList.add("is-error");
       return;
     }
-    persistAcceptedAction(outcome.action, outcome.actorId);
+    await persistAcceptedAction(
+      outcome.action,
+      outcome.actorId,
+      outcome.projection,
+      currentGame,
+    );
     await refresh(outcome.projection);
     scheduleAi();
   } catch (error) {
@@ -1674,7 +1707,7 @@ async function advanceFromResult(action) {
     elements.message.classList.add("is-error");
     return false;
   }
-  persistAcceptedAction(action, HUMAN_ID);
+  await persistAcceptedAction(action, HUMAN_ID, outcome.projection, currentGame);
   resetAutoActions();
   riichiMode = false;
   selectionBeforeRiichi = 0;

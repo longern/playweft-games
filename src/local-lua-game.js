@@ -92,6 +92,24 @@ function __playweft_local_ai_action(actor_id)
   if type(ai_action) ~= "function" then return nil end
   return ai_action(__local_state, actor_id)
 end
+
+function __playweft_local_checkpoint()
+  return {
+    state = __local_state,
+    events = __local_events,
+    version = __local_version,
+  }
+end
+
+function __playweft_local_restore(checkpoint, viewer_id, server_time)
+  if type(checkpoint) ~= "table" or type(checkpoint.state) ~= "table" then
+    error("Invalid local game checkpoint")
+  end
+  __local_state = checkpoint.state
+  __local_events = type(checkpoint.events) == "table" and checkpoint.events or {}
+  __local_version = math.max(0, math.floor(tonumber(checkpoint.version) or 0))
+  return __playweft_local_view(viewer_id, server_time)
+end
 `;
 
 /**
@@ -127,6 +145,8 @@ export async function createLocalLuaGame({
     const readView = lua.global.get("__playweft_local_view");
     const applyAction = lua.global.get("__playweft_local_action");
     const chooseAiAction = lua.global.get("__playweft_local_ai_action");
+    const createCheckpoint = lua.global.get("__playweft_local_checkpoint");
+    const restoreCheckpoint = lua.global.get("__playweft_local_restore");
     const context = {
       protocolVersion: 1,
       players: players.map((player, index) => ({
@@ -159,6 +179,22 @@ export async function createLocalLuaGame({
       aiAction(actorId) {
         ensureOpen(closed);
         return chooseAiAction(actorId);
+      },
+      checkpoint() {
+        ensureOpen(closed);
+        return createCheckpoint();
+      },
+      restoreCheckpoint(checkpoint, viewerId = playerId) {
+        ensureOpen(closed);
+        return restoreCheckpoint(
+          {
+            state: checkpoint?.state,
+            events: checkpoint?.events,
+            version: checkpoint?.stateVersion,
+          },
+          viewerId,
+          Date.now(),
+        );
       },
       close() {
         if (closed) return;

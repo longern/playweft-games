@@ -8,6 +8,7 @@ import {
   createMahjongSoloSave,
   readMahjongSoloSave,
   setMahjongSoloAutoActions,
+  setMahjongSoloCheckpoint,
   writeMahjongSoloSave,
 } from "../games/mahjong/solo-save.js";
 
@@ -102,4 +103,74 @@ test("mahjong solo saves retain per-hand automatic actions", () => {
     readMahjongSoloSave(storage)?.autoActions,
     updated.autoActions,
   );
+});
+
+test("mahjong solo saves restore from a validated hand-end checkpoint", () => {
+  const first = appendMahjongSoloAction(
+    createSave(),
+    { type: "discard", tileId: 41 },
+    "human",
+  );
+  const saved = setMahjongSoloCheckpoint(first, {
+    formatVersion: 1,
+    actionIndex: 1,
+    state: { phase: "hand_ended", scores: [25000, 25000, 25000, 25000] },
+    events: [{ type: "win" }],
+    engineVersion: 1,
+    stateVersion: 17,
+  });
+  assert.ok(saved?.checkpoint);
+  assert.equal(saved.checkpoint.actionIndex, 1);
+  assert.equal(saved.actions.length, 1);
+  assert.deepEqual(
+    readMahjongSoloSave({
+      getItem() {
+        return JSON.stringify(saved);
+      },
+    })?.checkpoint,
+    saved.checkpoint,
+  );
+});
+
+test("mahjong solo saves ignore malformed checkpoints and retain full replay", () => {
+  const saved = createSave({
+    actions: [{ action: { type: "discard", tileId: 41 }, actorId: "human" }],
+  });
+  const storage = createStorage();
+  storage.setItem(
+    MAHJONG_SOLO_SAVE_KEY,
+    JSON.stringify({
+      ...saved,
+      checkpoint: {
+        formatVersion: 1,
+        actionIndex: 2,
+        state: {},
+        events: [],
+        engineVersion: 1,
+        stateVersion: 1,
+      },
+    }),
+  );
+  const restored = readMahjongSoloSave(storage);
+  assert.ok(restored);
+  assert.equal(restored.checkpoint, null);
+  assert.equal(restored.actions.length, 1);
+});
+
+test("mahjong solo saves upgrade version-one action logs without a checkpoint", () => {
+  const storage = createStorage();
+  storage.setItem(
+    MAHJONG_SOLO_SAVE_KEY,
+    JSON.stringify({
+      ...createSave({
+        actions: [{ action: { type: "discard", tileId: 41 }, actorId: "human" }],
+      }),
+      version: 1,
+    }),
+  );
+  const restored = readMahjongSoloSave(storage);
+  assert.ok(restored);
+  assert.equal(restored.version, 2);
+  assert.equal(restored.checkpoint, null);
+  assert.equal(restored.actions.length, 1);
 });

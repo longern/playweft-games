@@ -1,5 +1,8 @@
 export const MAHJONG_SOLO_SAVE_KEY = "playweft.mahjong.solo-save.v1";
-export const MAHJONG_SOLO_SAVE_VERSION = 1;
+export const MAHJONG_SOLO_SAVE_VERSION = 2;
+export const MAHJONG_SOLO_CHECKPOINT_VERSION = 1;
+// Increment only when a game.lua state change cannot read an older raw state.
+export const MAHJONG_SOLO_ENGINE_CHECKPOINT_VERSION = 1;
 
 export function readMahjongSoloSave(storage = safeLocalStorage()) {
   if (!storage) return null;
@@ -71,6 +74,14 @@ export function appendMahjongSoloAction(save, action, actorId) {
   };
 }
 
+export function setMahjongSoloCheckpoint(save, checkpoint) {
+  const normalized = normalizeSave(save);
+  if (!normalized) return null;
+  const nextCheckpoint = normalizeCheckpoint(checkpoint, normalized.actions.length);
+  if (!nextCheckpoint) return null;
+  return { ...normalized, checkpoint: nextCheckpoint };
+}
+
 export function setMahjongSoloAutoActions(save, autoActions) {
   const normalized = normalizeSave(save);
   if (!normalized) return null;
@@ -81,7 +92,10 @@ export function setMahjongSoloAutoActions(save, autoActions) {
 }
 
 function normalizeSave(value) {
-  if (!isPlainObject(value) || value.version !== MAHJONG_SOLO_SAVE_VERSION) {
+  if (
+    !isPlainObject(value) ||
+    (value.version !== 1 && value.version !== MAHJONG_SOLO_SAVE_VERSION)
+  ) {
     return null;
   }
   if (!/^[0-9a-f]{32}$/.test(value.randomSeed ?? "")) return null;
@@ -101,6 +115,32 @@ function normalizeSave(value) {
       actorId,
     })),
     autoActions: normalizeAutoActions(value.autoActions),
+    checkpoint: normalizeCheckpoint(value.checkpoint, value.actions.length),
+  };
+}
+
+function normalizeCheckpoint(value, actionCount) {
+  if (!isPlainObject(value)) return null;
+  if (value.formatVersion !== MAHJONG_SOLO_CHECKPOINT_VERSION) return null;
+  if (
+    !Number.isSafeInteger(value.actionIndex) ||
+    value.actionIndex < 0 ||
+    value.actionIndex > actionCount ||
+    !isPlainObject(value.state) ||
+    (!Array.isArray(value.events) && !isPlainObject(value.events)) ||
+    value.engineVersion !== MAHJONG_SOLO_ENGINE_CHECKPOINT_VERSION ||
+    !Number.isSafeInteger(value.stateVersion) ||
+    value.stateVersion < 0
+  ) {
+    return null;
+  }
+  return {
+    formatVersion: MAHJONG_SOLO_CHECKPOINT_VERSION,
+    actionIndex: value.actionIndex,
+    state: structuredClone(value.state),
+    events: structuredClone(value.events),
+    engineVersion: MAHJONG_SOLO_ENGINE_CHECKPOINT_VERSION,
+    stateVersion: value.stateVersion,
   };
 }
 
