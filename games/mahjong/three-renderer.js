@@ -58,6 +58,7 @@ import { ThreeMahjongTable } from "./render/three-table.js";
 import { ThreeAnimationController } from "./render/three-animation-controller.js";
 import {
   HAND_REVEAL_FALL_DURATION_MS,
+  NEW_HAND_DEAL_DURATION_MS,
   OWN_HAND_CROSSFADE_DURATION_MS,
   OWN_DRAW_ENTRY_DURATION_MS,
   OWN_TILE_HOVER_DURATION_MS,
@@ -65,6 +66,7 @@ import {
   OWN_TILE_SELECTION_DURATION_MS,
   handRevealStartDelay,
   handRevealFallProgress,
+  newHandDealProgress,
   ownHandCrossfadeProgress,
   ownDrawEntryKey,
   ownDrawEntryProgress,
@@ -89,6 +91,8 @@ export class MahjongThreeRenderer {
     this.ownHandCrossfade = null;
     this.ownDrawAnimation = null;
     this.ownTileMotions = [];
+    this.dealInTiles = [];
+    this.dealInAnimation = null;
     this.ownTileRecords = new Map();
     this.activeOwnTileIds = new Set();
     this.highlightableTiles = new Set();
@@ -358,6 +362,13 @@ export class MahjongThreeRenderer {
       ui.animateHandReveal,
     );
     if (!handRevealKey) this.animations.resetKey("hand-reveal");
+    const dealInKey = String(ui.dealInKey || "");
+    this.animateDealIn = this.animations.claim(
+      "new-hand-deal",
+      dealInKey,
+      ui.animateDealIn,
+    );
+    if (!dealInKey) this.animations.resetKey("new-hand-deal");
     this.state = state;
     this.ui = ui;
     this.highlightedType =
@@ -368,8 +379,10 @@ export class MahjongThreeRenderer {
     this.cancelOwnHandCrossfade();
     this.cancelOwnDrawEntry();
     this.cancelOwnTileMotion();
+    this.cancelDealIn();
     this.pendingOwnDrawEntryTile = null;
     this.revealTiles.length = 0;
+    this.dealInTiles.length = 0;
     // Keep the mesh's current height when a selection transition is
     // interrupted; reconciliation below uses it as the next animation origin.
     this.hoveredTile = null;
@@ -401,6 +414,7 @@ export class MahjongThreeRenderer {
         handRevealStartDelay(revealDelay, crossfadesOwnHand),
       );
     }
+    if (this.animateDealIn && this.dealInTiles.length) this.startDealIn();
   }
 
   updateSelection(ui) {
@@ -543,9 +557,7 @@ export class MahjongThreeRenderer {
         : Array.from({ length: layout.rackCount }, (_, index) => index);
       for (const index of rackSlots) {
         const transform = handTransform(position, index, layout.rackCapacity);
-        const tile = this.createTile({ concealed: true });
-        applyStandingTransform(tile, transform);
-        this.layers.hands.add(tile);
+        this.addConcealedHandTile(transform);
       }
       if (layout.hasDrawn) {
         const transform = handTransform(
@@ -554,11 +566,76 @@ export class MahjongThreeRenderer {
           layout.rackCapacity,
           { drawn: true },
         );
-        const tile = this.createTile({ concealed: true });
-        applyStandingTransform(tile, transform);
-        this.layers.hands.add(tile);
+        this.addConcealedHandTile(transform);
       }
     }
+  }
+
+  addConcealedHandTile(transform) {
+    if (!this.animateDealIn) {
+      const tile = this.createTile({ concealed: true });
+      applyStandingTransform(tile, transform);
+      this.layers.hands.add(tile);
+      return;
+    }
+    const slot = new Group();
+    slot.position.set(transform.x, 0, transform.z);
+    slot.rotation.y = transform.yaw;
+    const tile = this.createTile({ concealed: true });
+    // A newly dealt closed tile rises by undoing the same edge-hinged motion
+    // used when a tile is covered. Keeping the lower edge on the felt avoids
+    // the weightless centre-axis spin of the first implementation.
+    const hingeTransform = presentedTileHingeTransform(true);
+    const hinge = new Group();
+    hinge.position.z = hingeTransform.pivotZ;
+    hinge.rotation.x = hingeTransform.restingRotationX;
+    tile.position.set(0, hingeTransform.tileY, hingeTransform.tileZ);
+    hinge.add(tile);
+    slot.add(hinge);
+    this.layers.hands.add(slot);
+    this.dealInTiles.push({
+      kind: "stand",
+      hinge,
+      restingRotationX: hingeTransform.restingRotationX,
+    });
+  }
+
+  startDealIn() {
+    const animation = this.dealInTiles;
+    this.dealInAnimation = animation;
+    this.animations.play({
+      id: "new-hand-deal",
+      duration: NEW_HAND_DEAL_DURATION_MS,
+      update: (progress) => {
+        if (this.dealInAnimation !== animation) return;
+        const eased = newHandDealProgress(progress);
+        for (const entry of animation) {
+          if (entry.kind === "fade") {
+            setFadedTileOpacity(entry.materials, eased);
+            continue;
+          }
+          entry.hinge.rotation.x = entry.restingRotationX * (1 - eased);
+        }
+      },
+      complete: () => this.finishDealIn(animation),
+    });
+  }
+
+  cancelDealIn() {
+    this.animations.cancel("new-hand-deal");
+    if (this.dealInAnimation) this.finishDealIn(this.dealInAnimation);
+  }
+
+  finishDealIn(animation) {
+    for (const entry of animation) {
+      if (entry.kind === "fade") {
+        setFadedTileOpacity(entry.materials, 1);
+        restoreTileMaterials(entry.materials);
+        continue;
+      }
+      entry.hinge.rotation.x = 0;
+    }
+    if (this.dealInAnimation === animation) this.dealInAnimation = null;
   }
 
   addPresentedHand(
@@ -740,6 +817,13 @@ export class MahjongThreeRenderer {
       this.ownHandLayer.add(tile);
       record = { tile, visualKey };
       this.ownTileRecords.set(Number(tileId), record);
+      if (this.animateDealIn) {
+        // The local hand is rendered by the orthographic overlay, so a fade
+        // does not interfere with the tabletop's physical light or shadows.
+        const materials = cloneTileMaterialsForFade(tile);
+        setFadedTileOpacity(materials, 0);
+        this.dealInTiles.push({ kind: "fade", materials });
+      }
     }
     const { tile } = record;
     this.highlightableTiles.add(tile);
@@ -999,9 +1083,11 @@ export class MahjongThreeRenderer {
       return;
     }
     const tile = this.pickTile(event);
-    const interactiveTile = this.state?.legalActions?.canDiscard ? tile : null;
-    this.setHoveredTile(interactiveTile);
-    this.renderer.domElement.style.cursor = interactiveTile
+    // Selection is available while waiting too. Only pointer-down starts a
+    // drag, so hover and the cursor should advertise selection independently
+    // from whether this turn may discard.
+    this.setHoveredTile(tile);
+    this.renderer.domElement.style.cursor = tile
       ? "pointer"
       : "default";
   }
@@ -1265,7 +1351,10 @@ function setFadedTileOpacity(records, value) {
     materials.forEach((material, index) => {
       material.opacity = record.targetOpacities[index] * opacity;
     });
-    record.object.castShadow = record.castShadow && opacity >= 0.35;
+    // WebGL shadow maps are binary: a threshold half way through a fade makes
+    // a full-strength shadow visibly pop in. Enable it on the first rendered
+    // fade frame instead, while the tile is still effectively invisible.
+    record.object.castShadow = record.castShadow && opacity > 0;
   }
 }
 

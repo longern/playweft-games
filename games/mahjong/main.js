@@ -3,13 +3,15 @@ import { createPlayweftSoloClient } from "../../src/playweft-solo-client.js";
 import { Cog, X, createIcons } from "lucide";
 import {
   AI_DELAY_MS,
-  AUTO_RIICHI_DISCARD_DELAY_MS,
+  AUTO_DECISION_DELAY_MS,
   DRAW_REVEAL_CARD_DELAY_MS,
   DRAW_REVEAL_VISIBLE_BASE_MS,
   DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS,
   HAND_INSERTION_DELAY_MS,
   HAND_END_PRESENTATION_DELAY_MS,
   HUMAN_ID,
+  NEW_HAND_DEAL_DURATION_MS,
+  OWN_DRAW_ENTRY_DURATION_MS,
   PLAYERS,
 } from "./constants.js";
 import { MahjongDomView } from "./dom-view.js";
@@ -181,6 +183,7 @@ const MATCH_MUSIC_FADE_DURATION_MS = 800;
 const SETUP_EXIT_DURATION_MS = 560;
 const RESULT_PAGE_TRANSITION_MS = 920;
 const RESULT_EXIT_DURATION_MS = 320;
+const NEW_HAND_TABLE_PAUSE_MS = 360;
 const KAN_DRAW_PAUSE_MS = 300;
 const MATCH_SUMMARY_PORTRAIT_POSITIONS = [
   "0% 0%",
@@ -950,12 +953,12 @@ async function initialize(matchType = "east") {
       autoActions,
     });
     writeMahjongSoloSave(soloSave);
-    await refresh(game.initialProjection);
+    await refresh(game.initialProjection, { animateDealIn: true });
     elements.app.setAttribute("aria-busy", "false");
     elements.setup.hidden = true;
     elements.loading.hidden = true;
     settingsDialog.setSoloMatchActive(true);
-    scheduleAi();
+    scheduleAi({ afterDealIn: true });
   } catch (error) {
     console.error(error);
     await setupExit;
@@ -1091,8 +1094,9 @@ function startMahjongEntry() {
   showSetup();
 }
 
-function showSetup() {
+function showSetup({ behindResult = false } = {}) {
   elements.setup.classList.remove("is-leaving");
+  elements.setup.classList.toggle("is-prepared-for-result-exit", behindResult);
   for (const button of elements.setup.querySelectorAll("[data-match-type]")) {
     button.disabled = false;
   }
@@ -1247,18 +1251,28 @@ async function runAiTurn() {
   }
 }
 
-function scheduleAi() {
+function scheduleAi({ afterDealIn = false } = {}) {
   window.clearTimeout(aiTimer);
   if (!state || state.phase === "hand_ended" || presentation.kanDrawPending)
     return;
+  const visualDelay = afterDealIn ? NEW_HAND_DEAL_DURATION_MS : 0;
   const autoAction = automaticMahjongAction(state, autoActions, { riichiMode });
   if (autoAction) {
+    const isVisibleTileDecision = ["claim", "tsumo", "discard"].includes(
+      autoAction.type,
+    );
     aiTimer = window.setTimeout(() => {
       const currentAction = automaticMahjongAction(state, autoActions, {
         riichiMode,
       });
       if (sameMahjongAction(currentAction, autoAction)) dispatch(currentAction);
-    }, 0);
+    },
+    isVisibleTileDecision
+      ? Math.max(
+          visualDelay,
+          autoAction.type === "claim" ? 0 : OWN_DRAW_ENTRY_DURATION_MS,
+        ) + AUTO_DECISION_DELAY_MS
+      : 0);
     return;
   }
   const automaticTile = automaticRiichiDiscard(state, HUMAN_ID);
@@ -1267,19 +1281,24 @@ function scheduleAi() {
       if (automaticRiichiDiscard(state, HUMAN_ID) === automaticTile) {
         dispatch({ type: "discard", tileId: automaticTile });
       }
-    }, AUTO_RIICHI_DISCARD_DELAY_MS);
+    },
+    Math.max(visualDelay, OWN_DRAW_ENTRY_DURATION_MS) +
+      AUTO_DECISION_DELAY_MS);
     return;
   }
   if (state.phase === "claiming") {
-    aiTimer = window.setTimeout(runAiTurn, AI_DELAY_MS);
+    aiTimer = window.setTimeout(runAiTurn, visualDelay + AI_DELAY_MS);
     return;
   }
   const seat = activeSeat(state);
   if (seat <= 1) return;
-  aiTimer = window.setTimeout(runAiTurn, AI_DELAY_MS);
+  aiTimer = window.setTimeout(runAiTurn, visualDelay + AI_DELAY_MS);
 }
 
-async function refresh(projection, { ownDiscardedTile = 0 } = {}) {
+async function refresh(
+  projection,
+  { ownDiscardedTile = 0, animateDealIn = false } = {},
+) {
   const currentGame = game;
   if (!projection) projection = await currentGame?.view(HUMAN_ID);
   if (!projection || currentGame !== game) return;
@@ -1302,11 +1321,11 @@ async function refresh(projection, { ownDiscardedTile = 0 } = {}) {
     isDrawRevealState(state) ? revealKey : "",
     DRAW_REVEAL_CARD_DELAY_MS,
   );
-  renderCurrentState();
+  renderCurrentState({ animateDealIn });
   playRiverTileSound(events);
 }
 
-function renderCurrentState() {
+function renderCurrentState({ animateDealIn = false } = {}) {
   const renderState = presentedState();
   const revealedPlayerIndices = handRevealPlayerIndices(state);
   const coveredPlayerIndices = handCoveredPlayerIndices(state);
@@ -1317,6 +1336,8 @@ function renderCurrentState() {
       presentation.drawRevealVisible &&
       !presentation.resultVisible,
     resultPage: resultPageIndex,
+    dealInKey: animateDealIn ? handDealInKey(state) : "",
+    animateDealIn,
     riichiMode,
     defaultNames: getMahjongDefaultNames(),
     playerNameIsAuthoritative: hasPlatformName,
@@ -1330,6 +1351,8 @@ function renderCurrentState() {
   applyPackAvatars(renderState);
   visualRenderer.render(renderState, visibleEvents, {
     ...domView.visualUi(playerName, selectedTileId),
+    dealInKey: animateDealIn ? handDealInKey(state) : "",
+    animateDealIn,
     riichiMode,
     riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),
     revealPlayerIndices: revealedPlayerIndices,
@@ -1367,6 +1390,8 @@ function renderClearedTableForResultExit() {
     coveredPlayerIndices: [],
     handRevealKey: "",
     animateHandReveal: false,
+    dealInKey: "",
+    animateDealIn: false,
     delayHandRevealForCallout: false,
     deferredHandInsertionSeat: 0,
     deferredHandInsertionIndex: 0,
@@ -1422,14 +1447,7 @@ async function continueResult() {
       return;
     }
 
-    renderClearedTableForResultExit();
-    elements.result.classList.add("is-exiting");
-    await waitForAnimation(
-      elements.result,
-      "result-screen-exit",
-      RESULT_EXIT_DURATION_MS,
-    );
-    dispatch({ type: state.matchEnded ? "new_match" : "next_hand" });
+    await advanceFromResult({ type: "next_hand" });
   } finally {
     resultPageAnimating = false;
     elements.rematch.disabled = false;
@@ -1550,15 +1568,7 @@ async function restartMatchFromSummary() {
   elements.matchSummaryRematch.disabled = true;
   elements.matchSummarySetup.disabled = true;
   try {
-    hideMatchSummary();
-    renderClearedTableForResultExit();
-    elements.result.classList.add("is-exiting");
-    await waitForAnimation(
-      elements.result,
-      "result-screen-exit",
-      RESULT_EXIT_DURATION_MS,
-    );
-    dispatch({ type: "new_match" });
+    await advanceFromResult({ type: "new_match" });
   } finally {
     resultPageAnimating = false;
     elements.matchSummaryRematch.disabled = false;
@@ -1576,14 +1586,17 @@ async function returnToSetupFromSummary() {
   elements.matchSummaryRematch.disabled = true;
   elements.matchSummarySetup.disabled = true;
   try {
-    hideMatchSummary();
-    renderClearedTableForResultExit();
+    // Keep the completed-match sheet on top while the lobby is made ready
+    // directly underneath it.  The exit fade therefore reveals the lobby,
+    // never an intermediate table frame.
+    showSetup({ behindResult: true });
     elements.result.classList.add("is-exiting");
     await waitForAnimation(
       elements.result,
       "result-screen-exit",
       RESULT_EXIT_DURATION_MS,
     );
+    hideMatchSummary();
     window.clearTimeout(aiTimer);
     presentation.suspend();
     game?.close();
@@ -1608,6 +1621,41 @@ async function returnToSetupFromSummary() {
     resetResultPageTrack();
     elements.result.classList.remove("is-exiting");
   }
+}
+
+async function advanceFromResult(action) {
+  const currentGame = game;
+  if (!currentGame || !state) return false;
+  const outcome = await currentGame.action(action, HUMAN_ID);
+  if (currentGame !== game) return false;
+  if (!outcome.result?.accepted) {
+    elements.message.textContent = errorMessage(outcome.result?.error?.code);
+    elements.message.classList.add("is-error");
+    return false;
+  }
+  persistAcceptedAction(action, HUMAN_ID);
+  resetAutoActions();
+  riichiMode = false;
+  selectionBeforeRiichi = 0;
+  selectedTileId = 0;
+  renderClearedTableForResultExit();
+  elements.result.classList.add("is-exiting");
+  await waitForAnimation(
+    elements.result,
+    "result-screen-exit",
+    RESULT_EXIT_DURATION_MS,
+  );
+  hideMatchSummary();
+  elements.result.hidden = true;
+  elements.result.classList.remove("is-exiting");
+  await waitForDelay(NEW_HAND_TABLE_PAUSE_MS);
+  await refresh(outcome.projection, { animateDealIn: true });
+  scheduleAi({ afterDealIn: true });
+  return true;
+}
+
+function waitForDelay(duration) {
+  return new Promise((resolve) => window.setTimeout(resolve, duration));
 }
 
 function resetResultPageTrack() {
@@ -1739,6 +1787,16 @@ function handEndPresentationKey(current) {
   const winners = asArray(current.winners);
   if (!winners.length) return "";
   return `${current.moveCount}:${current.winType}:${winners.join(",")}`;
+}
+
+function handDealInKey(current) {
+  if (!current || current.phase === "hand_ended") return "";
+  return [
+    Number(current.roundWind) || 0,
+    Number(current.handNumber) || 0,
+    Number(current.honba) || 0,
+    Number(current.moveCount) || 0,
+  ].join(":");
 }
 
 function isDrawRevealState(current) {

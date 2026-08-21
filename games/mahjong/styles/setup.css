@@ -9,6 +9,13 @@
     #071713 var(--mahjong-setup-background-image, none) center / cover no-repeat;
 }
 
+/* Used only while a finished-match sheet fades away.  It lets the lobby take
+ * the place of the table behind the sheet without becoming interactive early. */
+.setup-panel.is-prepared-for-result-exit {
+  z-index: 85;
+  pointer-events: none;
+}
+
 :root[data-mahjong-has-lobby] .setup-panel {
   background-image: var(--mahjong-lobby-image);
 }

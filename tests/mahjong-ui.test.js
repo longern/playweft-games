@@ -10,11 +10,13 @@ import {
   Vector3,
 } from "three";
 import {
+  AUTO_DECISION_DELAY_MS,
   DRAW_REVEAL_CARD_DELAY_MS,
   DRAW_REVEAL_VISIBLE_BASE_MS,
   DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS,
   HAND_INSERTION_DELAY_MS,
   HAND_END_PRESENTATION_DELAY_MS,
+  OWN_DRAW_ENTRY_DURATION_MS,
 } from "../games/mahjong/constants.js";
 import {
   automaticRiichiDiscard,
@@ -1623,14 +1625,26 @@ test("mahjong result pages separate winners before the score summary", () => {
     "utf8",
   );
   assert.match(main, /if \(state\.matchEnded\) \{\s*showMatchSummary\(\);\s*return;/s);
-  assert.match(main, /dispatch\(\{ type: "new_match" \}\)/);
+  assert.match(main, /await advanceFromResult\(\{ type: "new_match" \}\)/);
   assert.match(main, /function returnToSetupFromSummary\(\)/);
+  assert.match(main, /renderClearedTableForResultExit\(\);/);
+  assert.match(main, /await waitForDelay\(NEW_HAND_TABLE_PAUSE_MS\);/);
+  assert.match(main, /await refresh\(outcome\.projection, \{ animateDealIn: true \}\)/);
+  assert.match(main, /showSetup\(\{ behindResult: true \}\)/);
   assert.match(
     html,
     /id="match-summary"[\s\S]*?id="match-summary-rows"[\s\S]*?再来一局[\s\S]*?返回大厅/,
   );
   assert.match(resultStyles, /\.match-summary\s*\{[\s\S]*?backdrop-filter: blur\(18px\)/);
   assert.match(resultStyles, /\.match-summary-photo\s*\{[\s\S]*?padding: 18px 18px 78px;/);
+  const setupStyles = readFileSync(
+    new URL("../games/mahjong/styles/setup.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    setupStyles,
+    /\.setup-panel\.is-prepared-for-result-exit\s*\{[\s\S]*?z-index: 85;[\s\S]*?pointer-events: none;/,
+  );
 });
 
 test("mahjong score sheets retain the latest scored hands and show each change from the prior row", () => {
@@ -2096,6 +2110,23 @@ test("mahjong automatically tsumogiri after riichi only when discard is the sole
   );
 });
 
+test("mahjong gives every automatic win and tsumogiri one recognition delay", () => {
+  const main = readFileSync(
+    new URL("../games/mahjong/main.js", import.meta.url),
+    "utf8",
+  );
+  assert.equal(AUTO_DECISION_DELAY_MS, 520);
+  assert.equal(OWN_DRAW_ENTRY_DURATION_MS, 180);
+  assert.match(
+    main,
+    /const isVisibleTileDecision = \["claim", "tsumo", "discard"\]\.includes\([\s\S]*?Math\.max\([\s\S]*?OWN_DRAW_ENTRY_DURATION_MS[\s\S]*?\+ AUTO_DECISION_DELAY_MS/s,
+  );
+  assert.match(
+    main,
+    /automaticRiichiDiscard[\s\S]*?Math\.max\(visualDelay, OWN_DRAW_ENTRY_DURATION_MS\)[\s\S]*?AUTO_DECISION_DELAY_MS/s,
+  );
+});
+
 test("mahjong uses one standing 3D tile transform for all four seats", () => {
   const renderer = readFileSync(
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
@@ -2442,6 +2473,13 @@ test("mahjong lets players inspect their hand outside their discard turn", () =>
   );
   assert.match(view, /aria-disabled/);
   assert.match(renderer, /this\.pickableTiles\.push\(tile\)/);
+  const pointerMove = renderer.slice(
+    renderer.indexOf("  handlePointerMove(event) {"),
+    renderer.indexOf("  handlePointerUp(event) {"),
+  );
+  assert.match(pointerMove, /this\.setHoveredTile\(tile\)/);
+  assert.match(pointerMove, /style\.cursor = tile\s*\?\s*"pointer"/);
+  assert.doesNotMatch(pointerMove, /legalActions\?\.canDiscard/);
   assert.doesNotMatch(
     renderer,
     /handlePointerUp\(event\) \{[^}]*if \(!this\.state\?\.legalActions\?\.canDiscard\) return/s,
@@ -2855,9 +2893,59 @@ test("mahjong shuffles behind a synchronized waiting-scene exit", () => {
     main,
     /\[game\] = await Promise\.all\(\[\s*gamePreparation,\s*setupExit,\s*visualRendererReady,\s*\]\)/,
   );
+  assert.match(
+    main,
+    /await refresh\(game\.initialProjection, \{ animateDealIn: true \}\)[\s\S]*?scheduleAi\(\{ afterDealIn: true \}\)/,
+  );
   assert.ok(
     main.indexOf("createLocalLuaGame({") <
       main.indexOf("elements.setup.hidden = true;"),
+  );
+});
+
+test("mahjong forwards the initial deal animation to the Three renderer", () => {
+  const main = readFileSync(
+    new URL("../games/mahjong/main.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    main,
+    /visualRenderer\.render\(renderState, visibleEvents, \{[\s\S]*?dealInKey: animateDealIn \? handDealInKey\(state\) : "",[\s\S]*?animateDealIn,/,
+  );
+});
+
+test("mahjong reverses the covered-tile edge hinge when dealing a new hand", () => {
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    renderer,
+    /const hingeTransform = presentedTileHingeTransform\(true\);[\s\S]*?hinge\.rotation\.x = hingeTransform\.restingRotationX;[\s\S]*?hinge\.add\(tile\)/,
+  );
+  assert.match(
+    renderer,
+    /entry\.hinge\.rotation\.x = entry\.restingRotationX \* \(1 - eased\)/,
+  );
+});
+
+test("mahjong fades only the non-perspective local hand when dealing", () => {
+  const renderer = readFileSync(
+    new URL("../games/mahjong/three-renderer.js", import.meta.url),
+    "utf8",
+  );
+  const dealTile = renderer.slice(
+    renderer.indexOf("addConcealedHandTile(transform)"),
+    renderer.indexOf("startDealIn()"),
+  );
+  assert.doesNotMatch(dealTile, /cloneTileMaterialsForFade\(tile\)/);
+  const ownTile = renderer.slice(
+    renderer.indexOf("\n  addOwnTile("),
+    renderer.indexOf("\n  pruneOwnTiles()"),
+  );
+  assert.match(
+    ownTile,
+    /cloneTileMaterialsForFade\(tile\)[\s\S]*?dealInTiles\.push\(\{ kind: "fade", materials \}\)/,
   );
 });
 
