@@ -1466,7 +1466,10 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     }),
     { revealed: [], covered: [] },
   );
-  assert.match(renderer, /concealed: covered/);
+  assert.match(
+    renderer,
+    /const concealFace = covered && seat !== 1;[\s\S]*?concealed: concealFace/,
+  );
   assert.match(renderer, /settlePresentedTile\(hinge, covered\)/);
   const resultStyles = readFileSync(
     new URL("../games/mahjong/styles/result.css", import.meta.url),

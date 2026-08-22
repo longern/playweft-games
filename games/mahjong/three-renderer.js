@@ -732,6 +732,7 @@ export class MahjongThreeRenderer {
     const { rack, drawn } = splitRevealedHand(state, playerId, seat);
     rack.forEach((tile, index) => {
       this.addPresentedTableTile(position, tile, index, false, {
+        seat,
         covered,
         animate,
         crossfade,
@@ -739,6 +740,7 @@ export class MahjongThreeRenderer {
     });
     if (drawn) {
       this.addPresentedTableTile(position, drawn, rack.length, true, {
+        seat,
         covered,
         animate,
         crossfade,
@@ -751,19 +753,24 @@ export class MahjongThreeRenderer {
     tileInfo,
     index,
     drawn,
-    { covered, animate, crossfade = false },
+    { seat, covered, animate, crossfade = false },
   ) {
     const transform = presentedHandTransform(position, index, index, {
       drawn,
       covered,
     });
+    // A covered local hand falls face-down onto the table. Keep its face mesh
+    // for that motion so the player sees their own tiles turn over; its final
+    // orientation still leaves the face against the table. Other seats never
+    // receive their concealed faces.
+    const concealFace = covered && seat !== 1;
     const slot = new Group();
     slot.position.set(transform.x, 0, transform.z);
     slot.rotation.y = transform.yaw;
     const tile = this.createTile({
       type: tileInfo.type,
       red: tileInfo.red,
-      concealed: covered,
+      concealed: concealFace,
       dora:
         this.showGameHints &&
         !covered &&
