@@ -3659,6 +3659,13 @@ local function choose_ai_discard(state, seat, hand, allowed, forbidden, melds)
 		aggression = aggression - 0.18
 	end
 	local mode = ai_push_mode(state, seat, minimum_shanten, best_value, pressure, aggression, objective, placement)
+	local opponent_riichi = false
+	for other = 1, PLAYER_COUNT do
+		if other ~= seat and state.riichi[state.players[other]] then
+			opponent_riichi = true
+			break
+		end
+	end
 	local ukeire_candidates = {}
 	for _, candidate in ipairs(candidates) do
 		candidate.ukeire = 0
@@ -3781,6 +3788,47 @@ local function choose_ai_discard(state, seat, hand, allowed, forbidden, melds)
 			and math.abs((candidate.value or 0) - (best.value or 0)) <= 0.001
 			and candidate.sequenceCore > (best.sequenceCore or 0)
 		)
+			or (
+				-- A narrow repeated inversion found in the Mortal audit: when
+				-- pressure is low and the two hands are otherwise comparable, a
+				-- slightly smaller ukeire can be correct if it preserves a
+				-- materially richer block decomposition.  Keep this bounded to
+				-- at most one live tile of ukeire and near-equal value.  Require
+				-- enough absolute acceptance for the hand's shanten distance; in
+				-- deep closed hands, raw speed remains more important than shape.
+				pressure <= 0.35
+				and candidate.shanten == best.shanten
+				and (candidate.shapeValue or 0) >= (best.shapeValue or 0) + 2
+				and (best.ukeire or 0) - (candidate.ukeire or 0) <= 1
+				and (state.callOccurred or #state.wall <= 45)
+				and (
+					(candidate.shanten == 1 and (candidate.ukeire or 0) >= 10)
+					or (candidate.shanten == 2 and (candidate.ukeire or 0) >= 20)
+					or (candidate.shanten >= 3 and (candidate.ukeire or 0) >= 18)
+				)
+				and math.abs((candidate.value or 0) - (best.value or 0)) <= 0.001
+				and candidate.score >= best.score - 14
+			)
+			or (
+				-- After a call has occurred and no opponent is in riichi, the other
+				-- repeated Mortal inversion is a small shape-over-speed trade: when
+				-- speed is otherwise close, preserving a stronger block structure
+				-- avoids throwing away the hand's next route for one live tile.
+				state.callOccurred
+				and not state.riichi[player_id]
+				and not opponent_riichi
+				and pressure >= 0.25
+				and pressure <= 0.65
+				and candidate.shanten == best.shanten
+				and (candidate.shapeValue or 0) >= (best.shapeValue or 0) + 2
+				and (best.ukeire or 0) - (candidate.ukeire or 0) == 1
+				and (
+					(candidate.shanten == 1 and (candidate.ukeire or 0) >= 10)
+					or (candidate.shanten == 2 and (candidate.ukeire or 0) >= 10)
+				)
+				and math.abs((candidate.value or 0) - (best.value or 0)) <= 0.001
+				and candidate.score >= best.score - 24
+			)
 			or (
 				math.abs(candidate.score - best.score) <= 0.001
 				and math.abs(candidate.closeScoreKeep - best.closeScoreKeep) <= 0.001
@@ -4047,6 +4095,34 @@ local function choose_ai_claim(state, claimant)
 					acceptable = true
 				end
 				if current_goal.preserveClosed and improvement < 1 then
+					acceptable = false
+				end
+				-- A zero-shanten-gain chi is especially costly: unlike a value pon,
+				-- it usually opens a sequence without creating a guaranteed yaku and
+				-- gives up both the closed-hand route and defensive flexibility.  The
+				-- non-test Mortal audit found this inversion one-way (15 current zero
+				-- gain chis: 14 Mortal passes, no Mortal chis), while zero-gain pons
+				-- and kans remained bidirectional and are intentionally left alone.
+				if option.kind == "chi" and improvement <= 0 then
+					acceptable = false
+				end
+				-- A zero-gain pon needs a concrete reason to spend the closed-hand
+				-- route.  Keep the narrow exception Mortal repeatedly accepts: a
+				-- value-honor pon that commits to an already identified toitoi route,
+				-- even while still distant (2+ shanten).  Other zero-gain pons either
+				-- add a nominal yaku without improving the route, or open a hand with
+				-- no reliable score increase; those should pass for now.
+				local distant_yakuhai_toitoi =
+					yakuhai_call and goal.route == "toitoi" and discard.shanten >= 2
+				if option.kind == "pon" and improvement <= 0 and not distant_yakuhai_toitoi then
+					acceptable = false
+				end
+				-- Daiminkan is a separate commitment from pon: it adds dora volatility,
+				-- can improve every opponent's hand, and removes the option to keep the
+				-- fourth copy as a later decision.  In the fresh claim audit, 15 of 16
+				-- AI daiminkans were Mortal passes; the only counterexample is not a
+				-- basis for an exception.  Self-kans are evaluated independently.
+				if option.kind == "kan" then
 					acceptable = false
 				end
 				if option.kind == "kan" and pressure >= 0.75 and not state.riichi[player_id] then
