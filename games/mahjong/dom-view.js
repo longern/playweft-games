@@ -596,7 +596,14 @@ export class MahjongDomView {
   ) {
     const { elements } = this;
     const ended = state.phase === "hand_ended";
-    elements.result.hidden = !ended || !showResult;
+    // Start warming the result scene as soon as a hand ends. Keeping it in
+    // the render tree gives the backdrop time to paint before the entrance
+    // animation starts, while inert and aria-hidden keep it non-interactive.
+    elements.result.hidden = !ended;
+    elements.result.inert = !ended || !showResult;
+    elements.result.setAttribute("aria-hidden", String(!ended || !showResult));
+    elements.result.classList.toggle("is-warming", ended && !showResult);
+    elements.result.classList.toggle("is-entering", ended && showResult);
     if (!ended) return;
     const detailCount = resultDetailPageCount(state);
     const safePage = Math.max(0, Math.min(detailCount, Number(pageIndex) || 0));
