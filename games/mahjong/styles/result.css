@@ -491,7 +491,6 @@
   width: 100%;
   border-collapse: collapse;
   color: rgba(247, 241, 224, 0.96);
-  font-family: "Kalam Score", "Mahjong Brush", serif;
   font-size: 35px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -538,7 +537,6 @@
   box-shadow: none;
   color: #f4e5c3;
   cursor: pointer;
-  font-family: "Mahjong Brush", "FZKai-Z03", STKaiti, KaiTi, serif;
   font-size: 28px;
   font-weight: 700;
   letter-spacing: 0.08em;
