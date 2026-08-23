@@ -37,6 +37,10 @@ import { MahjongResultHandRenderer } from "./result-hand-renderer.js";
 import { MahjongPresentationController } from "./presentation-controller.js";
 import { createMahjongSettingsDialog } from "./settings-dialog.js";
 import {
+  isMahjongMatchMusicActive,
+  MahjongMatchMusic,
+} from "./match-music.js";
+import {
   deferMahjongDecorativeAssets,
   deferMahjongImageAssets,
 } from "./deferred-visual-assets.js";
@@ -145,10 +149,6 @@ const defaultMusicCopyright = document.querySelector("#default-bgm-copyright");
 syncDefaultMusicCopyright();
 const riverTileSound = new Audio(discardSoundSource);
 riverTileSound.preload = "auto";
-let musicNeedsGesture = false;
-let matchMusicFadeFrame = 0;
-let matchMusicGain = 1;
-let matchMusicPlayRequest = 0;
 let voicedEventKey = "";
 let playedRiverTileSoundKey = "";
 let soloSave = readMahjongSoloSave();
@@ -203,7 +203,11 @@ const settingsDialog = createMahjongSettingsDialog({
     void endSoloMatch();
   },
 });
-applyMatchMusicVolume();
+const matchMusicController = new MahjongMatchMusic({
+  audio: matchMusic,
+  getVolumeScale: () => settingsDialog.musicVolumeScale,
+  fadeDuration: MATCH_MUSIC_FADE_DURATION_MS,
+});
 const visualRenderer = new MahjongThreeRenderer(elements.stage, {
   onSelectTile: selectTile,
   onClearSelection: clearSelectedTile,
@@ -495,6 +499,7 @@ function handlePlayweftError(message, _code, requestId) {
   if (!requestId || requestId === roomActionRequestId) {
     actionInFlight = false;
     roomActionRequestId = "";
+    if (state?.phase === "hand_ended") syncMatchMusic();
   }
   if (!state) {
     showLoadingError(message);
@@ -574,108 +579,57 @@ async function applyVisualPack() {
 }
 
 function applyMatchMusicVolume() {
-  matchMusic.volume = Math.min(
-    1,
-    Math.max(0, settingsDialog.musicVolumeScale * matchMusicGain),
-  );
-}
-
-function setMatchMusicGain(gain) {
-  matchMusicGain = Math.min(1, Math.max(0, gain));
-  applyMatchMusicVolume();
-}
-
-function cancelMatchMusicFade() {
-  if (matchMusicFadeFrame) cancelAnimationFrame(matchMusicFadeFrame);
-  matchMusicFadeFrame = 0;
-}
-
-function fadeMatchMusicTo(targetGain, { pauseWhenSilent = false } = {}) {
-  cancelMatchMusicFade();
-  const initialGain = matchMusicGain;
-  if (initialGain === targetGain) {
-    if (pauseWhenSilent && targetGain === 0) matchMusic.pause();
-    return;
-  }
-  const startedAt = performance.now();
-  const step = (now) => {
-    const progress = Math.min(
-      1,
-      (now - startedAt) / MATCH_MUSIC_FADE_DURATION_MS,
-    );
-    const easedProgress = progress * progress * (3 - 2 * progress);
-    setMatchMusicGain(initialGain + (targetGain - initialGain) * easedProgress);
-    if (progress < 1) {
-      matchMusicFadeFrame = requestAnimationFrame(step);
-      return;
-    }
-    matchMusicFadeFrame = 0;
-    if (pauseWhenSilent && targetGain === 0) matchMusic.pause();
-  };
-  matchMusicFadeFrame = requestAnimationFrame(step);
+  matchMusicController.applyVolume();
 }
 
 function syncMatchMusic({
-  start = Boolean(game || (playMode === "room" && state)),
+  start = isMahjongMatchMusicActive({
+    gameInitializing,
+    game,
+    playMode,
+    state,
+  }),
   fadeIn = false,
 } = {}) {
   const source = getMahjongMatchMusicUrl();
   if (!start || !source) {
-    matchMusicPlayRequest += 1;
-    cancelMatchMusicFade();
-    matchMusic.pause();
-    matchMusic.removeAttribute("src");
-    matchMusic.load();
-    setMatchMusicGain(1);
-    musicNeedsGesture = false;
+    matchMusicController.stop();
     return;
   }
   const resolvedSource = new URL(source, document.baseURI).href;
-  if (matchMusic.src !== resolvedSource) {
-    cancelMatchMusicFade();
-    matchMusic.pause();
-    matchMusic.src = resolvedSource;
-  }
+  matchMusicController.setSource(resolvedSource);
   if (state?.phase === "hand_ended") {
-    matchMusicPlayRequest += 1;
-    cancelMatchMusicFade();
-    setMatchMusicGain(0);
-    matchMusic.pause();
-    musicNeedsGesture = false;
+    matchMusicController.mute();
     return;
   }
-  cancelMatchMusicFade();
-  setMatchMusicGain(fadeIn ? 0 : 1);
-  const playRequest = ++matchMusicPlayRequest;
-  void matchMusic.play().then(
-    () => {
-      if (playRequest !== matchMusicPlayRequest) return;
-      musicNeedsGesture = false;
-      if (fadeIn) fadeMatchMusicTo(1);
-    },
-    (error) => {
-      if (playRequest !== matchMusicPlayRequest) return;
-      musicNeedsGesture = error?.name === "NotAllowedError";
-    },
+  matchMusicController.play({ fadeIn });
+}
+
+function primeMatchMusicForNextHand() {
+  const source = getMahjongMatchMusicUrl();
+  if (!source) return;
+  matchMusicController.primeForNextHand(
+    new URL(source, document.baseURI).href,
   );
 }
 
 function resumeMatchMusic() {
   if (
-    !musicNeedsGesture ||
+    !matchMusicController.blockedByAutoplay ||
     !(game || (playMode === "room" && state)) ||
     state?.phase === "hand_ended"
   )
     return;
-  syncMatchMusic({ fadeIn: matchMusicGain === 0 });
+  matchMusicController.resumeIfBlocked({
+    fadeIn: matchMusicController.gain === 0,
+  });
 }
 
 function syncMatchMusicForHandState(previousState, currentState) {
   const handWasEnded = previousState?.phase === "hand_ended";
   const handIsEnded = currentState?.phase === "hand_ended";
   if (!handWasEnded && handIsEnded) {
-    matchMusicPlayRequest += 1;
-    fadeMatchMusicTo(0, { pauseWhenSilent: true });
+    matchMusicController.mute({ fade: true });
   } else if (handWasEnded && !handIsEnded) {
     syncMatchMusic({ start: true, fadeIn: true });
   }
@@ -1648,7 +1602,9 @@ async function continueResult() {
       return;
     }
 
-    await advanceFromResult({ type: "next_hand" });
+    primeMatchMusicForNextHand();
+    const advanced = await advanceFromResult({ type: "next_hand" });
+    if (!advanced && state?.phase === "hand_ended") syncMatchMusic();
   } finally {
     resultPageAnimating = false;
     elements.rematch.disabled = false;
@@ -1778,7 +1734,9 @@ async function restartMatchFromSummary() {
   elements.matchSummaryRematch.disabled = true;
   elements.matchSummarySetup.disabled = true;
   try {
-    await advanceFromResult({ type: "new_match" });
+    primeMatchMusicForNextHand();
+    const advanced = await advanceFromResult({ type: "new_match" });
+    if (!advanced && state?.phase === "hand_ended") syncMatchMusic();
   } finally {
     resultPageAnimating = false;
     elements.matchSummaryRematch.disabled = false;
@@ -2201,8 +2159,7 @@ function cancelRiichiMode() {
 }
 
 function handlePageHide(event) {
-  cancelMatchMusicFade();
-  matchMusic.pause();
+  matchMusicController.suspend();
   riverTileSound.pause();
   window.clearTimeout(aiTimer);
   presentation.suspend();
@@ -2215,8 +2172,7 @@ function handlePageShow(event) {
 
 function handleVisibilityChange() {
   if (document.visibilityState === "hidden") {
-    cancelMatchMusicFade();
-    matchMusic.pause();
+    matchMusicController.suspend();
     riverTileSound.pause();
     window.clearTimeout(aiTimer);
     presentation.suspend();
@@ -2247,10 +2203,7 @@ function destroy() {
   destroyed = true;
   window.clearTimeout(aiTimer);
   presentation.destroy();
-  matchMusicPlayRequest += 1;
-  cancelMatchMusicFade();
-  matchMusic.pause();
-  matchMusic.removeAttribute("src");
+  matchMusicController.stop();
   riverTileSound.pause();
   window.removeEventListener("pagehide", handlePageHide);
   window.removeEventListener("pageshow", handlePageShow);

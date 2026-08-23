@@ -1572,7 +1572,7 @@ test("mahjong starts with an inline low-resolution tile atlas and a sampled felt
   assert.match(table, /setDefaultFeltTexture\(texture\)/);
 });
 
-test("mahjong retries restored match music on the first user gesture", () => {
+test("mahjong routes blocked playback and rematches through a user gesture", () => {
   const main = readFileSync(
     new URL("../games/mahjong/main.js", import.meta.url),
     "utf8",
@@ -1585,6 +1585,8 @@ test("mahjong retries restored match music on the first user gesture", () => {
     main,
     /document\.addEventListener\("keydown", resumeMatchMusic\);/,
   );
+  assert.match(main, /matchMusicController\.resumeIfBlocked\(/);
+  assert.match(main, /primeMatchMusicForNextHand\(\);/);
 });
 
 test("mahjong result pages separate winners before the score summary", () => {
