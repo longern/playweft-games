@@ -77,8 +77,8 @@ export async function createLocalLuaGame(options = {}) {
       action(action, actorId = options.playerId, viewerId = options.playerId) {
         return request("action", { action, actorId, viewerId });
       },
-      aiTurn(actorIds, viewerId = options.playerId) {
-        return request("aiTurn", { actorIds, viewerId });
+      aiTurn(viewerId = options.playerId) {
+        return request("aiTurn", { viewerId });
       },
       close() {
         if (closed) return;

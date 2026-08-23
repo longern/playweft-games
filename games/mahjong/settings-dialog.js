@@ -77,8 +77,8 @@ export function createMahjongSettingsDialog({
   }
 
   function clearMotionTimers() {
-    if (openingFrame) cancelAnimationFrame(openingFrame);
-    if (closingTimer) clearTimeout(closingTimer);
+    if (openingFrame) window.cancelAnimationFrame(openingFrame);
+    if (closingTimer) window.clearTimeout(closingTimer);
     openingFrame = 0;
     closingTimer = 0;
   }
@@ -118,7 +118,7 @@ export function createMahjongSettingsDialog({
         surface.focus({ preventScroll: true });
       };
       if (animate && !motionReduced() && wasHidden) {
-        openingFrame = requestAnimationFrame(reveal);
+        openingFrame = window.requestAnimationFrame(reveal);
       } else {
         reveal();
       }

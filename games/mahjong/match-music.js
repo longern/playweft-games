@@ -22,8 +22,11 @@ export class MahjongMatchMusic {
     audio,
     getVolumeScale,
     fadeDuration,
-    requestFrame = requestAnimationFrame,
-    cancelFrame = cancelAnimationFrame,
+    // Animation frame APIs are Web-IDL methods in some embedded browsers.
+    // Calling a detached global `requestAnimationFrame` can therefore throw
+    // "Illegal invocation" exactly when a hand ends and BGM starts fading.
+    requestFrame = (callback) => window.requestAnimationFrame(callback),
+    cancelFrame = (frame) => window.cancelAnimationFrame(frame),
   }) {
     this.#audio = audio;
     this.#getVolumeScale = getVolumeScale;

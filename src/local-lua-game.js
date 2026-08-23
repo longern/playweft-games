@@ -88,9 +88,44 @@ function __playweft_local_action(action, actor_id, action_at)
   }
 end
 
-function __playweft_local_ai_action(actor_id)
-  if type(ai_action) ~= "function" then return nil end
-  return ai_action(__local_state, actor_id)
+function __playweft_local_ai_turn(viewer_id, server_time)
+  local actor_id = nil
+  if __local_state.phase == "playing" then
+    actor_id = __local_state.players[__local_state.turnIndex]
+  elseif __local_state.phase == "claiming" then
+    local claimant = __local_state.claimants[__local_state.claimIndex]
+    actor_id = claimant and claimant.playerId or nil
+  end
+
+  local projection = __playweft_local_view(viewer_id, server_time)
+  if not actor_id then
+    return { status = "idle", projection = projection }
+  end
+  if actor_id == viewer_id then
+    return {
+      status = "waiting_for_human",
+      actorId = actor_id,
+      projection = projection,
+    }
+  end
+  if type(ai_action) ~= "function" then
+    error("Local game does not provide an AI action")
+  end
+  local action = ai_action(__local_state, actor_id)
+  if type(action) ~= "table" then
+    error("AI did not provide an action for the active player")
+  end
+  local result = __playweft_local_action(action, actor_id, server_time)
+  if result.accepted ~= true then
+    error("AI action was rejected")
+  end
+  return {
+    status = "acted",
+    actorId = actor_id,
+    action = action,
+    result = result,
+    projection = __playweft_local_view(viewer_id, server_time),
+  }
 end
 
 function __playweft_local_checkpoint()
@@ -144,7 +179,7 @@ export async function createLocalLuaGame({
     const setupLocal = lua.global.get("__playweft_local_setup");
     const readView = lua.global.get("__playweft_local_view");
     const applyAction = lua.global.get("__playweft_local_action");
-    const chooseAiAction = lua.global.get("__playweft_local_ai_action");
+    const advanceAiTurn = lua.global.get("__playweft_local_ai_turn");
     const createCheckpoint = lua.global.get("__playweft_local_checkpoint");
     const restoreCheckpoint = lua.global.get("__playweft_local_restore");
     const context = {
@@ -176,9 +211,9 @@ export async function createLocalLuaGame({
         ensureOpen(closed);
         return applyAction(action, actorId, Date.now());
       },
-      aiAction(actorId) {
+      aiTurn(viewerId = playerId) {
         ensureOpen(closed);
-        return chooseAiAction(actorId);
+        return advanceAiTurn(viewerId, Date.now());
       },
       checkpoint() {
         ensureOpen(closed);

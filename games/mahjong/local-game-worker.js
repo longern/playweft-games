@@ -47,18 +47,7 @@ async function handle(type, payload) {
     };
   }
   if (type === "aiTurn") {
-    for (const actorId of payload.actorIds || []) {
-      const action = game.aiAction(actorId);
-      if (!action) continue;
-      const result = game.action(action, actorId);
-      return {
-        actorId,
-        action,
-        result,
-        projection: result?.accepted ? game.view(payload.viewerId) : null,
-      };
-    }
-    return { action: null, result: null, projection: null };
+    return game.aiTurn(payload.viewerId);
   }
   throw new TypeError(`Unknown Mahjong worker request: ${type}`);
 }

@@ -631,19 +631,19 @@ export class MahjongResultHandRenderer {
       this.startButton.setPressAmount(from + (to - from) * eased);
       this.drawFrame();
       if (progress < 1) {
-        this.startButtonAnimation = requestAnimationFrame(step);
+        this.startButtonAnimation = window.requestAnimationFrame(step);
         return;
       }
       this.startButtonAnimation = 0;
       this.startButtonAnimationTarget = null;
       onComplete?.();
     };
-    this.startButtonAnimation = requestAnimationFrame(step);
+    this.startButtonAnimation = window.requestAnimationFrame(step);
   }
 
   cancelStartButtonAnimation() {
     if (!this.startButtonAnimation) return;
-    cancelAnimationFrame(this.startButtonAnimation);
+    window.cancelAnimationFrame(this.startButtonAnimation);
     this.startButtonAnimation = 0;
     this.startButtonAnimationTarget = null;
   }

@@ -18,9 +18,12 @@ import {
 } from "./constants.js";
 import { MahjongDomView } from "./dom-view.js";
 import { automaticMahjongAction, sameMahjongAction } from "./auto-actions.js";
+import {
+  createMahjongAutoActionScheduler,
+  shouldScheduleMahjongAiTurn,
+} from "./auto-action-scheduler.js";
 import { bindFixedViewport } from "./fixed-viewport.js";
 import {
-  activeSeat,
   asArray,
   automaticRiichiDiscard,
   blankDoubleClickAction,
@@ -35,6 +38,7 @@ import {
 import { MahjongThreeRenderer } from "./three-renderer.js";
 import { MahjongResultHandRenderer } from "./result-hand-renderer.js";
 import { MahjongPresentationController } from "./presentation-controller.js";
+import { createMahjongEffectRunner } from "./effect-runner.js";
 import { createMahjongSettingsDialog } from "./settings-dialog.js";
 import {
   isMahjongMatchMusicActive,
@@ -84,6 +88,7 @@ import {
   setMahjongSoloCheckpoint,
   writeMahjongSoloSave,
 } from "./solo-save.js";
+import { replayMahjongSoloSave } from "./solo-replay.js";
 import { mahjongInitialEntry } from "./entry-flow.js";
 import { orientMahjongRoomProjection } from "./room-state.js";
 import "../../src/base.css";
@@ -119,7 +124,8 @@ let matchSummaryVisible = false;
 let selectedTileId = 0;
 let riichiMode = false;
 let selectionBeforeRiichi = 0;
-let aiTimer;
+const aiScheduler = createMahjongAutoActionScheduler();
+const effectRunner = createMahjongEffectRunner();
 let visibleEvents = [];
 let playerName = "你";
 let hasPlatformName = false;
@@ -128,8 +134,10 @@ let hasPlatformAvatar = false;
 let endingSoloMatch = false;
 let roomPlayerId = "";
 let roomActionRequestId = "";
+let setupRecoveryErrorTimer;
 const MATCH_MUSIC_FADE_DURATION_MS = 800;
 const SETUP_EXIT_DURATION_MS = 560;
+const SETUP_RECOVERY_ERROR_DURATION_MS = 4600;
 const RESULT_PAGE_TRANSITION_MS = 920;
 const RESULT_EXIT_DURATION_MS = 320;
 const NEW_HAND_TABLE_PAUSE_MS = 360;
@@ -157,8 +165,8 @@ let playMode = isStandalone ? "solo" : null;
 let autoActions = defaultAutoActions();
 
 function revealMahjongAppAfterStyles() {
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       document.documentElement.classList.add("mahjong-app-ready");
       const splash = document.querySelector("#mahjong-boot-splash");
       window.setTimeout(() => splash?.remove(), 220);
@@ -1063,26 +1071,11 @@ async function resumeSavedMatch() {
       matchId: save.matchId,
       settings: { matchType: save.matchType, rules: save.rules },
     });
-    let projection = restored.initialProjection;
-    let actions = save.actions;
-    if (save.checkpoint) {
-      try {
-        const restoredCheckpoint = await restored.restoreCheckpoint(save.checkpoint);
-        projection = restoredCheckpoint.projection;
-        actions = save.actions.slice(save.checkpoint.actionIndex);
-      } catch (checkpointError) {
-        console.warn("Mahjong save checkpoint was unusable; replaying full log", checkpointError);
-      }
-    }
-    for (const { action, actorId } of actions) {
-      const outcome = await restored.action(action, actorId);
-      if (!outcome.result?.accepted) {
-        throw new Error(
-          `saved action rejected: ${outcome.result?.error?.code || "unknown"}`,
-        );
-      }
-      projection = outcome.projection;
-    }
+    const projection = await replayMahjongSoloSave({
+      game: restored,
+      save,
+      playerId: HUMAN_ID,
+    });
     await visualRendererReady;
     game = restored;
     await rerollMahjongAssetPackPortraits();
@@ -1102,9 +1095,16 @@ async function resumeSavedMatch() {
   } catch (error) {
     console.error(error);
     restored?.close();
-    clearSoloSave();
+    if (game === restored) game = undefined;
+    state = undefined;
+    settingsDialog.setSoloMatchActive(false);
     showSetup();
     elements.loading.hidden = true;
+    showSetupRecoveryError(
+      error instanceof Error && error.message
+        ? error.message
+        : "Failed to restore saved game.",
+    );
   } finally {
     gameInitializing = false;
   }
@@ -1200,6 +1200,22 @@ function showSetup({ behindResult = false } = {}) {
   elements.setup.hidden = false;
 }
 
+function showSetupRecoveryError(message) {
+  window.clearTimeout(setupRecoveryErrorTimer);
+  elements.setupRecoveryError.textContent = message;
+  elements.setupRecoveryError.hidden = false;
+  void elements.setupRecoveryError.offsetWidth;
+  elements.setupRecoveryError.classList.add("is-visible");
+  setupRecoveryErrorTimer = window.setTimeout(() => {
+    elements.setupRecoveryError.classList.remove("is-visible");
+    window.setTimeout(() => {
+      if (!elements.setupRecoveryError.classList.contains("is-visible")) {
+        elements.setupRecoveryError.hidden = true;
+      }
+    }, 180);
+  }, SETUP_RECOVERY_ERROR_DURATION_MS);
+}
+
 async function endSoloMatch() {
   if (!game || gameInitializing || endingSoloMatch) return;
   endingSoloMatch = true;
@@ -1210,7 +1226,7 @@ async function endSoloMatch() {
         ? window.confirm(confirmation)
         : await playweftClient?.confirm(confirmation);
     if (!confirmed) return;
-    window.clearTimeout(aiTimer);
+    aiScheduler.cancel();
     settingsDialog.setOpen(false, { restoreFocus: false, animate: false });
     presentation.suspend();
     game.close();
@@ -1270,8 +1286,10 @@ function showLoadingError(message) {
   elements.loadingMessage.hidden = false;
 }
 
-async function dispatch(action) {
-  if (!state || actionInFlight) return;
+async function dispatch(action, { source = "manual" } = {}) {
+  if (!state) return;
+  if (source === "manual") aiScheduler.cancel();
+  if (actionInFlight) return;
   if (playMode === "room") {
     const requestId = playweftClient?.sendAction(action);
     if (!requestId) {
@@ -1279,15 +1297,14 @@ async function dispatch(action) {
       elements.message.classList.add("is-error");
       return;
     }
-    window.clearTimeout(aiTimer);
     actionInFlight = true;
     roomActionRequestId = requestId;
     return;
   }
   if (!game) return;
   const currentGame = game;
+  let reschedule = false;
   actionInFlight = true;
-  window.clearTimeout(aiTimer);
   try {
     const outcome = await currentGame.action(action, HUMAN_ID);
     if (currentGame !== game) return;
@@ -1309,7 +1326,7 @@ async function dispatch(action) {
           ? Number(action.tileId) || 0
           : 0,
     });
-    scheduleAi();
+    reschedule = true;
   } catch (error) {
     if (currentGame !== game) return;
     console.error("Mahjong action failed", error);
@@ -1317,34 +1334,29 @@ async function dispatch(action) {
     elements.message.classList.add("is-error");
   } finally {
     actionInFlight = false;
+    if (reschedule && currentGame === game) scheduleAi();
   }
 }
 
-async function runAiTurn() {
+async function runAiTurn(scheduledGeneration) {
   if (
     playMode !== "solo" ||
     !game ||
     !state ||
     state.phase === "hand_ended" ||
-    actionInFlight
+    actionInFlight ||
+    !aiScheduler.isCurrent(scheduledGeneration)
   )
     return;
   const currentGame = game;
-  const actorIds =
-    state.phase === "claiming"
-      ? state.players.slice(1)
-      : (() => {
-          const seat = activeSeat(state);
-          return seat > 1 ? [state.players[seat - 1]] : [];
-        })();
-  if (!actorIds.length) return;
+  let reschedule = false;
   actionInFlight = true;
   try {
-    // Claim-response identity is deliberately hidden from the projection. The
-    // worker probes the AI seats against its authoritative state atomically.
-    const outcome = await currentGame.aiTurn(actorIds);
-    if (currentGame !== game || !outcome.action) return;
-    if (!outcome.result?.accepted) {
+    // The worker owns the authoritative phase and current actor. The page can
+    // therefore never select an AI identity from an out-of-date projection.
+    const outcome = await currentGame.aiTurn(HUMAN_ID);
+    if (currentGame !== game || !outcome?.projection) return;
+    if (outcome.status === "acted" && !outcome.result?.accepted) {
       console.error(
         "AI action rejected",
         outcome.actorId,
@@ -1355,14 +1367,16 @@ async function runAiTurn() {
       elements.message.classList.add("is-error");
       return;
     }
-    await persistAcceptedAction(
-      outcome.action,
-      outcome.actorId,
-      outcome.projection,
-      currentGame,
-    );
+    if (outcome.status === "acted") {
+      await persistAcceptedAction(
+        outcome.action,
+        outcome.actorId,
+        outcome.projection,
+        currentGame,
+      );
+      reschedule = true;
+    }
     await refresh(outcome.projection);
-    scheduleAi();
   } catch (error) {
     if (currentGame !== game) return;
     console.error("Mahjong AI worker failed", error);
@@ -1370,11 +1384,12 @@ async function runAiTurn() {
     elements.message.classList.add("is-error");
   } finally {
     actionInFlight = false;
+    if (reschedule && currentGame === game) scheduleAi();
   }
 }
 
 function scheduleAi({ afterDealIn = false } = {}) {
-  window.clearTimeout(aiTimer);
+  aiScheduler.cancel();
   if (playMode !== "solo") return;
   if (!state || state.phase === "hand_ended" || presentation.kanDrawPending)
     return;
@@ -1384,13 +1399,15 @@ function scheduleAi({ afterDealIn = false } = {}) {
     const isVisibleTileDecision = ["claim", "tsumo", "discard"].includes(
       autoAction.type,
     );
-    aiTimer = window.setTimeout(
-      () => {
+    aiScheduler.schedule(
+      (scheduledGeneration) => {
+        if (!aiScheduler.isCurrent(scheduledGeneration) || actionInFlight)
+          return;
         const currentAction = automaticMahjongAction(state, autoActions, {
           riichiMode,
         });
         if (sameMahjongAction(currentAction, autoAction))
-          dispatch(currentAction);
+          void dispatch(currentAction, { source: "automatic" });
       },
       isVisibleTileDecision
         ? Math.max(
@@ -1403,10 +1420,15 @@ function scheduleAi({ afterDealIn = false } = {}) {
   }
   const automaticTile = automaticRiichiDiscard(state, HUMAN_ID);
   if (automaticTile) {
-    aiTimer = window.setTimeout(
-      () => {
+    aiScheduler.schedule(
+      (scheduledGeneration) => {
+        if (!aiScheduler.isCurrent(scheduledGeneration) || actionInFlight)
+          return;
         if (automaticRiichiDiscard(state, HUMAN_ID) === automaticTile) {
-          dispatch({ type: "discard", tileId: automaticTile });
+          void dispatch(
+            { type: "discard", tileId: automaticTile },
+            { source: "automatic" },
+          );
         }
       },
       Math.max(visualDelay, OWN_DRAW_ENTRY_DURATION_MS) +
@@ -1414,13 +1436,11 @@ function scheduleAi({ afterDealIn = false } = {}) {
     );
     return;
   }
-  if (state.phase === "claiming") {
-    aiTimer = window.setTimeout(runAiTurn, visualDelay + AI_DELAY_MS);
-    return;
-  }
-  const seat = activeSeat(state);
-  if (seat <= 1) return;
-  aiTimer = window.setTimeout(runAiTurn, visualDelay + AI_DELAY_MS);
+  if (!shouldScheduleMahjongAiTurn(state)) return;
+  aiScheduler.schedule(
+    (scheduledGeneration) => void runAiTurn(scheduledGeneration),
+    visualDelay + AI_DELAY_MS,
+  );
 }
 
 async function refresh(
@@ -1434,50 +1454,61 @@ async function refresh(
   if (!projection || (playMode === "solo" && currentGame !== game)) return;
   const previousState = state;
   state = projection.state;
-  syncMatchMusicForHandState(previousState, state);
   if (riichiMode && !state.legalActions?.canRiichi) {
     riichiMode = false;
     selectionBeforeRiichi = 0;
   }
   const events = asArray(projection.events);
   visibleEvents = events;
-  syncResultPage(state);
-  playRoleVoices(events);
-  queueKanDraw(events);
-  queueHandInsertion(previousState, events, ownDiscardedTile);
-  presentation.syncHandEnd(handEndPresentationPlan(state));
+  // The state above is authoritative. Everything below is a recoverable
+  // effect: a host audio/WebGL/animation error may degrade presentation, but
+  // must never reject the action that produced this projection.
+  effectRunner.runAll([
+    ["match music", () => syncMatchMusicForHandState(previousState, state)],
+    ["result state", () => syncResultPage(state)],
+    ["role voices", () => playRoleVoices(events)],
+    ["kan draw presentation", () => queueKanDraw(events)],
+    ["hand insertion presentation", () =>
+      queueHandInsertion(previousState, events, ownDiscardedTile)],
+    ["hand-end presentation", () =>
+      presentation.syncHandEnd(handEndPresentationPlan(state))],
+  ]);
   renderCurrentState({ animateDealIn });
-  playRiverTileSound(events);
+  effectRunner.run("river tile sound", () => playRiverTileSound(events));
 }
 
 function renderCurrentState({ animateDealIn = false } = {}) {
   const renderState = presentedState();
   const revealedPlayerIndices = handRevealPlayerIndices(state);
   const coveredPlayerIndices = handCoveredPlayerIndices(state);
-  renderPresentationOverlays(renderState, { animateDealIn });
-  visualRenderer.render(renderState, visibleEvents, {
-    ...domView.visualUi(playerName, selectedTileId),
-    dealInKey: animateDealIn ? handDealInKey(state) : "",
-    animateDealIn,
-    riichiMode,
-    riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),
-    showGameHints: settingsDialog.gameHintsEnabled,
-    revealPlayerIndices: revealedPlayerIndices,
-    coveredPlayerIndices,
-    handRevealKey: handEndPresentationKey(state),
-    animateHandReveal:
-      revealedPlayerIndices.length + coveredPlayerIndices.length > 0 &&
-      !presentation.resultVisible,
-    handRevealDelay: isExhaustiveDrawRevealState(state)
-      ? AUTO_DECISION_DELAY_MS
-      : 0,
-    delayHandRevealForCallout: visibleEvents.some(
-      (event) => event.type === "won",
-    ),
-    deferredHandInsertionSeat: Number(presentation.handInsertion?.seat) || 0,
-    deferredHandInsertionIndex:
-      Number(presentation.handInsertion?.rackIndex) || 0,
-  });
+  effectRunner.run("table overlays", () =>
+    renderPresentationOverlays(renderState, { animateDealIn }),
+  );
+  effectRunner.run("table scene", () =>
+    visualRenderer.render(renderState, visibleEvents, {
+      ...domView.visualUi(playerName, selectedTileId),
+      dealInKey: animateDealIn ? handDealInKey(state) : "",
+      animateDealIn,
+      riichiMode,
+      riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),
+      showGameHints: settingsDialog.gameHintsEnabled,
+      revealPlayerIndices: revealedPlayerIndices,
+      coveredPlayerIndices,
+      handRevealKey: handEndPresentationKey(state),
+      animateHandReveal:
+        revealedPlayerIndices.length + coveredPlayerIndices.length > 0 &&
+        !presentation.resultVisible,
+      handRevealDelay: isExhaustiveDrawRevealState(state)
+        ? AUTO_DECISION_DELAY_MS
+        : 0,
+      delayHandRevealForCallout: visibleEvents.some(
+        (event) => event.type === "won",
+      ),
+      deferredHandInsertionSeat: Number(presentation.handInsertion?.seat) || 0,
+      deferredHandInsertionIndex:
+        Number(presentation.handInsertion?.rackIndex) || 0,
+    }),
+  );
 }
 
 function renderPresentationOverlays(
@@ -1485,28 +1516,32 @@ function renderPresentationOverlays(
   { animateDealIn = false } = {},
 ) {
   if (!renderState) return;
-  domView.render(renderState, visibleEvents, selectedTileId, playerName, {
-    showResult: presentation.resultVisible,
-    showGameHints: settingsDialog.gameHintsEnabled,
-    showDrawReveal:
-      isDrawRevealState(state) &&
-      presentation.drawRevealVisible &&
-      !presentation.resultVisible,
-    resultPage: resultPageIndex,
-    dealInKey: animateDealIn ? handDealInKey(state) : "",
-    animateDealIn,
-    riichiMode,
-    defaultNames: getMahjongDefaultNames(),
-    playerNameIsAuthoritative: hasPlatformName,
-  });
-  if (matchSummaryVisible) {
-    resultHandRenderer.hide();
-    renderMatchSummary();
-  } else {
-    resultHandRenderer.render(renderState, resultPageIndex, playerName, {
+  effectRunner.run("table DOM", () =>
+    domView.render(renderState, visibleEvents, selectedTileId, playerName, {
+      showResult: presentation.resultVisible,
+      showGameHints: settingsDialog.gameHintsEnabled,
+      showDrawReveal:
+        isDrawRevealState(state) &&
+        presentation.drawRevealVisible &&
+        !presentation.resultVisible,
+      resultPage: resultPageIndex,
+      dealInKey: animateDealIn ? handDealInKey(state) : "",
+      animateDealIn,
+      riichiMode,
       defaultNames: getMahjongDefaultNames(),
       playerNameIsAuthoritative: hasPlatformName,
-    });
+    }),
+  );
+  if (matchSummaryVisible) {
+    effectRunner.run("result hand cleanup", () => resultHandRenderer.hide());
+    effectRunner.run("match summary", () => renderMatchSummary());
+  } else {
+    effectRunner.run("result hand", () =>
+      resultHandRenderer.render(renderState, resultPageIndex, playerName, {
+        defaultNames: getMahjongDefaultNames(),
+        playerNameIsAuthoritative: hasPlatformName,
+      }),
+    );
   }
 }
 
@@ -1517,33 +1552,37 @@ function renderResultExitTable(tableState) {
   visibleEvents = [];
   selectedTileId = 0;
   riichiMode = false;
-  domView.render(
-    { ...renderState, legalActions: {} },
-    [],
-    selectedTileId,
-    playerName,
-    {
-      preserveResult: true,
-      riichiMode,
-      defaultNames: getMahjongDefaultNames(),
-      playerNameIsAuthoritative: hasPlatformName,
-    },
+  effectRunner.run("result exit DOM", () =>
+    domView.render(
+      { ...renderState, legalActions: {} },
+      [],
+      selectedTileId,
+      playerName,
+      {
+        preserveResult: true,
+        riichiMode,
+        defaultNames: getMahjongDefaultNames(),
+        playerNameIsAuthoritative: hasPlatformName,
+      },
+    ),
   );
   const staticState = { ...renderState, legalActions: {} };
-  visualRenderer.render(staticState, [], {
-    ...domView.visualUi(playerName, selectedTileId),
-    riichiMode,
-    riichiCandidateTiles: [],
-    revealPlayerIndices: [],
-    coveredPlayerIndices: [],
-    handRevealKey: "",
-    animateHandReveal: false,
-    dealInKey: "",
-    animateDealIn: false,
-    delayHandRevealForCallout: false,
-    deferredHandInsertionSeat: 0,
-    deferredHandInsertionIndex: 0,
-  });
+  effectRunner.run("result exit scene", () =>
+    visualRenderer.render(staticState, [], {
+      ...domView.visualUi(playerName, selectedTileId),
+      riichiMode,
+      riichiCandidateTiles: [],
+      revealPlayerIndices: [],
+      coveredPlayerIndices: [],
+      handRevealKey: "",
+      animateHandReveal: false,
+      dealInKey: "",
+      animateDealIn: false,
+      delayHandRevealForCallout: false,
+      deferredHandInsertionSeat: 0,
+      deferredHandInsertionIndex: 0,
+    }),
+  );
 }
 
 function isResultBlankSpace(target) {
@@ -1771,7 +1810,7 @@ async function returnToSetupFromSummary() {
       RESULT_EXIT_DURATION_MS,
     );
     hideMatchSummary();
-    window.clearTimeout(aiTimer);
+    aiScheduler.cancel();
     presentation.suspend();
     game?.close();
     game = undefined;
@@ -2161,7 +2200,7 @@ function cancelRiichiMode() {
 function handlePageHide(event) {
   matchMusicController.suspend();
   riverTileSound.pause();
-  window.clearTimeout(aiTimer);
+  aiScheduler.cancel();
   presentation.suspend();
   if (!event.persisted) destroy();
 }
@@ -2174,7 +2213,7 @@ function handleVisibilityChange() {
   if (document.visibilityState === "hidden") {
     matchMusicController.suspend();
     riverTileSound.pause();
-    window.clearTimeout(aiTimer);
+    aiScheduler.cancel();
     presentation.suspend();
     return;
   }
@@ -2201,7 +2240,7 @@ function resumeAfterSuspension() {
 function destroy() {
   if (destroyed) return;
   destroyed = true;
-  window.clearTimeout(aiTimer);
+  aiScheduler.cancel();
   presentation.destroy();
   matchMusicController.stop();
   riverTileSound.pause();

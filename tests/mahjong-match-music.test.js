@@ -123,3 +123,39 @@ test("mahjong cancels an unfinished result fade when the next hand starts immedi
     "an already-running player is not restarted just because the result fade was interrupted",
   );
 });
+
+test("mahjong hand-end fade retains the embedded window animation-frame receiver", () => {
+  const originalWindow = globalThis.window;
+  const frames = new Map();
+  const frameHost = {
+    nextFrame: 1,
+    requestAnimationFrame(callback) {
+      assert.equal(this, frameHost);
+      const id = this.nextFrame;
+      this.nextFrame += 1;
+      frames.set(id, callback);
+      return id;
+    },
+    cancelAnimationFrame(id) {
+      assert.equal(this, frameHost);
+      frames.delete(id);
+    },
+  };
+  globalThis.window = frameHost;
+  try {
+    const audio = new FakeAudio();
+    const music = new MahjongMatchMusic({
+      audio,
+      getVolumeScale: () => 0.32,
+      fadeDuration: 800,
+    });
+
+    music.mute({ fade: true });
+
+    assert.equal(frames.size, 1);
+    [...frames.values()][0](Number.MAX_SAFE_INTEGER);
+    assert.equal(audio.paused, true);
+  } finally {
+    globalThis.window = originalWindow;
+  }
+});
