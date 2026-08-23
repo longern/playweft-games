@@ -63,6 +63,7 @@ import {
   getMahjongMatchMusicUrl,
   initializeMahjongAssetPacks,
   listMahjongAssetPacks,
+  rerollMahjongAssetPackPortraits,
   MAHJONG_YAKU_VOICE_KEYS,
 } from "./asset-packs.js";
 import {
@@ -793,7 +794,8 @@ async function refreshThemePacks() {
     visualPacks = await listMahjongAssetPacks();
     renderThemePacks();
   } catch {
-    themePackElements.feedback.textContent = "当前浏览器未开放本机主题包存储。";
+    visualPacks = [];
+    renderThemePacks();
   }
 }
 
@@ -897,7 +899,12 @@ function renderAppearanceSettings() {
   surfaceGroup.append(surfaceLegend);
   const surfaces = [
     ["桌布", "tablecloth", catalog.tablecloths, pack.appearance.tablecloth],
-    ["背景", "background", catalog.backgrounds, pack.appearance.background],
+    [
+      "背景",
+      "tableBackground",
+      catalog.tableBackgrounds,
+      pack.appearance.tableBackground,
+    ],
     ["牌背", "tileBack", catalog.tileBacks, pack.appearance.tileBack],
   ];
   for (const [label, key, options, selected] of surfaces) {
@@ -907,7 +914,7 @@ function renderAppearanceSettings() {
       );
   }
   if (surfaceGroup.childElementCount > 1) controls.append(surfaceGroup);
-  if (catalog.lobby.length) {
+  if (catalog.lobbyBackgrounds.length) {
     const lobbyGroup = document.createElement("fieldset");
     lobbyGroup.className = "settings-appearance-choice-group";
     const lobbyLegend = document.createElement("legend");
@@ -916,26 +923,26 @@ function renderAppearanceSettings() {
     lobbyGroup.append(
       createAppearanceSelect(
         "大厅背景",
-        "lobby",
-        catalog.lobby,
-        pack.appearance.lobby,
+        "lobbyBackground",
+        catalog.lobbyBackgrounds,
+        pack.appearance.lobbyBackground,
       ),
     );
     controls.append(lobbyGroup);
   }
-  if (catalog.music.length || catalog.voices.length) {
+  if (catalog.matchBgm.length || catalog.voices.length) {
     const soundGroup = document.createElement("fieldset");
     soundGroup.className = "settings-appearance-choice-group";
     const soundLegend = document.createElement("legend");
     soundLegend.textContent = "声音";
     soundGroup.append(soundLegend);
-    if (catalog.music.length)
+    if (catalog.matchBgm.length)
       soundGroup.append(
         createAppearanceSelect(
           "对局音乐",
-          "music",
-          catalog.music,
-          pack.appearance.music,
+          "matchBgm",
+          catalog.matchBgm,
+          pack.appearance.matchBgm,
           "不播放",
         ),
       );
@@ -1047,6 +1054,7 @@ async function initialize(matchType = "east") {
     settings: { matchType, rules },
   });
   try {
+    await rerollMahjongAssetPackPortraits();
     [game] = await Promise.all([
       gamePreparation,
       setupExit,
@@ -1123,6 +1131,7 @@ async function resumeSavedMatch() {
     }
     await visualRendererReady;
     game = restored;
+    await rerollMahjongAssetPackPortraits();
     if (save.playerName) playerName = save.playerName;
     autoActions = { ...save.autoActions };
     syncAutoActionControls();
@@ -1862,6 +1871,9 @@ async function advanceFromResult(action) {
   elements.result.classList.remove("is-exiting");
   await waitForDelay(NEW_HAND_TABLE_PAUSE_MS);
   visualRenderer.prepareDealIn();
+  if (action.type === "new_match") {
+    await rerollMahjongAssetPackPortraits();
+  }
   await refresh(outcome.projection, { animateDealIn: true });
   scheduleAi({ afterDealIn: true });
   return true;

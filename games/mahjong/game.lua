@@ -105,6 +105,11 @@ local function next_random(state)
 	return state.seed
 end
 
+local function next_match_seed(seed)
+	local next = (math.floor(math.abs(tonumber(seed) or 1)) * RANDOM_MULTIPLIER + 1) % RANDOM_MODULUS
+	return next == 0 and 1 or next
+end
+
 local function shuffled_tiles(state)
 	local tiles = {}
 	for tile = 1, 136 do
@@ -3958,7 +3963,7 @@ function on_action(state, action, context)
 			return rejected("game_not_over")
 		end
 		return accepted(
-			new_match(state.players, state.playerNames, state.seed, {
+			new_match(state.players, state.playerNames, next_match_seed(state.seed), {
 				matchType = state.matchType,
 				rules = state.rules,
 			}),

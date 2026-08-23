@@ -9,7 +9,10 @@ import {
   requiredPackName,
   unpackMahjongAssetPack,
 } from "../games/mahjong/asset-packs.js";
-import { normalizeMahjongDefaultAssetConfig } from "../games/mahjong/default-assets.js";
+import {
+  normalizeMahjongDefaultAssetConfig,
+  portraitNames,
+} from "../games/mahjong/default-assets.js";
 
 test("mahjong music falls back when a pack has no music and preserves silence", () => {
   assert.equal(
@@ -56,10 +59,10 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
             { id: "wolf", file: "portraits/wolf.png", label: "灰狼" },
           ],
           tablecloths: [{ id: "felt", file: "felt.png", label: "绒面" }],
-          backgrounds: [],
-          lobby: [{ id: "evening", file: "lobby/evening.webp", label: "暮色" }],
+          tableBackgrounds: [],
+          lobbyBackgrounds: [{ id: "evening", file: "lobby/evening.webp", label: "暮色" }],
           tileBacks: [],
-          music: [{ id: "night", file: "music/night.ogg", label: "夜风" }],
+          matchBgm: [{ id: "night", file: "music/night.ogg", label: "夜风" }],
           voices: [
             {
               character: "fox",
@@ -68,9 +71,7 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
             },
           ],
         },
-        defaults: {
-          appearance: { portraits: { right: "wolf" }, music: "night" },
-        },
+        defaults: { portraits: { self: "fox", right: "fox" }, matchBgm: "night" },
       }),
     ),
     "moonlit/portraits/fox.png": new Uint8Array([137, 80, 78, 71]),
@@ -93,9 +94,9 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
     "moonlit/portraits/fox.png",
   );
   assert.equal(manifest.catalog.tablecloths[0].fileName, "moonlit/felt.png");
-  assert.equal(manifest.catalog.music[0].fileName, "moonlit/music/night.ogg");
+  assert.equal(manifest.catalog.matchBgm[0].fileName, "moonlit/music/night.ogg");
   assert.equal(
-    manifest.catalog.lobby[0].fileName,
+    manifest.catalog.lobbyBackgrounds[0].fileName,
     "moonlit/lobby/evening.webp",
   );
   assert.equal(
@@ -113,10 +114,10 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
   assert.deepEqual(manifest.appearance.portraits, {
     self: "fox",
     right: "wolf",
-    opposite: "fox",
-    left: "fox",
+    opposite: "wolf",
+    left: "wolf",
   });
-  assert.equal(manifest.appearance.music, "night");
+  assert.equal(manifest.appearance.matchBgm, "night");
 });
 
 test("mahjong asset packs reject the former object-shaped catalog", async () => {
@@ -149,33 +150,38 @@ test("appearance independently selects each local seat and falls back to availab
   const catalog = {
     portraits: [{ id: "fox" }, { id: "wolf" }, { id: "cat" }],
     tablecloths: [{ id: "felt" }],
-    backgrounds: [{ id: "night" }],
+    tableBackgrounds: [{ id: "night" }],
+    lobbyBackgrounds: [],
     tileBacks: [{ id: "cloud" }],
-    music: [{ id: "dawn" }],
+    matchBgm: [{ id: "dawn" }],
     voices: [],
   };
-  assert.deepEqual(
-    normaliseAppearance(
-      {
-        portraits: { self: "cat", right: "wolf", opposite: "missing" },
-        tablecloth: "felt",
-        background: "missing",
-        tileBack: "cloud",
-        music: "dawn",
-        voice: false,
-      },
-      catalog,
-    ),
+  const appearance = normaliseAppearance(
     {
-      portraits: { self: "cat", right: "wolf", opposite: "fox", left: "fox" },
+      portraits: { self: "cat", right: "wolf", opposite: "missing" },
       tablecloth: "felt",
-      background: "night",
-      lobby: "",
+      tableBackground: "missing",
       tileBack: "cloud",
-      music: "dawn",
+      matchBgm: "dawn",
       voice: false,
     },
+    catalog,
   );
+  assert.equal(appearance.portraits.self, "cat");
+  assert.deepEqual(
+    new Set([appearance.portraits.right, appearance.portraits.opposite]),
+    new Set(["fox", "wolf"]),
+  );
+  assert.equal(appearance.portraits.left, "fox");
+  const { portraits: _portraits, ...nonPortraitAppearance } = appearance;
+  assert.deepEqual(nonPortraitAppearance, {
+    tablecloth: "felt",
+    tableBackground: "night",
+    lobbyBackground: "",
+    tileBack: "cloud",
+    matchBgm: "dawn",
+    voice: false,
+  });
 });
 
 test("build-time default assets keep multiple remote choices and normalize defaults", () => {
@@ -203,7 +209,11 @@ test("build-time default assets keep multiple remote choices and normalize defau
       { id: "cloud", url: "https://cdn.example/cloud.webp", label: "祥云" },
     ],
     defaults: {
-      portraits: { self: "wolf", pool: ["wolf", "missing"] },
+      portraits: {
+        self: "cat",
+        right: "wolf",
+        pool: ["wolf", "fox", "missing"],
+      },
       matchBgm: "day",
       tablecloth: "wood",
       tileBack: "cloud",
@@ -212,27 +222,88 @@ test("build-time default assets keep multiple remote choices and normalize defau
     },
   });
   assert.equal(config.name, "默认主题");
-  assert.deepEqual(config.portraitPool, ["wolf"]);
+  assert.deepEqual(config.portraitPool, ["wolf", "fox"]);
   assert.deepEqual(config.appearance.portraits, {
-    self: "wolf",
+    self: "cat",
     right: "",
     opposite: "",
     left: "",
   });
   assert.deepEqual(config.appearance, {
-    portraits: { self: "wolf", right: "", opposite: "", left: "" },
+    portraits: { self: "cat", right: "", opposite: "", left: "" },
     tablecloth: "wood",
-    background: "night",
-    lobby: "evening",
+    tableBackground: "night",
+    lobbyBackground: "evening",
     tileBack: "cloud",
-    music: "day",
+    matchBgm: "day",
   });
-  assert.deepEqual(config.catalog.music.map(({ id, url }) => ({ id, url })), [
+  assert.deepEqual(config.catalog.matchBgm.map(({ id, url }) => ({ id, url })), [
     { id: "night", url: "https://cdn.example/night.mp3" },
     { id: "day", url: "https://cdn.example/day.ogg" },
   ]);
   assert.equal(config.catalog.tablecloths.length, 2);
   assert.equal(config.catalog.tileBacks[0].label, "祥云");
+});
+
+test("portrait pools keep self fixed and ignore explicit opponent seats", () => {
+  const catalog = [
+    { id: "self" },
+    { id: "right" },
+    { id: "opposite" },
+    { id: "left" },
+  ];
+  const resolved = normaliseAppearance(
+    { portraits: { self: "self", right: "opposite" } },
+    { portraits: catalog },
+    ["right", "opposite", "left"],
+  ).portraits;
+  assert.equal(resolved.self, "self");
+  assert.deepEqual(new Set([resolved.right, resolved.opposite, resolved.left]), new Set(["right", "opposite", "left"]));
+  const poolOnly = normaliseAppearance(
+    { portraits: { self: "self", right: "opposite" } },
+    { portraits: catalog },
+    ["right"],
+  ).portraits;
+  assert.deepEqual(poolOnly, {
+    self: "self",
+    right: "right",
+    opposite: "right",
+    left: "right",
+  });
+});
+
+test("portrait pools repeat entries after unique portraits are exhausted", () => {
+  const onePortrait = normaliseAppearance(
+    { portraits: { self: "solo" } },
+    { portraits: [{ id: "solo" }] },
+    ["solo"],
+  ).portraits;
+  assert.deepEqual(onePortrait, {
+    self: "solo",
+    right: "solo",
+    opposite: "solo",
+    left: "solo",
+  });
+
+  const twoPortraits = normaliseAppearance(
+    { portraits: { self: "self" } },
+    { portraits: [{ id: "self" }, { id: "other" }] },
+    ["other"],
+  ).portraits;
+  assert.equal(twoPortraits.self, "self");
+  assert.equal(twoPortraits.right, "other");
+  assert.equal(twoPortraits.opposite, "other");
+  assert.equal(twoPortraits.left, "other");
+});
+
+test("portrait labels follow the currently assigned avatar seats", () => {
+  assert.deepEqual(
+    portraitNames(
+      { portraits: [{ id: "fox", label: "赤狐" }, { id: "wolf", label: "灰狼" }] },
+      { portraits: { self: "wolf", right: "fox", opposite: "wolf", left: "fox" } },
+    ),
+    { self: "灰狼", right: "赤狐", opposite: "灰狼", left: "赤狐" },
+  );
 });
 
 test("build-time default assets reject unsafe or malformed remote URLs", () => {
@@ -243,7 +314,7 @@ test("build-time default assets reject unsafe or malformed remote URLs", () => {
       { id: "ok", url: "https://cdn.example/ok.mp3", label: "有效" },
     ],
   });
-  assert.deepEqual(config.catalog.music, [
+  assert.deepEqual(config.catalog.matchBgm, [
     { id: "ok", url: "https://cdn.example/ok.mp3", label: "有效", copyright: "" },
   ]);
 });

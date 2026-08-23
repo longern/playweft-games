@@ -95,6 +95,27 @@ test("Mahjong draws seats deterministically and can assign every initial wind", 
   assert.equal(result.covered, 4);
 });
 
+test("Mahjong rematches advance the match draw for new seat assignments", async () => {
+  const result = await runScenario(`
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "0000000000000000000000000000002a" } })
+    local dealers = {}
+    local seeds = {}
+    for index = 1, 5 do
+      state.phase, state.matchEnded = "hand_ended", false
+      local rematch = on_action(state, { type = "new_match" }, { actor = { id = "p1" } })
+      state = rematch.state
+      dealers[state.dealerIndex] = true
+      seeds[#seeds + 1] = state.seed
+    end
+    local dealerCount = 0
+    for _ in pairs(dealers) do dealerCount = dealerCount + 1 end
+    result = { dealerCount = dealerCount, seedChanged = seeds[1] ~= seeds[2] }
+  `);
+
+  assert.ok(result.dealerCount >= 2);
+  assert.equal(result.seedChanged, true);
+});
+
 test("Mahjong view reveals only the viewer's concealed hand", async () => {
   const result = await runScenario(`
     state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000007" } })
