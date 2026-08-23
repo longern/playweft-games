@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { readFile, rename, rmdir } from "node:fs/promises";
 import { defineConfig } from "vite";
+import { normalizeMahjongDefaultAssetConfig } from "./games/mahjong/default-assets.js";
 
 const games = [
   "pig-dice",
@@ -30,7 +31,7 @@ for (const game of games) {
 }
 
 export default defineConfig({
-  plugins: [emitGamePackages(), preserveGameUrls()],
+  plugins: [mahjongDefaultAssets(), emitGamePackages(), preserveGameUrls()],
   build: {
     rollupOptions: {
       input,
@@ -49,6 +50,51 @@ export default defineConfig({
     },
   },
 });
+
+function mahjongDefaultAssets() {
+  return {
+    name: "mahjong-default-assets",
+    async config() {
+      const sourceUrl = String(
+        process.env.MAHJONG_DEFAULT_ASSET_CONFIG_URL || "",
+      ).trim();
+      if (!sourceUrl) return undefined;
+      let response;
+      try {
+        response = await fetch(sourceUrl);
+      } catch (error) {
+        throw new Error(`无法读取麻将默认素材配置：${error.message}`);
+      }
+      if (!response.ok) {
+        throw new Error(
+          `无法读取麻将默认素材配置：HTTP ${response.status}`,
+        );
+      }
+      let value;
+      try {
+        value = await response.json();
+      } catch {
+        throw new Error("麻将默认素材配置必须是 JSON");
+      }
+      const config = normalizeMahjongDefaultAssetConfig(value);
+      const assetCount = Object.values(config.catalog).reduce(
+        (count, entries) => count + entries.length,
+        0,
+      );
+      if (!assetCount && !config.assetPacks.length) {
+        throw new Error("麻将默认素材配置没有可用素材或可下载素材包");
+      }
+      return {
+        define: {
+          // The client module normalizes the injected source exactly once.
+          // Injecting `config` here would normalize an already-normalized
+          // object again and discard fields such as matchBgm.
+          __MAHJONG_DEFAULT_ASSET_CONFIG__: JSON.stringify(value),
+        },
+      };
+    },
+  };
+}
 
 /**
  * Publish each Manifest and authoritative Lua entry beside its game client.

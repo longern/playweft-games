@@ -9,15 +9,33 @@ import {
   requiredPackName,
   unpackMahjongAssetPack,
 } from "../games/mahjong/asset-packs.js";
+import { normalizeMahjongDefaultAssetConfig } from "../games/mahjong/default-assets.js";
 
-test("mahjong default music yields to a pack's music or silence", () => {
-  const defaultUrl = "https://media.example/default-bgm.mp3";
-  assert.equal(chooseMahjongMatchMusicUrl(defaultUrl, "", false), defaultUrl);
+test("mahjong music falls back when a pack has no music and preserves silence", () => {
   assert.equal(
-    chooseMahjongMatchMusicUrl(defaultUrl, "blob:custom-music", true),
+    chooseMahjongMatchMusicUrl(
+      "https://cdn.example/default.mp3",
+      "blob:custom-music",
+      true,
+    ),
     "blob:custom-music",
   );
-  assert.equal(chooseMahjongMatchMusicUrl(defaultUrl, "", true), "");
+  assert.equal(
+    chooseMahjongMatchMusicUrl(
+      "https://cdn.example/default.mp3",
+      "",
+      false,
+    ),
+    "https://cdn.example/default.mp3",
+  );
+  assert.equal(
+    chooseMahjongMatchMusicUrl(
+      "https://cdn.example/default.mp3",
+      "",
+      true,
+    ),
+    "",
+  );
 });
 
 test("mahjong asset packs require a manifest-provided name", () => {
@@ -160,7 +178,91 @@ test("appearance independently selects each local seat and falls back to availab
   );
 });
 
-test("mahjong settings exposes its visual-pack tab and appearance choices", () => {
+test("build-time default assets keep multiple remote choices and normalize defaults", () => {
+  const config = normalizeMahjongDefaultAssetConfig({
+    portraits: [
+      { id: "fox", url: "https://cdn.example/fox.webp", label: "赤狐" },
+      { id: "wolf", url: "https://cdn.example/wolf.webp", label: "灰狼" },
+      { id: "cat", url: "https://cdn.example/cat.webp", label: "黑猫" },
+    ],
+    matchBgm: [
+      { id: "night", url: "https://cdn.example/night.mp3", label: "夜风", copyright: "A" },
+      { id: "day", url: "https://cdn.example/day.ogg", label: "日光", copyright: "B" },
+    ],
+    tablecloths: [
+      { id: "felt", url: "https://cdn.example/felt.webp", label: "绒面" },
+      { id: "wood", url: "https://cdn.example/wood.webp", label: "木纹" },
+    ],
+    tableBackgrounds: [
+      { id: "night", url: "https://cdn.example/night.webp", label: "夜景" },
+    ],
+    lobbyBackgrounds: [
+      { id: "evening", url: "https://cdn.example/evening.webp", label: "暮色" },
+    ],
+    tileBacks: [
+      { id: "cloud", url: "https://cdn.example/cloud.webp", label: "祥云" },
+    ],
+    defaults: {
+      portraits: { self: "wolf", pool: ["wolf", "missing"] },
+      matchBgm: "day",
+      tablecloth: "wood",
+      tileBack: "cloud",
+      tableBackground: "night",
+      lobbyBackground: "evening",
+    },
+  });
+  assert.equal(config.name, "默认主题");
+  assert.deepEqual(config.portraitPool, ["wolf"]);
+  assert.deepEqual(config.appearance.portraits, {
+    self: "wolf",
+    right: "",
+    opposite: "",
+    left: "",
+  });
+  assert.deepEqual(config.appearance, {
+    portraits: { self: "wolf", right: "", opposite: "", left: "" },
+    tablecloth: "wood",
+    background: "night",
+    lobby: "evening",
+    tileBack: "cloud",
+    music: "day",
+  });
+  assert.deepEqual(config.catalog.music.map(({ id, url }) => ({ id, url })), [
+    { id: "night", url: "https://cdn.example/night.mp3" },
+    { id: "day", url: "https://cdn.example/day.ogg" },
+  ]);
+  assert.equal(config.catalog.tablecloths.length, 2);
+  assert.equal(config.catalog.tileBacks[0].label, "祥云");
+});
+
+test("build-time default assets reject unsafe or malformed remote URLs", () => {
+  const config = normalizeMahjongDefaultAssetConfig({
+    matchBgm: [
+      { id: "data", url: "data:audio/mp3;base64,AAAA", label: "数据" },
+      { id: "bad id", url: "https://cdn.example/bad.mp3", label: "坏 ID" },
+      { id: "ok", url: "https://cdn.example/ok.mp3", label: "有效" },
+    ],
+  });
+  assert.deepEqual(config.catalog.music, [
+    { id: "ok", url: "https://cdn.example/ok.mp3", label: "有效", copyright: "" },
+  ]);
+});
+
+test("build-time config exposes named downloadable asset packs without ids", () => {
+  const config = normalizeMahjongDefaultAssetConfig({
+    assetPacks: [
+      { name: "月下雀席", url: "https://cdn.example/moonlit.zip" },
+      { name: "重复地址", url: "https://cdn.example/moonlit.zip" },
+      { name: "不安全", url: "file:///tmp/theme.zip" },
+      { name: "缺地址" },
+    ],
+  });
+  assert.deepEqual(config.assetPacks, [
+    { name: "月下雀席", url: "https://cdn.example/moonlit.zip" },
+  ]);
+});
+
+test("mahjong settings separates theme management from appearance choices", () => {
   const page = readFileSync(
     new URL("../games/mahjong/index.html", import.meta.url),
     "utf8",
@@ -169,21 +271,29 @@ test("mahjong settings exposes its visual-pack tab and appearance choices", () =
     new URL("../games/mahjong/main.js", import.meta.url),
     "utf8",
   );
-  assert.match(page, /data-settings-tab="visual"[^>]*>画面/);
-  assert.match(page, /id="settings-pack-upload"/);
-  assert.match(page, /id="settings-pack-list"/);
-  assert.match(page, /id="settings-pack-appearance"/);
+  const settingsCss = readFileSync(
+    new URL("../games/mahjong/styles/settings.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(page, /data-settings-tab="theme"[^>]*>主题/);
+  assert.match(page, /data-settings-tab="appearance"[^>]*>装扮/);
+  assert.match(page, /id="settings-theme-upload"/);
+  assert.match(page, /id="settings-theme-list"/);
+  assert.match(page, /id="settings-appearance-controls"/);
+  assert.doesNotMatch(page, /素材包/);
   assert.doesNotMatch(page, /settings-pack-name/);
   assert.match(
     page,
     /accept="\.zip,application\/zip,application\/x-zip-compressed"/,
   );
-  assert.doesNotMatch(page, /id="settings-pack-upload"[^>]*multiple/);
+  assert.doesNotMatch(page, /id="settings-theme-upload"[^>]*multiple/);
   assert.match(main, /configureMahjongAssetPackAppearance/);
   assert.match(main, /角色语音/);
-  assert.match(main, /name: "默认主题"/);
+  assert.match(main, /getMahjongDefaultPack\(\)/);
+  assert.match(settingsCss, /\.settings-option strong[\s\S]*?font-size: 20px/);
+  assert.match(settingsCss, /\.settings-theme-list strong[\s\S]*?font-size: 20px/);
   assert.match(
     main,
-    /action === "delete"[\s\S]*?window\.parent === window[\s\S]*?window\.confirm\(confirmation\)[\s\S]*?await soloClient\.confirm\(confirmation\)/,
+    /action === "delete"[\s\S]*?isStandalone[\s\S]*?window\.confirm\(confirmation\)[\s\S]*?await playweftClient\?\.confirm\(confirmation\)/,
   );
 });

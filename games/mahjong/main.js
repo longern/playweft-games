@@ -1,5 +1,5 @@
 import { createLocalLuaGame } from "./local-game-worker-client.js";
-import { createPlayweftSoloClient } from "../../src/playweft-solo-client.js";
+import { createPlayweftClient } from "../../src/playweft-client.js";
 import { Cog, X, createIcons } from "lucide";
 import {
   AI_DELAY_MS,
@@ -55,6 +55,10 @@ import {
   deleteMahjongAssetPack,
   deactivateMahjongAssetPacks,
   getMahjongAssetUrl,
+  getMahjongConfiguredAssetPacks,
+  getMahjongDefaultPack,
+  configureMahjongDefaultPackAppearance,
+  getMahjongMatchMusicCopyright,
   getMahjongDefaultNames,
   getMahjongMatchMusicUrl,
   initializeMahjongAssetPacks,
@@ -62,8 +66,6 @@ import {
   MAHJONG_YAKU_VOICE_KEYS,
 } from "./asset-packs.js";
 import {
-  DEFAULT_MATCH_MUSIC_COPYRIGHT,
-  DEFAULT_MATCH_MUSIC_URL,
   DEFAULT_MATCH_MUSIC_VOLUME,
 } from "./media-config.js";
 import {
@@ -78,69 +80,9 @@ import {
   writeMahjongSoloSave,
 } from "./solo-save.js";
 import { mahjongInitialEntry } from "./entry-flow.js";
+import { orientMahjongRoomProjection } from "./room-state.js";
 import "../../src/base.css";
 import "./styles.css";
-
-const THEME_JSON_EXAMPLE = {
-  schemaVersion: 1,
-  name: "月下雀席",
-  assets: {
-    portraits: [
-      { id: "fox", file: "portraits/fox.webp", label: "赤狐" },
-      { id: "wolf", file: "portraits/wolf.webp", label: "灰狼" },
-      { id: "leopard", file: "portraits/leopard.webp", label: "雪豹" },
-    ],
-    tablecloths: [
-      { id: "felt", file: "table/felt.webp", label: "深绿绒面" },
-      { id: "brocade", file: "table/brocade.webp", label: "锦缎" },
-    ],
-    backgrounds: [
-      { id: "night", file: "backgrounds/night.webp", label: "夜景" },
-    ],
-    lobby: [{ id: "evening", file: "lobby/evening.webp", label: "暮色街巷" }],
-    tileBacks: [{ id: "cloud", file: "tiles/cloud.webp", label: "祥云" }],
-    music: [{ id: "night-wind", file: "music/night-wind.ogg", label: "夜风" }],
-    voices: [
-      {
-        character: "fox",
-        lines: {
-          chi: "voices/fox/chi.ogg",
-          pon: "voices/fox/pon.ogg",
-          kan: "voices/fox/kan.ogg",
-          riichi: "voices/fox/riichi.ogg",
-          ron: "voices/fox/ron.ogg",
-          tsumo: "voices/fox/tsumo.ogg",
-        },
-        yaku: {
-          tanyao: "voices/fox/tanyao.ogg",
-          iipeikou: "voices/fox/iipeikou.ogg",
-        },
-      },
-    ],
-  },
-  defaults: {
-    appearance: {
-      portraits: {
-        self: "fox",
-        right: "wolf",
-        opposite: "leopard",
-        left: "fox",
-      },
-      tablecloth: "felt",
-      background: "night",
-      lobby: "evening",
-      tileBack: "cloud",
-      music: "night-wind",
-      voice: true,
-    },
-    names: {
-      self: "我",
-      right: "右家",
-      opposite: "对家",
-      left: "左家",
-    },
-  },
-};
 
 createIcons({ icons: { Cog, X } });
 
@@ -161,12 +103,6 @@ deferMahjongImageAssets({
   urls: { signpost: defaultLobbySignpostUrl },
 });
 
-document.querySelector("#theme-json-example").textContent = JSON.stringify(
-  THEME_JSON_EXAMPLE,
-  null,
-  2,
-);
-
 let game;
 let gameInitializing = false;
 let actionInFlight = false;
@@ -185,6 +121,8 @@ let hasPlatformName = false;
 let destroyed = false;
 let hasPlatformAvatar = false;
 let endingSoloMatch = false;
+let roomPlayerId = "";
+let roomActionRequestId = "";
 const MATCH_MUSIC_FADE_DURATION_MS = 800;
 const SETUP_EXIT_DURATION_MS = 560;
 const RESULT_PAGE_TRANSITION_MS = 920;
@@ -203,8 +141,7 @@ matchMusic.loop = true;
 matchMusic.preload = "metadata";
 matchMusic.volume = DEFAULT_MATCH_MUSIC_VOLUME;
 const defaultMusicCopyright = document.querySelector("#default-bgm-copyright");
-defaultMusicCopyright.textContent = DEFAULT_MATCH_MUSIC_COPYRIGHT;
-defaultMusicCopyright.hidden = !DEFAULT_MATCH_MUSIC_COPYRIGHT;
+syncDefaultMusicCopyright();
 const riverTileSound = new Audio(discardSoundSource);
 riverTileSound.preload = "auto";
 let musicNeedsGesture = false;
@@ -214,7 +151,8 @@ let matchMusicPlayRequest = 0;
 let voicedEventKey = "";
 let playedRiverTileSoundKey = "";
 let soloSave = readMahjongSoloSave();
-let playMode = window.parent === window ? "solo" : null;
+const isStandalone = window.parent === window;
+let playMode = isStandalone ? "solo" : null;
 let autoActions = defaultAutoActions();
 
 function revealMahjongAppAfterStyles() {
@@ -313,11 +251,14 @@ const visualRendererReady = visualRenderer.init().catch((error) => {
 const resultHandRendererReady = resultHandRenderer.init().catch((error) => {
   console.error("Mahjong result hand renderer failed", error);
 });
-const visualPackElements = {
-  upload: document.querySelector("#settings-pack-upload"),
-  feedback: document.querySelector("#settings-pack-feedback"),
-  list: document.querySelector("#settings-pack-list"),
-  appearance: document.querySelector("#settings-pack-appearance"),
+const themePackElements = {
+  upload: document.querySelector("#settings-theme-upload"),
+  feedback: document.querySelector("#settings-theme-feedback"),
+  list: document.querySelector("#settings-theme-list"),
+};
+const appearanceElements = {
+  feedback: document.querySelector("#settings-appearance-feedback"),
+  controls: document.querySelector("#settings-appearance-controls"),
 };
 const DEFAULT_VISUAL_PACK_ID = "__default__";
 let visualPacks = [];
@@ -328,36 +269,67 @@ void Promise.all([
   resultHandRendererReady,
   assetPacksReady,
 ]).then(() => applyVisualPack());
-void refreshVisualPacks();
-visualPackElements.upload.addEventListener("change", async () => {
-  const archive = visualPackElements.upload.files?.[0];
-  visualPackElements.upload.value = "";
+void refreshThemePacks();
+themePackElements.upload.addEventListener("change", async () => {
+  const archive = themePackElements.upload.files?.[0];
+  themePackElements.upload.value = "";
   if (!archive) return;
-  visualPackElements.feedback.textContent = "正在保存素材包…";
+  themePackElements.feedback.textContent = "正在保存主题包…";
   try {
     visualPacks = await createMahjongAssetPack(archive);
-    renderVisualPacks();
-    visualPackElements.feedback.textContent = "已导入并启用素材包。";
+    renderThemePacks();
+    themePackElements.feedback.textContent = "已导入并启用主题包。";
   } catch (error) {
-    visualPackElements.feedback.textContent =
-      error instanceof Error ? error.message : "导入素材包失败";
+    themePackElements.feedback.textContent =
+      error instanceof Error ? error.message : "导入主题包失败";
   }
 });
-visualPackElements.list.addEventListener("click", async (event) => {
+themePackElements.list.addEventListener("click", async (event) => {
   const button = event.target.closest("button");
   const id = button?.dataset.packId;
   const action = button?.dataset.packAction;
-  if (!id || !action) return;
+  const packUrl = button?.dataset.packUrl;
+  if (!action) return;
+  if (action === "download") {
+    if (!packUrl) return;
+    const configuredPack = getMahjongConfiguredAssetPacks().find(
+      (pack) => pack.url === packUrl,
+    );
+    if (!configuredPack) return;
+    themePackElements.feedback.textContent = `正在下载「${configuredPack.name}」…`;
+    try {
+      const response = await fetch(configuredPack.url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      const archive = {
+        name: `${configuredPack.name}.zip`,
+        size: blob.size,
+        arrayBuffer: () => blob.arrayBuffer(),
+      };
+      visualPacks = await createMahjongAssetPack(archive, {
+        sourceUrl: configuredPack.url,
+      });
+      renderThemePacks();
+      themePackElements.feedback.textContent = "已下载并启用主题包。";
+    } catch (error) {
+      themePackElements.feedback.textContent =
+        error instanceof Error ? `主题包下载失败：${error.message}` : "主题包下载失败";
+    }
+    return;
+  }
+  if (!id) return;
   if (action === "delete") {
-    const confirmation = "删除这个麻将素材包？此操作无法恢复。";
+    const confirmation = "删除这个麻将主题包？此操作无法恢复。";
     const confirmed =
-      window.parent === window
+      isStandalone
         ? window.confirm(confirmation)
-        : await soloClient.confirm(confirmation);
+        : await playweftClient?.confirm(confirmation);
     if (!confirmed) return;
   }
-  visualPackElements.feedback.textContent =
-    action === "delete" ? "正在删除…" : "正在切换…";
+  themePackElements.feedback.textContent =
+    action === "delete" ? "正在删除…" : "正在切换主题包…";
   try {
     visualPacks =
       action === "delete"
@@ -365,21 +337,21 @@ visualPackElements.list.addEventListener("click", async (event) => {
         : id === DEFAULT_VISUAL_PACK_ID
           ? await deactivateMahjongAssetPacks()
           : await activateMahjongAssetPack(id);
-    renderVisualPacks();
-    visualPackElements.feedback.textContent =
+    renderThemePacks();
+    themePackElements.feedback.textContent =
       action === "delete"
-        ? "已删除素材包。"
+        ? "已删除主题包。"
         : id === DEFAULT_VISUAL_PACK_ID
-          ? "已切回默认画面。"
-          : "已启用素材包。";
+          ? "已切回默认主题。"
+          : "已启用主题包。";
   } catch {
-    visualPackElements.feedback.textContent =
-      action === "delete" ? "删除素材包失败" : "切换素材包失败";
+    themePackElements.feedback.textContent =
+      action === "delete" ? "删除主题包失败" : "切换主题包失败";
   }
 });
-visualPackElements.appearance.addEventListener("change", async (event) => {
+appearanceElements.controls.addEventListener("change", async (event) => {
   const select = event.target.closest("select[data-appearance-key]");
-  const activePack = visualPacks.find((pack) => pack.active);
+  const activePack = getActiveVisualPack();
   if (!select || !activePack) return;
   const appearance = structuredClone(activePack.appearance);
   const key = select.dataset.appearanceKey;
@@ -390,21 +362,26 @@ visualPackElements.appearance.addEventListener("change", async (event) => {
   } else {
     appearance[key] = select.value;
   }
-  visualPackElements.feedback.textContent = "正在应用画面配置…";
+  appearanceElements.feedback.textContent = "正在应用装扮配置…";
   try {
-    visualPacks = await configureMahjongAssetPackAppearance(
-      activePack.id,
-      appearance,
-    );
-    renderVisualPacks();
-    visualPackElements.feedback.textContent = "已应用画面配置。";
+    if (activePack.isDefault) {
+      configureMahjongDefaultPackAppearance(appearance);
+    } else {
+      visualPacks = await configureMahjongAssetPackAppearance(
+        activePack.id,
+        appearance,
+      );
+    }
+    renderThemePacks();
+    appearanceElements.feedback.textContent = "已应用装扮配置。";
   } catch (error) {
-    visualPackElements.feedback.textContent =
-      error instanceof Error ? error.message : "画面配置失败";
+    appearanceElements.feedback.textContent =
+      error instanceof Error ? error.message : "装扮配置失败";
   }
 });
 window.addEventListener("mahjong:asset-pack-changed", () => {
   void applyVisualPack();
+  syncDefaultMusicCopyright();
   syncMatchMusic();
   applyPackAvatars(state);
   if (state) renderCurrentState();
@@ -449,24 +426,91 @@ document.addEventListener("visibilitychange", handleVisibilityChange);
 document.addEventListener("pointerdown", resumeMatchMusic, { passive: true });
 document.addEventListener("keydown", resumeMatchMusic);
 
-const soloClient = createPlayweftSoloClient({
-  onReady(context) {
-    playMode = context?.mode ?? "solo";
-    const name = context?.player?.name?.trim();
-    if (name) {
-      playerName = name;
-      hasPlatformName = true;
-    }
-    requestPlatformAvatar(context);
-    startMahjongEntry();
-  },
-  onError(message) {
-    if (!game) showLoadingError(message);
-  },
-});
+const playweftClient = isStandalone
+  ? undefined
+  : createPlayweftClient({
+      onReady: handlePlayweftReady,
+      onState: handleRoomState,
+      onActionResult: handleRoomActionResult,
+      onError: handlePlayweftError,
+    });
 
-if (window.parent === window) startMahjongEntry();
+if (isStandalone) startMahjongEntry();
 revealMahjongAppAfterStyles();
+
+function handlePlayweftReady(context) {
+  playMode = context?.mode ?? "solo";
+  roomPlayerId = context?.playerId || "";
+  const name = context?.player?.name?.trim();
+  if (name) {
+    playerName = name;
+    hasPlatformName = true;
+  }
+  requestPlatformAvatar(context);
+  if (playMode === "room") {
+    settingsDialog.setSoloMatchActive(false);
+    showRoomWaiting();
+    return;
+  }
+  startMahjongEntry();
+}
+
+async function handleRoomState(message) {
+  if (playMode !== "room") return;
+  roomPlayerId = message?.playerId || roomPlayerId;
+  const projection = orientMahjongRoomProjection(
+    { state: message?.state, events: message?.events },
+    roomPlayerId,
+  );
+  if (!projection?.state) return;
+  const hadState = Boolean(state);
+  const animateDealIn =
+    !hadState ||
+    asArray(projection.events).some(
+      (event) => event?.type === "next_hand" || event?.type === "new_match",
+    );
+  try {
+    await visualRendererReady;
+    if (destroyed || playMode !== "room") return;
+    await refresh(projection, { animateDealIn });
+    if (!hadState) syncMatchMusic({ start: true, fadeIn: true });
+    elements.app.setAttribute("aria-busy", "false");
+    elements.setup.hidden = true;
+    elements.loading.hidden = true;
+    actionInFlight = false;
+    roomActionRequestId = "";
+  } catch (error) {
+    console.error("Mahjong room state failed to render", error);
+    showLoadingError("房间状态加载失败，请稍后重试");
+  }
+}
+
+function handleRoomActionResult(_result) {
+  // Keep the action locked until the following authoritative state update.
+  // Otherwise a fast second tap can send an action against the old projection.
+}
+
+function handlePlayweftError(message, _code, requestId) {
+  if (!requestId || requestId === roomActionRequestId) {
+    actionInFlight = false;
+    roomActionRequestId = "";
+  }
+  if (!state) {
+    showLoadingError(message);
+    return;
+  }
+  elements.message.textContent = message;
+  elements.message.classList.add("is-error");
+}
+
+function showRoomWaiting() {
+  elements.setup.hidden = true;
+  elements.loading.classList.remove("is-error");
+  elements.loading.classList.add("is-active");
+  elements.loadingMessage.textContent = "等待其他玩家加入…";
+  elements.loadingMessage.hidden = false;
+  elements.loading.hidden = false;
+}
 
 function requestPlatformAvatar(context) {
   const initialSource = context?.player?.avatar?.src;
@@ -477,7 +521,7 @@ function requestPlatformAvatar(context) {
     applyPackAvatars(state);
   }
   if (!asArray(context?.capabilities).includes("user.getProfile")) return;
-  void soloClient
+  void playweftClient
     .getUserProfile({ fields: ["avatar"] })
     .then((profile) => {
       const source = profile?.avatar?.src;
@@ -507,6 +551,12 @@ function applyPackAvatars() {
     const source = getMahjongAssetUrl(`portrait-${portraitSlot}`);
     domView.setPlayerAvatar(position, source);
   }
+}
+
+function syncDefaultMusicCopyright() {
+  const copyright = getMahjongMatchMusicCopyright();
+  defaultMusicCopyright.textContent = copyright;
+  defaultMusicCopyright.hidden = !copyright;
 }
 
 async function applyVisualPack() {
@@ -564,8 +614,11 @@ function fadeMatchMusicTo(targetGain, { pauseWhenSilent = false } = {}) {
   matchMusicFadeFrame = requestAnimationFrame(step);
 }
 
-function syncMatchMusic({ start = Boolean(game), fadeIn = false } = {}) {
-  const source = getMahjongMatchMusicUrl(DEFAULT_MATCH_MUSIC_URL);
+function syncMatchMusic({
+  start = Boolean(game || (playMode === "room" && state)),
+  fadeIn = false,
+} = {}) {
+  const source = getMahjongMatchMusicUrl();
   if (!start || !source) {
     matchMusicPlayRequest += 1;
     cancelMatchMusicFade();
@@ -607,7 +660,12 @@ function syncMatchMusic({ start = Boolean(game), fadeIn = false } = {}) {
 }
 
 function resumeMatchMusic() {
-  if (!musicNeedsGesture || !game || state?.phase === "hand_ended") return;
+  if (
+    !musicNeedsGesture ||
+    !(game || (playMode === "room" && state)) ||
+    state?.phase === "hand_ended"
+  )
+    return;
   syncMatchMusic({ fadeIn: matchMusicGain === 0 });
 }
 
@@ -729,62 +787,83 @@ function playVoiceSource(source) {
   });
 }
 
-async function refreshVisualPacks() {
+async function refreshThemePacks() {
   try {
     await assetPacksReady;
     visualPacks = await listMahjongAssetPacks();
-    renderVisualPacks();
+    renderThemePacks();
   } catch {
-    visualPackElements.feedback.textContent = "当前浏览器未开放本机素材存储。";
+    themePackElements.feedback.textContent = "当前浏览器未开放本机主题包存储。";
   }
 }
 
-function renderVisualPacks() {
+function renderThemePacks() {
+  const defaultPack = getMahjongDefaultPack();
+  defaultPack.active = !visualPacks.some((pack) => pack.active);
   const packs = [
-    {
-      id: DEFAULT_VISUAL_PACK_ID,
-      name: "默认主题",
-      assetNames: ["内置画面"],
-      active: !visualPacks.some((pack) => pack.active),
-      isDefault: true,
-    },
+    defaultPack,
     ...visualPacks,
   ];
-  visualPackElements.list.replaceChildren(
-    ...packs.map((pack) => {
+  const localItems = packs.map((pack) => {
+    const item = document.createElement("li");
+    item.classList.toggle("is-active", pack.active);
+    const details = document.createElement("span");
+    const title = document.createElement("strong");
+    title.textContent = pack.name;
+    const summary = document.createElement("small");
+    summary.textContent = pack.isDefault
+      ? "内置主题包"
+      : `${pack.assetNames.length} 项装扮内容`;
+    details.append(title, summary);
+    const actions = document.createElement("span");
+    actions.className = "settings-theme-actions";
+    if (pack.active) {
+      const active = document.createElement("em");
+      active.textContent = "使用中";
+      actions.append(active);
+    } else {
+      actions.append(createVisualPackButton("使用", "activate", pack.id));
+    }
+    if (!pack.isDefault) {
+      actions.append(createVisualPackButton("删除", "delete", pack.id));
+    }
+    item.append(details, actions);
+    return item;
+  });
+  const downloadedUrls = new Set(
+    visualPacks.map((pack) => pack.sourceUrl).filter(Boolean),
+  );
+  const remoteItems = getMahjongConfiguredAssetPacks()
+    .filter((pack) => !downloadedUrls.has(pack.url))
+    .map((pack) => {
       const item = document.createElement("li");
-      item.classList.toggle("is-active", pack.active);
+      item.className = "is-remote";
       const details = document.createElement("span");
       const title = document.createElement("strong");
       title.textContent = pack.name;
       const summary = document.createElement("small");
-      summary.textContent = pack.assetNames.join(" · ");
+      summary.textContent = "在线主题包";
       details.append(title, summary);
       const actions = document.createElement("span");
-      actions.className = "settings-pack-actions";
-      if (pack.active) {
-        const active = document.createElement("em");
-        active.textContent = "使用中";
-        actions.append(active);
-      } else {
-        actions.append(createVisualPackButton("启用", "activate", pack.id));
-      }
-      if (!pack.isDefault) {
-        actions.append(createVisualPackButton("删除", "delete", pack.id));
-      }
+      actions.className = "settings-theme-actions";
+      const download = createVisualPackButton("下载", "download");
+      download.dataset.packUrl = pack.url;
+      actions.append(download);
       item.append(details, actions);
       return item;
-    }),
-  );
-  renderVisualPackAppearance();
+    });
+  themePackElements.list.replaceChildren(...localItems, ...remoteItems);
+  renderAppearanceSettings();
 }
 
-function renderVisualPackAppearance() {
-  const pack = visualPacks.find((candidate) => candidate.active);
+function renderAppearanceSettings() {
+  const pack = getActiveVisualPack();
   const catalog = pack?.catalog;
   if (!pack || !catalog) {
-    visualPackElements.appearance.hidden = true;
-    visualPackElements.appearance.replaceChildren();
+    appearanceElements.controls.hidden = false;
+    appearanceElements.controls.replaceChildren(
+      createAppearanceEmptyState("暂无可配置的主题内容，请先选择一个主题包。"),
+    );
     return;
   }
   const portraitLabels = {
@@ -795,7 +874,7 @@ function renderVisualPackAppearance() {
   };
   const controls = document.createDocumentFragment();
   const portraitGroup = document.createElement("fieldset");
-  portraitGroup.className = "settings-pack-choice-group";
+  portraitGroup.className = "settings-appearance-choice-group";
   const portraitLegend = document.createElement("legend");
   portraitLegend.textContent = "四家角色";
   portraitGroup.append(portraitLegend);
@@ -812,7 +891,7 @@ function renderVisualPackAppearance() {
   if (catalog.portraits.length) controls.append(portraitGroup);
 
   const surfaceGroup = document.createElement("fieldset");
-  surfaceGroup.className = "settings-pack-choice-group";
+  surfaceGroup.className = "settings-appearance-choice-group";
   const surfaceLegend = document.createElement("legend");
   surfaceLegend.textContent = "牌桌画面";
   surfaceGroup.append(surfaceLegend);
@@ -830,7 +909,7 @@ function renderVisualPackAppearance() {
   if (surfaceGroup.childElementCount > 1) controls.append(surfaceGroup);
   if (catalog.lobby.length) {
     const lobbyGroup = document.createElement("fieldset");
-    lobbyGroup.className = "settings-pack-choice-group";
+    lobbyGroup.className = "settings-appearance-choice-group";
     const lobbyLegend = document.createElement("legend");
     lobbyLegend.textContent = "大厅";
     lobbyGroup.append(lobbyLegend);
@@ -846,7 +925,7 @@ function renderVisualPackAppearance() {
   }
   if (catalog.music.length || catalog.voices.length) {
     const soundGroup = document.createElement("fieldset");
-    soundGroup.className = "settings-pack-choice-group";
+    soundGroup.className = "settings-appearance-choice-group";
     const soundLegend = document.createElement("legend");
     soundLegend.textContent = "声音";
     soundGroup.append(soundLegend);
@@ -874,9 +953,29 @@ function renderVisualPackAppearance() {
       );
     controls.append(soundGroup);
   }
-  visualPackElements.appearance.replaceChildren(controls);
-  visualPackElements.appearance.hidden =
-    !visualPackElements.appearance.childElementCount;
+  const hasControls = controls.childElementCount > 0;
+  if (hasControls) {
+    const heading = document.createElement("h3");
+    heading.textContent = `当前主题包：${pack.name}`;
+    appearanceElements.controls.replaceChildren(heading, controls);
+  } else {
+    appearanceElements.controls.replaceChildren(
+      createAppearanceEmptyState("当前主题包没有可配置的装扮内容。"),
+    );
+  }
+  appearanceElements.controls.hidden = false;
+}
+
+function createAppearanceEmptyState(message) {
+  const empty = document.createElement("p");
+  empty.className = "settings-appearance-empty";
+  empty.textContent = message;
+  return empty;
+}
+
+function getActiveVisualPack() {
+  return visualPacks.find((candidate) => candidate.active) ||
+    getMahjongDefaultPack();
 }
 
 function createAppearanceSelect(
@@ -887,7 +986,7 @@ function createAppearanceSelect(
   emptyLabel = "",
 ) {
   const row = document.createElement("label");
-  row.className = "settings-pack-choice";
+  row.className = "settings-appearance-choice";
   const text = document.createElement("span");
   text.textContent = label;
   const select = document.createElement("select");
@@ -920,7 +1019,7 @@ function createVisualPackButton(label, action, id = "") {
 }
 
 async function initialize(matchType = "east") {
-  if (game || gameInitializing) return;
+  if (playMode !== "solo" || game || gameInitializing) return;
   gameInitializing = true;
   syncMatchMusic({ start: true });
   const rules = Object.fromEntries(
@@ -1121,7 +1220,7 @@ function clearSoloSave() {
 }
 
 function startMahjongEntry() {
-  if (game || gameInitializing) return;
+  if (playMode !== "solo" || game || gameInitializing) return;
   if (mahjongInitialEntry(playMode, Boolean(soloSave)) === "resume") {
     void resumeSavedMatch();
     return;
@@ -1144,9 +1243,9 @@ async function endSoloMatch() {
   try {
     const confirmation = "结束本局并返回标题？本局进度不会保留。";
     const confirmed =
-      window.parent === window
+      isStandalone
         ? window.confirm(confirmation)
-        : await soloClient.confirm(confirmation);
+        : await playweftClient?.confirm(confirmation);
     if (!confirmed) return;
     window.clearTimeout(aiTimer);
     settingsDialog.setOpen(false, { restoreFocus: false, animate: false });
@@ -1209,7 +1308,20 @@ function showLoadingError(message) {
 }
 
 async function dispatch(action) {
-  if (!game || !state || actionInFlight) return;
+  if (!state || actionInFlight) return;
+  if (playMode === "room") {
+    const requestId = playweftClient?.sendAction(action);
+    if (!requestId) {
+      elements.message.textContent = "尚未连接到房间";
+      elements.message.classList.add("is-error");
+      return;
+    }
+    window.clearTimeout(aiTimer);
+    actionInFlight = true;
+    roomActionRequestId = requestId;
+    return;
+  }
+  if (!game) return;
   const currentGame = game;
   actionInFlight = true;
   window.clearTimeout(aiTimer);
@@ -1246,7 +1358,14 @@ async function dispatch(action) {
 }
 
 async function runAiTurn() {
-  if (!game || !state || state.phase === "hand_ended" || actionInFlight) return;
+  if (
+    playMode !== "solo" ||
+    !game ||
+    !state ||
+    state.phase === "hand_ended" ||
+    actionInFlight
+  )
+    return;
   const currentGame = game;
   const actorIds =
     state.phase === "claiming"
@@ -1293,6 +1412,7 @@ async function runAiTurn() {
 
 function scheduleAi({ afterDealIn = false } = {}) {
   window.clearTimeout(aiTimer);
+  if (playMode !== "solo") return;
   if (!state || state.phase === "hand_ended" || presentation.kanDrawPending)
     return;
   const visualDelay = afterDealIn ? NEW_HAND_DEAL_DURATION_MS : 0;
@@ -1345,8 +1465,10 @@ async function refresh(
   { ownDiscardedTile = 0, animateDealIn = false } = {},
 ) {
   const currentGame = game;
-  if (!projection) projection = await currentGame?.view(HUMAN_ID);
-  if (!projection || currentGame !== game) return;
+  if (!projection && playMode === "solo") {
+    projection = await currentGame?.view(HUMAN_ID);
+  }
+  if (!projection || (playMode === "solo" && currentGame !== game)) return;
   const previousState = state;
   state = projection.state;
   syncMatchMusicForHandState(previousState, state);
@@ -1565,6 +1687,7 @@ function showMatchSummary() {
   if (!state?.matchEnded) return;
   matchSummaryVisible = true;
   elements.result.classList.add("is-match-summary");
+  elements.matchSummarySetup.hidden = playMode === "room";
   elements.matchSummary.hidden = false;
   resultHandRenderer.hide();
   renderMatchSummary();
@@ -1573,6 +1696,7 @@ function showMatchSummary() {
 function hideMatchSummary() {
   matchSummaryVisible = false;
   elements.result.classList.remove("is-match-summary");
+  elements.matchSummarySetup.hidden = false;
   elements.matchSummary.hidden = true;
 }
 
@@ -1658,7 +1782,13 @@ async function restartMatchFromSummary() {
 }
 
 async function returnToSetupFromSummary() {
-  if (!matchSummaryVisible || !state?.matchEnded || resultPageAnimating) return;
+  if (
+    playMode !== "solo" ||
+    !matchSummaryVisible ||
+    !state?.matchEnded ||
+    resultPageAnimating
+  )
+    return;
   resultPageAnimating = true;
   elements.matchSummaryRematch.disabled = true;
   elements.matchSummarySetup.disabled = true;
@@ -1701,6 +1831,11 @@ async function returnToSetupFromSummary() {
 }
 
 async function advanceFromResult(action) {
+  if (playMode === "room") {
+    if (!state || actionInFlight) return false;
+    await dispatch(action);
+    return actionInFlight;
+  }
   const currentGame = game;
   if (!currentGame || !state) return false;
   const outcome = await currentGame.action(action, HUMAN_ID);
@@ -2019,7 +2154,7 @@ function discardOwnTile(tileId) {
   if (
     !canDiscardHandTile({
       canDiscard: state?.legalActions?.canDiscard,
-      riichiDeclared: state?.riichi?.[HUMAN_ID] === true,
+      riichiDeclared: state?.riichi?.[state?.players?.[0]] === true,
       drawnTile: state?.drawnTile,
       tileId,
     })
@@ -2115,5 +2250,5 @@ function destroy() {
   visualRenderer.destroy();
   resultHandRenderer.destroy();
   game?.close();
-  soloClient.destroy();
+  playweftClient?.destroy();
 }

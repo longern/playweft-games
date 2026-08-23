@@ -32,6 +32,17 @@
   "orientation": "landscape",
   "help_url": "./help.html",
   "modes": {
-    "solo": {}
+    "solo": {},
+    "room": {
+      "players": {
+        "min": 4,
+        "max": 4
+      },
+      "server": {
+        "runtime": "lua",
+        "entry": "./game.lua",
+        "persistence": "durable"
+      }
+    }
   }
 }

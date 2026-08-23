@@ -131,8 +131,10 @@
             <div class="settings-tabs" role="tablist" aria-label="设置内容">
               <button id="settings-operation-tab" type="button" role="tab" aria-selected="true"
                 aria-controls="settings-operation-panel" data-settings-tab="operation">操作</button>
-              <button id="settings-visual-tab" type="button" role="tab" aria-selected="false"
-                aria-controls="settings-visual-panel" data-settings-tab="visual" tabindex="-1">画面</button>
+              <button id="settings-theme-tab" type="button" role="tab" aria-selected="false"
+                aria-controls="settings-theme-panel" data-settings-tab="theme" tabindex="-1">主题</button>
+              <button id="settings-appearance-tab" type="button" role="tab" aria-selected="false"
+                aria-controls="settings-appearance-panel" data-settings-tab="appearance" tabindex="-1">装扮</button>
               <button id="settings-sound-tab" type="button" role="tab" aria-selected="false"
                 aria-controls="settings-sound-panel" data-settings-tab="sound" tabindex="-1">声音</button>
               <button id="settings-help-tab" type="button" role="tab" aria-selected="false"
@@ -176,21 +178,32 @@
                 <input id="discard-volume-setting" type="range" min="0" max="100" step="1" value="100" />
               </div>
             </div>
-            <div id="settings-visual-panel" class="settings-tab-panel settings-visual-panel" role="tabpanel"
-              aria-labelledby="settings-visual-tab" data-settings-panel="visual" hidden>
-              <p class="settings-visual-intro">素材仅保存在本机。四家角色对应本地视角：自己、右手边、对家、左手边；它们不关联玩家名称或联机身份。</p>
-              <details class="settings-pack-manifest">
-                <summary>查看 theme.json 示例</summary>
-                <pre id="theme-json-example"></pre>
-              </details>
-              <label class="settings-pack-upload" for="settings-pack-upload">
-                <span>选择 .zip 素材包</span>
-                <input id="settings-pack-upload" type="file"
+            <div id="settings-theme-panel" class="settings-tab-panel settings-theme-panel" role="tabpanel"
+              aria-labelledby="settings-theme-tab" data-settings-panel="theme" hidden>
+              <div class="settings-theme-heading">
+                <div>
+                  <h2>主题包</h2>
+                  <p>下载、导入和管理主题包，内容仅保存在本机。</p>
+                </div>
+              </div>
+              <label class="settings-theme-upload" for="settings-theme-upload">
+                <span>导入 ZIP 主题包</span>
+                <input id="settings-theme-upload" type="file"
                   accept=".zip,application/zip,application/x-zip-compressed" />
               </label>
-              <p id="settings-pack-feedback" class="settings-pack-feedback" role="status" aria-live="polite"></p>
-              <ul id="settings-pack-list" class="settings-pack-list" aria-label="素材包列表"></ul>
-              <div id="settings-pack-appearance" class="settings-pack-appearance" hidden></div>
+              <p id="settings-theme-feedback" class="settings-theme-feedback" role="status" aria-live="polite"></p>
+              <ul id="settings-theme-list" class="settings-theme-list" aria-label="主题包列表"></ul>
+            </div>
+            <div id="settings-appearance-panel" class="settings-tab-panel settings-appearance-panel" role="tabpanel"
+              aria-labelledby="settings-appearance-tab" data-settings-panel="appearance" hidden>
+              <div class="settings-appearance-heading">
+                <div>
+                  <h2>装扮</h2>
+                  <p>调整当前主题包中的具体内容。</p>
+                </div>
+              </div>
+              <p id="settings-appearance-feedback" class="settings-appearance-feedback" role="status" aria-live="polite"></p>
+              <div id="settings-appearance-controls" class="settings-appearance-controls" hidden></div>
             </div>
             <div id="settings-help-panel" class="settings-tab-panel settings-help-panel" role="tabpanel"
               aria-labelledby="settings-help-tab" data-settings-panel="help" hidden>

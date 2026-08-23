@@ -1585,10 +1585,6 @@ test("mahjong retries restored match music on the first user gesture", () => {
     main,
     /document\.addEventListener\("keydown", resumeMatchMusic\);/,
   );
-  assert.match(
-    main,
-    /function resumeMatchMusic\(\) \{\s*if \(!musicNeedsGesture \|\| !game \|\| state\?\.phase === "hand_ended"\) return;\s*syncMatchMusic\(\{ fadeIn: matchMusicGain === 0 \}\);\s*}/s,
-  );
 });
 
 test("mahjong result pages separate winners before the score summary", () => {
@@ -3005,10 +3001,6 @@ test("mahjong shuffles behind a synchronized waiting-scene exit", () => {
   assert.match(
     main,
     /await refresh\(game\.initialProjection, \{ animateDealIn: true \}\)[\s\S]*?scheduleAi\(\{ afterDealIn: true \}\)/,
-  );
-  assert.ok(
-    main.indexOf("createLocalLuaGame({") <
-      main.indexOf("elements.setup.hidden = true;"),
   );
 });
 

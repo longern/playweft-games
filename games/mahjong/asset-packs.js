@@ -1,4 +1,11 @@
 import { unzipSync } from "fflate";
+import {
+  configureMahjongDefaultAssetAppearance,
+  getMahjongConfiguredAssetPacks,
+  getMahjongDefaultAssetCopyright,
+  getMahjongDefaultAssetMap,
+  getMahjongDefaultAssetPack,
+} from "./default-assets.js";
 
 const DB_NAME = "playweft-mahjong-asset-packs-v2";
 const PACKS = "packs";
@@ -82,13 +89,14 @@ let activeDefaultNames = {};
 let activePackOverridesMusic = false;
 
 export async function initializeMahjongAssetPacks() {
-  if (!("indexedDB" in globalThis)) return new Map();
+  // Apply build-time defaults synchronously so the first user gesture can
+  // start default media before IndexedDB finishes reading local packs.
+  applyResolvedAssets(null);
+  if (!("indexedDB" in globalThis)) {
+    return new Map();
+  }
   const active = await readActivePack();
-  applyActiveAssets(
-    active?.assets ?? new Map(),
-    active?.defaultNames,
-    Boolean(active?.catalog.music.length),
-  );
+  if (active) applyResolvedAssets(active);
   return active?.assets ?? new Map();
 }
 
@@ -104,8 +112,9 @@ export function chooseMahjongMatchMusicUrl(
   return packOverridesMusic ? customUrl : defaultUrl;
 }
 
-/** Use an active pack's music choice, including silence, over the default BGM. */
-export function getMahjongMatchMusicUrl(defaultUrl) {
+/** Use an active pack's music choice, falling back when it has no music. */
+export function getMahjongMatchMusicUrl() {
+  const defaultUrl = getMahjongDefaultAssetMap().get("music")?.url ?? "";
   return chooseMahjongMatchMusicUrl(
     defaultUrl,
     getMahjongAssetUrl("music"),
@@ -115,6 +124,25 @@ export function getMahjongMatchMusicUrl(defaultUrl) {
 
 export function getMahjongDefaultNames() {
   return { ...activeDefaultNames };
+}
+
+export function getMahjongDefaultPack() {
+  return getMahjongDefaultAssetPack();
+}
+
+export { getMahjongConfiguredAssetPacks };
+
+export function configureMahjongDefaultPackAppearance(appearance) {
+  const pack = configureMahjongDefaultAssetAppearance(appearance);
+  applyResolvedAssets(null);
+  return pack;
+}
+
+export function getMahjongMatchMusicCopyright() {
+  if (activePackOverridesMusic) {
+    return activeAssets.get("music")?.copyright || "";
+  }
+  return getMahjongDefaultAssetCopyright();
 }
 
 export async function listMahjongAssetPacks() {
@@ -148,7 +176,7 @@ export async function listMahjongAssetPacks() {
     );
 }
 
-export async function createMahjongAssetPack(archive) {
+export async function createMahjongAssetPack(archive, metadata = {}) {
   const files = await unpackMahjongAssetPack(archive);
   const manifest = await readMahjongAssetPackManifest(files);
   const name = requiredPackName(manifest.name);
@@ -185,6 +213,7 @@ export async function createMahjongAssetPack(archive) {
     catalog: manifest.catalog,
     appearance: manifest.appearance,
     defaultNames: manifest.defaultNames,
+    sourceUrl: typeof metadata.sourceUrl === "string" ? metadata.sourceUrl : "",
     createdAt: now,
     updatedAt: now,
   });
@@ -300,10 +329,23 @@ export async function deleteMahjongAssetPack(id) {
 
 async function refreshActiveAssets() {
   const active = await readActivePack();
+  applyResolvedAssets(active);
+}
+
+function applyResolvedAssets(active) {
+  if (active) {
+    applyActiveAssets(
+      active.assets,
+      active.defaultNames,
+      Boolean(active.catalog.music.length),
+    );
+    return;
+  }
+  const defaults = getMahjongDefaultAssetPack();
   applyActiveAssets(
-    active?.assets ?? new Map(),
-    active?.defaultNames,
-    Boolean(active?.catalog.music.length),
+    defaults.assets,
+    defaults.defaultNames,
+    Boolean(defaults.catalog.music.length),
   );
 }
 
@@ -341,9 +383,9 @@ function applyActiveAssets(
     defaultNames && typeof defaultNames === "object" ? defaultNames : {};
   const root = document.documentElement;
   for (const [slot, record] of assets) {
-    if (!record?.blob) continue;
-    const url = URL.createObjectURL(record.blob);
-    objectUrls.set(slot, url);
+    if (!record?.blob && !record?.url) continue;
+    const url = record.blob ? URL.createObjectURL(record.blob) : record.url;
+    if (record.blob) objectUrls.set(slot, url);
     activeAssets.set(slot, { ...record, url });
     if (!(slot in MAHJONG_ASSET_SLOTS)) continue;
     root.removeAttribute(`data-mahjong-has-${slot}`);

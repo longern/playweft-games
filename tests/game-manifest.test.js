@@ -7,6 +7,7 @@ const ROOM_GAMES = new Map([
   ["connect-four", [2, 2]],
   ["texas-holdem", [2, 6]],
   ["dou-dizhu", [3, 3]],
+  ["mahjong", [4, 4]],
   ["werewolf-dealer", [6, 15]],
   ["uno", [2, 4]],
   ["go", [2, 2]],
@@ -111,15 +112,8 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
     }
     assert.equal("permissions" in manifest, false);
 
-    if (game === "sudoku" || game === "mahjong") {
+    if (game === "sudoku") {
       assert.deepEqual(manifest.modes, { solo: {} });
-      if (game === "mahjong") {
-        const lua = await readFile("games/mahjong/game.lua", "utf8");
-        const main = await readFile("games/mahjong/main.js", "utf8");
-        assert.match(lua, /function ai_action\(/);
-        assert.match(main, /createLocalLuaGame/);
-        assert.doesNotMatch(main, /game\.lua\?raw/);
-      }
       continue;
     }
 
@@ -134,9 +128,7 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
         },
       },
     };
-    if (
-      ["go", "dou-dizhu", "gomoku", "xiangqi", "werewolf-dealer"].includes(game)
-    ) {
+    if (["go", "dou-dizhu", "gomoku", "xiangqi", "werewolf-dealer", "mahjong"].includes(game)) {
       expectedModes.solo = {};
     }
     assert.deepEqual(manifest.modes, expectedModes);
@@ -146,6 +138,11 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
       /game\.lua\?raw/,
       `${game} client must not bundle the authoritative Lua source`,
     );
+    if (game === "mahjong") {
+      const lua = await readFile("games/mahjong/game.lua", "utf8");
+      assert.match(lua, /function ai_action\(/);
+      assert.match(main, /createLocalLuaGame/);
+    }
   }
 });
 
