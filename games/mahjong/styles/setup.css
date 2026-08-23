@@ -242,7 +242,9 @@
   width: 144px;
   height: 144px;
   border-radius: 20px;
-  background: rgba(0, 0, 0, 0.64);
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3);
   content: "";
   opacity: 0;
