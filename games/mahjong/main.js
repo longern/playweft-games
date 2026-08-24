@@ -116,6 +116,9 @@ const SETUP_RECOVERY_ERROR_DURATION_MS = 4600;
 const REPLAY_STEP_DELAY_MS = 780;
 const REPLAY_RESULT_PAGE_DELAY_MS = 2400;
 const REPLAY_SPEEDS = [0.5, 1, 2, 4];
+const LATE_WALL_REPORT_START = 4;
+const LATE_WALL_REPORT_BUDGET_MS = 500;
+const RIVER_BOTTOM_REPORT_BUDGET_MS = 500;
 const effectRunner = createMahjongEffectRunner();
 const isStandalone = window.parent === window;
 let game;
@@ -126,6 +129,25 @@ let playerName = "你";
 let hasPlatformName = false;
 let hasPlatformAvatar = false;
 let roomPlayerId = "";
+let roomIsOwner = false;
+let roomAiGame;
+let roomAiPlayerIds = "";
+let roomAiBusy = false;
+let roomAiSchedule = 0;
+let roomLegalGame;
+let roomLegalPlayerIds = "";
+let roomLegalRequest = 0;
+let roomLegalRequestedKey = "";
+let roomTenpaiGame;
+let roomTenpaiGameReady;
+let roomTenpaiPlayerIds = "";
+let roomTenpaiRequest = 0;
+let roomTenpaiRequestedKey = "";
+let roomTenpaiReports;
+let roomTenpaiReportsPromise;
+let roomTenpaiSupplementRequest = 0;
+let roomTenpaiSupplementRequestedKey = "";
+let roomTenpaiReportedKey = "";
 let setupRecoveryErrorTimer;
 let playMode = isStandalone ? "solo" : null;
 let autoActions = defaultAutoActions();
@@ -352,7 +374,7 @@ session = createMahjongSessionController({
   getAutoActions: () => autoActions,
   getRiichiMode: () => tableController.isRiichiMode(),
   isKanDrawPending: () => presentation.kanDrawPending,
-  sendRoomAction: (action) => playweftClient?.sendAction(action),
+  sendRoomAction: sendRoomActionWithTenpaiReport,
   onRoomUnavailable: () => showMessage("尚未连接到房间"),
   persistAcceptedAction,
   refreshProjection: tableController.refresh,
@@ -1077,6 +1099,10 @@ function waitForReplayDelay(delay) {
 function handlePlayweftReady(context) {
   playMode = context?.mode ?? "solo";
   roomPlayerId = context?.playerId || "";
+  roomIsOwner =
+    context?.player?.isOwner === true ||
+    context?.isOwner === true ||
+    (context?.match?.ownerId && context.match.ownerId === context.playerId);
   const name = context?.player?.name?.trim();
   if (name) {
     playerName = name;
@@ -1094,6 +1120,8 @@ function handlePlayweftReady(context) {
 async function handleRoomState(message) {
   if (playMode !== "room") return;
   roomPlayerId = message?.playerId || roomPlayerId;
+  roomIsOwner = message?.state?.roomIsOwner === true;
+  roomAiBusy = false;
   const projection = orientMahjongRoomProjection(
     {
       state: message?.state,
@@ -1103,6 +1131,7 @@ async function handleRoomState(message) {
     roomPlayerId,
   );
   if (!projection?.state) return;
+  scheduleRoomAi(projection.state);
   const hadState = Boolean(tableController.getState());
   const animateDealIn =
     !hadState ||
@@ -1113,6 +1142,9 @@ async function handleRoomState(message) {
     await visualRendererReady;
     if (destroyed || playMode !== "room") return;
     await tableController.refresh(projection, { animateDealIn });
+    scheduleRoomLegalActions(message?.state);
+    scheduleRoomTenpaiReports(projection.state);
+    scheduleRoomEarlyTenpaiReport(projection.state, projection.events);
     if (!hadState)
       tableController.syncMatchMusic({ fadeIn: true });
     elements.app.setAttribute("aria-busy", "false");
@@ -1125,11 +1157,397 @@ async function handleRoomState(message) {
   }
 }
 
+function roomLegalStateKey(state) {
+  return JSON.stringify([
+    state?.phase,
+    state?.turnIndex,
+    state?.moveCount,
+    state?.drawnTile,
+    state?.ownHand,
+    state?.legalContext?.kanCount,
+    state?.legalContext?.firstTurn,
+  ]);
+}
+
+function buildRoomLegalState(state) {
+  const context = state?.legalContext;
+  const playerId = roomPlayerId;
+  const doraTiles = asArray(context?.doraTiles);
+  const deadWall = Array.from({ length: doraTiles.length * 2 }, () => 0);
+  doraTiles.forEach((tile, index) => {
+    deadWall[index * 2] = Number(tile) || 0;
+  });
+  return {
+    players: asArray(state?.players),
+    phase: state?.phase,
+    turnIndex: Number(state?.turnIndex) || 0,
+    drawnTile: Number(state?.drawnTile) || 0,
+    hands: { [playerId]: asArray(state?.ownHand).map(Number) },
+    wall: Array.from({ length: Math.max(0, Number(state?.wallCount) || 0) }, () => 0),
+    deadWall,
+    kanCount: Number(context?.kanCount) || 0,
+    callOccurred: context?.callOccurred === true,
+    melds: context?.melds || {},
+    discards: context?.discards || {},
+    riichi: state?.riichi || {},
+    scores: asArray(state?.scores).map(Number),
+    matchType: state?.matchType,
+    roundWind: Number(state?.roundWind) || 0,
+    handNumber: Number(state?.handNumber) || 0,
+    dealerIndex: Number(state?.dealerIndex) || 0,
+    honba: Number(state?.honba) || 0,
+    riichiSticks: Number(state?.riichiSticks) || 0,
+    rules: state?.rules || {},
+    kuikaeForbidden: { [playerId]: context?.kuikaeForbidden || {} },
+    firstTurn: { [playerId]: context?.firstTurn === true },
+    doubleRiichi: { [playerId]: context?.doubleRiichi === true },
+    ippatsu: { [playerId]: context?.ippatsu === true },
+    rinshanWin: context?.rinshanWin === true,
+    chankanWin: context?.chankanWin === true,
+  };
+}
+
+function buildRoomTenpaiReportState(state) {
+  return {
+    players: asArray(state?.players),
+    phase: state?.phase,
+    turnIndex: Number(state?.turnIndex) || 0,
+    drawnTile: Number(state?.drawnTile) || 0,
+    hands: { [roomPlayerId]: asArray(state?.ownHand).map(Number) },
+    melds: state?.melds || {},
+  };
+}
+
+function roomTenpaiStateKey(state) {
+  const activePlayer = asArray(state?.players)[Number(state?.turnIndex) - 1];
+  return JSON.stringify([
+    state?.phase,
+    activePlayer,
+    state?.turnIndex,
+    state?.moveCount,
+    state?.wallCount,
+    state?.drawnTile,
+    state?.ownHand,
+    state?.melds?.[activePlayer],
+  ]);
+}
+
+async function ensureRoomTenpaiGame(state) {
+  const players = asArray(state?.players).map((id) => ({ id, name: id }));
+  const playerIds = JSON.stringify(asArray(state?.players));
+  if (!players.length) return undefined;
+  if (roomTenpaiGame && roomTenpaiPlayerIds === playerIds) {
+    return roomTenpaiGame;
+  }
+  if (roomTenpaiGameReady && roomTenpaiPlayerIds === playerIds) {
+    return roomTenpaiGameReady;
+  }
+  roomTenpaiGame?.close();
+  roomTenpaiGame = undefined;
+  roomTenpaiPlayerIds = playerIds;
+  const ready = createLocalLuaGame({
+    sourceUrl: "./game.lua",
+    players,
+    playerId: roomPlayerId,
+  }).then((createdGame) => {
+    if (destroyed || roomTenpaiPlayerIds !== playerIds) {
+      createdGame.close();
+      return undefined;
+    }
+    roomTenpaiGame = createdGame;
+    return createdGame;
+  });
+  roomTenpaiGameReady = ready;
+  try {
+    return await ready;
+  } finally {
+    if (roomTenpaiGameReady === ready) roomTenpaiGameReady = undefined;
+  }
+}
+
+function scheduleRoomTenpaiReports(state) {
+  const wallCount = Math.max(0, Number(state?.wallCount) || 0);
+  if (playMode !== "room" || state?.phase !== "playing" || wallCount > LATE_WALL_REPORT_START) {
+    roomTenpaiRequest += 1;
+    roomTenpaiRequestedKey = "";
+    roomTenpaiReports = undefined;
+    roomTenpaiReportsPromise = undefined;
+    if (wallCount > LATE_WALL_REPORT_START) {
+      roomTenpaiSupplementRequest += 1;
+      roomTenpaiSupplementRequestedKey = "";
+      roomTenpaiReportedKey = "";
+    }
+    return;
+  }
+  void ensureRoomTenpaiGame(state).catch((error) => {
+    console.error("Mahjong room tenpai worker failed to start", error);
+  });
+  const activePlayer = asArray(state.players)[Number(state.turnIndex) - 1];
+  if (activePlayer !== roomPlayerId || wallCount === 0) {
+    roomTenpaiRequest += 1;
+    roomTenpaiRequestedKey = "";
+    roomTenpaiReports = undefined;
+    roomTenpaiReportsPromise = undefined;
+    return;
+  }
+  const key = roomTenpaiStateKey(state);
+  if (key === roomTenpaiRequestedKey) return;
+  roomTenpaiRequestedKey = key;
+  roomTenpaiReports = undefined;
+  const request = ++roomTenpaiRequest;
+  const reportPromise = runRoomTenpaiReports(buildRoomLegalState(state), key, request);
+  roomTenpaiReportsPromise = reportPromise;
+}
+
+async function runRoomTenpaiReports(state, key, request) {
+  try {
+    const localGame = await ensureRoomTenpaiGame(state);
+    if (!localGame) return undefined;
+    const reports = await Promise.race([
+      localGame.tenpaiReports(state, roomPlayerId),
+      new Promise((resolve) => {
+        window.setTimeout(resolve, LATE_WALL_REPORT_BUDGET_MS);
+      }),
+    ]);
+    if (
+      destroyed ||
+      playMode !== "room" ||
+      request !== roomTenpaiRequest ||
+      key !== roomTenpaiRequestedKey
+    ) return undefined;
+    roomTenpaiReports = reports && typeof reports === "object" ? reports : undefined;
+    return roomTenpaiReports;
+  } catch (error) {
+    if (request === roomTenpaiRequest) {
+      console.error("Mahjong room tenpai report failed", error);
+    }
+    return undefined;
+  }
+}
+
+async function roomTenpaiReportForDiscard(state, tileId) {
+  try {
+    const localGame = await ensureRoomTenpaiGame(state);
+    if (!localGame) return undefined;
+    return await Promise.race([
+      localGame.tenpaiReport(state, tileId, roomPlayerId),
+      new Promise((resolve) => {
+        window.setTimeout(resolve, RIVER_BOTTOM_REPORT_BUDGET_MS);
+      }),
+    ]);
+  } catch (error) {
+    console.error("Mahjong river-bottom tenpai report failed", error);
+    return undefined;
+  }
+}
+
+function roomPlayerHasFutureNormalDraw(state, playerId) {
+  const players = asArray(state?.players);
+  const remainingDraws = Math.max(0, Number(state?.wallCount) || 0);
+  if (!players.length || remainingDraws === 0) return false;
+  const firstDrawIndex = Number(state?.turnIndex) % players.length;
+  for (let offset = 0; offset < remainingDraws; offset += 1) {
+    if (players[(firstDrawIndex + offset) % players.length] === playerId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function roomEarlyTenpaiStateKey(state) {
+  return JSON.stringify([
+    state?.moveCount,
+    state?.phase,
+    state?.turnIndex,
+    state?.wallCount,
+    state?.ownHand,
+    state?.melds?.[roomPlayerId],
+  ]);
+}
+
+function scheduleRoomEarlyTenpaiReport(state, events) {
+  const wallCount = Math.max(0, Number(state?.wallCount) || 0);
+  const sawCall = asArray(events).some((event) => event?.type === "claimed");
+  const activePlayer = asArray(state?.players)[Number(state?.turnIndex) - 1];
+  if (
+    !sawCall ||
+    state?.phase !== "playing" ||
+    wallCount === 0 ||
+    wallCount > LATE_WALL_REPORT_START ||
+    activePlayer === roomPlayerId ||
+    roomPlayerHasFutureNormalDraw(state, roomPlayerId)
+  ) {
+    return;
+  }
+  const key = roomEarlyTenpaiStateKey(state);
+  if (key === roomTenpaiSupplementRequestedKey) return;
+  roomTenpaiSupplementRequestedKey = key;
+  const request = ++roomTenpaiSupplementRequest;
+  void runRoomEarlyTenpaiReport(buildRoomTenpaiReportState(state), request);
+}
+
+async function runRoomEarlyTenpaiReport(state, request) {
+  try {
+    const localGame = await ensureRoomTenpaiGame(state);
+    if (!localGame) return;
+    const report = await Promise.race([
+      localGame.currentTenpaiReport(state, roomPlayerId),
+      new Promise((resolve) => {
+        window.setTimeout(resolve, LATE_WALL_REPORT_BUDGET_MS);
+      }),
+    ]);
+    if (
+      destroyed ||
+      playMode !== "room" ||
+      request !== roomTenpaiSupplementRequest ||
+      !report?.key ||
+      report.key === roomTenpaiReportedKey
+    ) return;
+    const requestId = playweftClient?.sendAction({
+      type: "tenpai_report",
+      tenpaiReport: report,
+    });
+    if (requestId) roomTenpaiReportedKey = report.key;
+  } catch (error) {
+    if (request === roomTenpaiSupplementRequest) {
+      console.error("Mahjong room early tenpai report failed", error);
+    }
+  }
+}
+
+async function sendRoomActionWithTenpaiReport(action) {
+  let enrichedAction = action;
+  let attachedReport;
+  const state = tableController?.getState();
+  const isLateDiscard =
+    (action?.type === "discard" || action?.type === "riichi") &&
+    state?.phase === "playing" &&
+    asArray(state?.players)[Number(state?.turnIndex) - 1] === roomPlayerId &&
+    Math.max(0, Number(state?.wallCount) || 0) <= LATE_WALL_REPORT_START;
+  if (isLateDiscard) {
+    const key = roomTenpaiStateKey(state);
+    if (Number(state?.wallCount) === 0) {
+      const report = await roomTenpaiReportForDiscard(
+        buildRoomLegalState(state),
+        Number(action.tileId),
+      );
+      if (report) {
+        enrichedAction = { ...action, tenpaiReport: report };
+        attachedReport = report;
+      }
+    } else if (key === roomTenpaiRequestedKey) {
+      const report = roomTenpaiReports?.[Number(action.tileId)];
+      if (report) {
+        enrichedAction = { ...action, tenpaiReport: report };
+        attachedReport = report;
+      }
+    }
+  }
+  try {
+    const requestId = await playweftClient?.sendAction(enrichedAction);
+    if (requestId && attachedReport?.key) roomTenpaiReportedKey = attachedReport.key;
+    return requestId;
+  } catch (error) {
+    console.error("Mahjong room action failed", error);
+    return undefined;
+  }
+}
+
+function scheduleRoomLegalActions(state) {
+  const activePlayer = asArray(state?.players)[Number(state?.turnIndex) - 1];
+  if (
+    !state?.legalContext ||
+    state?.phase !== "playing" ||
+    activePlayer !== roomPlayerId
+  ) {
+    roomLegalRequestedKey = "";
+    roomLegalRequest += 1;
+    return;
+  }
+  const key = roomLegalStateKey(state);
+  if (key === roomLegalRequestedKey) return;
+  roomLegalRequestedKey = key;
+  const request = ++roomLegalRequest;
+  void runRoomLegalActions(buildRoomLegalState(state), key, request);
+}
+
+async function runRoomLegalActions(state, key, request) {
+  try {
+    const players = asArray(state.players).map((id) => ({ id, name: id }));
+    const playerIds = JSON.stringify(state.players);
+    if (!roomLegalGame || roomLegalPlayerIds !== playerIds) {
+      roomLegalGame?.close();
+      roomLegalGame = await createLocalLuaGame({
+        sourceUrl: "./game.lua",
+        players,
+        playerId: roomPlayerId,
+      });
+      roomLegalPlayerIds = playerIds;
+    }
+    const legalActions = await roomLegalGame.legalActions(state, roomPlayerId);
+    if (
+      destroyed ||
+      playMode !== "room" ||
+      request !== roomLegalRequest ||
+      key !== roomLegalRequestedKey
+    ) return;
+    tableController.applyLegalActions(legalActions);
+  } catch (error) {
+    if (request === roomLegalRequest) {
+      console.error("Mahjong room legal-action preview failed", error);
+    }
+  }
+}
+
+function scheduleRoomAi(state) {
+  if (!roomIsOwner || !state?.aiTurn?.player || !state?.aiContext) return;
+  window.clearTimeout(roomAiSchedule);
+  roomAiSchedule = window.setTimeout(() => {
+    void runRoomAi(state.aiContext, state.aiTurn.player);
+  }, 0);
+}
+
+async function runRoomAi(aiContext, actorId) {
+  if (roomAiBusy || !roomIsOwner || !aiContext || !actorId) return;
+  roomAiBusy = true;
+  try {
+    const players = (aiContext.players || []).map((id) => ({
+      id,
+      name: id,
+    }));
+    const currentIds = JSON.stringify(aiContext.players || []);
+    if (!roomAiGame || roomAiPlayerIds !== currentIds) {
+      roomAiGame?.close();
+      roomAiGame = await createLocalLuaGame({
+        sourceUrl: "./game.lua",
+        players,
+        playerId: actorId,
+      });
+      roomAiPlayerIds = currentIds;
+    }
+    const outcome = await roomAiGame.aiAction(aiContext, actorId);
+    if (outcome?.status !== "acted" || !outcome.action) {
+      roomAiBusy = false;
+      return;
+    }
+    const requestId = playweftClient?.sendAction({
+      type: "ai_turn",
+      playerId: actorId,
+      action: outcome.action,
+    });
+    if (!requestId) roomAiBusy = false;
+  } catch (error) {
+    roomAiBusy = false;
+    console.error("Mahjong room AI failed", error);
+  }
+}
+
 function handleRoomActionResult() {
   // Wait for the authoritative projection; a fast second tap must not act on stale state.
 }
 
 function handlePlayweftError(message, _code, requestId) {
+  roomAiBusy = false;
   if (session.rejectRoomAction(requestId)) {
     tableController.clearResultPageReadyPending();
     if (tableController.getState()?.phase === "hand_ended") {
@@ -1523,6 +1941,7 @@ function resumeAfterSuspension() {
 function destroy() {
   if (destroyed) return;
   destroyed = true;
+  window.clearTimeout(roomAiSchedule);
   session?.cancelScheduledActions();
   tableController?.destroy();
   themeController.destroy();
@@ -1536,5 +1955,21 @@ function destroy() {
   visualRenderer.destroy();
   resultHandRenderer.destroy();
   game?.close();
+  roomAiGame?.close();
+  roomAiGame = undefined;
+  roomLegalRequest += 1;
+  roomLegalRequestedKey = "";
+  roomLegalGame?.close();
+  roomLegalGame = undefined;
+  roomTenpaiRequest += 1;
+  roomTenpaiRequestedKey = "";
+  roomTenpaiReports = undefined;
+  roomTenpaiReportsPromise = undefined;
+  roomTenpaiSupplementRequest += 1;
+  roomTenpaiSupplementRequestedKey = "";
+  roomTenpaiReportedKey = "";
+  roomTenpaiGame?.close();
+  roomTenpaiGame = undefined;
+  roomTenpaiGameReady = undefined;
   playweftClient?.destroy();
 }

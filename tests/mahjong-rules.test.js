@@ -468,6 +468,128 @@ test("Mahjong records each exhaustive-draw tenpai player's waiting tile types", 
   });
 });
 
+test("Mahjong uses a matching late-wall declaration and falls back only for an invalid player report", async () => {
+  const result = await runScenario(`
+    local function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+    local function report_key(hand)
+      local hand_counts, meld_counts = {}, {}
+      for kind = 1, 34 do hand_counts[kind], meld_counts[kind] = 0, 0 end
+      for _, tile in ipairs(hand) do
+        local kind = math.floor((tile - 1) / 4) + 1
+        hand_counts[kind] = hand_counts[kind] + 1
+      end
+      return table.concat(hand_counts, ",") .. ":" .. table.concat(meld_counts, ",")
+    end
+
+    state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000056" } })
+    local waiting_hand = ids({ 1,2,3, 4,5,6, 10,11,12, 19,20,21, 28 })
+    state.hands.p1 = waiting_hand
+    state.hands.p2 = {}
+    state.hands.p3 = waiting_hand
+    state.hands.p4 = {}
+    state.tenpaiReports = {
+      p1 = { key = report_key(waiting_hand), tenpai = false },
+      p3 = { key = "stale", tenpai = false },
+    }
+    finish_exhaustive_draw(state)
+    result = {
+      tenpai = state.result.tenpai,
+      p3Waits = state.result.tenpaiWaits[3],
+    }
+  `);
+
+  assert.deepEqual(result, {
+    tenpai: [false, false, true, false],
+    p3Waits: [28],
+  });
+});
+
+test("Mahjong derives the same waits as complete structural validation", async () => {
+  const result = await runScenario(`
+    local function same_types(left, right)
+      if #left ~= #right then return false end
+      for index = 1, #left do
+        if left[index] ~= right[index] then return false end
+      end
+      return true
+    end
+
+    local function reference_waits(hand, melds)
+      local result, counts, locked_counts = {}, type_counts(hand), type_counts(hand)
+      for _, meld in ipairs(melds or {}) do
+        for _, tile in ipairs(meld.tiles or {}) do
+          local kind = tile_type(tile)
+          locked_counts[kind] = locked_counts[kind] + 1
+        end
+      end
+      for kind = 1, 34 do
+        if locked_counts[kind] < 4 then
+          local candidate = copy_array(hand)
+          candidate[#candidate + 1] = (kind - 1) * 4 + 1
+          if is_structural_win(candidate, melds) then
+            result[#result + 1] = kind
+          end
+        end
+      end
+      return result
+    end
+
+    function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+
+    local checked, matched = 0, true
+    for seed = 1, 80 do
+      local state = setup({
+        players = ${PLAYER_TABLE},
+        match = { randomSeed = string.format("%032x", seed) },
+      })
+      for seat = 2, 4 do
+        local player_id = state.players[seat]
+        checked = checked + 1
+        if not same_types(
+          waiting_types(state.hands[player_id], state.melds[player_id]),
+          reference_waits(state.hands[player_id], state.melds[player_id])
+        ) then
+          matched = false
+        end
+      end
+    end
+
+    local opened_melds = { { kind = "chi", tiles = ids({ 1, 2, 3 }) } }
+    local opened_hand = ids({ 4,5,6, 10,11,12, 19,20,21, 28 })
+    checked = checked + 1
+    matched = matched and same_types(
+      waiting_types(opened_hand, opened_melds),
+      reference_waits(opened_hand, opened_melds)
+    )
+    for _, hand in ipairs({
+      ids({ 1,1, 2,2, 3,3, 4,4, 5,5, 6,6, 7 }),
+      ids({ 1,9,10,18,19,27,28,29,30,31,32,33,34 }),
+    }) do
+      checked = checked + 1
+      matched = matched and same_types(waiting_types(hand, {}), reference_waits(hand, {}))
+    end
+
+    result = { checked = checked, matched = matched }
+  `);
+
+  assert.ok(result.checked > 0);
+  assert.equal(result.matched, true);
+});
+
 test("Mahjong terminal view reveals tile faces and red-five identity", async () => {
   const result = await runScenario(`
     state = setup({ players = ${PLAYER_TABLE}, match = { randomSeed = "00000000000000000000000000000007" } })

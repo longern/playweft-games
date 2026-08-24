@@ -45,12 +45,13 @@ export function createMahjongSessionController({
     if (actionInFlight) return false;
 
     if (getMode?.() === "room") {
-      const requestId = sendRoomAction?.(action);
+      actionInFlight = true;
+      const requestId = await sendRoomAction?.(action);
       if (!requestId) {
+        actionInFlight = false;
         onRoomUnavailable?.();
         return false;
       }
-      actionInFlight = true;
       roomActionRequestId = requestId;
       return true;
     }

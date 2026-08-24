@@ -512,7 +512,7 @@ export class MahjongDomView {
       this.countdownServerTime + (Date.now() - this.countdownLocalTime);
     const remainingMs = Math.max(0, this.countdownDeadlineAt - estimatedServerTime);
     const remainingSeconds = Math.ceil(remainingMs / 1000);
-    element.textContent = `${remainingSeconds}秒`;
+    element.textContent = String(remainingSeconds);
     element.classList.toggle("is-urgent", remainingSeconds <= 5);
     element.hidden = false;
   }
@@ -579,7 +579,7 @@ export class MahjongDomView {
       this.resultCountdownDeadlineAt - estimatedServerTime,
     );
     const remainingSeconds = Math.ceil(remainingMs / 1000);
-    element.textContent = `${remainingSeconds}秒`;
+    element.textContent = String(remainingSeconds);
     element.classList.toggle("is-urgent", remainingSeconds <= 5);
     element.hidden = false;
   }

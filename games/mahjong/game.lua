@@ -52,7 +52,15 @@ local function setup_players(context)
 		players[#players + 1] = player.id
 		names[#names + 1] = type(player.name) == "string" and player.name or ""
 	end
-	return players, names
+	local ai_players = {}
+	local ai_names = { "AI 東", "AI 南", "AI 西" }
+	while #players < PLAYER_COUNT do
+		local ai_id = "mahjong-ai-" .. tostring(#players + 1)
+		players[#players + 1] = ai_id
+		names[#names + 1] = ai_names[#players - 1] or ("AI " .. tostring(#players))
+		ai_players[ai_id] = true
+	end
+	return players, names, ai_players
 end
 
 local function player_index(state, player_id)
@@ -262,10 +270,51 @@ local function is_thirteen_orphans(tiles, melds)
 	return pair_found
 end
 
+-- This is intentionally separate from `standard_decompositions`: rule
+-- validation often only needs to know whether a hand can win at all.  Building
+-- every decomposition for a non-winning, sequence-heavy hand is needlessly
+-- expensive in the authoritative room runtime.
+local function has_standard_decomposition(tiles, melds)
+	local needed = 4 - #(melds or {})
+	if #tiles ~= needed * 3 + 2 then
+		return false
+	end
+	local counts = type_counts(tiles)
+	-- Groups never cross suit boundaries.  A standard hand has exactly one
+	-- pair, so each suit (and the honors) must contain a multiple of three
+	-- tiles, except for one component with two extra tiles.  This cheap,
+	-- necessary test rejects the overwhelming majority of random claim checks
+	-- before the full decomposition routine is needed.
+	for kind = 28, 34 do
+		-- Honors cannot form sequences, so a lone honor (or four concealed
+		-- copies) can never belong to a completed standard hand.
+		if counts[kind] == 1 or counts[kind] == 4 then
+			return false
+		end
+	end
+	local pair_components = 0
+	for _, bounds in ipairs({ { 1, 9 }, { 10, 18 }, { 19, 27 }, { 28, 34 } }) do
+		local total = 0
+		for kind = bounds[1], bounds[2] do
+			total = total + counts[kind]
+		end
+		local remainder = total % 3
+		if remainder == 2 then
+			pair_components = pair_components + 1
+		elseif remainder ~= 0 then
+			return false
+		end
+	end
+	if pair_components ~= 1 then
+		return false
+	end
+	return #standard_decompositions(tiles, melds) > 0
+end
+
 local function is_structural_win(tiles, melds)
 	return is_seven_pairs(tiles, melds)
 		or is_thirteen_orphans(tiles, melds)
-		or #standard_decompositions(tiles, melds) > 0
+		or has_standard_decomposition(tiles, melds)
 end
 
 local function is_closed_hand(melds)
@@ -277,27 +326,427 @@ local function is_closed_hand(melds)
 	return true
 end
 
+-- `waiting_types` is called by the authoritative room when an exhaustive
+-- draw is settled.  Do not calculate it by constructing 34 candidate hands
+-- and enumerating every decomposition: a single unlucky four-player draw can
+-- otherwise exceed the room's instruction quota.
+--
+-- Instead, each of the three suits and honors returns a compact bit mask of
+-- the complete groups and optional pair it can form.  The recursive cache is
+-- keyed by a base-five count vector, so all candidate waits in a component
+-- share one search. The masks are combined afterwards to check for the
+-- required four groups and one pair.
+local WAIT_SIGNATURE_BITS = { 1, 2, 4, 8, 16, 32, 64, 128, 256, 512 }
+
+local function wait_signature_has(signature, groups, pair)
+	local bit = WAIT_SIGNATURE_BITS[groups * 2 + pair + 1]
+	return bit and math.floor(signature / bit) % 2 == 1
+end
+
+local function wait_signature_add_group(signature)
+	local result = 0
+	for groups = 0, 3 do
+		for pair = 0, 1 do
+			if wait_signature_has(signature, groups, pair) then
+				result = result + WAIT_SIGNATURE_BITS[(groups + 1) * 2 + pair + 1]
+			end
+		end
+	end
+	return result
+end
+
+local function wait_signature_add_pair(signature)
+	local result = 0
+	for groups = 0, 4 do
+		if wait_signature_has(signature, groups, 0) then
+			result = result + WAIT_SIGNATURE_BITS[groups * 2 + 2]
+		end
+	end
+	return result
+end
+
+local function wait_component_key(counts, first, last)
+	local code, factor = 0, 1
+	for kind = first, last do
+		code, factor = code + counts[kind] * factor, factor * 5
+	end
+	return code
+end
+
+local function wait_component_signature(counts, first, last, sequences, cache)
+	local code = wait_component_key(counts, first, last)
+	if cache[code] ~= nil then
+		return cache[code]
+	end
+	local kind = first
+	while kind <= last and counts[kind] == 0 do
+		kind = kind + 1
+	end
+	if kind > last then
+		cache[code] = 1
+		return 1
+	end
+	local signature = 0
+	if counts[kind] >= 2 then
+		counts[kind] = counts[kind] - 2
+		signature = signature + wait_signature_add_pair(
+			wait_component_signature(counts, first, last, sequences, cache)
+		)
+		counts[kind] = counts[kind] + 2
+	end
+	if counts[kind] >= 3 then
+		counts[kind] = counts[kind] - 3
+		signature = signature + wait_signature_add_group(
+			wait_component_signature(counts, first, last, sequences, cache)
+		)
+		counts[kind] = counts[kind] + 3
+	end
+	if sequences and kind <= last - 2 and counts[kind + 1] > 0 and counts[kind + 2] > 0 then
+		counts[kind], counts[kind + 1], counts[kind + 2] =
+			counts[kind] - 1, counts[kind + 1] - 1, counts[kind + 2] - 1
+		signature = signature + wait_signature_add_group(
+			wait_component_signature(counts, first, last, sequences, cache)
+		)
+		counts[kind], counts[kind + 1], counts[kind + 2] =
+			counts[kind] + 1, counts[kind + 1] + 1, counts[kind + 2] + 1
+	end
+	cache[code] = signature
+	return signature
+end
+
+local function wait_mask_has(mask, relative_kind)
+	local bit = WAIT_SIGNATURE_BITS[relative_kind]
+	return bit and math.floor(mask / bit) % 2 == 1
+end
+
+local function wait_mask_add(mask, bit)
+	return math.floor(mask / bit) % 2 == 1 and mask or mask + bit
+end
+
+local function wait_mask_merge(left, right, length)
+	for relative_kind = 1, length do
+		local bit = WAIT_SIGNATURE_BITS[relative_kind]
+		if math.floor(right / bit) % 2 == 1 then
+			left = wait_mask_add(left, bit)
+		end
+	end
+	return left
+end
+
+-- Return every way this component can be completed by exactly one extra tile.
+-- Each entry is keyed by the resulting group/pair signature and contains a
+-- bit mask of the local tile kinds that can be that extra tile.  Sharing this
+-- search across all candidate tiles avoids the 34 separate recursive walks
+-- performed by the old `waiting_types` implementation.
+local function wait_added_component_signatures(counts, first, last, sequences, complete_cache, added_cache)
+	local code = wait_component_key(counts, first, last)
+	if added_cache[code] then
+		return added_cache[code]
+	end
+	local length, kind, result = last - first + 1, first, {}
+	while kind <= last and counts[kind] == 0 do
+		kind = kind + 1
+	end
+	if kind > last then
+		added_cache[code] = result
+		return result
+	end
+	local function merge_added(source, group_delta, pair_delta)
+		for index, mask in pairs(source) do
+			local groups, pair = math.floor((index - 1) / 2), (index - 1) % 2
+			if groups + group_delta <= 4 and pair + pair_delta <= 1 then
+				local target = (groups + group_delta) * 2 + pair + pair_delta + 1
+				result[target] = wait_mask_merge(result[target] or 0, mask, length)
+			end
+		end
+	end
+	local function add_candidate(signature, group_delta, pair_delta, relative_kind)
+		local bit = WAIT_SIGNATURE_BITS[relative_kind]
+		for groups = 0, 4 - group_delta do
+			for pair = 0, 1 - pair_delta do
+				if wait_signature_has(signature, groups, pair) then
+					local target = (groups + group_delta) * 2 + pair + pair_delta + 1
+					result[target] = wait_mask_add(result[target] or 0, bit)
+				end
+			end
+		end
+	end
+	local relative_kind = kind - first + 1
+	if counts[kind] >= 2 then
+		counts[kind] = counts[kind] - 2
+		merge_added(wait_added_component_signatures(counts, first, last, sequences, complete_cache, added_cache), 0, 1)
+		counts[kind] = counts[kind] + 2
+	end
+	if counts[kind] >= 3 then
+		counts[kind] = counts[kind] - 3
+		merge_added(wait_added_component_signatures(counts, first, last, sequences, complete_cache, added_cache), 1, 0)
+		counts[kind] = counts[kind] + 3
+	end
+	if sequences and kind <= last - 2 and counts[kind + 1] > 0 and counts[kind + 2] > 0 then
+		counts[kind], counts[kind + 1], counts[kind + 2] =
+			counts[kind] - 1, counts[kind + 1] - 1, counts[kind + 2] - 1
+		merge_added(wait_added_component_signatures(counts, first, last, sequences, complete_cache, added_cache), 1, 0)
+		counts[kind], counts[kind + 1], counts[kind + 2] =
+			counts[kind] + 1, counts[kind + 1] + 1, counts[kind + 2] + 1
+	end
+	if counts[kind] >= 1 then
+		counts[kind] = counts[kind] - 1
+		add_candidate(wait_component_signature(counts, first, last, sequences, complete_cache), 0, 1, relative_kind)
+		counts[kind] = counts[kind] + 1
+	end
+	if counts[kind] >= 2 then
+		counts[kind] = counts[kind] - 2
+		add_candidate(wait_component_signature(counts, first, last, sequences, complete_cache), 1, 0, relative_kind)
+		counts[kind] = counts[kind] + 2
+	end
+	if sequences then
+		if kind > first and counts[kind + 1] > 0 then
+			counts[kind], counts[kind + 1] = counts[kind] - 1, counts[kind + 1] - 1
+			add_candidate(wait_component_signature(counts, first, last, sequences, complete_cache), 1, 0, relative_kind - 1)
+			counts[kind], counts[kind + 1] = counts[kind] + 1, counts[kind + 1] + 1
+		end
+		if kind <= last - 2 and counts[kind + 2] > 0 then
+			counts[kind], counts[kind + 2] = counts[kind] - 1, counts[kind + 2] - 1
+			add_candidate(wait_component_signature(counts, first, last, sequences, complete_cache), 1, 0, relative_kind + 1)
+			counts[kind], counts[kind + 2] = counts[kind] + 1, counts[kind + 2] + 1
+		end
+		if kind <= last - 1 and counts[kind + 1] > 0 then
+			counts[kind], counts[kind + 1] = counts[kind] - 1, counts[kind + 1] - 1
+			add_candidate(wait_component_signature(counts, first, last, sequences, complete_cache), 1, 0, relative_kind + 2)
+			counts[kind], counts[kind + 1] = counts[kind] + 1, counts[kind + 1] + 1
+		end
+	end
+	added_cache[code] = result
+	return result
+end
+
+local function wait_standard_win(component_signatures, needed_groups)
+	local possible = { [0] = true }
+	for _, signature in ipairs(component_signatures) do
+		local next_possible = {}
+		for key in pairs(possible) do
+			local groups, pair = math.floor(key / 2), key % 2
+			for component_groups = 0, needed_groups - groups do
+				for component_pair = 0, 1 - pair do
+					if wait_signature_has(signature, component_groups, component_pair) then
+						next_possible[(groups + component_groups) * 2 + pair + component_pair] = true
+					end
+				end
+			end
+		end
+		possible = next_possible
+	end
+	return possible[needed_groups * 2 + 1] == true
+end
+
+local function wait_is_seven_pairs(counts)
+	local pairs = 0
+	for kind = 1, 34 do
+		if counts[kind] == 2 then
+			pairs = pairs + 1
+		elseif counts[kind] ~= 0 then
+			return false
+		end
+	end
+	return pairs == 7
+end
+
+local function wait_is_thirteen_orphans(counts)
+	local unique, pair = 0, false
+	for kind = 1, 34 do
+		if counts[kind] > 0 then
+			if not is_outside(kind) then
+				return false
+			end
+			unique = unique + 1
+			if counts[kind] >= 2 then
+				pair = true
+			end
+		end
+	end
+	return unique == 13 and pair
+end
+
 local function waiting_types(hand, melds)
-	local result, counts, locked_counts = {}, type_counts(hand), type_counts(hand)
+	local meld_count = #(melds or {})
+	if #hand ~= (4 - meld_count) * 3 + 1 then
+		return {}
+	end
+	local counts, locked_counts = type_counts(hand), type_counts(hand)
 	for _, meld in ipairs(melds or {}) do
 		for _, tile in ipairs(meld.tiles or {}) do
 			local kind = tile_type(tile)
 			locked_counts[kind] = locked_counts[kind] + 1
 		end
 	end
-	for kind = 1, 34 do
-		-- A wait may be exhausted in the wall or other players' hands and still
-		-- count as tenpai, but it may never require a fifth physical copy already
-		-- locked in this player's concealed hand and fixed groups.
-		if locked_counts[kind] < 4 then
-			local candidate = copy_array(hand)
-			candidate[#candidate + 1] = (kind - 1) * 4 + 1
-			if is_structural_win(candidate, melds) then
-				result[#result + 1] = kind
+	local complete_caches, added_caches = { {}, {}, {}, {} }, { {}, {}, {}, {} }
+	local components = {
+		{ first = 1, last = 9, sequences = true },
+		{ first = 10, last = 18, sequences = true },
+		{ first = 19, last = 27, sequences = true },
+		{ first = 28, last = 34, sequences = false },
+	}
+	local component_signatures = {}
+	for index, component in ipairs(components) do
+		component_signatures[index] = wait_component_signature(
+			counts, component.first, component.last, component.sequences, complete_caches[index]
+		)
+	end
+	local needed_groups = 4 - meld_count
+	local waits = {}
+	for component_index, component in ipairs(components) do
+		local added_signatures = wait_added_component_signatures(
+			counts,
+			component.first,
+			component.last,
+			component.sequences,
+			complete_caches[component_index],
+			added_caches[component_index]
+		)
+		local prior_signature = component_signatures[component_index]
+		for signature_index, tile_mask in pairs(added_signatures) do
+			component_signatures[component_index] = WAIT_SIGNATURE_BITS[signature_index]
+			if wait_standard_win(component_signatures, needed_groups) then
+				for relative_kind = 1, component.last - component.first + 1 do
+					local kind = component.first + relative_kind - 1
+					-- A wait may be exhausted in the wall or other players' hands and still
+					-- count as tenpai, but it may never require a fifth physical copy already
+					-- locked in this player's concealed hand and fixed groups.
+					if locked_counts[kind] < 4 and wait_mask_has(tile_mask, relative_kind) then
+						waits[kind] = true
+					end
+				end
+			end
+		end
+		component_signatures[component_index] = prior_signature
+	end
+	if meld_count == 0 then
+		for kind = 1, 34 do
+			if locked_counts[kind] < 4 then
+				counts[kind] = counts[kind] + 1
+				if wait_is_seven_pairs(counts) or wait_is_thirteen_orphans(counts) then
+					waits[kind] = true
+				end
+				counts[kind] = counts[kind] - 1
 			end
 		end
 	end
+	local result = {}
+	for kind = 1, 34 do
+		if waits[kind] then
+			result[#result + 1] = kind
+		end
+	end
 	return result
+end
+
+-- Late-wall clients may attach a structural tenpai declaration to their own
+-- discard.  The room keeps one declaration per player and only falls back to
+-- `waiting_types` for a player whose declaration no longer matches their
+-- current concealed hand and melds.
+local function tenpai_hand_key(hand, melds)
+	local hand_counts, meld_counts = type_counts(hand), {}
+	for kind = 1, 34 do
+		meld_counts[kind] = 0
+	end
+	for _, meld in ipairs(melds or {}) do
+		for _, tile in ipairs(meld.tiles or {}) do
+			local kind = tile_type(tile)
+			meld_counts[kind] = meld_counts[kind] + 1
+		end
+	end
+	return table.concat(hand_counts, ",") .. ":" .. table.concat(meld_counts, ",")
+end
+
+local function tenpai_report_witness_valid(report, hand, melds)
+	if type(report) ~= "table" or report.tenpai ~= true or type(report.witness) ~= "table" then
+		return false
+	end
+	local witness, kind = report.witness, math.floor(tonumber(report.witness.kind) or 0)
+	if kind < 1 or kind > 34 then
+		return false
+	end
+	local locked_counts = type_counts(hand)
+	for _, meld in ipairs(melds or {}) do
+		for _, tile in ipairs(meld.tiles or {}) do
+			local tile_kind = tile_type(tile)
+			locked_counts[tile_kind] = locked_counts[tile_kind] + 1
+		end
+	end
+	if locked_counts[kind] >= 4 then
+		return false
+	end
+	local counts = type_counts(hand)
+	counts[kind] = counts[kind] + 1
+	if witness.form ~= "standard" then
+		return false
+	end
+	local pair = math.floor(tonumber(witness.pair) or 0)
+	local groups = witness.groups
+	if pair < 1 or pair > 34 or type(groups) ~= "table" then
+		return false
+	end
+	if #groups ~= 4 - #(melds or {}) then
+		return false
+	end
+	local function take(tile_kind, amount)
+		if not tile_kind or counts[tile_kind] < amount then
+			return false
+		end
+		counts[tile_kind] = counts[tile_kind] - amount
+		return true
+	end
+	if not take(pair, 2) then
+		return false
+	end
+	for _, group in ipairs(groups) do
+		local group_kind, tile = group and group.kind, math.floor(tonumber(group and group.tile) or 0)
+		if group_kind == "triplet" then
+			if tile < 1 or tile > 34 or not take(tile, 3) then
+				return false
+			end
+		elseif group_kind == "sequence" then
+			local rank = tile and ((tile - 1) % 9) + 1 or 0
+			if tile < 1 or tile > 27 or rank > 7
+				or not take(tile, 1) or not take(tile + 1, 1) or not take(tile + 2, 1) then
+				return false
+			end
+		else
+			return false
+		end
+	end
+	for tile_kind = 1, 34 do
+		if counts[tile_kind] ~= 0 then
+			return false
+		end
+	end
+	return true
+end
+
+local function normalized_tenpai_report(report, hand, melds)
+	if type(report) ~= "table" or report.key ~= tenpai_hand_key(hand, melds) then
+		return nil
+	end
+	if report.tenpai == false then
+		report.waits = {}
+		return report
+	end
+	if not tenpai_report_witness_valid(report, hand, melds) then
+		return nil
+	end
+	report.waits = type(report.waits) == "table" and report.waits or { report.witness.kind }
+	return report
+end
+
+local function tenpai_report_for(state, player_id)
+	local pending = state.pendingTenpaiReport
+	if pending and pending.playerId == player_id then
+		state.pendingTenpaiReport = nil
+		local report = normalized_tenpai_report(pending.report, state.hands[player_id], state.melds[player_id])
+		return report
+	end
+	local report = state.tenpaiReports and state.tenpaiReports[player_id]
+	return normalized_tenpai_report(report, state.hands[player_id], state.melds[player_id])
 end
 
 local function wait_shape_quality(hand, melds, winning_kind)
@@ -1222,6 +1671,7 @@ local function deal(state)
 	state.winners, state.results, state.abortiveReason = {}, {}, ""
 	state.abortivePlayerIndex, state.abortiveTile = 0, 0
 	state.draw, state.result, state.moveCount = false, nil, 0
+	state.tenpaiReports, state.pendingTenpaiReport = {}, nil
 	state.chankanWin = false
 	state.turnIndex, state.phase = state.dealerIndex, "playing"
 	draw_tile(state, state.dealerIndex, false)
@@ -1581,8 +2031,9 @@ finish_exhaustive_draw = function(state)
 	end
 	local tenpai, tenpai_waits, count = {}, {}, 0
 	for seat, player_id in ipairs(state.players) do
-		local waits = waiting_types(state.hands[player_id], state.melds[player_id])
-		tenpai[seat] = #waits > 0
+		local report = tenpai_report_for(state, player_id)
+		local waits = report and report.waits or waiting_types(state.hands[player_id], state.melds[player_id])
+		tenpai[seat] = report and report.tenpai or #waits > 0
 		tenpai_waits[seat] = waits
 		if tenpai[seat] then
 			count = count + 1
@@ -1618,7 +2069,7 @@ finish_abortive_draw = function(state, reason, player_index)
 	mark_next_hand(state, true, true)
 end
 
-local function new_match(players, names, seed, settings)
+local function new_match(players, names, seed, settings, ai_players)
 	seed = math.floor(math.abs(tonumber(seed) or 1)) % RANDOM_MODULUS
 	if seed == 0 then
 		seed = 1
@@ -1638,6 +2089,7 @@ local function new_match(players, names, seed, settings)
 			{ roundWind = 1, handNumber = 1, honba = 0, scores = { 25000, 25000, 25000, 25000 } },
 		},
 		matchEnded = false,
+		aiPlayers = ai_players or {},
 		rules = rule_settings(settings),
 	}
 	-- A paipu viewer can start directly at any recorded hand.  The wall plus
@@ -1930,12 +2382,14 @@ local function begin_chankan(state, seat, tile, meld_index, kan_kind, kan_tiles)
 		local other = ((seat - 1 + distance) % 4) + 1
 		local player_id = state.players[other]
 		local can_ron = false
-		if not is_furiten(state, player_id) then
-			if kan_kind == "ankan" then
-				local candidate = copy_array(state.hands[player_id])
-				candidate[#candidate + 1] = tile
-				can_ron = is_thirteen_orphans(candidate, state.melds[player_id])
-			else
+		if kan_kind == "ankan" then
+			local candidate = copy_array(state.hands[player_id])
+			candidate[#candidate + 1] = tile
+			can_ron = is_thirteen_orphans(candidate, state.melds[player_id]) and not is_furiten(state, player_id)
+		else
+			local candidate = copy_array(state.hands[player_id])
+			candidate[#candidate + 1] = tile
+			if is_structural_win(candidate, state.melds[player_id]) and not is_furiten(state, player_id) then
 				can_ron = score_hand(state, other, tile, "ron") ~= nil
 			end
 		end
@@ -2016,7 +2470,7 @@ end
 local function claim_options(state, seat, discarder, tile)
 	local player_id, options = state.players[seat], {}
 	local hand, kind = state.hands[player_id], tile_type(tile)
-	local ron_opportunity = not is_furiten(state, player_id) and structural_ron_available(state, seat, tile)
+	local ron_opportunity = structural_ron_available(state, seat, tile) and not is_furiten(state, player_id)
 	if ron_opportunity and score_hand(state, seat, tile, "ron") then
 		options[#options + 1] = { kind = "ron", tileIds = {} }
 	end
@@ -2734,7 +3188,7 @@ local function visible_events(events, viewer_id)
 	return result
 end
 
-local function legal_actions(state, viewer_id)
+local function legal_actions(state, viewer_id, fast_projection)
 	local seat = player_index(state, viewer_id)
 	local legal = {
 		canDiscard = false,
@@ -2756,6 +3210,12 @@ local function legal_actions(state, viewer_id)
 			legal.forbiddenDiscardTypes[#legal.forbiddenDiscardTypes + 1] = kind
 		end
 		table.sort(legal.forbiddenDiscardTypes)
+		-- The room service has a strict per-call instruction quota.  Exact
+		-- tenpai, riichi, yaku, and furiten previews belong to the local Lua
+		-- worker; action validation below remains authoritative.
+		if fast_projection then
+			return legal
+		end
 		local discard_waits = tenpai_discard_waits(state, viewer_id)
 		legal.canTsumo = state.drawnTile > 0 and score_hand(state, seat, state.drawnTile, "tsumo") ~= nil
 		legal.riichiTiles = riichi_discards(state, viewer_id, discard_waits)
@@ -4081,12 +4541,12 @@ local function choose_ai_discard(state, seat, hand, allowed, forbidden, melds)
 end
 
 function setup(context)
-	local players, names = setup_players(context)
+	local players, names, ai_players = setup_players(context)
 	if #players ~= PLAYER_COUNT then
 		error("Mahjong requires exactly four players")
 	end
 	local settings = context.match and context.match.settings or {}
-	return new_match(players, names, normalize_random_seed(context.match.randomSeed), settings)
+	return new_match(players, names, normalize_random_seed(context.match.randomSeed), settings, ai_players)
 end
 
 function export_paipu(state)
@@ -4173,6 +4633,7 @@ function view(state, events, context)
 		state = {
 			players = state.players,
 			playerNames = state.playerNames,
+			aiPlayers = state.aiPlayers,
 			matchType = state.matchType,
 			roundWind = state.roundWind,
 			handNumber = state.handNumber,
@@ -4193,10 +4654,10 @@ function view(state, events, context)
 			handCounts = hand_counts,
 			discards = visible_discards(state),
 			melds = visible_melds(state),
-			legalActions = legal_actions(state, viewer_id),
+			legalActions = legal_actions(state, viewer_id, context.fastLegalActions == true),
 			drawnTile = state.turnIndex == player_index(state, viewer_id) and state.drawnTile or 0,
 			riichi = state.riichi,
-			furiten = is_furiten(state, viewer_id),
+			furiten = context.fastLegalActions ~= true and is_furiten(state, viewer_id) or false,
 			winner = state.winner,
 			winnerIndex = state.winnerIndex,
 			winType = state.winType,
@@ -4245,7 +4706,7 @@ function on_action(state, action, context)
 			new_match(state.players, state.playerNames, next_match_seed(state.seed), {
 				matchType = state.matchType,
 				rules = state.rules,
-			}),
+			}, state.aiPlayers),
 			{ { type = "new_match", player = actor_id, playerIndex = seat } }
 		)
 	end

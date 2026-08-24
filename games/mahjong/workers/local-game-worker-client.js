@@ -92,6 +92,23 @@ export async function createLocalLuaGame(options = {}) {
       aiTurn(viewerId = options.playerId) {
         return request("aiTurn", { viewerId });
       },
+      aiAction(state, actorId) {
+        return request("aiAction", { state, actorId });
+      },
+      legalActions(state, viewerId = options.playerId) {
+        return request("legalActions", { state, viewerId }).then(
+          normalizeLegalActions,
+        );
+      },
+      tenpaiReports(state, viewerId = options.playerId) {
+        return request("tenpaiReports", { state, viewerId });
+      },
+      tenpaiReport(state, tileId, viewerId = options.playerId) {
+        return request("tenpaiReport", { state, tileId, viewerId });
+      },
+      currentTenpaiReport(state, viewerId = options.playerId) {
+        return request("currentTenpaiReport", { state, viewerId });
+      },
       close() {
         if (closed) return;
         closed = true;
@@ -104,6 +121,29 @@ export async function createLocalLuaGame(options = {}) {
     worker.terminate();
     throw error;
   }
+}
+
+function localLuaList(value) {
+  return Array.isArray(value) ? value : Object.values(value ?? {});
+}
+
+function normalizeLegalActions(legalActions) {
+  if (!legalActions || typeof legalActions !== "object") return legalActions;
+  return {
+    ...legalActions,
+    riichiTiles: localLuaList(legalActions.riichiTiles),
+    selfKans: localLuaList(legalActions.selfKans),
+    forbiddenDiscardTypes: localLuaList(legalActions.forbiddenDiscardTypes),
+    claims: localLuaList(legalActions.claims).map((claim) => ({
+      ...claim,
+      tileTypes: localLuaList(claim?.tileTypes),
+      red: localLuaList(claim?.red),
+    })),
+    tenpaiDiscards: localLuaList(legalActions.tenpaiDiscards).map((discard) => ({
+      ...discard,
+      waits: localLuaList(discard?.waits),
+    })),
+  };
 }
 
 // The worker client is emitted to /assets/ in a production build, while the

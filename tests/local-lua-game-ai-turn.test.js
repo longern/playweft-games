@@ -71,6 +71,80 @@ test("local Mahjong runtime leaves a human turn untouched", async (t) => {
   assert.equal(outcome.projection.state.moveCount, before.state.moveCount);
 });
 
+test("local Mahjong AI can decide one named actor without applying an action", async (t) => {
+  let game;
+  let projection;
+  for (let seed = 1; seed <= 16; seed += 1) {
+    game = await createGame(t, seed);
+    projection = game.view(HUMAN_ID);
+    if (projection.state.turnIndex !== 1) break;
+    game.close();
+    game = undefined;
+  }
+  t.after(() => game?.close());
+
+  assert.ok(game, "a deterministic seed should give an AI the opening turn");
+  const actorId = projection.state.players[projection.state.turnIndex - 1];
+  const checkpoint = game.checkpoint();
+  const outcome = game.aiAction(checkpoint.state, actorId);
+
+  assert.equal(outcome.status, "acted");
+  assert.equal(outcome.actorId, actorId);
+  assert.ok(outcome.action?.type);
+  assert.equal(game.view(HUMAN_ID).state.moveCount, projection.state.moveCount);
+});
+
+test("local Mahjong runtime calculates a human turn's legal preview without mutating state", async (t) => {
+  let game;
+  let projection;
+  for (let seed = 1; seed <= 16; seed += 1) {
+    game = await createGame(t, seed);
+    projection = game.view(HUMAN_ID);
+    if (projection.state.turnIndex === 1) break;
+    game.close();
+    game = undefined;
+  }
+  t.after(() => game?.close());
+
+  assert.ok(game, "a deterministic seed should give the human the opening turn");
+  const checkpoint = game.checkpoint();
+  const legal = game.legalActions(checkpoint.state, HUMAN_ID);
+
+  assert.equal(legal.canDiscard, true);
+  assert.ok(legal.riichiTiles && typeof legal.riichiTiles === "object");
+  assert.ok(legal.tenpaiDiscards && typeof legal.tenpaiDiscards === "object");
+  assert.equal(game.view(HUMAN_ID).state.moveCount, projection.state.moveCount);
+});
+
+test("local Mahjong runtime calculates the exact river-bottom discard declaration", async (t) => {
+  const game = await createGame(t, 12_345);
+  t.after(() => game.close());
+  const checkpoint = game.checkpoint();
+  checkpoint.state.phase = "playing";
+  checkpoint.state.turnIndex = 1;
+  checkpoint.state.drawnTile = 0;
+  checkpoint.state.melds[HUMAN_ID] = [];
+  checkpoint.state.hands[HUMAN_ID] = [
+    1, 5, 9, 13, 17, 21, 37, 41, 45, 73, 77, 81, 109, 133,
+  ];
+
+  const report = game.tenpaiReport(checkpoint.state, 133, HUMAN_ID);
+  const reports = game.tenpaiReports(checkpoint.state, HUMAN_ID);
+
+  assert.equal(report.tenpai, true);
+  assert.deepEqual(report, reports[133]);
+  assert.deepEqual(luaTableValues(report.waits), [28]);
+  assert.equal(report.witness.form, "standard");
+  assert.equal(report.witness.pair, 28);
+  assert.equal(luaTableValues(report.witness.groups).length, 4);
+  assert.match(report.key, /:/);
+
+  checkpoint.state.hands[HUMAN_ID].pop();
+  const currentReport = game.currentTenpaiReport(checkpoint.state, HUMAN_ID);
+
+  assert.deepEqual(currentReport, report);
+});
+
 test("local Mahjong authority advances every AI turn without a page-selected actor", async (t) => {
   const game = await createGame(t, 12_345);
   t.after(() => game.close());

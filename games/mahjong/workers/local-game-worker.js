@@ -55,5 +55,20 @@ async function handle(type, payload) {
   if (type === "aiTurn") {
     return game.aiTurn(payload.viewerId);
   }
+  if (type === "aiAction") {
+    return game.aiAction(payload.state, payload.actorId);
+  }
+  if (type === "legalActions") {
+    return game.legalActions(payload.state, payload.viewerId);
+  }
+  if (type === "tenpaiReports") {
+    return game.tenpaiReports(payload.state, payload.viewerId);
+  }
+  if (type === "tenpaiReport") {
+    return game.tenpaiReport(payload.state, payload.tileId, payload.viewerId);
+  }
+  if (type === "currentTenpaiReport") {
+    return game.currentTenpaiReport(payload.state, payload.viewerId);
+  }
   throw new TypeError(`Unknown Mahjong worker request: ${type}`);
 }

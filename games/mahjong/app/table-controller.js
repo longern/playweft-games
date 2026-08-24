@@ -140,6 +140,20 @@ export function createMahjongTableController({
     effectRunner.run("river tile sound", () => playRiverTileSound(events));
   }
 
+  function applyLegalActions(legalActions) {
+    if (!state || !legalActions || typeof legalActions !== "object") return;
+    state = {
+      ...state,
+      legalActions,
+      furiten: legalActions.furiten === true,
+    };
+    if (riichiMode && !state.legalActions.canRiichi) {
+      riichiMode = false;
+      selectionBeforeRiichi = 0;
+    }
+    renderCurrentState();
+  }
+
   function renderCurrentState({ animateDealIn = false } = {}) {
     const renderState = presentedState();
     const revealedPlayerIndices = handRevealPlayerIndices(state);
@@ -832,6 +846,7 @@ export function createMahjongTableController({
     clearActionUi,
     reset,
     refresh,
+    applyLegalActions,
     renderCurrentState,
     renderPresentationOverlays,
     applyMatchMusicVolume,

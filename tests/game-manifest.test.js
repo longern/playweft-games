@@ -7,7 +7,7 @@ const ROOM_GAMES = new Map([
   ["connect-four", [2, 2]],
   ["texas-holdem", [2, 6]],
   ["dou-dizhu", [3, 3]],
-  ["mahjong", [4, 4]],
+  ["mahjong", [2, 4]],
   ["werewolf-dealer", [6, 15]],
   ["uno", [2, 4]],
   ["go", [2, 2]],

@@ -175,6 +175,143 @@ function __playweft_local_ai_turn(viewer_id, server_time)
   }
 end
 
+function __playweft_local_ai_action(state, actor_id)
+  if type(state) ~= "table" or type(actor_id) ~= "string" then
+    error("AI action requires a state and actor id")
+  end
+  if type(ai_action) ~= "function" then
+    error("Local game does not provide an AI action")
+  end
+  local action = ai_action(state, actor_id)
+  if type(action) ~= "table" then
+    return { status = "idle", actorId = actor_id }
+  end
+  return { status = "acted", actorId = actor_id, action = action }
+end
+
+function __playweft_local_legal_actions(state, viewer_id)
+  if type(state) ~= "table" or type(viewer_id) ~= "string" then
+    error("Legal-action preview requires a state and viewer id")
+  end
+  local legal = legal_actions(state, viewer_id)
+  legal.furiten = is_furiten(state, viewer_id)
+  return legal
+end
+
+local function __playweft_local_tenpai_witness(hand, melds, waits)
+  local winning_kind = waits[1]
+  if not winning_kind then return nil end
+  local candidate = copy_array(hand)
+  candidate[#candidate + 1] = (winning_kind - 1) * 4 + 1
+  -- The room verifier intentionally accepts only standard-hand witnesses.
+  -- Special-hand waits simply omit a report and use the server fallback.
+  for _, decomposition in ipairs(standard_decompositions(candidate, melds)) do
+    local groups = {}
+    for _, group in ipairs(decomposition.groups) do
+      groups[#groups + 1] = { kind = group.kind, tile = group.tile }
+    end
+    return {
+      kind = winning_kind,
+      form = "standard",
+      pair = decomposition.pair,
+      groups = groups,
+    }
+  end
+  return nil
+end
+
+function __playweft_local_tenpai_reports(state, viewer_id)
+  if type(state) ~= "table" or type(viewer_id) ~= "string" then
+    error("Tenpai reports require a state and viewer id")
+  end
+  if state.phase ~= "playing" or state.players[state.turnIndex] ~= viewer_id then
+    return {}
+  end
+  local melds = state.melds[viewer_id] or {}
+  local hand = copy_array(state.hands[viewer_id] or {})
+  if (tonumber(state.drawnTile) or 0) > 0 then
+    hand[#hand + 1] = state.drawnTile
+  end
+  local reports = {}
+  for index, tile in ipairs(hand) do
+    local after = copy_array(hand)
+    table.remove(after, index)
+    local waits = waiting_types(after, melds)
+    if #waits == 0 then
+      reports[tile] = { key = tenpai_hand_key(after, melds), tenpai = false }
+    else
+      local witness = __playweft_local_tenpai_witness(after, melds, waits)
+      if witness then
+        reports[tile] = {
+          key = tenpai_hand_key(after, melds),
+          tenpai = true,
+          waits = waits,
+          witness = witness,
+        }
+      end
+    end
+  end
+  return reports
+end
+
+function __playweft_local_tenpai_report(state, viewer_id, discarded_tile)
+  if type(state) ~= "table" or type(viewer_id) ~= "string" then
+    error("Tenpai report requires a state and viewer id")
+  end
+  if state.phase ~= "playing" or state.players[state.turnIndex] ~= viewer_id then
+    return nil
+  end
+  local melds = state.melds[viewer_id] or {}
+  local hand = copy_array(state.hands[viewer_id] or {})
+  if (tonumber(state.drawnTile) or 0) > 0 then
+    hand[#hand + 1] = state.drawnTile
+  end
+  local removed = false
+  for index, tile in ipairs(hand) do
+    if tile == discarded_tile then
+      table.remove(hand, index)
+      removed = true
+      break
+    end
+  end
+  if not removed then return nil end
+  local waits = waiting_types(hand, melds)
+  if #waits == 0 then
+    return { key = tenpai_hand_key(hand, melds), tenpai = false }
+  end
+  local witness = __playweft_local_tenpai_witness(hand, melds, waits)
+  if not witness then return nil end
+  return {
+    key = tenpai_hand_key(hand, melds),
+    tenpai = true,
+    waits = waits,
+    witness = witness,
+  }
+end
+
+function __playweft_local_current_tenpai_report(state, viewer_id)
+  if type(state) ~= "table" or type(viewer_id) ~= "string" then
+    error("Current tenpai report requires a state and viewer id")
+  end
+  local melds = state.melds[viewer_id] or {}
+  local hand = copy_array(state.hands[viewer_id] or {})
+  if state.players[state.turnIndex] == viewer_id and (tonumber(state.drawnTile) or 0) > 0 then
+    return nil
+  end
+  local waits = waiting_types(hand, melds)
+  if #waits == 0 then
+    return { key = tenpai_hand_key(hand, melds), tenpai = false }
+  end
+  local witness = __playweft_local_tenpai_witness(hand, melds, waits)
+  if not witness then return nil end
+  return {
+    key = tenpai_hand_key(hand, melds),
+    tenpai = true,
+    waits = waits,
+    witness = witness,
+  }
+end
+
 function __playweft_local_checkpoint()
   return {
     state = __local_state,
@@ -254,6 +391,11 @@ export async function createLocalLuaGame({
     const applyAction = lua.global.get("__playweft_local_action");
     const loadReplayHand = lua.global.get("__playweft_local_load_replay_hand");
     const advanceAiTurn = lua.global.get("__playweft_local_ai_turn");
+    const decideAiAction = lua.global.get("__playweft_local_ai_action");
+    const readLegalActions = lua.global.get("__playweft_local_legal_actions");
+    const readTenpaiReports = lua.global.get("__playweft_local_tenpai_reports");
+    const readTenpaiReport = lua.global.get("__playweft_local_tenpai_report");
+    const readCurrentTenpaiReport = lua.global.get("__playweft_local_current_tenpai_report");
     const createCheckpoint = lua.global.get("__playweft_local_checkpoint");
     const restoreCheckpoint = lua.global.get("__playweft_local_restore");
     const exportPaipu = lua.global.get("__playweft_local_paipu");
@@ -293,6 +435,26 @@ export async function createLocalLuaGame({
       aiTurn(viewerId = playerId) {
         ensureOpen(closed);
         return advanceAiTurn(viewerId, Date.now());
+      },
+      aiAction(state, actorId) {
+        ensureOpen(closed);
+        return decideAiAction(state, actorId);
+      },
+      legalActions(state, viewerId = playerId) {
+        ensureOpen(closed);
+        return readLegalActions(state, viewerId);
+      },
+      tenpaiReports(state, viewerId = playerId) {
+        ensureOpen(closed);
+        return readTenpaiReports(state, viewerId);
+      },
+      tenpaiReport(state, tileId, viewerId = playerId) {
+        ensureOpen(closed);
+        return readTenpaiReport(state, viewerId, Number(tileId));
+      },
+      currentTenpaiReport(state, viewerId = playerId) {
+        ensureOpen(closed);
+        return readCurrentTenpaiReport(state, viewerId);
       },
       checkpoint() {
         ensureOpen(closed);

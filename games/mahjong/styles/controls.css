@@ -27,12 +27,16 @@
 }
 
 .action-countdown {
+  position: fixed;
+  /* Sit just to the right of the action dock, rather than on the viewport edge. */
+  right: calc(var(--mahjong-action-right) - 76px);
+  bottom: 128px;
+  z-index: 56;
   display: inline-flex;
   box-sizing: border-box;
-  min-width: 120px;
+  width: 64px;
   min-height: 56px;
-  margin-left: 4px;
-  padding: 2px 20px;
+  padding: 2px 12px;
   align-items: center;
   justify-content: center;
   color: rgba(248, 237, 207, 0.72);
@@ -43,6 +47,7 @@
   line-height: 1;
   text-align: center;
   white-space: nowrap;
+  pointer-events: none;
 }
 
 .action-countdown.is-urgent {
