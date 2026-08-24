@@ -10,7 +10,7 @@ import {
   setMahjongSoloAutoActions,
   setMahjongSoloCheckpoint,
   writeMahjongSoloSave,
-} from "../games/mahjong/solo-save.js";
+} from "../games/mahjong/replay/solo-save.js";
 
 function createStorage() {
   const values = new Map();

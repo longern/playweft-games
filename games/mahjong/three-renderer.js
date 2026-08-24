@@ -18,9 +18,9 @@ import {
 import tileFacesUrl from "./assets/tiles/riichi-faces.webp?url";
 import tileFacesPlaceholderUrl from "./assets/tiles/riichi-faces-placeholder.webp?url";
 import feltSkinUrl from "./assets/felt-skin-moonwave-v1.jpg?url";
-import { afterWindowLoad } from "./deferred-visual-assets.js";
-import { POSITIONS } from "./constants.js";
-import { MAHJONG_VIEWPORT } from "./fixed-viewport.js";
+import { afterWindowLoad } from "./theme/deferred-visual-assets.js";
+import { POSITIONS } from "./rules/constants.js";
+import { MAHJONG_VIEWPORT } from "./app/fixed-viewport.js";
 import {
   asArray,
   canDiscardHandTile,
@@ -30,7 +30,7 @@ import {
   riverDisplayEntries,
   splitRevealedHand,
   tileType,
-} from "./game-format.js";
+} from "./rules/game-format.js";
 import {
   handTransform,
   MELD_GROUP_GAP,

@@ -6,7 +6,7 @@ import { createLocalLuaGame } from "../src/local-lua-game.js";
 import {
   summarizeMahjongPaipu,
   validateMahjongPaipu,
-} from "../games/mahjong/paipu-store.js";
+} from "../games/mahjong/replay/paipu-store.js";
 
 const HUMAN_ID = "human";
 const PLAYERS = [

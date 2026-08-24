@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { createMahjongEffectRunner } from "../games/mahjong/effect-runner.js";
-import { createMahjongTableController } from "../games/mahjong/table-controller.js";
+import { createMahjongEffectRunner } from "../games/mahjong/app/effect-runner.js";
+import { createMahjongTableController } from "../games/mahjong/app/table-controller.js";
 
 function createController({
   onDispatch = () => {},

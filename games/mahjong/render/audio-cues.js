@@ -1,4 +1,4 @@
-import { asArray } from "../game-format.js";
+import { asArray } from "../rules/game-format.js";
 
 const RIVER_TILE_VOLUME_BY_SEAT = Object.freeze({
   1: 0.78,

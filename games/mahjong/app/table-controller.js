@@ -7,7 +7,7 @@ import {
   DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS,
   HAND_END_PRESENTATION_DELAY_MS,
   HAND_INSERTION_DELAY_MS,
-} from "./constants.js";
+} from "../rules/constants.js";
 import {
   asArray,
   canDiscardHandTile,
@@ -16,13 +16,13 @@ import {
   exhaustiveDrawPresentation,
   matchResultRows,
   resultDetailPageCount,
-} from "./game-format.js";
-import { MAHJONG_YAKU_VOICE_KEYS } from "./asset-packs.js";
+} from "../rules/game-format.js";
+import { MAHJONG_YAKU_VOICE_KEYS } from "../theme/asset-packs.js";
 import {
   hasMahjongRiichi,
   mahjongMatchMusicTarget,
-} from "./match-music.js";
-import { riverTileSoundCue } from "./render/audio-cues.js";
+} from "../theme/match-music.js";
+import { riverTileSoundCue } from "../render/audio-cues.js";
 
 const MATCH_MUSIC_FADE_DURATION_MS = 800;
 const RESULT_PAGE_TRANSITION_MS = 920;

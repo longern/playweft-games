@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveLocalLuaSourceUrl } from "../games/mahjong/local-game-worker-client.js";
+import { resolveLocalLuaSourceUrl } from "../games/mahjong/workers/local-game-worker-client.js";
 
 test("mahjong worker resolves rules beside the page instead of its asset bundle", () => {
   assert.equal(

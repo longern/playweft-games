@@ -9,9 +9,9 @@ import {
   SRGBColorSpace,
   Vector3,
 } from "three";
-import { TILE_PHYSICAL_MM } from "./render/three-layout.js";
-import { visibleScoreSheetRows } from "./game-format.js";
-import { traditionalYakuName } from "./yaku-display.js";
+import { TILE_PHYSICAL_MM } from "../render/three-layout.js";
+import { visibleScoreSheetRows } from "../rules/game-format.js";
+import { traditionalYakuName } from "../rules/yaku-display.js";
 
 const A4_WIDTH_MM = 297;
 const A4_HEIGHT_MM = 210;

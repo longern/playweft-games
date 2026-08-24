@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { createMahjongEffectRunner } from "../games/mahjong/effect-runner.js";
+import { createMahjongEffectRunner } from "../games/mahjong/app/effect-runner.js";
 
 test("mahjong presentation failures do not prevent later terminal effects", () => {
   const errors = [];

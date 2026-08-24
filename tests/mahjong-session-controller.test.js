@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { createMahjongSessionController } from "../games/mahjong/session-controller.js";
+import { createMahjongSessionController } from "../games/mahjong/app/session-controller.js";
 
 function createScheduler() {
   let generation = 0;

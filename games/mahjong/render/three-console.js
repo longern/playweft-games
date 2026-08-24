@@ -9,7 +9,7 @@ import {
   SRGBColorSpace,
 } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { activeSeat } from "../game-format.js";
+import { activeSeat } from "../rules/game-format.js";
 import { PLAYFIELD_CENTRE_Z, TILE_SIZE } from "./three-layout.js";
 
 const LOGICAL_WIDTH = 640;

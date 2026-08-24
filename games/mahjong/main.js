@@ -10,7 +10,7 @@ import {
   createIcons,
 } from "lucide";
 import { createPlayweftClient } from "../../src/playweft-client.js";
-import { createLocalLuaGame } from "./local-game-worker-client.js";
+import { createLocalLuaGame } from "./workers/local-game-worker-client.js";
 import {
   AI_DELAY_MS,
   AUTO_DECISION_DELAY_MS,
@@ -18,28 +18,28 @@ import {
   NEW_HAND_DEAL_DURATION_MS,
   OWN_DRAW_ENTRY_DURATION_MS,
   PLAYERS,
-} from "./constants.js";
-import { MahjongDomView } from "./dom-view.js";
-import { createMahjongSessionController } from "./session-controller.js";
-import { bindFixedViewport } from "./fixed-viewport.js";
+} from "./rules/constants.js";
+import { MahjongDomView } from "./app/dom-view.js";
+import { createMahjongSessionController } from "./app/session-controller.js";
+import { bindFixedViewport } from "./app/fixed-viewport.js";
 import {
   asArray,
   blankDoubleClickAction,
   errorMessage,
   resultDetailPageCount,
-} from "./game-format.js";
+} from "./rules/game-format.js";
 import { MahjongThreeRenderer } from "./three-renderer.js";
-import { MahjongResultHandRenderer } from "./result-hand-renderer.js";
-import { MahjongPresentationController } from "./presentation-controller.js";
-import { createMahjongThemeController } from "./theme-controller.js";
-import { createMahjongTableController } from "./table-controller.js";
-import { createMahjongEffectRunner } from "./effect-runner.js";
+import { MahjongResultHandRenderer } from "./result/result-hand-renderer.js";
+import { MahjongPresentationController } from "./app/presentation-controller.js";
+import { createMahjongThemeController } from "./theme/theme-controller.js";
+import { createMahjongTableController } from "./app/table-controller.js";
+import { createMahjongEffectRunner } from "./app/effect-runner.js";
 import { createMahjongSettingsDialog } from "./settings-dialog.js";
-import { MahjongMatchMusic } from "./match-music.js";
+import { MahjongMatchMusic } from "./theme/match-music.js";
 import {
   deferMahjongDecorativeAssets,
   deferMahjongImageAssets,
-} from "./deferred-visual-assets.js";
+} from "./theme/deferred-visual-assets.js";
 import discardSoundSource from "./assets/audio/discard-sound.js";
 import defaultTableBackgroundUrl from "./assets/moonlit-table-v3.jpg?url";
 import defaultPortraitsUrl from "./assets/player-portraits-v1.jpg?url";
@@ -48,7 +48,7 @@ import defaultLobbyBackgroundUrl from "./assets/waiting-evening-v1.jpg?url";
 import defaultLobbySignpostUrl from "./assets/waiting-signpost-v3.webp?url";
 import defaultPaipuNotebookUrl from "./assets/paipu-notebook-v1.jpg?url";
 import defaultTileFacesUrl from "./assets/tiles/riichi-faces.webp?url";
-import { DEFAULT_MATCH_MUSIC_VOLUME } from "./media-config.js";
+import { DEFAULT_MATCH_MUSIC_VOLUME } from "./theme/media-config.js";
 import {
   appendMahjongSoloAction,
   clearMahjongSoloSave,
@@ -59,23 +59,23 @@ import {
   setMahjongSoloAutoActions,
   setMahjongSoloCheckpoint,
   writeMahjongSoloSave,
-} from "./solo-save.js";
+} from "./replay/solo-save.js";
 import {
   listMahjongPaipuSummaries,
   loadMahjongPaipu,
   saveMahjongPaipu,
   setMahjongPaipuPinned,
-} from "./paipu-store.js";
-import { replayMahjongSoloSave } from "./solo-replay.js";
+} from "./replay/paipu-store.js";
+import { replayMahjongSoloSave } from "./replay/solo-replay.js";
 import {
   buildMahjongPaipuTimeline,
   clampPaipuPosition,
   paipuHandIndexAtPosition,
   paipuNextHandPosition,
   paipuPreviousHandPosition,
-} from "./paipu-playback.js";
-import { mahjongInitialEntry } from "./entry-flow.js";
-import { orientMahjongRoomProjection } from "./room-state.js";
+} from "./replay/paipu-playback.js";
+import { mahjongInitialEntry } from "./app/entry-flow.js";
+import { orientMahjongRoomProjection } from "./rules/room-state.js";
 import "../../src/base.css";
 import "./styles.css";
 

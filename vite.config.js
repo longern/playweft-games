@@ -1,7 +1,14 @@
 import { resolve } from "node:path";
-import { readFile, rename, rmdir } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  rmdir,
+} from "node:fs/promises";
 import { defineConfig } from "vite";
-import { normalizeMahjongDefaultAssetConfig } from "./games/mahjong/default-assets.js";
+import { normalizeMahjongDefaultAssetConfig } from "./games/mahjong/theme/default-assets.js";
 import { buildMahjongOnlineSource } from "./games/mahjong/online-source.js";
 
 const games = [
@@ -186,9 +193,49 @@ function preserveGameUrls() {
     async closeBundle() {
       const builtGamesDir = resolve(outDir, "games");
       for (const game of games) {
-        await rename(resolve(builtGamesDir, game), resolve(outDir, game));
+        const sourceDir = resolve(builtGamesDir, game);
+        const targetDir = resolve(outDir, game);
+
+        try {
+          await access(sourceDir);
+        } catch (error) {
+          if (error.code !== "ENOENT") throw error;
+          // Vite 8 writes HTML entries directly to dist/<game>; there is
+          // nothing to move when this directory only contains emitted assets.
+          continue;
+        }
+
+        let targetExists = true;
+        try {
+          await access(targetDir);
+        } catch (error) {
+          if (error.code !== "ENOENT") throw error;
+          targetExists = false;
+        }
+
+        if (!targetExists) {
+          await rename(sourceDir, targetDir);
+          continue;
+        }
+
+        for (const entry of await readdir(sourceDir)) {
+          const sourceEntry = resolve(sourceDir, entry);
+          const targetEntry = resolve(targetDir, entry);
+          try {
+            await access(targetEntry);
+          } catch (error) {
+            if (error.code !== "ENOENT") throw error;
+            await rename(sourceEntry, targetEntry);
+          }
+        }
+        await rmdir(sourceDir);
       }
-      await rmdir(builtGamesDir);
+      try {
+        await rmdir(builtGamesDir);
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+        // The directory may not exist when Vite emitted all entries directly.
+      }
     },
   };
 }

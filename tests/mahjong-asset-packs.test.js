@@ -9,11 +9,11 @@ import {
   readMahjongAssetPackManifest,
   requiredPackName,
   unpackMahjongAssetPack,
-} from "../games/mahjong/asset-packs.js";
+} from "../games/mahjong/theme/asset-packs.js";
 import {
   normalizeMahjongDefaultAssetConfig,
   portraitNames,
-} from "../games/mahjong/default-assets.js";
+} from "../games/mahjong/theme/default-assets.js";
 
 test("mahjong music falls back when a pack has no music and preserves silence", () => {
   assert.equal(
@@ -382,7 +382,7 @@ test("mahjong settings separates theme management from appearance choices", () =
     "utf8",
   );
   const themeController = readFileSync(
-    new URL("../games/mahjong/theme-controller.js", import.meta.url),
+    new URL("../games/mahjong/theme/theme-controller.js", import.meta.url),
     "utf8",
   );
   const settingsCss = readFileSync(

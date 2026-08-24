@@ -1,4 +1,4 @@
-import { CLAIM_LABELS, PLAYERS, POSITIONS } from "./constants.js";
+import { CLAIM_LABELS, PLAYERS, POSITIONS } from "../rules/constants.js";
 import {
   activeSeat,
   asArray,
@@ -19,15 +19,15 @@ import {
   tenpaiWaitsForDiscard,
   tileFace,
   tileType,
-} from "./game-format.js";
+} from "../rules/game-format.js";
 import {
   MELD_SIDEWAYS_BOTTOM_INSET,
   MELD_SCALE,
   meldDisplayLayout,
   TILE_SIZE,
-} from "./render/three-layout.js";
-import { tileFaceFrameIndex } from "./render/tile-texture-map.js";
-import { traditionalDrawReason, traditionalYakuName } from "./yaku-display.js";
+} from "../render/three-layout.js";
+import { tileFaceFrameIndex } from "../render/tile-texture-map.js";
+import { traditionalDrawReason, traditionalYakuName } from "../rules/yaku-display.js";
 
 const RESULT_TILE_WIDTH_PX = 33;
 const RESULT_TILE_HEIGHT_PX = 47;

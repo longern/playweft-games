@@ -7,7 +7,7 @@ import {
   paipuHandIndexAtPosition,
   paipuNextHandPosition,
   paipuPreviousHandPosition,
-} from "../games/mahjong/paipu-playback.js";
+} from "../games/mahjong/replay/paipu-playback.js";
 
 function recordWithHands(...commandCounts) {
   return {

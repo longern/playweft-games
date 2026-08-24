@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { orientMahjongRoomProjection } from "../games/mahjong/room-state.js";
+import { orientMahjongRoomProjection } from "../games/mahjong/rules/room-state.js";
 
 test("room projection keeps its viewer at the bottom without changing private tiles", () => {
   const projection = {

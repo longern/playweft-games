@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { mahjongInitialEntry } from "../games/mahjong/entry-flow.js";
+import { mahjongInitialEntry } from "../games/mahjong/app/entry-flow.js";
 
 test("mahjong only resumes a local save for a solo entry", () => {
   assert.equal(mahjongInitialEntry("solo", true), "resume");

@@ -4,7 +4,7 @@ import { test } from "node:test";
 import {
   automaticMahjongAction,
   sameMahjongAction,
-} from "../games/mahjong/auto-actions.js";
+} from "../games/mahjong/rules/auto-actions.js";
 
 test("mahjong automatic actions prioritize winning and preserve ron", () => {
   const claiming = {

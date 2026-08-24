@@ -4,7 +4,7 @@ import { test } from "node:test";
 import {
   createMahjongAutoActionScheduler,
   shouldScheduleMahjongAiTurn,
-} from "../games/mahjong/auto-action-scheduler.js";
+} from "../games/mahjong/rules/auto-action-scheduler.js";
 
 function createTimers() {
   const callbacks = new Map();

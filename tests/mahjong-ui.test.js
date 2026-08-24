@@ -17,7 +17,7 @@ import {
   DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS,
   HAND_INSERTION_DELAY_MS,
   HAND_END_PRESENTATION_DELAY_MS,
-} from "../games/mahjong/constants.js";
+} from "../games/mahjong/rules/constants.js";
 import {
   automaticRiichiDiscard,
   blankDoubleClickAction,
@@ -46,16 +46,16 @@ import {
   tenpaiDiscardFuriten,
   tenpaiWaitsForDiscard,
   visibleScoreSheetRows,
-} from "../games/mahjong/game-format.js";
+} from "../games/mahjong/rules/game-format.js";
 
 import {
   fixedViewportScale,
   MAHJONG_VIEWPORT,
-} from "../games/mahjong/fixed-viewport.js";
+} from "../games/mahjong/app/fixed-viewport.js";
 import {
   deferMahjongDecorativeAssets,
   deferMahjongImageAssets,
-} from "../games/mahjong/deferred-visual-assets.js";
+} from "../games/mahjong/theme/deferred-visual-assets.js";
 import {
   handTransform,
   MELD_GROUP_GAP,
@@ -81,7 +81,7 @@ import {
   TILE_SIZE,
 } from "../games/mahjong/render/three-layout.js";
 import { resultMeldDisplayLayout } from "../games/mahjong/render/result-hand-layout.js";
-import { activateResultStartControl } from "../games/mahjong/result-start-control.js";
+import { activateResultStartControl } from "../games/mahjong/result/result-start-control.js";
 import {
   handRevealFallProgress,
   OWN_TILE_HOVER_DURATION_MS,
@@ -112,13 +112,13 @@ import {
 import { planarTileJitter } from "../games/mahjong/render/three-tile-jitter.js";
 import { ThreeAnimationController } from "../games/mahjong/render/three-animation-controller.js";
 import { ThreeKeyedSceneLayer } from "../games/mahjong/render/three-keyed-scene-layer.js";
-import { MahjongPresentationController } from "../games/mahjong/presentation-controller.js";
+import { MahjongPresentationController } from "../games/mahjong/app/presentation-controller.js";
 import { riverTileSoundCue } from "../games/mahjong/render/audio-cues.js";
 import { normalizeDiscardVolume } from "../games/mahjong/settings-dialog.js";
 import {
   traditionalDrawReason,
   traditionalYakuName,
-} from "../games/mahjong/yaku-display.js";
+} from "../games/mahjong/rules/yaku-display.js";
 
 test("mahjong shares asset-pack names across result views", () => {
   const state = {
@@ -382,7 +382,7 @@ test("mahjong restores its canvas overlay after mobile suspension", () => {
     "utf8",
   );
   const tableController = readFileSync(
-    new URL("../games/mahjong/table-controller.js", import.meta.url),
+    new URL("../games/mahjong/app/table-controller.js", import.meta.url),
     "utf8",
   );
   const tableConsole = readFileSync(
@@ -846,7 +846,7 @@ test("mahjong groups every chi behind one action and previews only the two consu
   ]);
 
   const view = readFileSync(
-    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
     "utf8",
   );
   assert.match(
@@ -896,7 +896,7 @@ test("mahjong previews waits and visible-copy counts for the selected discard", 
     "utf8",
   );
   const view = readFileSync(
-    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
     "utf8",
   );
   assert.match(html, /id="tenpai-preview"[^>]*hidden/);
@@ -935,7 +935,7 @@ test("mahjong keeps action buttons in a fixed player-facing order", () => {
   );
 
   const view = readFileSync(
-    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
     "utf8",
   );
   const chiPosition = view.indexOf(
@@ -1002,7 +1002,7 @@ test("mahjong keeps action labels compact and assigns semantic action classes", 
     "utf8",
   );
   const view = readFileSync(
-    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
     "utf8",
   );
 
@@ -1021,11 +1021,11 @@ test("mahjong keeps action labels compact and assigns semantic action classes", 
 
 test("mahjong uses a cancellable two-step riichi tile selection", () => {
   const tableController = readFileSync(
-    new URL("../games/mahjong/table-controller.js", import.meta.url),
+    new URL("../games/mahjong/app/table-controller.js", import.meta.url),
     "utf8",
   );
   const view = readFileSync(
-    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
     "utf8",
   );
   const renderer = readFileSync(
@@ -1158,11 +1158,11 @@ test("mahjong discards by dragging a hand tile above a fixed horizontal line", (
     "utf8",
   );
   const tableController = readFileSync(
-    new URL("../games/mahjong/table-controller.js", import.meta.url),
+    new URL("../games/mahjong/app/table-controller.js", import.meta.url),
     "utf8",
   );
   const view = readFileSync(
-    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
     "utf8",
   );
   const renderer = readFileSync(
@@ -1191,7 +1191,7 @@ test("mahjong discards by dragging a hand tile above a fixed horizontal line", (
 
 test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before results", () => {
   const tableController = readFileSync(
-    new URL("../games/mahjong/table-controller.js", import.meta.url),
+    new URL("../games/mahjong/app/table-controller.js", import.meta.url),
     "utf8",
   );
   const main = readFileSync(
@@ -1203,15 +1203,15 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     "utf8",
   );
   const resultRenderer = readFileSync(
-    new URL("../games/mahjong/result-hand-renderer.js", import.meta.url),
+    new URL("../games/mahjong/result/result-hand-renderer.js", import.meta.url),
     "utf8",
   );
   const format = readFileSync(
-    new URL("../games/mahjong/game-format.js", import.meta.url),
+    new URL("../games/mahjong/rules/game-format.js", import.meta.url),
     "utf8",
   );
   const view = readFileSync(
-    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
     "utf8",
   );
   const html = readFileSync(
@@ -1276,7 +1276,7 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     /if \(state\.winType === "nagashi"\) \{\s*this\.hide\(\);/s,
   );
   const paperRenderer = readFileSync(
-    new URL("../games/mahjong/result-paper-renderer.js", import.meta.url),
+    new URL("../games/mahjong/result/result-paper-renderer.js", import.meta.url),
     "utf8",
   );
   assert.match(
@@ -1392,7 +1392,7 @@ test("mahjong blank result double-click starts the button animation before advan
 
 test("mahjong keeps the result start button aligned across detail and score pages", () => {
   const renderer = readFileSync(
-    new URL("../games/mahjong/result-hand-renderer.js", import.meta.url),
+    new URL("../games/mahjong/result/result-hand-renderer.js", import.meta.url),
     "utf8",
   );
   assert.match(renderer, /this\.host\.prepend\(this\.renderer\.domElement\);/);
@@ -1409,7 +1409,7 @@ test("mahjong keeps the result start button aligned across detail and score page
 
 test("mahjong result fu and han values are at least half the point-value size", () => {
   const paperRenderer = readFileSync(
-    new URL("../games/mahjong/result-paper-renderer.js", import.meta.url),
+    new URL("../games/mahjong/result/result-paper-renderer.js", import.meta.url),
     "utf8",
   );
   const scoreFields = paperRenderer.match(
@@ -1425,7 +1425,7 @@ test("mahjong result fu and han values are at least half the point-value size", 
 
 test("mahjong result yaku names are no more than 1.4 times the han-unit size", () => {
   const paperRenderer = readFileSync(
-    new URL("../games/mahjong/result-paper-renderer.js", import.meta.url),
+    new URL("../games/mahjong/result/result-paper-renderer.js", import.meta.url),
     "utf8",
   );
   assert.match(
@@ -1442,7 +1442,7 @@ test("mahjong result yaku names are no more than 1.4 times the han-unit size", (
 
 test("mahjong score-sheet instant photos use distinct subtle tilts", () => {
   const paperRenderer = readFileSync(
-    new URL("../games/mahjong/result-paper-renderer.js", import.meta.url),
+    new URL("../games/mahjong/result/result-paper-renderer.js", import.meta.url),
     "utf8",
   );
   assert.match(
@@ -1463,7 +1463,7 @@ test("mahjong score-sheet instant photos use distinct subtle tilts", () => {
 
 test("mahjong score-sheet deltas use a slightly heavier synthesized weight", () => {
   const paperRenderer = readFileSync(
-    new URL("../games/mahjong/result-paper-renderer.js", import.meta.url),
+    new URL("../games/mahjong/result/result-paper-renderer.js", import.meta.url),
     "utf8",
   );
   assert.match(paperRenderer, /scoreSheetNumberFont\(16, 600\)/);
@@ -1570,7 +1570,7 @@ test("mahjong starts with an inline low-resolution tile atlas and a sampled felt
     "utf8",
   );
   const resultRenderer = readFileSync(
-    new URL("../games/mahjong/result-hand-renderer.js", import.meta.url),
+    new URL("../games/mahjong/result/result-hand-renderer.js", import.meta.url),
     "utf8",
   );
   const table = readFileSync(
@@ -1600,7 +1600,7 @@ test("mahjong routes blocked playback and rematches through a user gesture", () 
     "utf8",
   );
   const tableController = readFileSync(
-    new URL("../games/mahjong/table-controller.js", import.meta.url),
+    new URL("../games/mahjong/app/table-controller.js", import.meta.url),
     "utf8",
   );
   assert.match(
@@ -1948,11 +1948,11 @@ test("mahjong reuses local tile meshes for a quick interruptible selection lift"
     "utf8",
   );
   const tableController = readFileSync(
-    new URL("../games/mahjong/table-controller.js", import.meta.url),
+    new URL("../games/mahjong/app/table-controller.js", import.meta.url),
     "utf8",
   );
   const view = readFileSync(
-    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
     "utf8",
   );
   const selection = tableController.slice(
@@ -2077,11 +2077,11 @@ test("mahjong leaves a ron tile in the river while revealing only the winner's o
 
 test("mahjong result melds preserve call direction and kan presentation", () => {
   const view = readFileSync(
-    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
     "utf8",
   );
   const resultRenderer = readFileSync(
-    new URL("../games/mahjong/result-hand-renderer.js", import.meta.url),
+    new URL("../games/mahjong/result/result-hand-renderer.js", import.meta.url),
     "utf8",
   );
   assert.match(view, /meldDisplayLayout\(meld, winnerIndex\)/);
@@ -2523,7 +2523,7 @@ test("mahjong highlights matching visible tile types without adding count text",
     "utf8",
   );
   const view = readFileSync(
-    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
     "utf8",
   );
   const renderer = readFileSync(
@@ -2563,11 +2563,11 @@ test("mahjong highlights matching visible tile types without adding count text",
 
 test("mahjong lets players inspect their hand outside their discard turn", () => {
   const tableController = readFileSync(
-    new URL("../games/mahjong/table-controller.js", import.meta.url),
+    new URL("../games/mahjong/app/table-controller.js", import.meta.url),
     "utf8",
   );
   const view = readFileSync(
-    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
     "utf8",
   );
   const renderer = readFileSync(
@@ -2892,7 +2892,7 @@ test("mahjong settings dialog combines operation controls and themed help", () =
     "utf8",
   );
   const tableController = readFileSync(
-    new URL("../games/mahjong/table-controller.js", import.meta.url),
+    new URL("../games/mahjong/app/table-controller.js", import.meta.url),
     "utf8",
   );
   const renderer = readFileSync(
@@ -2999,7 +2999,7 @@ test("mahjong shuffles behind a synchronized waiting-scene exit", () => {
 
 test("mahjong forwards the initial deal animation to the Three renderer", () => {
   const tableController = readFileSync(
-    new URL("../games/mahjong/table-controller.js", import.meta.url),
+    new URL("../games/mahjong/app/table-controller.js", import.meta.url),
     "utf8",
   );
   assert.match(
@@ -3209,7 +3209,7 @@ test("mahjong keeps honba and riichi sticks in the top-left status panel", () =>
 
 test("mahjong renders a compact fixed five-slot dora rack", () => {
   const view = readFileSync(
-    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
     "utf8",
   );
   const tileFactory = readFileSync(
@@ -3269,7 +3269,7 @@ test("mahjong player nameplates leave scoring to the centre console", () => {
     "utf8",
   );
   const view = readFileSync(
-    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
     "utf8",
   );
   assert.doesNotMatch(html, /data-detail/);
@@ -3280,7 +3280,7 @@ test("mahjong player nameplates leave scoring to the centre console", () => {
 
 test("mahjong marks the east-seat badge explicitly", () => {
   const view = readFileSync(
-    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
     "utf8",
   );
   assert.match(
@@ -3299,7 +3299,7 @@ test("mahjong prefers the platform avatar for the local player", () => {
     "utf8",
   );
   const view = readFileSync(
-    new URL("../games/mahjong/dom-view.js", import.meta.url),
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
     "utf8",
   );
   assert.match(html, /id="player-bottom"[\s\S]*?data-player-avatar/);

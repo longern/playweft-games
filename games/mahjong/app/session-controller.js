@@ -1,9 +1,9 @@
-import { automaticMahjongAction, sameMahjongAction } from "./auto-actions.js";
+import { automaticMahjongAction, sameMahjongAction } from "../rules/auto-actions.js";
 import {
   createMahjongAutoActionScheduler,
   shouldScheduleMahjongAiTurn,
-} from "./auto-action-scheduler.js";
-import { automaticRiichiDiscard } from "./game-format.js";
+} from "../rules/auto-action-scheduler.js";
+import { automaticRiichiDiscard } from "../rules/game-format.js";
 
 /**
  * Owns the authoritative Mahjong action lifecycle. Page code supplies the

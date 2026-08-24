@@ -25,10 +25,10 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import tileFacesUrl from "./assets/tiles/riichi-faces.webp?url";
-import tileFacesPlaceholderUrl from "./assets/tiles/riichi-faces-placeholder.webp?url";
-import playerPortraitsUrl from "./assets/player-portraits-v1.jpg?url";
-import { afterWindowLoad } from "./deferred-visual-assets.js";
+import tileFacesUrl from "../assets/tiles/riichi-faces.webp?url";
+import tileFacesPlaceholderUrl from "../assets/tiles/riichi-faces-placeholder.webp?url";
+import playerPortraitsUrl from "../assets/player-portraits-v1.jpg?url";
+import { afterWindowLoad } from "../theme/deferred-visual-assets.js";
 import {
   asArray,
   doraTypeCounts,
@@ -38,19 +38,19 @@ import {
   resultBasePaymentTotal,
   resultIndicatorSlots,
   resultScoreSheetRows,
-} from "./game-format.js";
-import { MELD_GROUP_GAP, TILE_SIZE } from "./render/three-layout.js";
+} from "../rules/game-format.js";
+import { MELD_GROUP_GAP, TILE_SIZE } from "../render/three-layout.js";
 import {
   RESULT_HAND_SHADOW_OPACITY,
   RESULT_MELD_SCALE,
   resultMeldDisplayLayout,
-} from "./render/result-hand-layout.js";
-import { ThreeAnimationController } from "./render/three-animation-controller.js";
+} from "../render/result-hand-layout.js";
+import { ThreeAnimationController } from "../render/three-animation-controller.js";
 import {
   doraBreathIntensity,
   DORA_BREATH_DURATION_MS,
   ThreeTileFactory,
-} from "./render/three-tile-factory.js";
+} from "../render/three-tile-factory.js";
 import {
   MahjongResultPaper,
   RESULT_PAPER_DEPTH,
@@ -60,9 +60,9 @@ import {
   resultHandCameraDistance,
   resultHandCameraPosition,
   resultHandVerticalFov,
-} from "./render/result-hand-camera.js";
+} from "../render/result-hand-camera.js";
 import { activateResultStartControl } from "./result-start-control.js";
-import { YAKU_FONT_TEXT } from "./yaku-display.js";
+import { YAKU_FONT_TEXT } from "../rules/yaku-display.js";
 
 const VIEWPORT = Object.freeze({ width: 1280, height: 720 });
 const TILE_GAP = 0.01;

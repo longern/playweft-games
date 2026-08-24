@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { replayMahjongSoloSave } from "../games/mahjong/solo-replay.js";
+import { replayMahjongSoloSave } from "../games/mahjong/replay/solo-replay.js";
 
 test("mahjong replay falls back to the action log when a checkpoint cannot load", async () => {
   const save = {

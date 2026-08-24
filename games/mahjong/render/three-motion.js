@@ -1,7 +1,7 @@
 import {
   NEW_HAND_DEAL_DURATION_MS,
   OWN_DRAW_ENTRY_DURATION_MS,
-} from "../constants.js";
+} from "../rules/constants.js";
 
 export const HAND_REVEAL_FALL_DURATION_MS = 360;
 export const OWN_HAND_CROSSFADE_DURATION_MS = 150;

@@ -5,7 +5,7 @@ import {
   mahjongMusicSourceForState,
   isMahjongMatchMusicActive,
   MahjongMatchMusic,
-} from "../games/mahjong/match-music.js";
+} from "../games/mahjong/theme/match-music.js";
 
 class FakeAudio {
   src = "";

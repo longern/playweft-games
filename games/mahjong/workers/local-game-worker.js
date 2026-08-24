@@ -1,4 +1,4 @@
-import { createLocalLuaGame } from "../../src/local-lua-game.js";
+import { createLocalLuaGame } from "../../../src/local-lua-game.js";
 
 let game;
 
