@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { strToU8, zipSync } from "fflate";
 import {
   chooseMahjongMatchMusicUrl,
+  chooseMahjongRiichiMusicUrl,
   normaliseAppearance,
   readMahjongAssetPackManifest,
   requiredPackName,
@@ -41,6 +42,22 @@ test("mahjong music falls back when a pack has no music and preserves silence", 
   );
 });
 
+test("mahjong riichi music only replaces the match track when configured", () => {
+  assert.equal(
+    chooseMahjongRiichiMusicUrl("", "", false),
+    "",
+    "an absent riichi track keeps the normal match music active",
+  );
+  assert.equal(
+    chooseMahjongRiichiMusicUrl(
+      "https://cdn.example/default-riichi.mp3",
+      "blob:custom-riichi",
+      true,
+    ),
+    "blob:custom-riichi",
+  );
+});
+
 test("mahjong asset packs require a manifest-provided name", () => {
   assert.equal(requiredPackName("  月下雀席  "), "月下雀席");
   assert.throws(() => requiredPackName(""), /theme\.json 必须指定素材包名称/);
@@ -63,6 +80,9 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
           lobbyBackgrounds: [{ id: "evening", file: "lobby/evening.webp", label: "暮色" }],
           tileBacks: [],
           matchBgm: [{ id: "night", file: "music/night.ogg", label: "夜风" }],
+          riichiBgm: [
+            { id: "duel", file: "music/duel.ogg", label: "对决" },
+          ],
           voices: [
             {
               character: "fox",
@@ -71,7 +91,11 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
             },
           ],
         },
-        defaults: { portraits: { self: "fox", right: "fox" }, matchBgm: "night" },
+        defaults: {
+          portraits: { self: "fox", right: "fox" },
+          matchBgm: "night",
+          riichiBgm: "duel",
+        },
       }),
     ),
     "moonlit/portraits/fox.png": new Uint8Array([137, 80, 78, 71]),
@@ -79,6 +103,7 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
     "moonlit/felt.png": new Uint8Array([137, 80, 78, 71]),
     "moonlit/lobby/evening.webp": new Uint8Array([137, 80, 78, 71]),
     "moonlit/music/night.ogg": new Uint8Array([79, 103, 103, 83]),
+    "moonlit/music/duel.ogg": new Uint8Array([79, 103, 103, 83]),
     "moonlit/voices/fox/chi.ogg": new Uint8Array([79, 103, 103, 83]),
     "moonlit/voices/fox/tanyao.ogg": new Uint8Array([79, 103, 103, 83]),
   });
@@ -95,6 +120,10 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
   );
   assert.equal(manifest.catalog.tablecloths[0].fileName, "moonlit/felt.png");
   assert.equal(manifest.catalog.matchBgm[0].fileName, "moonlit/music/night.ogg");
+  assert.equal(
+    manifest.catalog.riichiBgm[0].fileName,
+    "moonlit/music/duel.ogg",
+  );
   assert.equal(
     manifest.catalog.lobbyBackgrounds[0].fileName,
     "moonlit/lobby/evening.webp",
@@ -118,6 +147,7 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
     left: "wolf",
   });
   assert.equal(manifest.appearance.matchBgm, "night");
+  assert.equal(manifest.appearance.riichiBgm, "duel");
 });
 
 test("mahjong asset packs reject the former object-shaped catalog", async () => {
@@ -154,6 +184,7 @@ test("appearance independently selects each local seat and falls back to availab
     lobbyBackgrounds: [],
     tileBacks: [{ id: "cloud" }],
     matchBgm: [{ id: "dawn" }],
+    riichiBgm: [{ id: "duel" }],
     voices: [],
   };
   const appearance = normaliseAppearance(
@@ -163,6 +194,7 @@ test("appearance independently selects each local seat and falls back to availab
       tableBackground: "missing",
       tileBack: "cloud",
       matchBgm: "dawn",
+      riichiBgm: "duel",
       voice: false,
     },
     catalog,
@@ -180,6 +212,7 @@ test("appearance independently selects each local seat and falls back to availab
     lobbyBackground: "",
     tileBack: "cloud",
     matchBgm: "dawn",
+    riichiBgm: "duel",
     voice: false,
   });
 });
@@ -194,6 +227,14 @@ test("build-time default assets keep multiple remote choices and normalize defau
     matchBgm: [
       { id: "night", url: "https://cdn.example/night.mp3", label: "夜风", copyright: "A" },
       { id: "day", url: "https://cdn.example/day.ogg", label: "日光", copyright: "B" },
+    ],
+    riichiBgm: [
+      {
+        id: "duel",
+        url: "https://cdn.example/duel.mp3",
+        label: "对决",
+        copyright: "C",
+      },
     ],
     tablecloths: [
       { id: "felt", url: "https://cdn.example/felt.webp", label: "绒面" },
@@ -215,6 +256,7 @@ test("build-time default assets keep multiple remote choices and normalize defau
         pool: ["wolf", "fox", "missing"],
       },
       matchBgm: "day",
+      riichiBgm: "duel",
       tablecloth: "wood",
       tileBack: "cloud",
       tableBackground: "night",
@@ -236,6 +278,7 @@ test("build-time default assets keep multiple remote choices and normalize defau
     lobbyBackground: "evening",
     tileBack: "cloud",
     matchBgm: "day",
+    riichiBgm: "duel",
   });
   assert.deepEqual(config.catalog.matchBgm.map(({ id, url }) => ({ id, url })), [
     { id: "night", url: "https://cdn.example/night.mp3" },

@@ -11,6 +11,7 @@ import {
   getMahjongDefaultPack,
   getMahjongMatchMusicCopyright,
   getMahjongMatchMusicUrl,
+  getMahjongRiichiMusicUrl,
   initializeMahjongAssetPacks,
   listMahjongAssetPacks,
   rerollMahjongAssetPackPortraits,
@@ -315,7 +316,11 @@ export function createMahjongThemeController({
       ));
       controls.append(lobbyGroup);
     }
-    if (catalog.matchBgm.length || catalog.voices.length) {
+    if (
+      catalog.matchBgm.length ||
+      catalog.riichiBgm.length ||
+      catalog.voices.length
+    ) {
       const soundGroup = document.createElement("fieldset");
       soundGroup.className = "settings-appearance-choice-group";
       const soundLegend = document.createElement("legend");
@@ -323,6 +328,9 @@ export function createMahjongThemeController({
       soundGroup.append(soundLegend);
       if (catalog.matchBgm.length) soundGroup.append(createAppearanceSelect(
         "对局音乐", "matchBgm", catalog.matchBgm, pack.appearance.matchBgm, "不播放",
+      ));
+      if (catalog.riichiBgm.length) soundGroup.append(createAppearanceSelect(
+        "立直音乐", "riichiBgm", catalog.riichiBgm, pack.appearance.riichiBgm, "不切换",
       ));
       if (catalog.voices.length) soundGroup.append(createAppearanceSelect(
         "角色语音", "voice",
@@ -398,6 +406,7 @@ export function createMahjongThemeController({
     getAssetUrl: getMahjongAssetUrl,
     getDefaultNames: getMahjongDefaultNames,
     getMatchMusicUrl: getMahjongMatchMusicUrl,
+    getRiichiMusicUrl: getMahjongRiichiMusicUrl,
     destroy() {
       themeElements.upload.removeEventListener("change", onUploadChange);
       themeElements.list.removeEventListener("click", onThemeListClick);

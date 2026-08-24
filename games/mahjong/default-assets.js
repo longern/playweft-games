@@ -11,6 +11,7 @@ const ASSET_GROUPS = [
   "lobbyBackgrounds",
   "tileBacks",
   "matchBgm",
+  "riichiBgm",
 ];
 const PORTRAIT_POSITIONS = MAHJONG_PORTRAIT_POSITIONS;
 const DEFAULT_APPEARANCE_KEY = "playweft.mahjong.default-asset-appearance";
@@ -59,6 +60,9 @@ export function normalizeMahjongDefaultAssetConfig(value) {
     matchBgm: requested?.matchBgm === ""
       ? ""
       : pickId(catalog.matchBgm, requested?.matchBgm),
+    riichiBgm: requested?.riichiBgm === ""
+      ? ""
+      : pickId(catalog.riichiBgm, requested?.riichiBgm),
   };
   return {
     name: "默认主题",
@@ -89,6 +93,12 @@ export function getMahjongDefaultAssetPack() {
   addSelectedAsset(assets, "lobby", config.catalog.lobbyBackgrounds, appearance.lobbyBackground);
   addSelectedAsset(assets, "tile-back", config.catalog.tileBacks, appearance.tileBack);
   addSelectedAsset(assets, "music", config.catalog.matchBgm, appearance.matchBgm);
+  addSelectedAsset(
+    assets,
+    "riichi-music",
+    config.catalog.riichiBgm,
+    appearance.riichiBgm,
+  );
   return {
     id: "__default__",
     name: config.name,
@@ -116,7 +126,16 @@ export function getMahjongConfiguredAssetPacks() {
 export function getMahjongDefaultAssetCopyright() {
   const config = MAHJONG_DEFAULT_ASSET_CONFIG;
   const appearance = readAppearance(config);
-  return config.catalog.matchBgm.find((entry) => entry.id === appearance.matchBgm)?.copyright || "";
+  const matchCopyright = config.catalog.matchBgm.find(
+    (entry) => entry.id === appearance.matchBgm,
+  )?.copyright;
+  const riichiCopyright = config.catalog.riichiBgm.find(
+    (entry) => entry.id === appearance.riichiBgm,
+  )?.copyright;
+  return [
+    matchCopyright && `对局音乐：${matchCopyright}`,
+    riichiCopyright && `立直音乐：${riichiCopyright}`,
+  ].filter(Boolean).join("；");
 }
 
 export function configureMahjongDefaultAssetAppearance(nextAppearance) {
@@ -154,6 +173,9 @@ function readAppearance(config) {
     matchBgm: requested?.matchBgm === ""
       ? ""
       : pickId(config.catalog.matchBgm, requested?.matchBgm),
+    riichiBgm: requested?.riichiBgm === ""
+      ? ""
+      : pickId(config.catalog.riichiBgm, requested?.riichiBgm),
   };
 }
 

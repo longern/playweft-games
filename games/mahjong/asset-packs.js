@@ -26,6 +26,7 @@ const CATALOG_GROUPS = [
   "lobbyBackgrounds",
   "tileBacks",
   "matchBgm",
+  "riichiBgm",
 ];
 const VOICE_CUES = ["chi", "pon", "kan", "riichi", "ron", "tsumo"];
 const ASSET_STORAGE_UNAVAILABLE = "MAHJONG_ASSET_STORAGE_UNAVAILABLE";
@@ -93,7 +94,8 @@ let databasePromise;
 let activeAssets = new Map();
 let objectUrls = new Map();
 let activeDefaultNames = {};
-let activePackOverridesMusic = false;
+let activePackOverridesMatchMusic = false;
+let activePackOverridesRiichiMusic = false;
 let transientPack = null;
 let assetPackStorageUnavailable = false;
 
@@ -136,13 +138,26 @@ export function chooseMahjongMatchMusicUrl(
   return packOverridesMusic ? customUrl : defaultUrl;
 }
 
+export const chooseMahjongRiichiMusicUrl = chooseMahjongMatchMusicUrl;
+
 /** Use an active pack's music choice, falling back when it has no music. */
 export function getMahjongMatchMusicUrl() {
   const defaultUrl = getMahjongDefaultAssetMap().get("music")?.url ?? "";
   return chooseMahjongMatchMusicUrl(
     defaultUrl,
     getMahjongAssetUrl("music"),
-    activePackOverridesMusic,
+    activePackOverridesMatchMusic,
+  );
+}
+
+/** Use a configured riichi track, otherwise leave the normal match music playing. */
+export function getMahjongRiichiMusicUrl() {
+  const defaultUrl =
+    getMahjongDefaultAssetMap().get("riichi-music")?.url ?? "";
+  return chooseMahjongRiichiMusicUrl(
+    defaultUrl,
+    getMahjongAssetUrl("riichi-music"),
+    activePackOverridesRiichiMusic,
   );
 }
 
@@ -163,10 +178,24 @@ export function configureMahjongDefaultPackAppearance(appearance) {
 }
 
 export function getMahjongMatchMusicCopyright() {
-  if (activePackOverridesMusic) {
-    return activeAssets.get("music")?.copyright || "";
+  if (!activePackOverridesMatchMusic && !activePackOverridesRiichiMusic) {
+    return getMahjongDefaultAssetCopyright();
   }
-  return getMahjongDefaultAssetCopyright();
+  const defaults = getMahjongDefaultAssetMap();
+  const matchCopyright = (
+    activePackOverridesMatchMusic
+      ? activeAssets.get("music")
+      : defaults.get("music")
+  )?.copyright;
+  const riichiCopyright = (
+    activePackOverridesRiichiMusic
+      ? activeAssets.get("riichi-music")
+      : defaults.get("riichi-music")
+  )?.copyright;
+  return [
+    matchCopyright && `对局音乐：${matchCopyright}`,
+    riichiCopyright && `立直音乐：${riichiCopyright}`,
+  ].filter(Boolean).join("；");
 }
 
 export async function listMahjongAssetPacks() {
@@ -227,7 +256,9 @@ export async function createMahjongAssetPack(archive, metadata = {}) {
     const file = [...files].find((candidate) => candidate.name === fileName);
     if (!file) throw new Error(`theme.json 引用了不存在的素材：${fileName}`);
     const expectedType =
-      group === "matchBgm" || group === "voices" ? "audio/" : "image/";
+      group === "matchBgm" || group === "riichiBgm" || group === "voices"
+        ? "audio/"
+        : "image/";
     if (!file.type.startsWith(expectedType))
       throw new Error(
         `${fileName} 不是${expectedType === "audio/" ? "音频" : "图片"}文件`,
@@ -480,6 +511,7 @@ function applyTransientAssets() {
       transientPack.assets,
       transientPack.defaultNames,
       Boolean(transientPack.catalog.matchBgm.length),
+      Boolean(transientPack.catalog.riichiBgm.length),
     );
   } else {
     applyResolvedAssets(null);
@@ -492,6 +524,7 @@ function applyResolvedAssets(active) {
       active.assets,
       active.defaultNames,
       Boolean(active.catalog.matchBgm.length),
+      Boolean(active.catalog.riichiBgm.length),
     );
     return;
   }
@@ -500,6 +533,7 @@ function applyResolvedAssets(active) {
     defaults.assets,
     defaults.defaultNames,
     Boolean(defaults.catalog.matchBgm.length),
+    Boolean(defaults.catalog.riichiBgm.length),
   );
 }
 
@@ -538,12 +572,14 @@ async function readActivePack() {
 function applyActiveAssets(
   assets,
   defaultNames = {},
-  packOverridesMusic = false,
+  packOverridesMatchMusic = false,
+  packOverridesRiichiMusic = false,
 ) {
   for (const [, url] of objectUrls) URL.revokeObjectURL(url);
   objectUrls = new Map();
   activeAssets = new Map();
-  activePackOverridesMusic = packOverridesMusic;
+  activePackOverridesMatchMusic = packOverridesMatchMusic;
+  activePackOverridesRiichiMusic = packOverridesRiichiMusic;
   activeDefaultNames =
     defaultNames && typeof defaultNames === "object" ? defaultNames : {};
   const root = document.documentElement;
@@ -685,6 +721,7 @@ function catalogFromManifest(assets) {
   addCatalogEntries(catalog.lobbyBackgrounds, assets.lobbyBackgrounds);
   addCatalogEntries(catalog.tileBacks, assets.tileBacks);
   addCatalogEntries(catalog.matchBgm, assets.matchBgm);
+  addCatalogEntries(catalog.riichiBgm, assets.riichiBgm);
   addVoiceSets(catalog.voices, assets.voices, catalog.portraits);
   if (!catalogAssets(catalog).length) throw new Error("素材包未声明可用素材");
   return catalog;
@@ -807,7 +844,7 @@ function catalogForPack(pack) {
   const catalog = { ...pack.catalog };
   for (const group of CATALOG_GROUPS) {
     if (Array.isArray(catalog[group])) continue;
-    if (group === "lobbyBackgrounds") {
+    if (group === "lobbyBackgrounds" || group === "riichiBgm") {
       catalog[group] = [];
       continue;
     }
@@ -840,6 +877,7 @@ export function normaliseAppearance(appearance, catalog, portraitPool = []) {
     lobbyBackground: pick("lobbyBackgrounds", choices.lobbyBackground),
     tileBack: pick("tileBacks", choices.tileBack),
     matchBgm: choices.matchBgm === "" ? "" : pick("matchBgm", choices.matchBgm),
+    riichiBgm: choices.riichiBgm === "" ? "" : pick("riichiBgm", choices.riichiBgm),
     voice: choices.voice !== false,
   };
 }
@@ -877,6 +915,7 @@ function resolveAppearanceAssets(stored, appearance, catalog) {
     ["background", "tableBackgrounds", appearance.tableBackground],
     ["tile-back", "tileBacks", appearance.tileBack],
     ["music", "matchBgm", appearance.matchBgm],
+    ["riichi-music", "riichiBgm", appearance.riichiBgm],
   ];
   for (const [slot, group, id] of staticSelections) {
     const record = stored.get(assetStorageSlot(group, id));

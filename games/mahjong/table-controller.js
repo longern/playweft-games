@@ -18,7 +18,10 @@ import {
   resultDetailPageCount,
 } from "./game-format.js";
 import { MAHJONG_YAKU_VOICE_KEYS } from "./asset-packs.js";
-import { isMahjongMatchMusicActive } from "./match-music.js";
+import {
+  hasMahjongRiichi,
+  mahjongMatchMusicTarget,
+} from "./match-music.js";
 import { riverTileSoundCue } from "./render/audio-cues.js";
 
 const MATCH_MUSIC_FADE_DURATION_MS = 800;
@@ -55,10 +58,12 @@ export function createMahjongTableController({
   getThemeAssetUrl,
   getThemeDefaultNames,
   getThemeMatchMusicUrl,
+  getThemeRiichiMusicUrl,
   dispatch,
   isActionInFlight,
   scheduleAi,
   onRerollPortraits,
+  onReplayAdvance,
   onReturnToSetup,
 } = {}) {
   let state;
@@ -203,7 +208,12 @@ export function createMahjongTableController({
   }
 
   async function continueResult() {
-    if (resultPageAnimating || state?.phase !== "hand_ended" || elements.result.hidden) return;
+    if (
+      resultPageAnimating ||
+      state?.phase !== "hand_ended" ||
+      elements.result.hidden ||
+      elements.result.inert
+    ) return;
     const detailCount = resultDetailPageCount(state);
     resultPageAnimating = true;
     elements.rematch.disabled = true;
@@ -234,7 +244,7 @@ export function createMahjongTableController({
         showMatchSummary();
         return;
       }
-      primeMatchMusicForNextHand();
+      syncMatchMusic({ transition: "next-hand" });
       const advanced = await advanceFromResult({ type: "next_hand" });
       if (!advanced && state?.phase === "hand_ended") syncMatchMusic();
     } finally {
@@ -251,7 +261,7 @@ export function createMahjongTableController({
     elements.matchSummaryRematch.disabled = true;
     elements.matchSummarySetup.disabled = true;
     try {
-      primeMatchMusicForNextHand();
+      syncMatchMusic({ transition: "next-hand" });
       const advanced = await advanceFromResult({ type: "new_match" });
       if (!advanced && state?.phase === "hand_ended") syncMatchMusic();
     } finally {
@@ -275,7 +285,7 @@ export function createMahjongTableController({
       elements.result.classList.add("is-exiting");
       await waitForAnimation(elements.result, "result-screen-exit", RESULT_EXIT_DURATION_MS);
       hideMatchSummary();
-      syncMatchMusic({ start: false });
+      syncMatchMusic({ enabled: false });
       await onReturnToSetup?.();
     } finally {
       resultPageAnimating = false;
@@ -287,6 +297,7 @@ export function createMahjongTableController({
   }
 
   async function advanceFromResult(action) {
+    if (getMode?.() === "replay") return onReplayAdvance?.(action) ?? false;
     if (getMode?.() === "room") {
       if (!state || isActionInFlight?.()) return false;
       await dispatch?.(action);
@@ -306,6 +317,21 @@ export function createMahjongTableController({
         await refresh(projection, { animateDealIn: true });
       },
     });
+  }
+
+  async function dismissResultForReplay() {
+    if (state?.phase !== "hand_ended" || elements.result.hidden) return;
+    renderResultExitTable(state);
+    elements.result.classList.add("is-exiting");
+    try {
+      await waitForAnimation(elements.result, "result-screen-exit", RESULT_EXIT_DURATION_MS);
+      hideMatchSummary();
+      elements.result.hidden = true;
+      await waitForDelay(NEW_HAND_TABLE_PAUSE_MS);
+      visualRenderer.prepareDealIn();
+    } finally {
+      elements.result.classList.remove("is-exiting");
+    }
   }
 
   function syncResultPage(current) {
@@ -438,48 +464,42 @@ export function createMahjongTableController({
     });
   }
 
-  function syncMatchMusic({
-    start = isMahjongMatchMusicActive({
+  function syncMatchMusic({ enabled, transition, userGesture = false, fadeIn = false, fadeOut = false } = {}) {
+    const target = mahjongMatchMusicTarget({
       gameInitializing: getGameInitializing?.(),
       game: getGame?.(),
       playMode: getMode?.(),
       state,
-    }),
-    fadeIn = false,
-  } = {}) {
-    const source = getThemeMatchMusicUrl?.();
-    if (!start || !source) {
-      matchMusicController.stop();
-      return;
-    }
-    matchMusicController.setSource(new URL(source, document.baseURI).href);
-    if (state?.phase === "hand_ended") {
-      matchMusicController.mute();
-      return;
-    }
-    matchMusicController.play({ fadeIn });
+      matchSource: getThemeMatchMusicUrl?.(),
+      riichiSource: getThemeRiichiMusicUrl?.(),
+      transition,
+    });
+    if (enabled === false) target.mode = "stopped";
+    if (userGesture && target.mode !== "playing") return;
+    if (target.source) target.source = new URL(target.source, document.baseURI).href;
+    matchMusicController.sync(target, {
+      fadeIn: fadeIn || (target.mode === "playing" && matchMusicController.gain === 0),
+      fadeOut,
+    });
   }
 
   function applyMatchMusicVolume() {
     matchMusicController.applyVolume();
   }
 
-  function primeMatchMusicForNextHand() {
-    const source = getThemeMatchMusicUrl?.();
-    if (!source) return;
-    matchMusicController.primeForNextHand(new URL(source, document.baseURI).href);
-  }
-
-  function resumeMatchMusic() {
-    if (!matchMusicController.blockedByAutoplay || !(getGame?.() || (getMode?.() === "room" && state)) || state?.phase === "hand_ended") return;
-    matchMusicController.resumeIfBlocked({ fadeIn: matchMusicController.gain === 0 });
-  }
-
   function syncMatchMusicForHandState(previousState, currentState) {
     const handWasEnded = previousState?.phase === "hand_ended";
     const handIsEnded = currentState?.phase === "hand_ended";
-    if (!handWasEnded && handIsEnded) matchMusicController.mute({ fade: true });
-    else if (handWasEnded && !handIsEnded) syncMatchMusic({ start: true, fadeIn: true });
+    if (!previousState) syncMatchMusic();
+    else if (!handWasEnded && handIsEnded) syncMatchMusic({ fadeOut: true });
+    else if (handWasEnded && !handIsEnded) syncMatchMusic({ fadeIn: true });
+    else if (
+      !handIsEnded &&
+      !hasMahjongRiichi(previousState) &&
+      hasMahjongRiichi(currentState)
+    ) {
+      syncMatchMusic({ fadeIn: true });
+    }
   }
 
   function playRiverTileSound(events) {
@@ -749,7 +769,7 @@ export function createMahjongTableController({
 
   function destroy() {
     presentation.destroy();
-    matchMusicController.stop();
+    syncMatchMusic({ enabled: false });
     riverTileSound.pause();
   }
 
@@ -763,7 +783,7 @@ export function createMahjongTableController({
     renderPresentationOverlays,
     applyMatchMusicVolume,
     syncMatchMusic,
-    resumeMatchMusic,
+    dismissResultForReplay,
     selectTile,
     clearSelectedTile,
     previewDraggedTile,

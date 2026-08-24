@@ -34,9 +34,15 @@ async function handle(type, payload) {
   if (!game) throw new Error("Mahjong worker is not initialized");
   if (type === "view") return game.view(payload.viewerId);
   if (type === "checkpoint") return game.checkpoint();
+  if (type === "exportPaipu") return game.exportPaipu();
   if (type === "restoreCheckpoint") {
     return {
       projection: game.restoreCheckpoint(payload.checkpoint, payload.viewerId),
+    };
+  }
+  if (type === "loadReplayHand") {
+    return {
+      projection: game.loadReplayHand(payload.hand, payload.viewerId),
     };
   }
   if (type === "action") {

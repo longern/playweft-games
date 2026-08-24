@@ -7,6 +7,44 @@ export function isMahjongMatchMusicActive({
   return Boolean(gameInitializing || game || (playMode === "room" && state));
 }
 
+export function hasMahjongRiichi(state) {
+  return Object.values(state?.riichi ?? {}).some(
+    (declared) => declared === true,
+  );
+}
+
+/** Prefer the configured riichi track once any player has declared riichi. */
+export function mahjongMusicSourceForState({
+  matchSource,
+  riichiSource,
+  state,
+}) {
+  return hasMahjongRiichi(state) && riichiSource ? riichiSource : matchSource;
+}
+
+export function mahjongMatchMusicTarget({
+  gameInitializing,
+  game,
+  playMode,
+  state,
+  matchSource,
+  riichiSource,
+  transition,
+}) {
+  const source = transition === "next-hand"
+    ? matchSource
+    : mahjongMusicSourceForState({ matchSource, riichiSource, state });
+  if (
+    !isMahjongMatchMusicActive({ gameInitializing, game, playMode, state }) ||
+    !source
+  ) {
+    return { mode: "stopped", source: "" };
+  }
+  if (transition === "next-hand") return { mode: "primed", source };
+  if (state?.phase === "hand_ended") return { mode: "muted", source };
+  return { mode: "playing", source };
+}
+
 export class MahjongMatchMusic {
   #audio;
   #getVolumeScale;
@@ -16,15 +54,11 @@ export class MahjongMatchMusic {
   #fadeFrame = 0;
   #gain = 1;
   #playRequest = 0;
-  #blockedByAutoplay = false;
 
   constructor({
     audio,
     getVolumeScale,
     fadeDuration,
-    // Animation frame APIs are Web-IDL methods in some embedded browsers.
-    // Calling a detached global `requestAnimationFrame` can therefore throw
-    // "Illegal invocation" exactly when a hand ends and BGM starts fading.
     requestFrame = (callback) => window.requestAnimationFrame(callback),
     cancelFrame = (frame) => window.cancelAnimationFrame(frame),
   }) {
@@ -34,10 +68,6 @@ export class MahjongMatchMusic {
     this.#requestFrame = requestFrame;
     this.#cancelFrame = cancelFrame;
     this.applyVolume();
-  }
-
-  get blockedByAutoplay() {
-    return this.#blockedByAutoplay;
   }
 
   get gain() {
@@ -51,23 +81,25 @@ export class MahjongMatchMusic {
     );
   }
 
-  setSource(source) {
-    if (this.#audio.src === source) return false;
-    this.#playRequest += 1;
-    this.cancelFade();
-    this.#audio.pause();
-    this.#audio.src = source;
-    return true;
-  }
-
-  stop() {
-    this.#playRequest += 1;
-    this.cancelFade();
-    this.#audio.pause();
-    this.#audio.removeAttribute("src");
-    this.#audio.load();
-    this.#setGain(1);
-    this.#blockedByAutoplay = false;
+  sync({ mode, source }, { fadeIn = false, fadeOut = false } = {}) {
+    if (mode === "stopped" || !source) {
+      this.#stop();
+      return;
+    }
+    this.#setSource(source);
+    if (mode === "muted") {
+      this.#mute({ fade: fadeOut });
+      return;
+    }
+    if (mode === "primed") {
+      this.#prime();
+      return;
+    }
+    if (mode === "playing") {
+      this.#play({ fadeIn });
+      return;
+    }
+    throw new TypeError(`Unknown Mahjong music mode: ${mode}`);
   }
 
   suspend() {
@@ -75,7 +107,29 @@ export class MahjongMatchMusic {
     this.#audio.pause();
   }
 
-  mute({ fade = false } = {}) {
+  cancelFade() {
+    if (this.#fadeFrame) this.#cancelFrame(this.#fadeFrame);
+    this.#fadeFrame = 0;
+  }
+
+  #setSource(source) {
+    if (this.#audio.src === source) return;
+    this.#playRequest += 1;
+    this.cancelFade();
+    this.#audio.pause();
+    this.#audio.src = source;
+  }
+
+  #stop() {
+    this.#playRequest += 1;
+    this.cancelFade();
+    this.#audio.pause();
+    this.#audio.removeAttribute("src");
+    this.#audio.load();
+    this.#setGain(1);
+  }
+
+  #mute({ fade = false } = {}) {
     this.#playRequest += 1;
     if (fade) {
       this.fadeTo(0, { pauseWhenSilent: true });
@@ -86,42 +140,21 @@ export class MahjongMatchMusic {
     this.#audio.pause();
   }
 
-  play({ fadeIn = false } = {}) {
+  #prime() {
+    this.cancelFade();
+    this.#setGain(0);
+    if (!this.#audio.paused) return;
+    this.#ensurePlayback({ fadeIn: false, keepMuted: true });
+  }
+
+  #play({ fadeIn = false } = {}) {
     this.cancelFade();
     this.#setGain(fadeIn ? 0 : 1);
     if (!this.#audio.paused) {
-      this.#blockedByAutoplay = false;
       if (fadeIn) this.fadeTo(1);
       return;
     }
-    this.#requestPlayback({ fadeIn, keepMuted: false });
-  }
-
-  /**
-   * Must be called directly from the user action that begins the next hand.
-   * It keeps a paused player alive at zero gain, so the asynchronous result
-   * exit cannot turn the following `play()` into a new autoplay request.
-   */
-  primeForNextHand(source) {
-    if (!source) return;
-    this.setSource(source);
-    this.cancelFade();
-    this.#setGain(0);
-    if (!this.#audio.paused) {
-      this.#blockedByAutoplay = false;
-      return;
-    }
-    this.#requestPlayback({ fadeIn: false, keepMuted: true });
-  }
-
-  resumeIfBlocked({ fadeIn = false } = {}) {
-    if (!this.#blockedByAutoplay) return;
-    this.play({ fadeIn });
-  }
-
-  cancelFade() {
-    if (this.#fadeFrame) this.#cancelFrame(this.#fadeFrame);
-    this.#fadeFrame = 0;
+    this.#ensurePlayback({ fadeIn, keepMuted: false });
   }
 
   fadeTo(targetGain, { pauseWhenSilent = false } = {}) {
@@ -146,20 +179,15 @@ export class MahjongMatchMusic {
     this.#fadeFrame = this.#requestFrame(step);
   }
 
-  #requestPlayback({ fadeIn, keepMuted }) {
+  #ensurePlayback({ fadeIn, keepMuted }) {
     const playRequest = ++this.#playRequest;
-    void this.#audio.play().then(
-      () => {
-        if (playRequest !== this.#playRequest) return;
-        this.#blockedByAutoplay = false;
-        if (keepMuted) return;
+    void this.#audio
+      .play()
+      .then(() => {
+        if (playRequest !== this.#playRequest || keepMuted) return;
         if (fadeIn) this.fadeTo(1);
-      },
-      (error) => {
-        if (playRequest !== this.#playRequest) return;
-        this.#blockedByAutoplay = error?.name === "NotAllowedError";
-      },
-    );
+      })
+      .catch(() => {});
   }
 
   #setGain(gain) {

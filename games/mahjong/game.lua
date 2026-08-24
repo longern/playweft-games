@@ -78,6 +78,34 @@ end
 local function tile_type(tile)
 	return math.floor((tile - 1) / 4) + 1
 end
+
+local function tile_code(tile)
+	local kind = tile_type(tile)
+	if RED_FIVES[tile] then
+		return ({ [5] = "0m", [14] = "0p", [23] = "0s" })[kind]
+	end
+	if kind <= 27 then
+		local rank = ((kind - 1) % 9) + 1
+		local suit = ({ "m", "p", "s" })[math.floor((kind - 1) / 9) + 1]
+		return tostring(rank) .. suit
+	end
+	return tostring(kind - 27) .. "z"
+end
+
+local function copy_record_value(value)
+	if type(value) ~= "table" then
+		return value
+	end
+	local copy = {}
+	for key, nested in pairs(value) do
+		copy[key] = copy_record_value(nested)
+	end
+	return copy
+end
+
+local function copy_scores_for_record(scores)
+	return { scores[1], scores[2], scores[3], scores[4] }
+end
 local function is_honor(kind)
 	return kind >= 28
 end
@@ -1022,8 +1050,154 @@ local function draw_tile(state, seat, rinshan)
 	return tile
 end
 
+local function paipu_wall(tiles)
+	local codes = {}
+	for index, tile in ipairs(tiles) do
+		codes[index] = tile_code(tile)
+	end
+	return table.concat(codes)
+end
+
+-- A paipu stores the full wall as two-character tile codes.  Rebuild the
+-- engine's internal tile IDs deterministically from those codes, so replay
+-- never depends on the random number generator that produced the original
+-- shuffle.  Identical non-red copies are interchangeable to the rules.
+local function tiles_from_paipu_wall(wall)
+	if type(wall) ~= "string" or #wall ~= 272 then
+		return nil
+	end
+	local available = {}
+	for tile = 1, 136 do
+		local code = tile_code(tile)
+		available[code] = available[code] or {}
+		available[code][#available[code] + 1] = tile
+	end
+	local tiles = {}
+	for position = 1, #wall, 2 do
+		local code = string.sub(wall, position, position + 1)
+		local choices = available[code]
+		if not choices or #choices == 0 then
+			return nil
+		end
+		tiles[#tiles + 1] = table.remove(choices, 1)
+	end
+	return tiles
+end
+
+local function start_paipu_hand(state, tiles)
+	if type(state.paipu) ~= "table" then
+		return
+	end
+	local positions = {}
+	for index, tile in ipairs(tiles) do
+		positions[tile] = index - 1
+	end
+	state.paipuTilePositions = positions
+	local hands = state.paipu.hands
+	hands[#hands + 1] = {
+		index = #hands,
+		round = {
+			wind = state.roundWind,
+			number = state.handNumber,
+			dealerSeat = state.dealerIndex,
+			honba = state.honba,
+			riichiSticks = state.riichiSticks,
+		},
+		startScores = copy_scores_for_record(state.scores),
+		wall = paipu_wall(tiles),
+		commands = {},
+		events = {},
+	}
+end
+
+local function current_paipu_hand(state)
+	local hands = state.paipu and state.paipu.hands
+	return hands and hands[#hands] or nil
+end
+
+local function paipu_tile_reference(state, tile)
+	if type(tile) ~= "number" or tile < 1 or tile > 136 then
+		return nil
+	end
+	return {
+		code = tile_code(tile),
+		ref = state.paipuTilePositions and state.paipuTilePositions[tile] or nil,
+	}
+end
+
+local function paipu_command(state, action)
+	local command = copy_record_value(action)
+	if type(command.tileId) == "number" then
+		command.tile = paipu_tile_reference(state, command.tileId)
+		command.tileId = nil
+	end
+	return command
+end
+
+local function paipu_event(state, event, sequence)
+	local recorded = copy_record_value(event)
+	recorded.seq = sequence
+	if type(event.tile) == "number" then
+		recorded.tile = paipu_tile_reference(state, event.tile)
+	end
+	return recorded
+end
+
+local function finish_paipu_hand(state, hand)
+	if not hand or hand["end"] or state.phase ~= "hand_ended" then
+		return
+	end
+	local winners = {}
+	for _, player_id in ipairs(state.winners or {}) do
+		local seat = player_index(state, player_id)
+		if seat then
+			winners[#winners + 1] = seat
+		end
+	end
+	hand["end"] = {
+		winType = state.winType,
+		draw = state.draw == true,
+		abortiveReason = state.abortiveReason,
+		winners = winners,
+		winningTile = paipu_tile_reference(state, state.winningTile),
+		result = copy_record_value(state.result),
+		results = copy_record_value(state.results),
+		scores = copy_scores_for_record(state.scores),
+		matchEnded = state.matchEnded == true,
+		matchEndReason = state.endReason,
+	}
+end
+
+function record_paipu_action(state, action, actor_id, events)
+	if action.type == "next_hand" or action.type == "new_match" then
+		return
+	end
+	local hand = current_paipu_hand(state)
+	if not hand then
+		return
+	end
+	local seat = player_index(state, actor_id)
+	hand.commands[#hand.commands + 1] = {
+		seat = seat,
+		action = paipu_command(state, action),
+	}
+	for _, event in ipairs(events or {}) do
+		state.paipu.eventCount = state.paipu.eventCount + 1
+		hand.events[#hand.events + 1] = paipu_event(state, event, state.paipu.eventCount)
+	end
+	finish_paipu_hand(state, hand)
+end
+
 local function deal(state)
-	local tiles = shuffled_tiles(state)
+	local replay_wall = state.replayWall
+	local tiles = replay_wall and tiles_from_paipu_wall(replay_wall) or shuffled_tiles(state)
+	if not tiles then
+		error("Invalid paipu wall")
+	end
+	if replay_wall then
+		state.replayWall = nil
+	end
+	start_paipu_hand(state, tiles)
 	clear_hand_state(state)
 	state.wall, state.deadWall, state.rinshan = tiles, {}, {}
 	for _ = 1, 13 do
@@ -1466,12 +1640,70 @@ local function new_match(players, names, seed, settings)
 		matchEnded = false,
 		rules = rule_settings(settings),
 	}
+	-- A paipu viewer can start directly at any recorded hand.  The wall plus
+	-- these hand-start fields are sufficient to rebuild that hand without
+	-- replaying every earlier hand in the match.
+	local replay_hand = settings and settings.replayHand
+	if type(replay_hand) == "table" then
+		local round = type(replay_hand.round) == "table" and replay_hand.round or {}
+		local scores = replay_hand.startScores
+		local wind = tonumber(round.wind)
+		local hand = tonumber(round.number)
+		local dealer = tonumber(round.dealerSeat)
+		local honba = tonumber(round.honba)
+		local riichi_sticks = tonumber(round.riichiSticks)
+		if
+			type(replay_hand.wall) ~= "string"
+			or type(scores) ~= "table"
+			or #scores ~= PLAYER_COUNT
+			or type(scores[1]) ~= "number" or scores[1] ~= scores[1]
+			or type(scores[2]) ~= "number" or scores[2] ~= scores[2]
+			or type(scores[3]) ~= "number" or scores[3] ~= scores[3]
+			or type(scores[4]) ~= "number" or scores[4] ~= scores[4]
+			or not wind or wind < 1 or wind % 1 ~= 0
+			or not hand or hand < 1 or hand > 4 or hand % 1 ~= 0
+			or not dealer or dealer < 1 or dealer > PLAYER_COUNT or dealer % 1 ~= 0
+			or not honba or honba < 0 or honba % 1 ~= 0
+			or not riichi_sticks or riichi_sticks < 0 or riichi_sticks % 1 ~= 0
+		then
+			error("Invalid paipu replay hand")
+		end
+		state.roundWind = wind
+		state.handNumber = hand
+		state.dealerIndex = dealer
+		state.honba = honba
+		state.riichiSticks = riichi_sticks
+		state.scores = copy_scores_for_record(scores)
+		state.scoreHistory = {
+			{
+				roundWind = state.roundWind,
+				handNumber = state.handNumber,
+				honba = state.honba,
+				scores = copy_scores_for_record(state.scores),
+			},
+		}
+	end
+	state.paipu = {
+		format = "longern.riichi.paipu",
+		formatVersion = 1,
+		initialScores = copy_scores_for_record(state.scores),
+		hands = {},
+		eventCount = 0,
+	}
+	-- Replay receives exactly one hand wall at a time.  Entering a later hand
+	-- is an explicit host command, rather than preloading future hand walls.
+	state.replayWall = replay_hand and replay_hand.wall or nil
 	-- Drawing the east seat is equivalent to drawing all four winds: once east
 	-- is known, south, west, and north follow clockwise around the fixed table.
 	-- Derive the draw from the match seed without advancing the tile-shuffle RNG,
 	-- so seat assignment and wall order remain independent reproducible results.
-	local seat_draw = (state.seed * RANDOM_MULTIPLIER) % RANDOM_MODULUS
-	state.dealerIndex = (seat_draw % PLAYER_COUNT) + 1
+	local initial_dealer = tonumber(settings and settings.initialDealerSeat)
+	if not replay_hand and initial_dealer and initial_dealer >= 1 and initial_dealer <= PLAYER_COUNT and initial_dealer % 1 == 0 then
+		state.dealerIndex = initial_dealer
+	elseif not replay_hand then
+		local seat_draw = (state.seed * RANDOM_MULTIPLIER) % RANDOM_MODULUS
+		state.dealerIndex = (seat_draw % PLAYER_COUNT) + 1
+	end
 	deal(state)
 	return state
 end
@@ -3855,6 +4087,53 @@ function setup(context)
 	end
 	local settings = context.match and context.match.settings or {}
 	return new_match(players, names, normalize_random_seed(context.match.randomSeed), settings)
+end
+
+function export_paipu(state)
+	local source = state.paipu
+	if type(source) ~= "table" then
+		return nil
+	end
+	local players = {}
+	for seat, player_id in ipairs(state.players) do
+		players[#players + 1] = {
+			seat = seat,
+			id = player_id,
+			name = state.playerNames[seat],
+			kind = seat == 1 and "human" or "ai",
+		}
+	end
+	local ranks = {}
+	for seat, score in ipairs(state.scores) do
+		local rank = 1
+		for _, other in ipairs(state.scores) do
+			if other > score then
+				rank = rank + 1
+			end
+		end
+		ranks[seat] = rank
+	end
+	return {
+		format = source.format,
+		formatVersion = source.formatVersion,
+		game = {
+			mode = "solo",
+			matchType = state.matchType,
+			rules = copy_record_value(state.rules),
+			initialScores = copy_record_value(source.initialScores),
+		},
+		players = players,
+		hands = copy_record_value(source.hands),
+		status = state.matchEnded and "completed" or "in_progress",
+		final = state.matchEnded and {
+			endReason = state.endReason,
+			scores = copy_scores_for_record(state.scores),
+			ranks = ranks,
+		} or nil,
+		integrity = {
+			eventCount = source.eventCount,
+		},
+	}
 end
 
 function view(state, events, context)

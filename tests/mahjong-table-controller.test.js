@@ -4,10 +4,23 @@ import { test } from "node:test";
 import { createMahjongEffectRunner } from "../games/mahjong/effect-runner.js";
 import { createMahjongTableController } from "../games/mahjong/table-controller.js";
 
-function createController({ onDispatch = () => {} } = {}) {
+function createController({
+  onDispatch = () => {},
+  matchMusicUrl = "",
+  riichiMusicUrl = "",
+  matchMusicController,
+  activeGame = false,
+} = {}) {
   const calls = [];
+  const game = activeGame ? {} : undefined;
+  const music = matchMusicController ?? {
+    gain: 1,
+    sync() {},
+    applyVolume() {},
+    suspend() {},
+  };
   const controller = createMahjongTableController({
-    document: {},
+    document: { baseURI: "https://example.com/mahjong/" },
     window: {
       setTimeout,
       clearTimeout,
@@ -56,22 +69,21 @@ function createController({ onDispatch = () => {} } = {}) {
     },
     effectRunner: createMahjongEffectRunner({ onError() {} }),
     settingsDialog: { gameHintsEnabled: true, discardVolumeScale: 1 },
-    matchMusicController: {
-      stop() {}, mute() {}, play() {}, setSource() {}, applyVolume() {}, suspend() {},
-    },
+    matchMusicController: music,
     riverTileSound: { pause() {} },
     humanId: "human",
-    getGame: () => undefined,
+    getGame: () => game,
     getGameInitializing: () => false,
     getMode: () => "solo",
     getPlayerName: () => "你",
     playerNameIsAuthoritative: () => false,
     getThemeAssetUrl: () => "",
     getThemeDefaultNames: () => [],
-    getThemeMatchMusicUrl: () => "",
+    getThemeMatchMusicUrl: () => matchMusicUrl,
+    getThemeRiichiMusicUrl: () => riichiMusicUrl,
     dispatch: onDispatch,
   });
-  return { controller, calls };
+  return { controller, calls, music };
 }
 
 test("mahjong table controller publishes a projection before rendering it", async () => {
@@ -128,4 +140,45 @@ test("mahjong table controller allows hand inspection without dispatching a turn
 
   assert.deepEqual(dispatched, []);
   assert.deepEqual(calls.at(-1), ["selection", 41]);
+});
+
+test("mahjong keeps the current match track unchanged when riichi music is not configured", async () => {
+  const musicCalls = [];
+  const { controller } = createController({
+    matchMusicUrl: "match.mp3",
+    activeGame: true,
+    matchMusicController: {
+      gain: 1,
+      sync(target, options) {
+        musicCalls.push([target, options]);
+      },
+      applyVolume() {},
+      suspend() {},
+    },
+  });
+  await controller.refresh({
+    state: { phase: "playing", moveCount: 1, ownHand: [], legalActions: {} },
+    events: [],
+  });
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 2,
+      ownHand: [],
+      legalActions: {},
+      riichi: { opponent: true },
+    },
+    events: [{ type: "riichi" }],
+  });
+
+  assert.deepEqual(musicCalls, [
+    [
+      { mode: "playing", source: "https://example.com/mahjong/match.mp3" },
+      { fadeIn: false, fadeOut: false },
+    ],
+    [
+      { mode: "playing", source: "https://example.com/mahjong/match.mp3" },
+      { fadeIn: true, fadeOut: false },
+    ],
+  ]);
 });

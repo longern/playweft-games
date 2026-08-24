@@ -35,8 +35,13 @@ body {
 
 button {
   font: inherit;
+  cursor: pointer;
   -webkit-user-select: none;
   user-select: none;
+}
+
+button:disabled {
+  cursor: default;
 }
 
 button:focus-visible,

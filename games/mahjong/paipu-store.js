@@ -1,0 +1,222 @@
+export const MAHJONG_PAIPU_DB_NAME = "playweft-mahjong";
+export const MAHJONG_PAIPU_DB_VERSION = 1;
+export const MAHJONG_PAIPU_MAX_RECORDS = 500;
+export const MAHJONG_PAIPU_MAX_BYTES = 50 * 1024 * 1024;
+export const MAHJONG_PAIPU_MAX_RECORD_BYTES = 2 * 1024 * 1024;
+
+export async function saveMahjongPaipu(record, options = {}) {
+  const normalized = validateMahjongPaipu(record);
+  const byteSize = encodedByteSize(normalized);
+  const maxRecords = options.maxRecords ?? MAHJONG_PAIPU_MAX_RECORDS;
+  const maxBytes = options.maxBytes ?? MAHJONG_PAIPU_MAX_BYTES;
+  const maxRecordBytes = options.maxRecordBytes ?? MAHJONG_PAIPU_MAX_RECORD_BYTES;
+  if (byteSize > maxRecordBytes) return { saved: false, reason: "record_too_large" };
+
+  const db = await openMahjongPaipuDatabase(options.indexedDB);
+  try {
+    const summaries = await readAll(db, "matches");
+    const retained = summaries.filter((entry) => entry.id !== normalized.id);
+    let totalBytes = retained.reduce(
+      (total, entry) => total + Math.max(0, Number(entry.byteSize) || 0),
+      0,
+    );
+    const evictedIds = [];
+    const candidates = retained
+      .filter((entry) => entry.pinned !== true)
+      .sort((left, right) => Number(left.endedAtMs) - Number(right.endedAtMs));
+    while (
+      retained.length - evictedIds.length >= maxRecords ||
+      totalBytes + byteSize > maxBytes
+    ) {
+      const oldest = candidates.shift();
+      if (!oldest) return { saved: false, reason: "storage_limit" };
+      evictedIds.push(oldest.id);
+      totalBytes -= Math.max(0, Number(oldest.byteSize) || 0);
+    }
+
+    const previous = summaries.find((entry) => entry.id === normalized.id);
+    const summary = {
+      ...summarizeMahjongPaipu(normalized, byteSize),
+      pinned: previous?.pinned === true || normalized.pinned === true,
+    };
+    await writeRecords(db, normalized, summary, evictedIds);
+    return { saved: true, evictedIds };
+  } finally {
+    db.close();
+  }
+}
+
+export async function listMahjongPaipuSummaries(options = {}) {
+  const db = await openMahjongPaipuDatabase(options.indexedDB);
+  try {
+    const summaries = await readAll(db, "matches");
+    return summaries.sort((left, right) => Number(right.endedAtMs) - Number(left.endedAtMs));
+  } finally {
+    db.close();
+  }
+}
+
+export async function loadMahjongPaipu(id, options = {}) {
+  const db = await openMahjongPaipuDatabase(options.indexedDB);
+  try {
+    const record = await readOne(db, "records", id);
+    return record ? validateMahjongPaipu(record) : null;
+  } finally {
+    db.close();
+  }
+}
+
+export async function setMahjongPaipuPinned(id, pinned, options = {}) {
+  const db = await openMahjongPaipuDatabase(options.indexedDB);
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction("matches", "readwrite");
+      const store = transaction.objectStore("matches");
+      const request = store.get(id);
+      request.onerror = () => reject(request.error || new Error("Unable to read Mahjong paipu summary"));
+      request.onsuccess = () => {
+        if (!request.result) {
+          resolve(false);
+          return;
+        }
+        request.result.pinned = pinned === true;
+        store.put(request.result);
+        transaction.oncomplete = () => resolve(true);
+      };
+      transaction.onerror = () => reject(transaction.error || new Error("Unable to update Mahjong paipu summary"));
+    });
+  } finally {
+    db.close();
+  }
+}
+
+export function summarizeMahjongPaipu(record, byteSize = encodedByteSize(record)) {
+  const localPlayer = record.players.find((player) => player.seat === 1);
+  return {
+    id: record.id,
+    endedAtMs: record.completedAtMs,
+    matchType: record.game.matchType,
+    playerName: localPlayer?.name || "",
+    finalScores: [...record.final.scores],
+    rank: Number(record.final.ranks[0]) || 0,
+    handCount: record.hands.length,
+    byteSize,
+    pinned: Boolean(record.pinned),
+  };
+}
+
+export function validateMahjongPaipu(record) {
+  if (!isPlainObject(record)) throw new TypeError("Invalid Mahjong paipu");
+  if (record.format !== "longern.riichi.paipu" || record.formatVersion !== 1) {
+    throw new TypeError("Unsupported Mahjong paipu format");
+  }
+  if (typeof record.id !== "string" || !record.id) {
+    throw new TypeError("Mahjong paipu requires an id");
+  }
+  if (record.status !== "completed" || !Number.isSafeInteger(record.completedAtMs)) {
+    throw new TypeError("Only completed Mahjong paipu records can be saved");
+  }
+  if (!isPlainObject(record.game) || !Array.isArray(record.players) || record.players.length !== 4) {
+    throw new TypeError("Mahjong paipu requires four players");
+  }
+  if (!Array.isArray(record.hands) || record.hands.length === 0) {
+    throw new TypeError("Mahjong paipu requires at least one hand");
+  }
+  for (const hand of record.hands) validateHand(hand);
+  if (
+    !isPlainObject(record.final) ||
+    !isScoreArray(record.final.scores) ||
+    !isRankArray(record.final.ranks)
+  ) {
+    throw new TypeError("Mahjong paipu has an invalid final result");
+  }
+  return structuredClone(record);
+}
+
+function validateHand(hand) {
+  if (!isPlainObject(hand) || !isWallEncoding(hand.wall)) {
+    throw new TypeError("Mahjong paipu contains an invalid hand wall");
+  }
+  if (!Array.isArray(hand.commands) || !Array.isArray(hand.events) || !isPlainObject(hand.end)) {
+    throw new TypeError("Mahjong paipu contains an incomplete hand");
+  }
+}
+
+function isWallEncoding(value) {
+  if (typeof value !== "string" || value.length !== 272) return false;
+  for (let index = 0; index < value.length; index += 2) {
+    const tile = value.slice(index, index + 2);
+    if (!/^(?:[1-9][mps]|0[mps]|[1-7]z)$/.test(tile)) return false;
+  }
+  return true;
+}
+
+function isScoreArray(value) {
+  return Array.isArray(value) && value.length === 4 && value.every(Number.isFinite);
+}
+
+function isRankArray(value) {
+  return Array.isArray(value) && value.length === 4 && value.every(Number.isInteger);
+}
+
+function encodedByteSize(value) {
+  const json = JSON.stringify(value);
+  return new TextEncoder().encode(json).byteLength;
+}
+
+function openMahjongPaipuDatabase(indexedDB = globalThis.indexedDB) {
+  if (!indexedDB?.open) throw new Error("Mahjong paipu storage is unavailable");
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(MAHJONG_PAIPU_DB_NAME, MAHJONG_PAIPU_DB_VERSION);
+    request.onerror = () => reject(request.error || new Error("Unable to open Mahjong paipu storage"));
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      const matches = db.objectStoreNames.contains("matches")
+        ? request.transaction.objectStore("matches")
+        : db.createObjectStore("matches", { keyPath: "id" });
+      if (!matches.indexNames.contains("endedAtMs")) {
+        matches.createIndex("endedAtMs", "endedAtMs");
+      }
+      if (!db.objectStoreNames.contains("records")) {
+        db.createObjectStore("records", { keyPath: "id" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+  });
+}
+
+function readAll(db, storeName) {
+  return requestResult(db.transaction(storeName, "readonly").objectStore(storeName).getAll());
+}
+
+function readOne(db, storeName, id) {
+  return requestResult(db.transaction(storeName, "readonly").objectStore(storeName).get(id));
+}
+
+function writeRecords(db, record, summary, evictedIds) {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(["matches", "records"], "readwrite");
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error || new Error("Unable to save Mahjong paipu"));
+    transaction.onabort = () => reject(transaction.error || new Error("Mahjong paipu save was aborted"));
+    const matches = transaction.objectStore("matches");
+    const records = transaction.objectStore("records");
+    for (const id of evictedIds) {
+      matches.delete(id);
+      records.delete(id);
+    }
+    matches.put(summary);
+    records.put(record);
+  });
+}
+
+function requestResult(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("Mahjong paipu storage request failed"));
+  });
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}

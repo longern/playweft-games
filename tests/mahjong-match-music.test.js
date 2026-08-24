@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  mahjongMatchMusicTarget,
+  mahjongMusicSourceForState,
   isMahjongMatchMusicActive,
   MahjongMatchMusic,
 } from "../games/mahjong/match-music.js";
@@ -73,29 +75,84 @@ test("mahjong keeps BGM active while a local game is being created", () => {
   );
 });
 
+test("mahjong changes to a riichi track only after a declaration when one is configured", () => {
+  const sources = {
+    matchSource: "https://example.com/match.mp3",
+    riichiSource: "https://example.com/riichi.mp3",
+  };
+  assert.equal(
+    mahjongMusicSourceForState({ ...sources, state: { riichi: {} } }),
+    sources.matchSource,
+  );
+  assert.equal(
+    mahjongMusicSourceForState({
+      ...sources,
+      state: { riichi: { player: true } },
+    }),
+    sources.riichiSource,
+  );
+  assert.equal(
+    mahjongMusicSourceForState({
+      matchSource: sources.matchSource,
+      riichiSource: "",
+      state: { riichi: { player: true } },
+    }),
+    sources.matchSource,
+  );
+});
+
+test("mahjong derives one music target for setup, results, and the next hand", () => {
+  const base = {
+    gameInitializing: false,
+    game: {},
+    playMode: "replay",
+    matchSource: "https://example.com/match.mp3",
+    riichiSource: "",
+  };
+  assert.deepEqual(
+    mahjongMatchMusicTarget({ ...base, state: { phase: "playing" } }),
+    { mode: "playing", source: base.matchSource },
+  );
+  assert.deepEqual(
+    mahjongMatchMusicTarget({ ...base, state: { phase: "hand_ended" } }),
+    { mode: "muted", source: base.matchSource },
+  );
+  assert.deepEqual(
+    mahjongMatchMusicTarget({
+      ...base,
+      state: { phase: "hand_ended", riichi: { player: true } },
+      transition: "next-hand",
+    }),
+    { mode: "primed", source: base.matchSource },
+  );
+  assert.deepEqual(
+    mahjongMatchMusicTarget({ ...base, game: undefined, state: undefined }),
+    { mode: "stopped", source: "" },
+  );
+});
+
 test("mahjong pauses BGM after a hand and resumes it within the next-hand gesture", async () => {
   const audio = new FakeAudio();
   const { music, frames } = createMusic(audio);
   const source = "https://example.com/match.mp3";
-  music.setSource(source);
-  music.play();
+  music.sync({ mode: "playing", source });
   await Promise.resolve();
   assert.equal(audio.paused, false);
 
   const pausesBeforeHandEnd = audio.pauseCalls;
-  music.mute({ fade: true });
+  music.sync({ mode: "muted", source }, { fadeOut: true });
   const finishFade = [...frames.values()][0];
   finishFade(Number.MAX_SAFE_INTEGER);
   assert.equal(audio.paused, true);
   assert.equal(audio.pauseCalls, pausesBeforeHandEnd + 1);
 
-  music.primeForNextHand(source);
+  music.sync({ mode: "primed", source });
   await Promise.resolve();
   assert.equal(audio.paused, false);
   assert.equal(music.gain, 0);
   assert.equal(audio.playCalls, 2);
 
-  music.play({ fadeIn: true });
+  music.sync({ mode: "playing", source }, { fadeIn: true });
   assert.equal(
     audio.playCalls,
     2,
@@ -107,13 +164,12 @@ test("mahjong cancels an unfinished result fade when the next hand starts immedi
   const audio = new FakeAudio();
   const { music, frames } = createMusic(audio);
   const source = "https://example.com/match.mp3";
-  music.setSource(source);
-  music.play();
+  music.sync({ mode: "playing", source });
   await Promise.resolve();
 
-  music.mute({ fade: true });
+  music.sync({ mode: "muted", source }, { fadeOut: true });
   assert.equal(frames.size, 1);
-  music.primeForNextHand(source);
+  music.sync({ mode: "primed", source });
 
   assert.equal(frames.size, 0);
   assert.equal(audio.paused, false);
@@ -150,7 +206,10 @@ test("mahjong hand-end fade retains the embedded window animation-frame receiver
       fadeDuration: 800,
     });
 
-    music.mute({ fade: true });
+    music.sync(
+      { mode: "muted", source: "https://example.com/match.mp3" },
+      { fadeOut: true },
+    );
 
     assert.equal(frames.size, 1);
     [...frames.values()][0](Number.MAX_SAFE_INTEGER);

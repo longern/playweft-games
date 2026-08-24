@@ -1505,7 +1505,7 @@ test("mahjong defers default decorative images until after window load", () => {
 
 });
 
-test("mahjong defers lobby signpost image until after window load", () => {
+test("mahjong defers lobby decorative images until after window load", () => {
   const listeners = new Map();
   const image = {
     dataset: { deferredImage: "signpost" },
@@ -1541,6 +1541,27 @@ test("mahjong defers lobby signpost image until after window load", () => {
   );
   assert.doesNotMatch(html, /rel="preload"[^>]+waiting-(?:evening|signpost)/);
   assert.match(html, /data-deferred-image="signpost"/);
+  assert.match(html, /data-deferred-image="paipu-notebook"/);
+
+  const main = readFileSync(
+    new URL("../games/mahjong/main.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(main, /import defaultPaipuNotebookUrl from "\.\/assets\/paipu-notebook-v1\.jpg\?url"/);
+  assert.match(main, /"paipu-notebook": defaultPaipuNotebookUrl/);
+
+  const setupStyles = readFileSync(
+    new URL("../games/mahjong/styles/setup.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    setupStyles,
+    /\.setup-paipu-entry\s*\{[\s\S]*?width:\s*252px;[\s\S]*?height:\s*252px;/,
+  );
+  assert.match(
+    setupStyles,
+    /\.setup-paipu-label\s*\{[\s\S]*?color:\s*#b9964f;[\s\S]*?transform:\s*matrix\(0\.97, -0\.244, 0\.29, 0\.958, 0, 0\)/,
+  );
 });
 
 test("mahjong starts with an inline low-resolution tile atlas and a sampled felt colour", () => {
@@ -1590,8 +1611,8 @@ test("mahjong routes blocked playback and rematches through a user gesture", () 
     main,
     /document\.addEventListener\("keydown", resumeMatchMusic\);/,
   );
-  assert.match(tableController, /matchMusicController\.resumeIfBlocked\(/);
-  assert.match(tableController, /primeMatchMusicForNextHand\(\);/);
+  assert.match(tableController, /mahjongMatchMusicTarget\(/);
+  assert.match(tableController, /transition: "next-hand"/);
 });
 
 test("mahjong result pages separate winners before the score summary", () => {

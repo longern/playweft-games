@@ -1,0 +1,135 @@
+.paipu-playback-controls {
+  position: absolute;
+  z-index: 100;
+  right: var(--mahjong-action-right);
+  bottom: 128px;
+  left: auto;
+  display: block;
+  padding: 0;
+  pointer-events: none;
+}
+
+.paipu-playback-controls[hidden] {
+  display: none;
+}
+
+.paipu-playback-card {
+  display: grid;
+  width: 382px;
+  grid-template-columns: auto minmax(86px, 1fr) auto auto;
+  grid-template-areas:
+    "hand status transport speed"
+    "progress progress progress progress";
+  gap: 7px 9px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(255, 232, 177, 0.34);
+  border-radius: 13px;
+  background: #0a211c;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.34);
+  color: #fff0c9;
+  pointer-events: auto;
+}
+
+.paipu-playback-hand,
+.paipu-playback-transport {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  justify-content: center;
+}
+
+.paipu-playback-hand {
+  grid-area: hand;
+}
+
+.paipu-playback-transport {
+  grid-area: transport;
+}
+
+.paipu-playback-card button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 236, 190, 0.24);
+  border-radius: 9px;
+  background: rgba(255, 244, 208, 0.08);
+  color: #fff0c9;
+}
+
+.paipu-playback-card button svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.25;
+}
+
+.paipu-playback-card button.paipu-playback-toggle {
+  border-color: rgba(241, 205, 118, 0.74);
+  background: linear-gradient(180deg, rgba(156, 111, 37, 0.9), rgba(92, 61, 20, 0.92));
+  color: #fff5d8;
+}
+
+.paipu-playback-card button:disabled {
+  opacity: 0.42;
+}
+
+.paipu-playback-card button[aria-disabled="true"] {
+  pointer-events: none;
+}
+
+.paipu-playback-card button:not(:disabled):hover {
+  border-color: rgba(255, 226, 155, 0.86);
+  background: rgba(255, 244, 208, 0.16);
+}
+
+.paipu-playback-card button.paipu-playback-toggle:not(:disabled):hover {
+  background: linear-gradient(180deg, rgba(185, 135, 48, 0.94), rgba(111, 72, 21, 0.96));
+}
+
+.paipu-playback-status {
+  grid-area: status;
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(255, 240, 208, 0.9);
+  font-size: 0.8rem;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paipu-playback-speed {
+  grid-area: speed;
+  justify-self: end;
+  width: 42px !important;
+  color: #ffe8a8 !important;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.paipu-playback-progress {
+  grid-area: progress;
+  width: 100%;
+  accent-color: #e3bc61;
+}
+
+@media (max-width: 640px) {
+  .paipu-playback-controls {
+    right: var(--mahjong-action-right);
+    bottom: 128px;
+    padding: 0;
+  }
+
+  .paipu-playback-card {
+    width: 382px;
+    gap: 6px 8px;
+    padding: 8px 9px;
+    border-radius: 13px;
+  }
+
+  .paipu-playback-card button {
+    width: 32px;
+    height: 32px;
+  }
+}

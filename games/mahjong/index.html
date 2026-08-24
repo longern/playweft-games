@@ -354,6 +354,10 @@
             <button class="setup-route-sign setup-route-south" type="button" data-match-type="hanchan"
               aria-label="南风场，包含东场与南场"><span>南風場</span></button>
           </div>
+          <button class="setup-paipu-entry" type="button" aria-label="牌谱">
+            <img class="setup-paipu-image" data-deferred-image="paipu-notebook" alt="" aria-hidden="true" />
+            <span class="setup-paipu-label" aria-hidden="true">牌谱</span>
+          </button>
           <details class="rule-options">
             <summary>高级规则</summary>
             <label><input type="checkbox" data-rule="multipleRon" checked /> 一炮多响</label>
@@ -366,6 +370,50 @@
             <label><input type="checkbox" data-rule="agariYame" checked /> 终局庄家止和</label>
           </details>
           <p id="setup-recovery-error" class="setup-recovery-error" role="status" aria-live="polite" hidden></p>
+        </div>
+      </section>
+
+      <section id="paipu-panel" class="paipu-panel" aria-label="牌谱" hidden>
+        <div class="paipu-card" tabindex="-1">
+          <header class="paipu-header">
+            <div>
+              <h2>牌谱</h2>
+              <p>本机保存的完整对局</p>
+            </div>
+            <button id="paipu-close-button" class="paipu-close" type="button" aria-label="关闭牌谱">
+              <i data-lucide="x" aria-hidden="true"></i>
+            </button>
+          </header>
+          <div id="paipu-empty" class="paipu-empty" hidden>还没有完成的对局</div>
+          <ul id="paipu-list" class="paipu-list" aria-label="牌谱列表"></ul>
+        </div>
+      </section>
+
+      <section id="paipu-playback-controls" class="paipu-playback-controls" aria-label="牌谱回放控制" hidden>
+        <div class="paipu-playback-card">
+          <div class="paipu-playback-hand">
+            <button id="paipu-replay-previous-hand" type="button" aria-label="上一局" title="上一局">
+              <i data-lucide="skip-back" aria-hidden="true"></i>
+            </button>
+            <button id="paipu-replay-next-hand" type="button" aria-label="下一局" title="下一局">
+              <i data-lucide="skip-forward" aria-hidden="true"></i>
+            </button>
+          </div>
+          <span id="paipu-replay-status" class="paipu-playback-status" role="status" aria-live="polite"></span>
+          <button id="paipu-replay-speed" class="paipu-playback-speed" type="button" aria-label="回放速度">1×</button>
+          <div class="paipu-playback-transport">
+            <button id="paipu-replay-step-back" type="button" aria-label="上一步" title="上一步">
+              <i data-lucide="chevron-left" aria-hidden="true"></i>
+            </button>
+            <button id="paipu-replay-toggle" class="paipu-playback-toggle" type="button" aria-label="播放" title="播放">
+              <i data-lucide="play" aria-hidden="true"></i>
+              <i data-lucide="pause" aria-hidden="true" hidden></i>
+            </button>
+            <button id="paipu-replay-step-forward" type="button" aria-label="下一步" title="下一步">
+              <i data-lucide="chevron-right" aria-hidden="true"></i>
+            </button>
+          </div>
+          <input id="paipu-replay-progress" class="paipu-playback-progress" type="range" min="0" max="0" value="0" step="1" aria-label="回放进度" />
         </div>
       </section>
 

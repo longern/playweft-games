@@ -269,6 +269,9 @@ export function createMahjongSettingsDialog({
     setSoloMatchActive(active) {
       if (endMatchButton) endMatchButton.hidden = !active;
     },
+    setEndMatchLabel(label) {
+      if (endMatchButton) endMatchButton.textContent = label;
+    },
     setOpen,
     destroy() {
       open = false;

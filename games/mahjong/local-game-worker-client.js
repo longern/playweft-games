@@ -71,8 +71,14 @@ export async function createLocalLuaGame(options = {}) {
       checkpoint() {
         return request("checkpoint");
       },
+      exportPaipu() {
+        return request("exportPaipu");
+      },
       restoreCheckpoint(checkpoint, viewerId = options.playerId) {
         return request("restoreCheckpoint", { checkpoint, viewerId });
+      },
+      loadReplayHand(hand, viewerId = options.playerId) {
+        return request("loadReplayHand", { hand, viewerId });
       },
       action(action, actorId = options.playerId, viewerId = options.playerId) {
         return request("action", { action, actorId, viewerId });

@@ -5,6 +5,8 @@ local __local_state = nil
 local __local_events = {}
 local __local_version = 0
 local __local_match_id = ""
+local __local_paipu_index = 1
+local __local_setup_context = nil
 
 local function __local_context(actor_id, action_at)
   local seat = nil
@@ -45,20 +47,56 @@ local function __local_viewer_context(viewer_id, server_time)
   }
 end
 
-function __playweft_local_setup(context, match_id, server_time)
+local function __local_start(context, match_id, server_time, viewer_id)
   __local_match_id = match_id
   __local_version = 0
   __local_events = {}
-  __local_state = setup(context)
+	__local_paipu_index = 1
+	__local_state = setup(context)
+	if type(__local_state.paipu) == "table" then
+		__local_state.paipu.createdAtMs = server_time
+		__local_state.paipu.recordIndex = __local_paipu_index
+	end
   return {
     accepted = true,
     version = __local_version,
     projection = view(
       __local_state,
       __local_events,
-      __local_viewer_context(context.players[1].id, server_time)
+      __local_viewer_context(viewer_id or context.players[1].id, server_time)
     ),
   }
+end
+
+function __playweft_local_setup(context, match_id, server_time)
+  __local_setup_context = context
+  return __local_start(context, match_id, server_time, context.players[1].id)
+end
+
+function __playweft_local_load_replay_hand(replay_hand, viewer_id, server_time)
+  if type(__local_setup_context) ~= "table" then
+    error("Local game has not been initialized")
+  end
+  local base_match = __local_setup_context.match or {}
+  local settings = {}
+  if type(base_match.settings) == "table" then
+    for key, value in pairs(base_match.settings) do
+      settings[key] = value
+    end
+  end
+  settings.replayHand = replay_hand
+  settings.replayWalls = nil
+  return __local_start({
+    protocolVersion = __local_setup_context.protocolVersion,
+    players = __local_setup_context.players,
+    match = {
+      id = base_match.id,
+      ownerId = base_match.ownerId,
+      startedAt = base_match.startedAt,
+      randomSeed = base_match.randomSeed,
+      settings = settings,
+    },
+  }, __local_match_id, server_time, viewer_id)
 end
 
 function __playweft_local_view(viewer_id, server_time)
@@ -79,6 +117,15 @@ function __playweft_local_action(action, actor_id, action_at)
     __local_state = result.state
     __local_events = result.events or {}
     __local_version = __local_version + 1
+	if action.type == "new_match" then
+		__local_paipu_index = __local_paipu_index + 1
+		if type(__local_state.paipu) == "table" then
+			__local_state.paipu.createdAtMs = action_at
+			__local_state.paipu.recordIndex = __local_paipu_index
+		end
+	elseif type(record_paipu_action) == "function" then
+		record_paipu_action(__local_state, action, actor_id, result.events)
+	end
   end
   return {
     accepted = result.accepted == true,
@@ -136,6 +183,22 @@ function __playweft_local_checkpoint()
   }
 end
 
+function __playweft_local_paipu(server_time)
+	if type(export_paipu) ~= "function" then
+		error("Local game does not provide a paipu exporter")
+	end
+	local record = export_paipu(__local_state)
+	if type(record) ~= "table" then
+		return nil
+	end
+	record.id = __local_match_id .. ":" .. tostring(__local_paipu_index)
+	record.createdAtMs = __local_state.paipu and __local_state.paipu.createdAtMs or nil
+	if record.status == "completed" then
+		record.completedAtMs = server_time
+	end
+	return record
+end
+
 function __playweft_local_restore(checkpoint, viewer_id, server_time)
   if type(checkpoint) ~= "table" or type(checkpoint.state) ~= "table" then
     error("Invalid local game checkpoint")
@@ -143,6 +206,7 @@ function __playweft_local_restore(checkpoint, viewer_id, server_time)
   __local_state = checkpoint.state
   __local_events = type(checkpoint.events) == "table" and checkpoint.events or {}
   __local_version = math.max(0, math.floor(tonumber(checkpoint.version) or 0))
+	__local_paipu_index = math.max(1, math.floor(tonumber(__local_state.paipu and __local_state.paipu.recordIndex) or 1))
   return __playweft_local_view(viewer_id, server_time)
 end
 `;
@@ -179,9 +243,11 @@ export async function createLocalLuaGame({
     const setupLocal = lua.global.get("__playweft_local_setup");
     const readView = lua.global.get("__playweft_local_view");
     const applyAction = lua.global.get("__playweft_local_action");
+    const loadReplayHand = lua.global.get("__playweft_local_load_replay_hand");
     const advanceAiTurn = lua.global.get("__playweft_local_ai_turn");
     const createCheckpoint = lua.global.get("__playweft_local_checkpoint");
     const restoreCheckpoint = lua.global.get("__playweft_local_restore");
+    const exportPaipu = lua.global.get("__playweft_local_paipu");
     const context = {
       protocolVersion: 1,
       players: players.map((player, index) => ({
@@ -211,6 +277,10 @@ export async function createLocalLuaGame({
         ensureOpen(closed);
         return applyAction(action, actorId, Date.now());
       },
+      loadReplayHand(replayHand, viewerId = playerId) {
+        ensureOpen(closed);
+        return loadReplayHand(replayHand, viewerId, Date.now()).projection;
+      },
       aiTurn(viewerId = playerId) {
         ensureOpen(closed);
         return advanceAiTurn(viewerId, Date.now());
@@ -218,6 +288,10 @@ export async function createLocalLuaGame({
       checkpoint() {
         ensureOpen(closed);
         return createCheckpoint();
+      },
+      exportPaipu() {
+        ensureOpen(closed);
+        return exportPaipu(Date.now());
       },
       restoreCheckpoint(checkpoint, viewerId = playerId) {
         ensureOpen(closed);

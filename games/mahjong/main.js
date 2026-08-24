@@ -1,4 +1,14 @@
-import { Cog, X, createIcons } from "lucide";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Cog,
+  Pause,
+  Play,
+  SkipBack,
+  SkipForward,
+  X,
+  createIcons,
+} from "lucide";
 import { createPlayweftClient } from "../../src/playweft-client.js";
 import { createLocalLuaGame } from "./local-game-worker-client.js";
 import {
@@ -16,6 +26,7 @@ import {
   asArray,
   blankDoubleClickAction,
   errorMessage,
+  resultDetailPageCount,
 } from "./game-format.js";
 import { MahjongThreeRenderer } from "./three-renderer.js";
 import { MahjongResultHandRenderer } from "./result-hand-renderer.js";
@@ -35,6 +46,7 @@ import defaultPortraitsUrl from "./assets/player-portraits-v1.jpg?url";
 import defaultResultTableclothUrl from "./assets/felt-skin-moonwave-v1.jpg?url";
 import defaultLobbyBackgroundUrl from "./assets/waiting-evening-v1.jpg?url";
 import defaultLobbySignpostUrl from "./assets/waiting-signpost-v3.webp?url";
+import defaultPaipuNotebookUrl from "./assets/paipu-notebook-v1.jpg?url";
 import defaultTileFacesUrl from "./assets/tiles/riichi-faces.webp?url";
 import { DEFAULT_MATCH_MUSIC_VOLUME } from "./media-config.js";
 import {
@@ -48,13 +60,36 @@ import {
   setMahjongSoloCheckpoint,
   writeMahjongSoloSave,
 } from "./solo-save.js";
+import {
+  listMahjongPaipuSummaries,
+  loadMahjongPaipu,
+  saveMahjongPaipu,
+  setMahjongPaipuPinned,
+} from "./paipu-store.js";
 import { replayMahjongSoloSave } from "./solo-replay.js";
+import {
+  buildMahjongPaipuTimeline,
+  clampPaipuPosition,
+  paipuHandIndexAtPosition,
+  paipuNextHandPosition,
+  paipuPreviousHandPosition,
+} from "./paipu-playback.js";
 import { mahjongInitialEntry } from "./entry-flow.js";
 import { orientMahjongRoomProjection } from "./room-state.js";
 import "../../src/base.css";
 import "./styles.css";
 
-createIcons({ icons: { Cog, X } });
+const lucideIcons = {
+  ChevronLeft,
+  ChevronRight,
+  Cog,
+  Pause,
+  Play,
+  SkipBack,
+  SkipForward,
+  X,
+};
+createIcons({ icons: lucideIcons });
 
 deferMahjongDecorativeAssets({
   document,
@@ -70,11 +105,17 @@ deferMahjongDecorativeAssets({
 deferMahjongImageAssets({
   document,
   window,
-  urls: { signpost: defaultLobbySignpostUrl },
+  urls: {
+    signpost: defaultLobbySignpostUrl,
+    "paipu-notebook": defaultPaipuNotebookUrl,
+  },
 });
 
 const SETUP_EXIT_DURATION_MS = 560;
 const SETUP_RECOVERY_ERROR_DURATION_MS = 4600;
+const REPLAY_STEP_DELAY_MS = 780;
+const REPLAY_RESULT_PAGE_DELAY_MS = 2400;
+const REPLAY_SPEEDS = [0.5, 1, 2, 4];
 const effectRunner = createMahjongEffectRunner();
 const isStandalone = window.parent === window;
 let game;
@@ -92,6 +133,33 @@ let session;
 let tableController;
 let playweftClient;
 let soloSave = readMahjongSoloSave();
+let replayRunId = 0;
+let replayState = null;
+let paipuOpeningFrame = 0;
+let paipuClosingTimer = 0;
+let paipuOpen = false;
+let paipuReturnFocus = null;
+
+const paipuElements = {
+  entry: document.querySelector(".setup-paipu-entry"),
+  panel: document.querySelector("#paipu-panel"),
+  card: document.querySelector(".paipu-card"),
+  close: document.querySelector("#paipu-close-button"),
+  list: document.querySelector("#paipu-list"),
+  empty: document.querySelector("#paipu-empty"),
+};
+
+const replayElements = {
+  controls: document.querySelector("#paipu-playback-controls"),
+  previousHand: document.querySelector("#paipu-replay-previous-hand"),
+  nextHand: document.querySelector("#paipu-replay-next-hand"),
+  status: document.querySelector("#paipu-replay-status"),
+  speed: document.querySelector("#paipu-replay-speed"),
+  stepBack: document.querySelector("#paipu-replay-step-back"),
+  toggle: document.querySelector("#paipu-replay-toggle"),
+  stepForward: document.querySelector("#paipu-replay-step-forward"),
+  progress: document.querySelector("#paipu-replay-progress"),
+};
 
 const matchMusic = new Audio();
 matchMusic.loop = true;
@@ -139,7 +207,10 @@ const settingsDialog = createMahjongSettingsDialog({
   musicVolumeValue: elements.musicVolumeValue,
   onMusicVolumeChange: () => tableController?.applyMatchMusicVolume(),
   onGameHintsChange: () => tableController?.renderCurrentState(),
-  onEndMatch: () => void endSoloMatch(),
+  onEndMatch: () => {
+    if (playMode === "replay") void exitMahjongPaipuReplay();
+    else void endSoloMatch();
+  },
 });
 const matchMusicController = new MahjongMatchMusic({
   audio: matchMusic,
@@ -247,10 +318,12 @@ tableController = createMahjongTableController({
   getThemeAssetUrl: themeController.getAssetUrl,
   getThemeDefaultNames: themeController.getDefaultNames,
   getThemeMatchMusicUrl: themeController.getMatchMusicUrl,
+  getThemeRiichiMusicUrl: themeController.getRiichiMusicUrl,
   dispatch: (...args) => session?.dispatch(...args),
   isActionInFlight: () => session?.isActionInFlight() === true,
   scheduleAi: (...args) => session?.scheduleAi(...args),
   onRerollPortraits: () => themeController.rerollPortraits(),
+  onReplayAdvance: (action) => advanceMahjongPaipuReplayFromResult(action),
   onReturnToSetup: teardownCompletedSoloMatch,
 });
 
@@ -324,6 +397,40 @@ if (isStandalone) startMahjongEntry();
 revealMahjongAppAfterStyles();
 
 function bindUiEvents() {
+  paipuElements.entry?.addEventListener("click", () => void openPaipuPanel());
+  paipuElements.close?.addEventListener("click", closePaipuPanel);
+  paipuElements.panel?.addEventListener("click", (event) => {
+    if (event.target === paipuElements.panel) closePaipuPanel();
+  });
+  replayElements.previousHand?.addEventListener("click", () => {
+    const state = replayState;
+    if (!state) return;
+    void seekMahjongPaipuReplay(
+      paipuPreviousHandPosition(state.timeline, state.position),
+    );
+  });
+  replayElements.nextHand?.addEventListener("click", () => {
+    const state = replayState;
+    if (!state) return;
+    void advanceToNextMahjongPaipuHand(state);
+  });
+  replayElements.stepBack?.addEventListener("click", () => {
+    const state = replayState;
+    if (state) void seekMahjongPaipuReplay(state.position - 1);
+  });
+  replayElements.stepForward?.addEventListener(
+    "click",
+    () => void advanceMahjongPaipuReplay(),
+  );
+  replayElements.toggle?.addEventListener(
+    "click",
+    () => void toggleMahjongPaipuPlayback(),
+  );
+  replayElements.speed?.addEventListener("click", cycleMahjongPaipuReplaySpeed);
+  replayElements.progress?.addEventListener("change", () => {
+    if (!replayState) return;
+    void seekMahjongPaipuReplay(replayElements.progress.value);
+  });
   elements.pass.addEventListener("click", () => dispatch({ type: "pass" }));
   elements.abort.addEventListener("click", () =>
     dispatch({ type: "abort_nine" }),
@@ -374,6 +481,599 @@ function bindUiEvents() {
   document.addEventListener("keydown", resumeMatchMusic);
 }
 
+async function openPaipuPanel() {
+  if (!paipuElements.panel || game || playMode !== "solo") return;
+  if (paipuOpen) return;
+  if (paipuOpeningFrame) window.cancelAnimationFrame(paipuOpeningFrame);
+  if (paipuClosingTimer) window.clearTimeout(paipuClosingTimer);
+  paipuOpeningFrame = 0;
+  paipuClosingTimer = 0;
+  paipuReturnFocus = document.activeElement;
+  paipuOpen = true;
+  paipuElements.panel.classList.remove("is-open");
+  paipuElements.panel.hidden = false;
+  await renderPaipuList();
+  paipuOpeningFrame = window.requestAnimationFrame(() => {
+    paipuOpeningFrame = 0;
+    if (!paipuOpen) return;
+    paipuElements.panel.classList.add("is-open");
+    paipuElements.card?.focus({ preventScroll: true });
+  });
+}
+
+function closePaipuPanel({ animate = true, restoreFocus = true } = {}) {
+  if (!paipuElements.panel) return;
+  if (!paipuOpen && paipuElements.panel.hidden) return;
+  if (paipuOpeningFrame) window.cancelAnimationFrame(paipuOpeningFrame);
+  if (paipuClosingTimer) window.clearTimeout(paipuClosingTimer);
+  paipuOpeningFrame = 0;
+  paipuClosingTimer = 0;
+  paipuOpen = false;
+  paipuElements.panel.classList.remove("is-open");
+  const reducedMotion =
+    window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+  if (animate && !reducedMotion) {
+    paipuClosingTimer = window.setTimeout(
+      () => finishPaipuClose(restoreFocus),
+      240,
+    );
+    return;
+  }
+  finishPaipuClose(restoreFocus);
+}
+
+function finishPaipuClose(restoreFocus) {
+  if (paipuOpen || !paipuElements.panel) return;
+  if (paipuClosingTimer) window.clearTimeout(paipuClosingTimer);
+  paipuClosingTimer = 0;
+  paipuElements.panel.hidden = true;
+  paipuElements.list.replaceChildren();
+  paipuElements.empty.hidden = true;
+  if (restoreFocus) paipuReturnFocus?.focus?.({ preventScroll: true });
+  paipuReturnFocus = null;
+}
+
+async function renderPaipuList() {
+  paipuElements.list.replaceChildren();
+  paipuElements.empty.hidden = true;
+  try {
+    const summaries = await listMahjongPaipuSummaries();
+    if (!summaries.length) {
+      paipuElements.empty.hidden = false;
+      return;
+    }
+    for (const summary of summaries)
+      paipuElements.list.append(renderPaipuEntry(summary));
+  } catch (error) {
+    console.error("Unable to read Mahjong paipu list", error);
+    paipuElements.empty.textContent = "牌谱暂时无法读取";
+    paipuElements.empty.hidden = false;
+  }
+}
+
+function renderPaipuEntry(summary) {
+  const item = document.createElement("li");
+  item.className = "paipu-entry";
+  const info = document.createElement("div");
+  info.className = "paipu-entry-info";
+  const title = document.createElement("strong");
+  title.textContent = `${summary.matchType === "hanchan" ? "南风场" : "东风场"} · ${summary.playerName || "你"}`;
+  const date = document.createElement("span");
+  date.textContent = `${formatPaipuDate(summary.endedAtMs)} · ${summary.handCount} 局 · ${summary.finalScores.join(" / ")}`;
+  info.append(title, date);
+  const actions = document.createElement("div");
+  actions.className = "paipu-entry-actions";
+  const replay = document.createElement("button");
+  replay.type = "button";
+  replay.textContent = "回放";
+  replay.addEventListener("click", () => void replayMahjongPaipu(summary.id));
+  const pin = document.createElement("button");
+  pin.type = "button";
+  pin.textContent = summary.pinned ? "已收藏" : "收藏";
+  pin.setAttribute("aria-pressed", String(summary.pinned));
+  pin.addEventListener("click", async () => {
+    pin.disabled = true;
+    try {
+      await setMahjongPaipuPinned(summary.id, !summary.pinned);
+      await renderPaipuList();
+    } catch (error) {
+      console.error("Unable to update Mahjong paipu favorite", error);
+      pin.disabled = false;
+    }
+  });
+  actions.append(replay, pin);
+  item.append(info, actions);
+  return item;
+}
+
+function formatPaipuDate(value) {
+  const date = new Date(Number(value));
+  return Number.isNaN(date.getTime())
+    ? "未知时间"
+    : date.toLocaleString("zh-CN", { dateStyle: "medium", timeStyle: "short" });
+}
+
+async function replayMahjongPaipu(id) {
+  if (game || gameInitializing) return;
+  let record;
+  try {
+    record = await loadMahjongPaipu(id);
+  } catch (error) {
+    console.error("Unable to load Mahjong paipu", error);
+    showMessage("牌谱读取失败");
+    return;
+  }
+  let timeline;
+  try {
+    timeline = buildMahjongPaipuTimeline(record);
+  } catch (error) {
+    console.error("Mahjong paipu timeline is invalid", error);
+    showMessage("牌谱格式无效");
+    return;
+  }
+  closePaipuPanel({ animate: false, restoreFocus: false });
+  gameInitializing = true;
+  playMode = "replay";
+  elements.setup.hidden = true;
+  elements.result.hidden = true;
+  elements.loading.hidden = false;
+  elements.loading.classList.add("is-active");
+  try {
+    const replayGame = await createMahjongPaipuReplayGame(record, 0);
+    game = replayGame;
+    replayState = {
+      record,
+      timeline,
+      tileIdsByHand: record.hands.map((hand) =>
+        replayTileIdsForWall(hand.wall),
+      ),
+      position: 0,
+      speed: 1,
+      playing: false,
+      busy: false,
+      playbackRunId: 0,
+    };
+    presentation.suspend();
+    tableController.reset();
+    const initial = game.initialProjection;
+    await tableController.refresh(initial, { animateDealIn: true });
+    elements.loading.hidden = true;
+    elements.app.setAttribute("aria-busy", "false");
+    settingsDialog.setSoloMatchActive(true);
+    settingsDialog.setEndMatchLabel("返回大厅");
+    replayElements.controls.hidden = false;
+    renderMahjongPaipuReplayControls();
+  } catch (error) {
+    console.error("Mahjong paipu replay failed", error);
+    await exitMahjongPaipuReplay({ returnToSetup: true });
+    showMessage("牌谱回放无法启动");
+  } finally {
+    gameInitializing = false;
+    elements.loading.hidden = true;
+  }
+}
+
+async function createMahjongPaipuReplayGame(record, handIndex = 0) {
+  const hand = record.hands[handIndex];
+  if (!hand) throw new Error("Paipu hand is missing");
+  return createLocalLuaGame({
+    sourceUrl: "./game.lua",
+    players: record.players.map(({ id, name }) => ({ id, name })),
+    playerId: record.players[0].id,
+    // Replay walls and tile references are the source of truth. This value is
+    // only required by the engine's normal setup contract.
+    randomSeed: crypto.randomUUID().replaceAll("-", ""),
+    matchId: `replay-${record.id}-${crypto.randomUUID()}`,
+    settings: {
+      matchType: record.game.matchType,
+      rules: record.game.rules,
+      replayHand: {
+        wall: hand.wall,
+        round: hand.round,
+        startScores: hand.startScores,
+      },
+    },
+  });
+}
+
+function replayHandSetup(record, handIndex) {
+  const hand = record.hands[handIndex];
+  if (!hand) throw new Error("Paipu hand is missing");
+  return {
+    wall: hand.wall,
+    round: hand.round,
+    startScores: hand.startScores,
+  };
+}
+
+function replayActionForStep(state, step) {
+  const action = replayAction(
+    step.command.action,
+    state.tileIdsByHand[step.handIndex],
+  );
+  return {
+    action,
+    actorId: state.record.players[step.command.seat - 1]?.id,
+    animateDealIn: false,
+  };
+}
+
+async function advanceMahjongPaipuReplay() {
+  const state = replayState;
+  if (!state || state.busy || state.position >= state.timeline.steps.length)
+    return false;
+  state.busy = true;
+  renderMahjongPaipuReplayControls();
+  try {
+    const step = state.timeline.steps[state.position];
+    if (step.kind === "next-hand") {
+      const loaded = await game?.loadReplayHand(
+        replayHandSetup(state.record, step.handIndex),
+        state.record.players[0]?.id,
+      );
+      if (!loaded?.projection)
+        throw new Error("Replay hand could not be loaded");
+      if (state !== replayState) return false;
+      state.position += 1;
+      await tableController.refresh(loaded.projection, { animateDealIn: true });
+      return true;
+    }
+    const { action, actorId, animateDealIn } = replayActionForStep(state, step);
+    const outcome = await game?.action(action, actorId);
+    if (!outcome?.result?.accepted)
+      throw new Error("Replay action was rejected");
+    if (state !== replayState) return false;
+    state.position += 1;
+    await tableController.refresh(outcome.projection, {
+      animateDealIn,
+      ownDiscardedTile:
+        action.type === "discard" || action.type === "riichi"
+          ? Number(action.tileId) || 0
+          : 0,
+    });
+    return outcome.projection?.state?.phase === "hand_ended"
+      ? "hand-ended"
+      : true;
+  } catch (error) {
+    console.error("Mahjong paipu playback step failed", error);
+    pauseMahjongPaipuPlayback();
+    showMessage("牌谱回放中断");
+    return false;
+  } finally {
+    if (state === replayState) {
+      state.busy = false;
+      renderMahjongPaipuReplayControls();
+    }
+  }
+}
+
+async function seekMahjongPaipuReplay(position) {
+  const state = replayState;
+  if (!state || state.busy) return;
+  const target = clampPaipuPosition(state.timeline, position);
+  if (target === state.position) {
+    renderMahjongPaipuReplayControls();
+    return;
+  }
+  pauseMahjongPaipuPlayback();
+  state.busy = true;
+  const seekRunId = ++replayRunId;
+  renderMahjongPaipuReplayControls();
+  try {
+    const handIndex = paipuHandIndexAtPosition(state.timeline, target);
+    const loaded = await game?.loadReplayHand(
+      replayHandSetup(state.record, handIndex),
+      state.record.players[0]?.id,
+    );
+    let projection = loaded?.projection;
+    if (!projection) throw new Error("Replay hand could not be loaded");
+    const handStart = state.timeline.handStarts[handIndex];
+    for (let index = handStart; index < target; index += 1) {
+      if (state !== replayState || seekRunId !== replayRunId) return;
+      const step = state.timeline.steps[index];
+      const { action, actorId } = replayActionForStep(state, step);
+      const outcome = await game?.action(action, actorId);
+      if (!outcome?.result?.accepted)
+        throw new Error("Replay seek action was rejected");
+      projection = outcome.projection;
+    }
+    if (state !== replayState || seekRunId !== replayRunId) return;
+    presentation.suspend();
+    tableController.reset();
+    elements.result.hidden = true;
+    state.position = target;
+    await tableController.refresh(projection, { animateDealIn: target === 0 });
+  } catch (error) {
+    console.error("Mahjong paipu seek failed", error);
+    showMessage("无法跳转到该位置");
+  } finally {
+    if (state === replayState) {
+      state.busy = false;
+      renderMahjongPaipuReplayControls();
+    }
+  }
+}
+
+async function toggleMahjongPaipuPlayback() {
+  const state = replayState;
+  if (!state || state.busy) return;
+  if (state.playing) {
+    pauseMahjongPaipuPlayback();
+    return;
+  }
+  if (state.position >= state.timeline.steps.length) return;
+  tableController.syncMatchMusic();
+  state.playing = true;
+  const runId = ++state.playbackRunId;
+  renderMahjongPaipuReplayControls();
+  while (
+    state === replayState &&
+    state.playing &&
+    runId === state.playbackRunId
+  ) {
+    const advanced = await advanceMahjongPaipuReplay();
+    if (
+      !advanced ||
+      !state.playing ||
+      state.position >= state.timeline.steps.length
+    )
+      break;
+    if (advanced === "hand-ended") {
+      const continued = await autoAdvanceMahjongPaipuResult(state, runId);
+      if (!continued) break;
+    }
+    await waitForReplayStep(state.speed);
+  }
+  if (state === replayState && runId === state.playbackRunId) {
+    state.playing = false;
+    renderMahjongPaipuReplayControls();
+  }
+}
+
+function pauseMahjongPaipuPlayback() {
+  const state = replayState;
+  if (!state) return;
+  state.playing = false;
+  state.playbackRunId += 1;
+}
+
+async function autoAdvanceMahjongPaipuResult(state, playbackRunId) {
+  const resultShown = await waitForMahjongPaipuResult(state, playbackRunId);
+  if (!resultShown) return false;
+  const detailCount = resultDetailPageCount(tableController.getState());
+  for (let page = 0; page < detailCount; page += 1) {
+    await waitForReplayDelay(REPLAY_RESULT_PAGE_DELAY_MS);
+    if (!isMahjongPaipuPlaybackActive(state, playbackRunId)) return false;
+    await tableController.continueResult();
+  }
+  await waitForReplayDelay(REPLAY_RESULT_PAGE_DELAY_MS);
+  if (!isMahjongPaipuPlaybackActive(state, playbackRunId)) return false;
+  if (tableController.getState()?.matchEnded) return false;
+  await tableController.continueResult();
+  return (
+    isMahjongPaipuPlaybackActive(state, playbackRunId) &&
+    tableController.getState()?.phase !== "hand_ended"
+  );
+}
+
+async function waitForMahjongPaipuResult(state, playbackRunId) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    if (!isMahjongPaipuPlaybackActive(state, playbackRunId)) return false;
+    // The panel is mounted while the hand-end reveal is still warming up.
+    // Autoplay must wait for the actual, interactive result page, then start
+    // its per-page dwell timer from that point.
+    if (
+      !elements.result.hidden &&
+      !elements.result.inert &&
+      elements.result.getAttribute("aria-hidden") === "false"
+    ) {
+      return true;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 100));
+  }
+  return false;
+}
+
+function isMahjongPaipuPlaybackActive(state, playbackRunId) {
+  return (
+    state === replayState &&
+    state.playing &&
+    playbackRunId === state.playbackRunId
+  );
+}
+
+async function advanceMahjongPaipuReplayFromResult(action) {
+  const state = replayState;
+  if (
+    !state ||
+    action?.type !== "next_hand" ||
+    state.timeline.steps[state.position]?.kind !== "next-hand"
+  ) {
+    return false;
+  }
+  await tableController.dismissResultForReplay();
+  return advanceMahjongPaipuReplay();
+}
+
+async function advanceToNextMahjongPaipuHand(state) {
+  const nextPosition = paipuNextHandPosition(state.timeline, state.position);
+  if (nextPosition === state.position) return;
+  if (
+    state.timeline.steps[state.position]?.kind === "next-hand" &&
+    tableController.getState()?.phase === "hand_ended"
+  ) {
+    await advanceMahjongPaipuReplayFromResult({ type: "next_hand" });
+    return;
+  }
+  await seekMahjongPaipuReplay(nextPosition);
+}
+
+function cycleMahjongPaipuReplaySpeed() {
+  const state = replayState;
+  if (!state || state.busy) return;
+  const current = REPLAY_SPEEDS.indexOf(state.speed);
+  state.speed = REPLAY_SPEEDS[(current + 1) % REPLAY_SPEEDS.length];
+  renderMahjongPaipuReplayControls();
+}
+
+function renderMahjongPaipuReplayControls() {
+  const state = replayState;
+  if (!state || !replayElements.controls) return;
+  const { timeline, position } = state;
+  const handIndex = paipuHandIndexAtPosition(timeline, position);
+  const hand = timeline.hands[handIndex];
+  const commandCount = timeline.steps
+    .slice(0, position)
+    .filter(
+      (step) => step.kind === "action" && step.handIndex === handIndex,
+    ).length;
+  const roundWind =
+    ["东", "南", "西", "北"][Math.max(0, Number(hand?.round?.wind) - 1)] ||
+    "牌谱";
+  const roundNumber = Number(hand?.round?.number) || handIndex + 1;
+  const completed = position >= timeline.steps.length;
+  replayElements.status.textContent = completed
+    ? "对局回放结束"
+    : `${roundWind}${roundNumber}局 · 第 ${commandCount} 手`;
+  replayElements.progress.max = String(timeline.steps.length);
+  replayElements.progress.value = String(position);
+  replayElements.progress.setAttribute(
+    "aria-valuetext",
+    `${position} / ${timeline.steps.length}`,
+  );
+  replayElements.controls.setAttribute("aria-busy", String(state.busy));
+  setMahjongPaipuReplayControlState(
+    replayElements.previousHand,
+    state.busy,
+    paipuPreviousHandPosition(timeline, position) === position,
+  );
+  setMahjongPaipuReplayControlState(
+    replayElements.nextHand,
+    state.busy,
+    paipuNextHandPosition(timeline, position) === position,
+  );
+  setMahjongPaipuReplayControlState(
+    replayElements.stepBack,
+    state.busy,
+    position === 0,
+  );
+  setMahjongPaipuReplayControlState(
+    replayElements.stepForward,
+    state.busy,
+    completed,
+  );
+  setMahjongPaipuReplayControlState(
+    replayElements.toggle,
+    state.busy,
+    completed,
+  );
+  setMahjongPaipuReplayControlState(replayElements.speed, state.busy, false);
+  replayElements.progress.setAttribute("aria-disabled", String(state.busy));
+  replayElements.speed.textContent = `${state.speed}×`;
+  replayElements.toggle.setAttribute(
+    "aria-label",
+    state.playing ? "暂停" : "播放",
+  );
+  replayElements.toggle.setAttribute("aria-pressed", String(state.playing));
+  replayElements.toggle.title = state.playing ? "暂停" : "播放";
+  replayElements.toggle
+    .querySelector('[data-lucide="play"]')
+    ?.toggleAttribute("hidden", state.playing);
+  replayElements.toggle
+    .querySelector('[data-lucide="pause"]')
+    ?.toggleAttribute("hidden", !state.playing);
+}
+
+function setMahjongPaipuReplayControlState(element, busy, unavailable) {
+  element.disabled = unavailable;
+  element.setAttribute("aria-disabled", String(busy || unavailable));
+}
+
+async function exitMahjongPaipuReplay({ returnToSetup = true } = {}) {
+  const state = replayState;
+  if (!state && playMode !== "replay") return;
+  replayRunId += 1;
+  pauseMahjongPaipuPlayback();
+  replayState = null;
+  replayElements.controls.hidden = true;
+  const replayGame = game;
+  game = undefined;
+  try {
+    session?.cancelScheduledActions();
+    tableController.syncMatchMusic({ enabled: false });
+    presentation.suspend();
+    replayGame?.close();
+    tableController.reset();
+  } catch (error) {
+    console.error("Mahjong paipu replay cleanup failed", error);
+  } finally {
+    elements.result.hidden = true;
+    elements.loading.hidden = true;
+    playMode = "solo";
+    settingsDialog.setOpen(false, { restoreFocus: false, animate: false });
+    settingsDialog.setSoloMatchActive(false);
+    settingsDialog.setEndMatchLabel("结束本局");
+    if (returnToSetup) showSetup();
+  }
+}
+
+function replayAction(action, replayTileIds) {
+  const replay = structuredClone(action);
+  if (replay.tile) {
+    const tileId = tileIdForReference(replay.tile, replayTileIds);
+    if (!tileId) throw new Error("Paipu action has an invalid tile reference");
+    replay.tileId = tileId;
+  }
+  delete replay.tile;
+  return replay;
+}
+
+function tileIdForReference(reference, replayTileIds) {
+  if (!Number.isInteger(reference?.ref)) return 0;
+  return replayTileIds?.[reference.ref] || 0;
+}
+
+function replayTileIdsForWall(wall) {
+  if (typeof wall !== "string" || wall.length !== 272) {
+    throw new Error("Paipu hand has an invalid wall");
+  }
+  const available = new Map();
+  for (let tileId = 1; tileId <= 136; tileId += 1) {
+    const code = tileCode(tileId);
+    const ids = available.get(code) || [];
+    ids.push(tileId);
+    available.set(code, ids);
+  }
+  const tileIds = [];
+  for (let offset = 0; offset < wall.length; offset += 2) {
+    const code = wall.slice(offset, offset + 2);
+    const ids = available.get(code);
+    if (!ids?.length) throw new Error("Paipu hand has an invalid tile code");
+    tileIds.push(ids.shift());
+  }
+  return tileIds;
+}
+
+function tileCode(tileId) {
+  if (tileId === 17) return "0m";
+  if (tileId === 53) return "0p";
+  if (tileId === 89) return "0s";
+  const kind = Math.floor((tileId - 1) / 4) + 1;
+  if (kind <= 27) {
+    return `${((kind - 1) % 9) + 1}${["m", "p", "s"][Math.floor((kind - 1) / 9)]}`;
+  }
+  return `${kind - 27}z`;
+}
+
+function waitForReplayStep(speed) {
+  const delay = REPLAY_STEP_DELAY_MS / Math.max(0.25, Number(speed) || 1);
+  return waitForReplayDelay(delay);
+}
+
+function waitForReplayDelay(delay) {
+  return new Promise((resolve) => window.setTimeout(resolve, delay));
+}
+
 function handlePlayweftReady(context) {
   playMode = context?.mode ?? "solo";
   roomPlayerId = context?.playerId || "";
@@ -410,7 +1110,7 @@ async function handleRoomState(message) {
     if (destroyed || playMode !== "room") return;
     await tableController.refresh(projection, { animateDealIn });
     if (!hadState)
-      tableController.syncMatchMusic({ start: true, fadeIn: true });
+      tableController.syncMatchMusic({ fadeIn: true });
     elements.app.setAttribute("aria-busy", "false");
     elements.setup.hidden = true;
     elements.loading.hidden = true;
@@ -476,7 +1176,7 @@ function requestPlatformAvatar(context) {
 async function initialize(matchType = "east") {
   if (playMode !== "solo" || game || gameInitializing) return;
   gameInitializing = true;
-  tableController.syncMatchMusic({ start: true });
+  tableController.syncMatchMusic();
   const rules = Object.fromEntries(
     [...elements.setup.querySelectorAll("[data-rule]")].map((input) => [
       input.dataset.rule,
@@ -525,6 +1225,7 @@ async function initialize(matchType = "east") {
     elements.setup.hidden = true;
     elements.loading.hidden = true;
     settingsDialog.setSoloMatchActive(true);
+    settingsDialog.setEndMatchLabel("结束本局");
     scheduleAi({ afterDealIn: true });
   } catch (error) {
     console.error(error);
@@ -569,11 +1270,12 @@ async function resumeSavedMatch() {
     autoActions = { ...save.autoActions };
     syncAutoActionControls();
     await tableController.refresh(projection);
-    tableController.syncMatchMusic({ start: true });
+    tableController.syncMatchMusic();
     elements.app.setAttribute("aria-busy", "false");
     elements.setup.hidden = true;
     elements.loading.hidden = true;
     settingsDialog.setSoloMatchActive(true);
+    settingsDialog.setEndMatchLabel("结束本局");
     scheduleAi();
   } catch (error) {
     console.error(error);
@@ -623,6 +1325,14 @@ async function persistAcceptedAction(
   }
   soloSave = next;
   writeMahjongSoloSave(soloSave);
+  if (projection?.state?.matchEnded && currentGame?.exportPaipu) {
+    try {
+      const paipu = await currentGame.exportPaipu();
+      if (paipu?.status === "completed") await saveMahjongPaipu(paipu);
+    } catch (error) {
+      console.warn("Mahjong paipu save failed", error);
+    }
+  }
 }
 
 function defaultAutoActions() {
@@ -676,6 +1386,7 @@ function startMahjongEntry() {
 }
 
 function showSetup() {
+  closePaipuPanel({ animate: false, restoreFocus: false });
   elements.setup.classList.remove("is-leaving", "is-prepared-for-result-exit");
   for (const button of elements.setup.querySelectorAll("[data-match-type]"))
     button.disabled = false;
@@ -717,7 +1428,7 @@ async function endSoloMatch() {
 
 async function teardownCompletedSoloMatch() {
   session?.cancelScheduledActions();
-  tableController.syncMatchMusic({ start: false });
+  tableController.syncMatchMusic({ enabled: false });
   presentation.suspend();
   game?.close();
   game = undefined;
@@ -726,6 +1437,7 @@ async function teardownCompletedSoloMatch() {
   elements.loading.hidden = true;
   showSetup();
   settingsDialog.setSoloMatchActive(false);
+  settingsDialog.setEndMatchLabel("结束本局");
   clearSoloSave();
 }
 
@@ -768,6 +1480,7 @@ function showMessage(message) {
 }
 
 function dispatch(action, options) {
+  if (playMode === "replay") return false;
   return session?.dispatch(action, options) ?? false;
 }
 
@@ -776,7 +1489,7 @@ function scheduleAi(options) {
 }
 
 function resumeMatchMusic() {
-  tableController?.resumeMatchMusic();
+  tableController?.syncMatchMusic({ userGesture: true });
 }
 
 function handlePageHide(event) {
