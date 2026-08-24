@@ -338,8 +338,8 @@ test("mahjong settings separates theme management from appearance choices", () =
     new URL("../games/mahjong/index.html", import.meta.url),
     "utf8",
   );
-  const main = readFileSync(
-    new URL("../games/mahjong/main.js", import.meta.url),
+  const themeController = readFileSync(
+    new URL("../games/mahjong/theme-controller.js", import.meta.url),
     "utf8",
   );
   const settingsCss = readFileSync(
@@ -358,13 +358,13 @@ test("mahjong settings separates theme management from appearance choices", () =
     /accept="\.zip,application\/zip,application\/x-zip-compressed"/,
   );
   assert.doesNotMatch(page, /id="settings-theme-upload"[^>]*multiple/);
-  assert.match(main, /configureMahjongAssetPackAppearance/);
-  assert.match(main, /角色语音/);
-  assert.match(main, /getMahjongDefaultPack\(\)/);
+  assert.match(themeController, /configureMahjongAssetPackAppearance/);
+  assert.match(themeController, /角色语音/);
+  assert.match(themeController, /getMahjongDefaultPack\(\)/);
   assert.match(settingsCss, /\.settings-option strong[\s\S]*?font-size: 20px/);
   assert.match(settingsCss, /\.settings-theme-list strong[\s\S]*?font-size: 20px/);
   assert.match(
-    main,
-    /action === "delete"[\s\S]*?isStandalone[\s\S]*?window\.confirm\(confirmation\)[\s\S]*?await playweftClient\?\.confirm\(confirmation\)/,
+    themeController,
+    /action === "delete"[\s\S]*?isStandalone[\s\S]*?browserWindow\.confirm\(message\)[\s\S]*?await confirm\?\.\(message\)/,
   );
 });

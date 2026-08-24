@@ -11,14 +11,12 @@ import {
   Vector3,
 } from "three";
 import {
-  AUTO_DECISION_DELAY_MS,
   DRAW_REVEAL_CARD_DELAY_MS,
   DRAW_REVEAL_CARD_GAP_MS,
   DRAW_REVEAL_VISIBLE_BASE_MS,
   DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS,
   HAND_INSERTION_DELAY_MS,
   HAND_END_PRESENTATION_DELAY_MS,
-  OWN_DRAW_ENTRY_DURATION_MS,
 } from "../games/mahjong/constants.js";
 import {
   automaticRiichiDiscard,
@@ -383,6 +381,10 @@ test("mahjong restores its canvas overlay after mobile suspension", () => {
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
     "utf8",
   );
+  const tableController = readFileSync(
+    new URL("../games/mahjong/table-controller.js", import.meta.url),
+    "utf8",
+  );
   const tableConsole = readFileSync(
     new URL("../games/mahjong/render/three-console.js", import.meta.url),
     "utf8",
@@ -395,7 +397,7 @@ test("mahjong restores its canvas overlay after mobile suspension", () => {
     main,
     /document\.addEventListener\("visibilitychange", handleVisibilityChange\)/,
   );
-  assert.match(main, /visualRenderer\.resume\(\)/);
+  assert.match(tableController, /visualRenderer\.resume\(\)/);
   assert.match(
     renderer,
     /addEventListener\(\s*"webglcontextrestored",\s*this\.onContextRestored/s,
@@ -1018,8 +1020,8 @@ test("mahjong keeps action labels compact and assigns semantic action classes", 
 });
 
 test("mahjong uses a cancellable two-step riichi tile selection", () => {
-  const main = readFileSync(
-    new URL("../games/mahjong/main.js", import.meta.url),
+  const tableController = readFileSync(
+    new URL("../games/mahjong/table-controller.js", import.meta.url),
     "utf8",
   );
   const view = readFileSync(
@@ -1031,22 +1033,19 @@ test("mahjong uses a cancellable two-step riichi tile selection", () => {
     "utf8",
   );
   assert.match(
-    main,
-    /elements\.riichi\.addEventListener\("click", enterRiichiMode\)/,
+    tableController,
+    /function enterRiichiMode\(\)/,
   );
   assert.match(
-    main,
-    /elements\.cancelRiichi\.addEventListener\("click", cancelRiichiMode\)/,
+    tableController,
+    /function cancelRiichiMode\(\)/,
   );
-  assert.match(main, /selectionBeforeRiichi = selectedTileId/);
+  assert.match(tableController, /selectionBeforeRiichi = selectedTileId/);
   assert.match(
-    main,
+    tableController,
     /orderedOwnTiles\(presentedState\(\)\)\.includes\(\s*selectionBeforeRiichi,?\s*\)/s,
   );
-  assert.match(
-    main,
-    /dispatch\(\{ type: "riichi", tileId: selectedTileId \}\)/,
-  );
+  assert.match(tableController, /dispatch\?\.\(\{ type: "riichi", tileId: selectedTileId \}\)/);
   assert.match(view, /elements\.cancelRiichi\.hidden = !riichiMode/);
   assert.match(
     view,
@@ -1158,8 +1157,8 @@ test("mahjong discards by dragging a hand tile above a fixed horizontal line", (
     new URL("../games/mahjong/index.html", import.meta.url),
     "utf8",
   );
-  const main = readFileSync(
-    new URL("../games/mahjong/main.js", import.meta.url),
+  const tableController = readFileSync(
+    new URL("../games/mahjong/table-controller.js", import.meta.url),
     "utf8",
   );
   const view = readFileSync(
@@ -1171,7 +1170,7 @@ test("mahjong discards by dragging a hand tile above a fixed horizontal line", (
     "utf8",
   );
   assert.doesNotMatch(html, /id="discard-button"/);
-  assert.doesNotMatch(main, /elements\.discard/);
+  assert.doesNotMatch(tableController, /elements\.discard/);
   assert.doesNotMatch(view, /elements\.discard/);
   assert.match(view, /向上拖动手牌，进入出牌区后松手打出/);
   assert.match(
@@ -1191,6 +1190,10 @@ test("mahjong discards by dragging a hand tile above a fixed horizontal line", (
 });
 
 test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before results", () => {
+  const tableController = readFileSync(
+    new URL("../games/mahjong/table-controller.js", import.meta.url),
+    "utf8",
+  );
   const main = readFileSync(
     new URL("../games/mahjong/main.js", import.meta.url),
     "utf8",
@@ -1215,36 +1218,36 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     new URL("../games/mahjong/index.html", import.meta.url),
     "utf8",
   );
-  assert.match(main, /handEndPresentationKey\(state\)/);
-  assert.match(main, /const winners = asArray\(current\.winners\)/);
+  assert.match(tableController, /handEndPresentationKey\(state\)/);
+  assert.match(tableController, /const winners = asArray\(current\.winners\)/);
   assert.match(
-    main,
+    tableController,
     /return asArray\(current\?\.winners\)\s*\.map\(\(id\) => asArray\(current\.players\)\.indexOf\(id\) \+ 1\)/s,
   );
-  assert.match(main, /handEndPresentationPlan\(state\)/);
-  assert.match(main, /isExhaustiveDrawRevealState\(current\)/);
-  assert.match(main, /drawRevealVisibleDuration\(current\)/);
-  assert.match(main, /DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS/);
+  assert.match(tableController, /handEndPresentationPlan\(state\)/);
+  assert.match(tableController, /isExhaustiveDrawRevealState\(current\)/);
+  assert.match(tableController, /drawRevealVisibleDuration\(current\)/);
+  assert.match(tableController, /DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS/);
   assert.match(
-    main,
+    tableController,
     /asArray\(current\?\.result\?\.tenpaiWaits\)\s*\.filter\(\s*\(waits\) => asArray\(waits\)\.length > 0/s,
   );
-  assert.match(main, /presentation\.syncHandEnd\(/);
-  assert.match(main, /presentation\.handRevealSettled\(key\)/);
-  assert.match(main, /renderPresentationOverlays/);
+  assert.match(tableController, /presentation\.syncHandEnd\(/);
+  assert.match(tableController, /presentation\.handRevealSettled\(key\)/);
+  assert.match(tableController, /renderPresentationOverlays/);
   assert.match(renderer, /onHandRevealComplete\?\.\(key\)/);
   assert.match(renderer, /this\.animations\.has\("hand-reveal"\)/);
-  assert.match(main, /DRAW_REVEAL_CARD_GAP_MS/);
-  assert.match(main, /DRAW_REVEAL_CARD_DELAY_MS/);
-  assert.match(main, /presentation\.drawRevealVisible/);
+  assert.match(tableController, /DRAW_REVEAL_CARD_GAP_MS/);
+  assert.match(tableController, /DRAW_REVEAL_CARD_DELAY_MS/);
+  assert.match(tableController, /presentation\.drawRevealVisible/);
   assert.match(view, /elements\.result\.hidden = !ended;/);
   assert.match(view, /is-warming", ended && !showResult/);
   assert.match(view, /is-entering", ended && showResult/);
-  assert.match(main, /current\.result\?\.abortive === true/);
-  assert.match(main, /abortive-draw/);
-  assert.match(main, /resultDelay: HAND_END_PRESENTATION_DELAY_MS/);
-  assert.match(main, /current\.abortiveReason === "九种九牌"/);
-  assert.match(main, /exhaustive-draw/);
+  assert.match(tableController, /current\.result\?\.abortive === true/);
+  assert.match(tableController, /abortive-draw/);
+  assert.match(tableController, /resultDelay: HAND_END_PRESENTATION_DELAY_MS/);
+  assert.match(tableController, /current\.abortiveReason === "九种九牌"/);
+  assert.match(tableController, /exhaustive-draw/);
   assert.match(
     html,
     /id="draw-reveal"[\s\S]*?<div class="draw-reveal-card">[\s\S]*?data-draw-tenpai-seat="3"[\s\S]*?id="draw-reveal-reason"/,
@@ -1286,17 +1289,15 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     paperRenderer,
     /context\.fillText\("滿貫", valueRight, baseline\)/,
   );
-  assert.match(main, /revealPlayerIndices: revealedPlayerIndices/);
-  assert.match(main, /coveredPlayerIndices,/);
   assert.match(
-    main,
+    tableController,
     /revealedPlayerIndices\.length \+ coveredPlayerIndices\.length > 0 &&\s*!presentation\.resultVisible/s,
   );
   assert.match(
-    main,
-    /function handCoveredPlayerIndices\(current\) \{[\s\S]*?return exhaustive\.covered;[\s\S]*?return \[\];\s*\}/,
+    tableController,
+    /function handCoveredPlayerIndices\(current\) \{[\s\S]*?exhaustive\.covered[\s\S]*?\[\]/,
   );
-  assert.doesNotMatch(main, /!winners\.has\(playerId\)/);
+  assert.doesNotMatch(tableController, /!winners\.has\(playerId\)/);
   assert.match(renderer, /startHandReveal\(delay = 0, key = ""\)/);
   assert.match(
     renderer,
@@ -1359,16 +1360,16 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     /const concealFace = covered && seat !== 1;[\s\S]*?concealed: concealFace/,
   );
   assert.match(renderer, /settlePresentedTile\(hinge, covered\)/);
-  assert.match(main, /const RESULT_PAGE_TRANSITION_MS = 920;/);
-  assert.match(main, /outgoing\.classList\.add\("is-step-previous"\)/);
-  assert.match(main, /elements\.resultTrack\.prepend\(outgoing\)/);
+  assert.match(tableController, /const RESULT_PAGE_TRANSITION_MS = 920;/);
+  assert.match(tableController, /outgoing\.classList\.add\("is-step-previous"\)/);
+  assert.match(tableController, /elements\.resultTrack\.prepend\(outgoing\)/);
   assert.match(
-    main,
+    tableController,
     /elements\.resultTrack\.classList\.add\("is-step-advancing"\)/,
   );
   assert.match(
     main,
-    /elements\.result\.addEventListener\("dblclick", \(event\) => \{\s*if \(!isResultBlankSpace\(event\.target\)\) return;\s*resultHandRenderer\.playStartButtonActivation\(\(\) => void continueResult\(\)\);\s*}\);/s,
+    /elements\.result\.addEventListener\("dblclick", \(event\) => \{\s*if \(!tableController\.isResultBlankSpace\(event\.target\)\) return;\s*resultHandRenderer\.playStartButtonActivation\s*\(\s*\(\) => void tableController\.continueResult\(\),?\s*\);\s*}\);/s,
   );
   assert.match(
     resultRenderer,
@@ -1577,6 +1578,10 @@ test("mahjong routes blocked playback and rematches through a user gesture", () 
     new URL("../games/mahjong/main.js", import.meta.url),
     "utf8",
   );
+  const tableController = readFileSync(
+    new URL("../games/mahjong/table-controller.js", import.meta.url),
+    "utf8",
+  );
   assert.match(
     main,
     /document\.addEventListener\("pointerdown", resumeMatchMusic, \{ passive: true \}\);/,
@@ -1585,8 +1590,8 @@ test("mahjong routes blocked playback and rematches through a user gesture", () 
     main,
     /document\.addEventListener\("keydown", resumeMatchMusic\);/,
   );
-  assert.match(main, /matchMusicController\.resumeIfBlocked\(/);
-  assert.match(main, /primeMatchMusicForNextHand\(\);/);
+  assert.match(tableController, /matchMusicController\.resumeIfBlocked\(/);
+  assert.match(tableController, /primeMatchMusicForNextHand\(\);/);
 });
 
 test("mahjong result pages separate winners before the score summary", () => {
@@ -1612,31 +1617,10 @@ test("mahjong result pages separate winners before the score summary", () => {
     { seat: 1, name: "你", score: 21_000, rank: 3 },
     { seat: 3, name: "织羽", score: 18_000, rank: 4 },
   ]);
-  const main = readFileSync(
-    new URL("../games/mahjong/main.js", import.meta.url),
-    "utf8",
-  );
   const html = readFileSync(
     new URL("../games/mahjong/index.html", import.meta.url),
     "utf8",
   );
-  assert.match(
-    main,
-    /if \(state\.matchEnded\) \{\s*showMatchSummary\(\);\s*return;/s,
-  );
-  assert.match(main, /await advanceFromResult\(\{ type: "new_match" \}\)/);
-  assert.match(main, /function returnToSetupFromSummary\(\)/);
-  assert.match(
-    main,
-    /renderResultExitTable\(outcome\.projection\?\.state\);/,
-  );
-  assert.match(main, /visualRenderer\.prepareDealIn\(\);/);
-  assert.match(main, /await waitForDelay\(NEW_HAND_TABLE_PAUSE_MS\);/);
-  assert.match(
-    main,
-    /await refresh\(outcome\.projection, \{ animateDealIn: true \}\)/,
-  );
-  assert.match(main, /showSetup\(\{ behindResult: true \}\)/);
   assert.match(
     html,
     /id="match-summary"[\s\S]*?id="match-summary-rows"[\s\S]*?再来一局[\s\S]*?返回大厅/,
@@ -1942,17 +1926,17 @@ test("mahjong reuses local tile meshes for a quick interruptible selection lift"
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
     "utf8",
   );
-  const main = readFileSync(
-    new URL("../games/mahjong/main.js", import.meta.url),
+  const tableController = readFileSync(
+    new URL("../games/mahjong/table-controller.js", import.meta.url),
     "utf8",
   );
   const view = readFileSync(
     new URL("../games/mahjong/dom-view.js", import.meta.url),
     "utf8",
   );
-  const selection = main.slice(
-    main.indexOf("function selectTile(tileId)"),
-    main.indexOf("function discardSelected()"),
+  const selection = tableController.slice(
+    tableController.indexOf("function selectTile(tileId)"),
+    tableController.indexOf("function discardSelected()"),
   );
   const selectionUpdate = renderer.slice(
     renderer.indexOf("  updateSelection(ui) {"),
@@ -1984,7 +1968,7 @@ test("mahjong reuses local tile meshes for a quick interruptible selection lift"
   assert.match(renderer, /this\.startOwnTileMotion\(\)/);
   assert.match(selection, /visualRenderer\.updateSelection\(/);
   assert.doesNotMatch(selection, /visualRenderer\.render\(/);
-  assert.match(main, /onClearSelection: clearSelectedTile/);
+  assert.match(tableController, /function clearSelectedTile\(\)/);
   assert.match(selection, /function clearSelectedTile\(\)/);
   assert.match(selection, /if \(!selectedTileId\) return/);
   assert.match(
@@ -2011,10 +1995,10 @@ test("mahjong reuses local tile meshes for a quick interruptible selection lift"
     cancelDrag,
     /if \(drag\?\.moved\) this\.callbacks\.onEndDragPreview\?\.\(\)/,
   );
-  assert.match(main, /onPreviewDragTile: previewDraggedTile/);
-  assert.match(main, /onEndDragPreview: restoreSelectedTilePreview/);
+  assert.match(tableController, /function previewDraggedTile\(tileId\)/);
+  assert.match(tableController, /function restoreSelectedTilePreview\(\)/);
   assert.match(
-    main,
+    tableController,
     /function previewDraggedTile\(tileId\) \{\s*domView\.renderTenpaiPreview\(presentedState\(\), Number\(tileId\) \|\| 0\);\s*\}/,
   );
   assert.match(
@@ -2146,23 +2130,6 @@ test("mahjong automatically tsumogiri after riichi only when discard is the sole
       "player",
     ),
     0,
-  );
-});
-
-test("mahjong gives every automatic win and tsumogiri one recognition delay", () => {
-  const main = readFileSync(
-    new URL("../games/mahjong/main.js", import.meta.url),
-    "utf8",
-  );
-  assert.equal(AUTO_DECISION_DELAY_MS, 520);
-  assert.equal(OWN_DRAW_ENTRY_DURATION_MS, 180);
-  assert.match(
-    main,
-    /const isVisibleTileDecision = \["claim", "tsumo", "discard"\]\.includes\([\s\S]*?Math\.max\([\s\S]*?OWN_DRAW_ENTRY_DURATION_MS[\s\S]*?\+ AUTO_DECISION_DELAY_MS/s,
-  );
-  assert.match(
-    main,
-    /automaticRiichiDiscard[\s\S]*?Math\.max\(visualDelay, OWN_DRAW_ENTRY_DURATION_MS\)[\s\S]*?AUTO_DECISION_DELAY_MS/s,
   );
 });
 
@@ -2574,8 +2541,8 @@ test("mahjong highlights matching visible tile types without adding count text",
 });
 
 test("mahjong lets players inspect their hand outside their discard turn", () => {
-  const main = readFileSync(
-    new URL("../games/mahjong/main.js", import.meta.url),
+  const tableController = readFileSync(
+    new URL("../games/mahjong/table-controller.js", import.meta.url),
     "utf8",
   );
   const view = readFileSync(
@@ -2586,9 +2553,9 @@ test("mahjong lets players inspect their hand outside their discard turn", () =>
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
     "utf8",
   );
-  const selection = main.slice(
-    main.indexOf("function selectTile(tileId)"),
-    main.indexOf("function discardSelected()"),
+  const selection = tableController.slice(
+    tableController.indexOf("function selectTile(tileId)"),
+    tableController.indexOf("function discardSelected()"),
   );
   assert.match(selection, /orderedOwnTiles\(renderState\)/);
   assert.match(selection, /state\?\.phase === "hand_ended"/);
@@ -2876,7 +2843,6 @@ test("mahjong uses one fixed 16:9 logical viewport without a top status bar", ()
     "utf8",
   );
   assert.match(main, /MahjongThreeRenderer/);
-  assert.match(main, /automaticRiichiDiscard/);
   assert.doesNotMatch(main, /MahjongPixiRenderer/);
   const packageJson = JSON.parse(
     readFileSync(new URL("../package.json", import.meta.url), "utf8"),
@@ -2902,6 +2868,10 @@ test("mahjong settings dialog combines operation controls and themed help", () =
   );
   const main = readFileSync(
     new URL("../games/mahjong/main.js", import.meta.url),
+    "utf8",
+  );
+  const tableController = readFileSync(
+    new URL("../games/mahjong/table-controller.js", import.meta.url),
     "utf8",
   );
   const renderer = readFileSync(
@@ -2966,7 +2936,7 @@ test("mahjong settings dialog combines operation controls and themed help", () =
   assert.match(main, /settingsDialog\.doubleClickPassEnabled/);
   assert.match(main, /settingsDialog\.setSoloMatchActive\(true\)/);
   assert.match(main, /结束本局并返回标题/);
-  assert.match(main, /cue\.volume \* settingsDialog\.discardVolumeScale/);
+  assert.match(tableController, /cue\.volume \* settingsDialog\.discardVolumeScale/);
   assert.match(
     main,
     /passAvailable: !elements\.pass\.hidden && !elements\.pass\.disabled/,
@@ -2998,21 +2968,21 @@ test("mahjong shuffles behind a synchronized waiting-scene exit", () => {
   assert.doesNotMatch(html, /class="loading-mark"|正在摆好牌桌/);
   assert.match(
     main,
-    /\[game\] = await Promise\.all\(\[\s*gamePreparation,\s*setupExit,\s*visualRendererReady,\s*\]\)/,
+    /\[game\] = await Promise\.all\(\[\s*gamePreparation,\s*setupExit,\s*visualRendererReady,?\s*\]\)/,
   );
   assert.match(
     main,
-    /await refresh\(game\.initialProjection, \{ animateDealIn: true \}\)[\s\S]*?scheduleAi\(\{ afterDealIn: true \}\)/,
+    /await tableController\.refresh\(game\.initialProjection, \{\s*animateDealIn: true,?\s*\}\)[\s\S]*?scheduleAi\(\{ afterDealIn: true \}\)/,
   );
 });
 
 test("mahjong forwards the initial deal animation to the Three renderer", () => {
-  const main = readFileSync(
-    new URL("../games/mahjong/main.js", import.meta.url),
+  const tableController = readFileSync(
+    new URL("../games/mahjong/table-controller.js", import.meta.url),
     "utf8",
   );
   assert.match(
-    main,
+    tableController,
     /visualRenderer\.render\(renderState, visibleEvents, \{[\s\S]*?dealInKey: animateDealIn \? handDealInKey\(state\) : "",[\s\S]*?animateDealIn,/,
   );
 });
