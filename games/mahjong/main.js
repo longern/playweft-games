@@ -12,7 +12,11 @@ import {
 import { MahjongDomView } from "./dom-view.js";
 import { createMahjongSessionController } from "./session-controller.js";
 import { bindFixedViewport } from "./fixed-viewport.js";
-import { asArray, blankDoubleClickAction, errorMessage } from "./game-format.js";
+import {
+  asArray,
+  blankDoubleClickAction,
+  errorMessage,
+} from "./game-format.js";
 import { MahjongThreeRenderer } from "./three-renderer.js";
 import { MahjongResultHandRenderer } from "./result-hand-renderer.js";
 import { MahjongPresentationController } from "./presentation-controller.js";
@@ -63,7 +67,11 @@ deferMahjongDecorativeAssets({
     "--mahjong-tile-face-image": defaultTileFacesUrl,
   },
 });
-deferMahjongImageAssets({ document, window, urls: { signpost: defaultLobbySignpostUrl } });
+deferMahjongImageAssets({
+  document,
+  window,
+  urls: { signpost: defaultLobbySignpostUrl },
+});
 
 const SETUP_EXIT_DURATION_MS = 560;
 const SETUP_RECOVERY_ERROR_DURATION_MS = 4600;
@@ -167,14 +175,17 @@ const visualRenderer = new MahjongThreeRenderer(elements.stage, {
     if (action) dispatch(action);
   },
 });
-const resultHandRenderer = new MahjongResultHandRenderer(elements.resultDetailContent, {
-  handsHost: elements.resultDetailHands,
-  yakuHost: elements.resultDetailYaku,
-  scoreHost: elements.resultScoreContent,
-  startControlHost: elements.rematch,
-  onStartButtonClick: () => void tableController?.continueResult(),
-  onBlankDoubleClick: () => void tableController?.continueResult(),
-});
+const resultHandRenderer = new MahjongResultHandRenderer(
+  elements.resultDetailContent,
+  {
+    handsHost: elements.resultDetailHands,
+    yakuHost: elements.resultDetailYaku,
+    scoreHost: elements.resultScoreContent,
+    startControlHost: elements.rematch,
+    onStartButtonClick: () => void tableController?.continueResult(),
+    onBlankDoubleClick: () => void tableController?.continueResult(),
+  },
+);
 const visualRendererReady = visualRenderer.init().catch((error) => {
   console.error("Mahjong renderer failed", error);
   showLoadingError("图形渲染器加载失败，请刷新页面重试");
@@ -200,12 +211,15 @@ const themeController = createMahjongThemeController({
   themeElements: themePackElements,
   appearanceElements,
   copyrightElement: defaultMusicCopyright,
-  waitForRenderers: () => Promise.all([visualRendererReady, resultHandRendererReady]),
-  setRendererAppearance: ({ tablecloth, tileBack }) => Promise.all([
-    visualRenderer.setAppearance({ tablecloth, tileBack }),
-    resultHandRenderer.setAppearance({ tablecloth, tileBack }),
-  ]),
-  setPlayerAvatar: (position, source) => domView.setPlayerAvatar(position, source),
+  waitForRenderers: () =>
+    Promise.all([visualRendererReady, resultHandRendererReady]),
+  setRendererAppearance: ({ tablecloth, tileBack }) =>
+    Promise.all([
+      visualRenderer.setAppearance({ tablecloth, tileBack }),
+      resultHandRenderer.setAppearance({ tablecloth, tileBack }),
+    ]),
+  setPlayerAvatar: (position, source) =>
+    domView.setPlayerAvatar(position, source),
   hasPlatformAvatar: () => hasPlatformAvatar,
   onAssetsChanged() {
     tableController?.syncMatchMusic();
@@ -240,18 +254,23 @@ tableController = createMahjongTableController({
   onReturnToSetup: teardownCompletedSoloMatch,
 });
 
-void Promise.all([visualRendererReady, resultHandRendererReady, themeController.ready])
-  .then(() => themeController.applyVisualPack());
+void Promise.all([
+  visualRendererReady,
+  resultHandRendererReady,
+  themeController.ready,
+]).then(() => themeController.applyVisualPack());
 themeController.syncDefaultMusicCopyright();
 void themeController.refreshThemePacks();
 
 bindUiEvents();
-playweftClient = isStandalone ? undefined : createPlayweftClient({
-  onReady: handlePlayweftReady,
-  onState: handleRoomState,
-  onActionResult: handleRoomActionResult,
-  onError: handlePlayweftError,
-});
+playweftClient = isStandalone
+  ? undefined
+  : createPlayweftClient({
+      onReady: handlePlayweftReady,
+      onState: handleRoomState,
+      onActionResult: handleRoomActionResult,
+      onError: handlePlayweftError,
+    });
 session = createMahjongSessionController({
   humanId: HUMAN_ID,
   getMode: () => playMode,
@@ -265,7 +284,8 @@ session = createMahjongSessionController({
   persistAcceptedAction,
   refreshProjection: tableController.refresh,
   onSoloActionAccepted(action) {
-    if (action.type === "next_hand" || action.type === "new_match") resetAutoActions();
+    if (action.type === "next_hand" || action.type === "new_match")
+      resetAutoActions();
     tableController.clearActionUi();
   },
   onActionRejected: (code) => showMessage(errorMessage(code)),
@@ -274,10 +294,18 @@ session = createMahjongSessionController({
     showMessage("动作处理失败，请重试");
   },
   onProjectionTransitionError(error) {
-    console.error("Mahjong result transition failed; restoring the projection", error);
+    console.error(
+      "Mahjong result transition failed; restoring the projection",
+      error,
+    );
   },
   onAiActionRejected(outcome) {
-    console.error("AI action rejected", outcome.actorId, outcome.action, outcome.result);
+    console.error(
+      "AI action rejected",
+      outcome.actorId,
+      outcome.action,
+      outcome.result,
+    );
     showMessage("AI 动作未通过规则校验");
   },
   onAiError(error) {
@@ -297,22 +325,46 @@ revealMahjongAppAfterStyles();
 
 function bindUiEvents() {
   elements.pass.addEventListener("click", () => dispatch({ type: "pass" }));
-  elements.abort.addEventListener("click", () => dispatch({ type: "abort_nine" }));
+  elements.abort.addEventListener("click", () =>
+    dispatch({ type: "abort_nine" }),
+  );
   elements.tsumo.addEventListener("click", () => dispatch({ type: "tsumo" }));
-  elements.riichi.addEventListener("click", () => tableController.enterRiichiMode());
-  elements.cancelRiichi.addEventListener("click", () => tableController.cancelRiichiMode());
-  elements.rematch.addEventListener("click", () => void tableController.continueResult());
-  elements.matchSummaryRematch.addEventListener("click", () => void tableController.restartMatchFromSummary());
-  elements.matchSummarySetup.addEventListener("click", () => void tableController.returnToSetupFromSummary());
+  elements.riichi.addEventListener("click", () =>
+    tableController.enterRiichiMode(),
+  );
+  elements.cancelRiichi.addEventListener("click", () =>
+    tableController.cancelRiichiMode(),
+  );
+  elements.rematch.addEventListener(
+    "click",
+    () => void tableController.continueResult(),
+  );
+  elements.matchSummaryRematch.addEventListener(
+    "click",
+    () => void tableController.restartMatchFromSummary(),
+  );
+  elements.matchSummarySetup.addEventListener(
+    "click",
+    () => void tableController.returnToSetupFromSummary(),
+  );
   elements.result.addEventListener("dblclick", (event) => {
     if (!tableController.isResultBlankSpace(event.target)) return;
-    resultHandRenderer.playStartButtonActivation(() => void tableController.continueResult());
+    resultHandRenderer.playStartButtonActivation(
+      () => void tableController.continueResult(),
+    );
   });
   elements.autoWin.addEventListener("click", () => toggleAutoAction("autoWin"));
-  elements.passClaims.addEventListener("click", () => toggleAutoAction("passClaims"));
-  elements.autoTsumogiri.addEventListener("click", () => toggleAutoAction("autoTsumogiri"));
+  elements.passClaims.addEventListener("click", () =>
+    toggleAutoAction("passClaims"),
+  );
+  elements.autoTsumogiri.addEventListener("click", () =>
+    toggleAutoAction("autoTsumogiri"),
+  );
   for (const button of elements.setup.querySelectorAll("[data-match-type]")) {
-    button.addEventListener("click", () => void initialize(button.dataset.matchType));
+    button.addEventListener(
+      "click",
+      () => void initialize(button.dataset.matchType),
+    );
   }
   syncAutoActionControls();
   window.addEventListener("pagehide", handlePageHide);
@@ -342,17 +394,23 @@ function handlePlayweftReady(context) {
 async function handleRoomState(message) {
   if (playMode !== "room") return;
   roomPlayerId = message?.playerId || roomPlayerId;
-  const projection = orientMahjongRoomProjection({ state: message?.state, events: message?.events }, roomPlayerId);
+  const projection = orientMahjongRoomProjection(
+    { state: message?.state, events: message?.events },
+    roomPlayerId,
+  );
   if (!projection?.state) return;
   const hadState = Boolean(tableController.getState());
-  const animateDealIn = !hadState || asArray(projection.events).some(
-    (event) => event?.type === "next_hand" || event?.type === "new_match",
-  );
+  const animateDealIn =
+    !hadState ||
+    asArray(projection.events).some(
+      (event) => event?.type === "next_hand" || event?.type === "new_match",
+    );
   try {
     await visualRendererReady;
     if (destroyed || playMode !== "room") return;
     await tableController.refresh(projection, { animateDealIn });
-    if (!hadState) tableController.syncMatchMusic({ start: true, fadeIn: true });
+    if (!hadState)
+      tableController.syncMatchMusic({ start: true, fadeIn: true });
     elements.app.setAttribute("aria-busy", "false");
     elements.setup.hidden = true;
     elements.loading.hidden = true;
@@ -368,7 +426,10 @@ function handleRoomActionResult() {
 }
 
 function handlePlayweftError(message, _code, requestId) {
-  if (session.rejectRoomAction(requestId) && tableController.getState()?.phase === "hand_ended") {
+  if (
+    session.rejectRoomAction(requestId) &&
+    tableController.getState()?.phase === "hand_ended"
+  ) {
     tableController.syncMatchMusic();
   }
   if (!tableController.getState()) {
@@ -396,25 +457,32 @@ function requestPlatformAvatar(context) {
     themeController.applyPackAvatars();
   }
   if (!asArray(context?.capabilities).includes("user.getProfile")) return;
-  void playweftClient.getUserProfile({ fields: ["avatar"] }).then((profile) => {
-    const source = profile?.avatar?.src;
-    if (typeof source === "string" && source) {
-      hasPlatformAvatar = true;
-      domView.setPlayerAvatar("bottom", source);
-    } else if (!initialSource) {
-      themeController.applyPackAvatars();
-    }
-  }).catch(() => {
-    if (!initialSource) themeController.applyPackAvatars();
-  });
+  void playweftClient
+    .getUserProfile({ fields: ["avatar"] })
+    .then((profile) => {
+      const source = profile?.avatar?.src;
+      if (typeof source === "string" && source) {
+        hasPlatformAvatar = true;
+        domView.setPlayerAvatar("bottom", source);
+      } else if (!initialSource) {
+        themeController.applyPackAvatars();
+      }
+    })
+    .catch(() => {
+      if (!initialSource) themeController.applyPackAvatars();
+    });
 }
 
 async function initialize(matchType = "east") {
   if (playMode !== "solo" || game || gameInitializing) return;
   gameInitializing = true;
   tableController.syncMatchMusic({ start: true });
-  const rules = Object.fromEntries([...elements.setup.querySelectorAll("[data-rule]")]
-    .map((input) => [input.dataset.rule, input.checked]));
+  const rules = Object.fromEntries(
+    [...elements.setup.querySelectorAll("[data-rule]")].map((input) => [
+      input.dataset.rule,
+      input.checked,
+    ]),
+  );
   elements.loading.classList.remove("is-active", "is-error");
   elements.loadingMessage.hidden = true;
   elements.loading.hidden = false;
@@ -424,7 +492,10 @@ async function initialize(matchType = "east") {
   const matchId = `solo-${crypto.randomUUID()}`;
   const gamePreparation = createLocalLuaGame({
     sourceUrl: "./game.lua",
-    players: PLAYERS.map((player, index) => ({ ...player, name: index === 0 ? playerName : player.name })),
+    players: PLAYERS.map((player, index) => ({
+      ...player,
+      name: index === 0 ? playerName : player.name,
+    })),
     playerId: HUMAN_ID,
     randomSeed,
     matchId,
@@ -432,11 +503,24 @@ async function initialize(matchType = "east") {
   });
   try {
     await themeController.rerollPortraits();
-    [game] = await Promise.all([gamePreparation, setupExit, visualRendererReady]);
+    [game] = await Promise.all([
+      gamePreparation,
+      setupExit,
+      visualRendererReady,
+    ]);
     resetAutoActions({ persist: false });
-    soloSave = createMahjongSoloSave({ randomSeed, matchId, matchType, rules, playerName, autoActions });
+    soloSave = createMahjongSoloSave({
+      randomSeed,
+      matchId,
+      matchType,
+      rules,
+      playerName,
+      autoActions,
+    });
     writeMahjongSoloSave(soloSave);
-    await tableController.refresh(game.initialProjection, { animateDealIn: true });
+    await tableController.refresh(game.initialProjection, {
+      animateDealIn: true,
+    });
     elements.app.setAttribute("aria-busy", "false");
     elements.setup.hidden = true;
     elements.loading.hidden = true;
@@ -464,13 +548,20 @@ async function resumeSavedMatch() {
   try {
     restored = await createLocalLuaGame({
       sourceUrl: "./game.lua",
-      players: PLAYERS.map((player, index) => ({ ...player, name: index === 0 ? save.playerName || playerName : player.name })),
+      players: PLAYERS.map((player, index) => ({
+        ...player,
+        name: index === 0 ? save.playerName || playerName : player.name,
+      })),
       playerId: HUMAN_ID,
       randomSeed: save.randomSeed,
       matchId: save.matchId,
       settings: { matchType: save.matchType, rules: save.rules },
     });
-    const projection = await replayMahjongSoloSave({ game: restored, save, playerId: HUMAN_ID });
+    const projection = await replayMahjongSoloSave({
+      game: restored,
+      save,
+      playerId: HUMAN_ID,
+    });
     await visualRendererReady;
     game = restored;
     await themeController.rerollPortraits();
@@ -492,29 +583,42 @@ async function resumeSavedMatch() {
     settingsDialog.setSoloMatchActive(false);
     showSetup();
     elements.loading.hidden = true;
-    showSetupRecoveryError(error instanceof Error && error.message ? error.message : "Failed to restore saved game.");
+    showSetupRecoveryError(
+      error instanceof Error && error.message
+        ? error.message
+        : "Failed to restore saved game.",
+    );
   } finally {
     gameInitializing = false;
   }
 }
 
-async function persistAcceptedAction(action, actorId, projection, currentGame = game) {
+async function persistAcceptedAction(
+  action,
+  actorId,
+  projection,
+  currentGame = game,
+) {
   if (!soloSave) return;
   let next = appendMahjongSoloAction(soloSave, action, actorId);
   if (!next) return;
   if (projection?.state?.phase === "hand_ended" && currentGame) {
     try {
       const snapshot = await currentGame.checkpoint();
-      next = setMahjongSoloCheckpoint(next, {
-        formatVersion: MAHJONG_SOLO_CHECKPOINT_VERSION,
-        actionIndex: next.actions.length,
-        state: snapshot.state,
-        events: snapshot.events,
-        engineVersion: MAHJONG_SOLO_ENGINE_CHECKPOINT_VERSION,
-        stateVersion: snapshot.version,
-      }) || next;
+      next =
+        setMahjongSoloCheckpoint(next, {
+          formatVersion: MAHJONG_SOLO_CHECKPOINT_VERSION,
+          actionIndex: next.actions.length,
+          state: snapshot.state,
+          events: snapshot.events,
+          engineVersion: MAHJONG_SOLO_ENGINE_CHECKPOINT_VERSION,
+          stateVersion: snapshot.version,
+        }) || next;
     } catch (error) {
-      console.warn("Mahjong save checkpoint failed; keeping the action log", error);
+      console.warn(
+        "Mahjong save checkpoint failed; keeping the action log",
+        error,
+      );
     }
   }
   soloSave = next;
@@ -573,7 +677,8 @@ function startMahjongEntry() {
 
 function showSetup() {
   elements.setup.classList.remove("is-leaving", "is-prepared-for-result-exit");
-  for (const button of elements.setup.querySelectorAll("[data-match-type]")) button.disabled = false;
+  for (const button of elements.setup.querySelectorAll("[data-match-type]"))
+    button.disabled = false;
   elements.setup.hidden = false;
 }
 
@@ -586,7 +691,8 @@ function showSetupRecoveryError(message) {
   setupRecoveryErrorTimer = window.setTimeout(() => {
     elements.setupRecoveryError.classList.remove("is-visible");
     window.setTimeout(() => {
-      if (!elements.setupRecoveryError.classList.contains("is-visible")) elements.setupRecoveryError.hidden = true;
+      if (!elements.setupRecoveryError.classList.contains("is-visible"))
+        elements.setupRecoveryError.hidden = true;
     }, 180);
   }, SETUP_RECOVERY_ERROR_DURATION_MS);
 }
@@ -596,7 +702,9 @@ async function endSoloMatch() {
   endingSoloMatch = true;
   try {
     const message = "结束本局并返回标题？本局进度不会保留。";
-    const confirmed = isStandalone ? window.confirm(message) : await playweftClient?.confirm(message);
+    const confirmed = isStandalone
+      ? window.confirm(message)
+      : await playweftClient?.confirm(message);
     if (!confirmed) return;
     settingsDialog.setOpen(false, { restoreFocus: false, animate: false });
     await teardownCompletedSoloMatch();
@@ -625,7 +733,8 @@ function beginSetupExit() {
   const signpost = elements.setup.querySelector(".setup-signpost");
   elements.setup.classList.add("is-leaving");
   elements.loading.classList.add("is-active");
-  for (const button of elements.setup.querySelectorAll("[data-match-type]")) button.disabled = true;
+  for (const button of elements.setup.querySelectorAll("[data-match-type]"))
+    button.disabled = true;
   return new Promise((resolve) => {
     let settled = false;
     const finish = () => {
@@ -636,9 +745,13 @@ function beginSetupExit() {
       resolve();
     };
     const handleTransitionEnd = (event) => {
-      if (event.target === signpost && event.propertyName === "opacity") finish();
+      if (event.target === signpost && event.propertyName === "opacity")
+        finish();
     };
-    const fallbackTimer = window.setTimeout(finish, SETUP_EXIT_DURATION_MS + 100);
+    const fallbackTimer = window.setTimeout(
+      finish,
+      SETUP_EXIT_DURATION_MS + 100,
+    );
     signpost.addEventListener("transitionend", handleTransitionEnd);
   });
 }
