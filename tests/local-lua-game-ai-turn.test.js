@@ -116,6 +116,52 @@ test("local Mahjong runtime calculates a human turn's legal preview without muta
   assert.equal(game.view(HUMAN_ID).state.moveCount, projection.state.moveCount);
 });
 
+test("local Mahjong room preview keeps tsumo and riichi for a completed closed hand", async (t) => {
+  const game = await createGame(t, 12_345);
+  t.after(() => game.close());
+  const checkpoint = game.checkpoint();
+  const playerIds = PLAYERS.map((player) => player.id);
+  const emptyByPlayer = Object.fromEntries(playerIds.map((id) => [id, []]));
+  const falseByPlayer = Object.fromEntries(playerIds.map((id) => [id, false]));
+  const previewState = {
+    players: playerIds,
+    phase: "playing",
+    turnIndex: 1,
+    drawnTile: 89,
+    hands: {
+      [HUMAN_ID]: [5, 6, 9, 13, 17, 18, 21, 25, 49, 53, 57, 81, 85],
+    },
+    wall: [0, 0, 0, 0],
+    deadWall: checkpoint.state.deadWall,
+    kanCount: 0,
+    callOccurred: false,
+    melds: emptyByPlayer,
+    discards: emptyByPlayer,
+    riichi: falseByPlayer,
+    scores: [25_000, 25_000, 25_000, 25_000],
+    matchType: "east",
+    roundWind: 1,
+    handNumber: 1,
+    dealerIndex: 1,
+    honba: 0,
+    riichiSticks: 0,
+    rules: checkpoint.state.rules,
+    kuikaeForbidden: { [HUMAN_ID]: {} },
+    tempFuriten: { [HUMAN_ID]: false },
+    riichiFuriten: { [HUMAN_ID]: false },
+    firstTurn: { [HUMAN_ID]: false },
+    doubleRiichi: { [HUMAN_ID]: false },
+    ippatsu: { [HUMAN_ID]: false },
+    rinshanWin: false,
+    chankanWin: false,
+  };
+
+  const legal = game.legalActions(previewState, HUMAN_ID);
+
+  assert.equal(legal.canTsumo, true);
+  assert.equal(legal.canRiichi, true);
+});
+
 test("local Mahjong runtime calculates the exact river-bottom discard declaration", async (t) => {
   const game = await createGame(t, 12_345);
   t.after(() => game.close());

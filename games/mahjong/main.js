@@ -1165,6 +1165,8 @@ function roomLegalStateKey(state) {
     state?.drawnTile,
     state?.ownHand,
     state?.legalContext?.kanCount,
+    state?.legalContext?.tempFuriten,
+    state?.legalContext?.riichiFuriten,
     state?.legalContext?.firstTurn,
   ]);
 }
@@ -1199,6 +1201,8 @@ function buildRoomLegalState(state) {
     riichiSticks: Number(state?.riichiSticks) || 0,
     rules: state?.rules || {},
     kuikaeForbidden: { [playerId]: context?.kuikaeForbidden || {} },
+    tempFuriten: { [playerId]: context?.tempFuriten === true },
+    riichiFuriten: { [playerId]: context?.riichiFuriten === true },
     firstTurn: { [playerId]: context?.firstTurn === true },
     doubleRiichi: { [playerId]: context?.doubleRiichi === true },
     ippatsu: { [playerId]: context?.ippatsu === true },
@@ -1504,7 +1508,7 @@ function scheduleRoomAi(state) {
   window.clearTimeout(roomAiSchedule);
   roomAiSchedule = window.setTimeout(() => {
     void runRoomAi(state.aiContext, state.aiTurn.player);
-  }, 0);
+  }, AI_DELAY_MS);
 }
 
 async function runRoomAi(aiContext, actorId) {

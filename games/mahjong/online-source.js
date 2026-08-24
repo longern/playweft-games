@@ -117,6 +117,8 @@ local function __mahjong_legal_context(state, player_id)
     discards = state.discards,
     melds = state.melds,
     kuikaeForbidden = state.kuikaeForbidden and state.kuikaeForbidden[player_id] or {},
+    tempFuriten = state.tempFuriten and state.tempFuriten[player_id] == true,
+    riichiFuriten = state.riichiFuriten and state.riichiFuriten[player_id] == true,
     firstTurn = state.firstTurn and state.firstTurn[player_id] == true,
     doubleRiichi = state.doubleRiichi and state.doubleRiichi[player_id] == true,
     ippatsu = state.ippatsu and state.ippatsu[player_id] == true,

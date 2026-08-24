@@ -479,6 +479,40 @@ test("short Mahjong rooms fill missing seats with AI controlled by the owner", a
   assert.equal(result.non_owner_rejected, true);
 });
 
+test("Mahjong room legal context includes the viewer's private furiten flags", async () => {
+  const result = await runOnlineMock(`
+    local function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+    local setup_result = setup({
+      protocolVersion = 1,
+      serverTime = 1000,
+      players = ${PLAYERS},
+      match = { id = "room-legal-preview", ownerId = "p1", randomSeed = "00000000000000000000000000000052" },
+    })
+    local state = setup_result.state
+    state.phase, state.turnIndex, state.wall = "playing", 1, { 1, 2, 3, 4 }
+    state.hands.p1 = ids({ 2,2,3,4,5,5,6,7, 13,14,15, 21,22 })
+    state.drawnTile = ids({ 23 })[1]
+    state.melds.p1, state.discards.p1 = {}, {}
+    state.tempFuriten.p1, state.riichiFuriten.p1 = false, false
+    local projection = view(state, {}, { viewer = { id = "p1", seat = 1, isOwner = true } })
+    local context = projection.state.legalContext
+    result = {
+      sentPrivateFuritenFlags = context.tempFuriten == false and context.riichiFuriten == false,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    sentPrivateFuritenFlags: true,
+  });
+});
+
 test("authoritative Mahjong timers auto-discard and auto-pass with stale protection", async () => {
   const result = await runOnlineMock(`
     local players = ${PLAYERS}
