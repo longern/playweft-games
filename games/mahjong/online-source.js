@@ -294,10 +294,19 @@ local function __mahjong_with_timeout_event(result, state, context, player_id, p
   return result
 end
 
-local __mahjong_online_setup = setup
 function setup(context)
-  local state = __mahjong_online_setup(context)
-  __mahjong_clear_private_state(state)
+  local players, names, ai_players = setup_players(context)
+  if #players ~= PLAYER_COUNT then
+    error("Mahjong requires exactly four players")
+  end
+  local state = {
+    phase = "lobby",
+    players = players,
+    playerNames = names,
+    aiPlayers = ai_players,
+    lobbySeed = normalize_random_seed(context.match and context.match.randomSeed),
+    roomOwnerId = context.match and context.match.ownerId,
+  }
   return {
     state = state,
     events = {},
@@ -307,6 +316,34 @@ end
 
 local __mahjong_online_action = on_action
 function on_action(state, action, context)
+  if state.phase == "lobby" then
+    if not action or action.type ~= "start_match" then
+      return rejected("match_not_started")
+    end
+    local actor = context and context.actor
+    if not actor or actor.isOwner ~= true or actor.id ~= state.roomOwnerId then
+      return rejected("start_match_owner_only")
+    end
+    if action.matchType ~= "east" and action.matchType ~= "hanchan" then
+      return rejected("invalid_match_type")
+    end
+    local settings = {
+      matchType = action.matchType,
+      rules = type(action.rules) == "table" and action.rules or {},
+    }
+    local started = new_match(
+      state.players,
+      state.playerNames,
+      state.lobbySeed,
+      settings,
+      state.aiPlayers
+    )
+    started.roomOwnerId = state.roomOwnerId
+    local result = accepted(started, { { type = "match_started", player = actor.id } })
+    __mahjong_clear_private_state(result.state)
+    result.timerOps = __mahjong_timer_ops(result.state, context)
+    return result
+  end
   if action and action.type == "ai_turn" then
     local actor = context and context.actor
     local player_id = action.playerId
@@ -429,6 +466,18 @@ end
 
 local __mahjong_online_view = view
 function view(state, events, context)
+  if state.phase == "lobby" then
+    return {
+      state = {
+        phase = "lobby",
+        players = state.players,
+        playerNames = state.playerNames,
+        aiPlayers = state.aiPlayers,
+        roomIsOwner = context.viewer.isOwner == true,
+      },
+      events = {},
+    }
+  end
   local view_context = {}
   for key, value in pairs(context or {}) do view_context[key] = value end
   view_context.fastLegalActions = true

@@ -492,7 +492,13 @@ function bindUiEvents() {
   for (const button of elements.setup.querySelectorAll("[data-match-type]")) {
     button.addEventListener(
       "click",
-      () => void initialize(button.dataset.matchType),
+      () => {
+        if (playMode === "room") {
+          void startRoomMatch(button.dataset.matchType);
+          return;
+        }
+        void initialize(button.dataset.matchType);
+      },
     );
   }
   syncAutoActionControls();
@@ -1131,6 +1137,14 @@ async function handleRoomState(message) {
     roomPlayerId,
   );
   if (!projection?.state) return;
+  if (projection.state.phase === "lobby") {
+    session.confirmRoomState();
+    gameInitializing = false;
+    elements.app.setAttribute("aria-busy", "false");
+    if (projection.state.roomIsOwner) showRoomSetup();
+    else showRoomWaiting();
+    return;
+  }
   scheduleRoomAi(projection.state);
   const hadState = Boolean(tableController.getState());
   const animateDealIn =
@@ -1147,6 +1161,7 @@ async function handleRoomState(message) {
     scheduleRoomEarlyTenpaiReport(projection.state, projection.events);
     if (!hadState)
       tableController.syncMatchMusic({ fadeIn: true });
+    gameInitializing = false;
     elements.app.setAttribute("aria-busy", "false");
     elements.setup.hidden = true;
     elements.loading.hidden = true;
@@ -1558,6 +1573,12 @@ function handlePlayweftError(message, _code, requestId) {
       tableController.syncMatchMusic();
     }
   }
+  if (playMode === "room" && !tableController.getState()) {
+    gameInitializing = false;
+    showRoomSetup();
+    showSetupRecoveryError(message);
+    return;
+  }
   if (!tableController.getState()) {
     showLoadingError(message);
     return;
@@ -1572,6 +1593,30 @@ function showRoomWaiting() {
   elements.loadingMessage.textContent = "等待其他玩家加入…";
   elements.loadingMessage.hidden = false;
   elements.loading.hidden = false;
+}
+
+function selectedMatchRules() {
+  return Object.fromEntries(
+    [...elements.setup.querySelectorAll("[data-rule]")].map((input) => [
+      input.dataset.rule,
+      input.checked,
+    ]),
+  );
+}
+
+async function startRoomMatch(matchType = "east") {
+  if (playMode !== "room" || !roomIsOwner || gameInitializing) return;
+  gameInitializing = true;
+  const setupExit = beginSetupExit();
+  const started = await session.dispatch({
+    type: "start_match",
+    matchType,
+    rules: selectedMatchRules(),
+  });
+  if (started) return;
+  await setupExit;
+  gameInitializing = false;
+  showRoomSetup();
 }
 
 function requestPlatformAvatar(context) {
@@ -1603,12 +1648,7 @@ async function initialize(matchType = "east") {
   if (playMode !== "solo" || game || gameInitializing) return;
   gameInitializing = true;
   tableController.syncMatchMusic();
-  const rules = Object.fromEntries(
-    [...elements.setup.querySelectorAll("[data-rule]")].map((input) => [
-      input.dataset.rule,
-      input.checked,
-    ]),
-  );
+  const rules = selectedMatchRules();
   elements.loading.classList.remove("is-active", "is-error");
   elements.loadingMessage.hidden = true;
   elements.loading.hidden = false;
@@ -1816,6 +1856,15 @@ function showSetup() {
   elements.setup.classList.remove("is-leaving", "is-prepared-for-result-exit");
   for (const button of elements.setup.querySelectorAll("[data-match-type]"))
     button.disabled = false;
+  elements.setup.hidden = false;
+}
+
+function showRoomSetup() {
+  closePaipuPanel({ animate: false, restoreFocus: false });
+  elements.setup.classList.remove("is-leaving", "is-prepared-for-result-exit");
+  for (const button of elements.setup.querySelectorAll("[data-match-type]"))
+    button.disabled = false;
+  elements.loading.hidden = true;
   elements.setup.hidden = false;
 }
 

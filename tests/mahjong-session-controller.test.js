@@ -146,6 +146,27 @@ test("mahjong room actions stay locked until the matching room response settles"
   assert.equal(controller.isActionInFlight(), false);
 });
 
+test("mahjong room can submit the host's start action before a table state exists", async () => {
+  const sent = [];
+  const { controller } = createController({
+    state: undefined,
+    mode: "room",
+    callbacks: {
+      sendRoomAction(action) {
+        sent.push(action);
+        return "start-request";
+      },
+    },
+  });
+
+  assert.equal(
+    await controller.dispatch({ type: "start_match", matchType: "hanchan" }),
+    true,
+  );
+  assert.deepEqual(sent, [{ type: "start_match", matchType: "hanchan" }]);
+  assert.equal(controller.isActionInFlight(), true);
+});
+
 test("mahjong restores an accepted projection when a result transition fails", async () => {
   const refreshed = [];
   const transitionErrors = [];

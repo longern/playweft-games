@@ -40,7 +40,7 @@ export function createMahjongSessionController({
     action,
     { source = "manual", onAcceptedProjection } = {},
   ) {
-    if (!getState?.()) return false;
+    if (!getState?.() && getMode?.() !== "room") return false;
     if (source === "manual") scheduler.cancel();
     if (actionInFlight) return false;
 

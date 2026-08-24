@@ -14,12 +14,31 @@ const PLAYERS = `{
   { id = "p4", name = "North", seat = 4 }
 }`;
 
+const AUTO_START_ROOM_FOR_EXISTING_SCENARIOS = String.raw`
+  local __test_lobby_setup = setup
+  function setup(context)
+    local lobby = __test_lobby_setup(context)
+    if context and context.keepLobby == true then return lobby end
+    return on_action(lobby.state, {
+      type = "start_match",
+      matchType = "east",
+      rules = {},
+    }, {
+      serverTime = context and context.serverTime,
+      actor = {
+        id = context.match.ownerId,
+        isOwner = true,
+      },
+    })
+  end
+`;
+
 async function runOnlineMock(scenario) {
   const fullSource = await readFile("games/mahjong/game.lua", "utf8");
   const source = buildMahjongOnlineSource(fullSource);
   const lua = await new LuaFactory().createEngine();
   try {
-    await lua.doString(`${source}\n${scenario}`);
+    await lua.doString(`${source}\n${AUTO_START_ROOM_FOR_EXISTING_SCENARIOS}\n${scenario}`);
     return lua.global.get("result");
   } finally {
     lua.global.close();
@@ -47,6 +66,7 @@ async function runOnlineWithinRuntimeQuota(scenario) {
         return result
       end
       ${source}
+      ${AUTO_START_ROOM_FOR_EXISTING_SCENARIOS}
       ${scenario}
     `);
     return lua.global.get("result");
@@ -65,6 +85,68 @@ test("Mahjong room entry stays below the Lua source limit and excludes solo AI",
   assert.match(onlineSource, /function view\(/);
   assert.doesNotMatch(onlineSource, /function ai_action\(/);
   assert.doesNotMatch(onlineSource, /function choose_ai_discard\(/);
+});
+
+test("Mahjong rooms stay in a private game lobby until the owner starts the selected match", async () => {
+  const result = await runOnlineMock(`
+    local setup_result = setup({
+      keepLobby = true,
+      serverTime = 1000,
+      players = {
+        { id = "host", name = "Host", seat = 1 },
+        { id = "guest", name = "Guest", seat = 2 },
+      },
+      match = {
+        id = "lobby-room",
+        ownerId = "host",
+        randomSeed = "0000000000000000000000000000002a",
+      },
+    })
+    local state = setup_result.state
+    local host_lobby = view(state, {}, { viewer = { id = "host", isOwner = true } })
+    local guest_lobby = view(state, {}, { viewer = { id = "guest", isOwner = false } })
+    local rejected_start = on_action(state, {
+      type = "start_match",
+      matchType = "hanchan",
+    }, {
+      actor = { id = "guest", isOwner = false },
+    })
+    local started = on_action(state, {
+      type = "start_match",
+      matchType = "hanchan",
+      rules = { multipleRon = false, nagashiMangan = false },
+    }, {
+      serverTime = 1001,
+      actor = { id = "host", isOwner = true },
+    })
+    local ai_count = 0
+    for _ in pairs(started.state.aiPlayers) do ai_count = ai_count + 1 end
+    result = {
+      lobby = host_lobby.state.phase == "lobby",
+      host_can_start = host_lobby.state.roomIsOwner == true,
+      guest_cannot_start = guest_lobby.state.roomIsOwner ~= true,
+      lobby_has_no_hand = host_lobby.state.ownHand == nil,
+      rejected_non_owner = rejected_start.accepted == false,
+      started = started.accepted == true and started.state.phase == "playing",
+      selected_length = started.state.matchType == "hanchan",
+      selected_rules = started.state.rules.multipleRon == false and started.state.rules.nagashiMangan == false,
+      added_ai = ai_count == 2,
+      dealt = #(started.state.hands.host or {}) == 13,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    lobby: true,
+    host_can_start: true,
+    guest_cannot_start: true,
+    lobby_has_no_hand: true,
+    rejected_non_owner: true,
+    started: true,
+    selected_length: true,
+    selected_rules: true,
+    added_ai: true,
+    dealt: true,
+  });
 });
 
 test("Mahjong room opens and processes a discard within the runtime instruction quota", async () => {
