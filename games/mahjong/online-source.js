@@ -11,8 +11,10 @@ const OPTIONAL_CALLBACK_START = "function on_player_left";
 
 const ONLINE_STATE_GUARD = String.raw`
 local __mahjong_turn_timer_id = "mahjong-turn"
+local __mahjong_result_timer_id = "mahjong-result"
 local __mahjong_discard_timeout_ms = 20000
 local __mahjong_claim_timeout_ms = 8000
+local __mahjong_result_timeout_ms = 8000
 
 local function __mahjong_now(context)
   return tonumber(context and (context.serverTime or context.firedAt)) or 0
@@ -41,6 +43,80 @@ local function __mahjong_timer_payload(state)
   return payload
 end
 
+local function __mahjong_result_detail_page_count(state)
+  if state.draw == true then return 0 end
+  local results = state.results or {}
+  if #results > 0 then return #results end
+  return state.result and 1 or 0
+end
+
+local function __mahjong_result_page_count(state)
+  if state.phase ~= "hand_ended" then return 0 end
+  local pages = __mahjong_result_detail_page_count(state) + 1
+  if state.matchEnded then pages = pages + 1 end
+  return pages
+end
+
+local function __mahjong_result_summary_page(state)
+  return __mahjong_result_detail_page_count(state) + 1
+end
+
+local function __mahjong_result_page_needs_confirmation(state)
+  return state.phase == "hand_ended"
+    and not (state.matchEnded and tonumber(state.resultPage) == __mahjong_result_summary_page(state))
+end
+
+local function __mahjong_start_result_page(state, context)
+  if not __mahjong_result_page_needs_confirmation(state) then
+    state.resultReadyPlayers = nil
+    state.resultDeadlineAt = nil
+    return
+  end
+  state.resultReadyPlayers = {}
+  local now = __mahjong_now(context)
+  state.resultDeadlineAt = now > 0 and now + __mahjong_result_timeout_ms or nil
+end
+
+local function __mahjong_ensure_result_page(state, context)
+  if state.phase ~= "hand_ended" then
+    state.resultPage = nil
+    state.resultReadyPlayers = nil
+    state.resultDeadlineAt = nil
+    return
+  end
+  state.turnDeadlineAt = nil
+  local page_count = __mahjong_result_page_count(state)
+  local page = tonumber(state.resultPage)
+  if not page or page < 0 or page >= page_count then
+    state.resultPage = 0
+    __mahjong_start_result_page(state, context)
+    return
+  end
+  if __mahjong_result_page_needs_confirmation(state)
+    and type(state.resultReadyPlayers) ~= "table" then
+    __mahjong_start_result_page(state, context)
+  end
+end
+
+local function __mahjong_result_timer_payload(state)
+  return {
+    phase = state.phase,
+    roundWind = tonumber(state.roundWind) or 0,
+    handNumber = tonumber(state.handNumber) or 0,
+    moveCount = tonumber(state.moveCount) or 0,
+    resultPage = tonumber(state.resultPage) or 0,
+  }
+end
+
+local function __mahjong_result_timer_matches(state, payload)
+  return type(payload) == "table"
+    and payload.phase == "hand_ended"
+    and tonumber(payload.roundWind) == tonumber(state.roundWind)
+    and tonumber(payload.handNumber) == tonumber(state.handNumber)
+    and tonumber(payload.moveCount) == tonumber(state.moveCount)
+    and tonumber(payload.resultPage) == tonumber(state.resultPage)
+end
+
 local function __mahjong_timeout_ms(state)
   if state.phase == "playing" then
     return __mahjong_discard_timeout_ms
@@ -52,10 +128,30 @@ local function __mahjong_timeout_ms(state)
 end
 
 local function __mahjong_timer_ops(state, context)
+  __mahjong_ensure_result_page(state, context)
+  if __mahjong_result_page_needs_confirmation(state) then
+    local now = __mahjong_now(context)
+    local after_ms = __mahjong_result_timeout_ms
+    if now > 0 and tonumber(state.resultDeadlineAt) then
+      after_ms = math.max(1, tonumber(state.resultDeadlineAt) - now)
+    end
+    return {
+      { op = "cancel", id = __mahjong_turn_timer_id },
+      {
+        op = "schedule",
+        id = __mahjong_result_timer_id,
+        afterMs = after_ms,
+        payload = __mahjong_result_timer_payload(state),
+      },
+    }
+  end
   local delay = __mahjong_timeout_ms(state)
   if not delay then
     state.turnDeadlineAt = nil
-    return { { op = "cancel", id = __mahjong_turn_timer_id } }
+    return {
+      { op = "cancel", id = __mahjong_turn_timer_id },
+      { op = "cancel", id = __mahjong_result_timer_id },
+    }
   end
   local now = __mahjong_now(context)
   state.turnDeadlineAt = now > 0 and now + delay or nil
@@ -66,6 +162,7 @@ local function __mahjong_timer_ops(state, context)
       afterMs = delay,
       payload = __mahjong_timer_payload(state),
     },
+    { op = "cancel", id = __mahjong_result_timer_id },
   }
 end
 
@@ -106,6 +203,61 @@ end
 
 local __mahjong_online_action = on_action
 function on_action(state, action, context)
+  if action and action.type == "result_ready" then
+    local actor_id = context and context.actor and context.actor.id
+    if state.phase ~= "hand_ended" or state.matchEnded and tonumber(state.resultPage) == __mahjong_result_summary_page(state) then
+      return rejected("result_ready_not_available")
+    end
+    if not actor_id or not state.players then
+      return rejected("not_a_player")
+    end
+    local is_player = false
+    for _, player_id in ipairs(state.players) do
+      if player_id == actor_id then is_player = true break end
+    end
+    if not is_player then return rejected("not_a_player") end
+    __mahjong_ensure_result_page(state, context)
+    if type(state.resultReadyPlayers) ~= "table" then
+      __mahjong_start_result_page(state, context)
+    end
+    if state.resultReadyPlayers[actor_id] then
+      return rejected("result_already_ready")
+    end
+    state.resultReadyPlayers[actor_id] = true
+    local all_ready = true
+    for _, player_id in ipairs(state.players) do
+      if state.resultReadyPlayers[player_id] ~= true then
+        all_ready = false
+        break
+      end
+    end
+    if all_ready then
+      local current_page = tonumber(state.resultPage) or 0
+      local last_interactive_page = __mahjong_result_detail_page_count(state)
+      if current_page < last_interactive_page then
+        state.resultPage = current_page + 1
+        __mahjong_start_result_page(state, context)
+        local result = accepted(state, { { type = "result_page_advanced", resultPage = state.resultPage } })
+        __mahjong_clear_private_state(result.state)
+        result.timerOps = __mahjong_timer_ops(result.state, context)
+        return result
+      end
+      if state.matchEnded then
+        state.resultPage = __mahjong_result_summary_page(state)
+        __mahjong_start_result_page(state, context)
+        local result = accepted(state, { { type = "result_page_advanced", resultPage = state.resultPage } })
+        __mahjong_clear_private_state(result.state)
+        result.timerOps = __mahjong_timer_ops(result.state, context)
+        return result
+      end
+      action = { type = "next_hand" }
+    else
+      local result = accepted(state, { { type = "result_ready", player = actor_id } })
+      __mahjong_clear_private_state(result.state)
+      result.timerOps = __mahjong_timer_ops(result.state, context)
+      return result
+    end
+  end
   local result = __mahjong_online_action(state, action, context)
   if not result or not result.accepted or not result.state then
     return result
@@ -120,12 +272,51 @@ function view(state, events, context)
   local projection = __mahjong_online_view(state, events, context)
   if projection and projection.state then
     projection.state.turnDeadlineAt = state.turnDeadlineAt
+    projection.state.resultPage = tonumber(state.resultPage) or 0
+    projection.state.resultDeadlineAt = state.resultDeadlineAt
+    projection.state.resultPageReady = state.resultReadyPlayers
+      and state.resultReadyPlayers[context.viewer.id] == true
+      or false
+    projection.state.resultSummaryVisible = state.matchEnded == true
+      and tonumber(state.resultPage) == __mahjong_result_summary_page(state)
   end
   return projection
 end
 
 function on_timer(state, timer, context)
   local payload = timer and timer.payload
+  if timer and timer.id == __mahjong_result_timer_id then
+    if not __mahjong_result_page_needs_confirmation(state)
+      or not __mahjong_result_timer_matches(state, payload) then
+      return {
+        state = state,
+        events = {},
+        timerOps = __mahjong_timer_ops(state, context),
+      }
+    end
+    local current_page = tonumber(state.resultPage) or 0
+    local last_interactive_page = __mahjong_result_detail_page_count(state)
+    if current_page < last_interactive_page then
+      state.resultPage = current_page + 1
+      __mahjong_start_result_page(state, context)
+      local result = accepted(state, { { type = "result_timeout", resultPage = state.resultPage } })
+      __mahjong_clear_private_state(result.state)
+      result.timerOps = __mahjong_timer_ops(result.state, context)
+      return result
+    end
+    if state.matchEnded then
+      state.resultPage = __mahjong_result_summary_page(state)
+      __mahjong_start_result_page(state, context)
+      local result = accepted(state, { { type = "result_timeout", resultPage = state.resultPage } })
+      __mahjong_clear_private_state(result.state)
+      result.timerOps = __mahjong_timer_ops(result.state, context)
+      return result
+    end
+    local result = __mahjong_online_action(state, { type = "next_hand" }, {
+      actor = { id = state.players[1] },
+    })
+    return __mahjong_with_timeout_event(result, state, context, nil, 0)
+  end
   if not __mahjong_timer_matches(state, payload) then
     return {
       state = state,

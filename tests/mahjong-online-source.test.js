@@ -245,3 +245,124 @@ test("authoritative Mahjong timers auto-discard and auto-pass with stale protect
   assert.equal(result.claimTimeoutEvent, true);
   assert.equal(result.claimMoved, true);
 });
+
+test("authoritative Mahjong result pages wait for every player, time out safely, and stop on the final ranking", async () => {
+  const result = await runOnlineMock(`
+    local players = ${PLAYERS}
+
+    local function action_context(seat, server_time)
+      return {
+        serverTime = server_time,
+        actor = {
+          id = players[seat].id,
+          role = "player",
+          seat = seat,
+          isOwner = seat == 1,
+        },
+      }
+    end
+
+    local function viewer_context(seat, server_time)
+      return {
+        serverTime = server_time,
+        viewer = {
+          id = players[seat].id,
+          role = "player",
+          seat = seat,
+          isOwner = seat == 1,
+        },
+      }
+    end
+
+    local function scheduled(ops, id)
+      for _, operation in ipairs(ops or {}) do
+        if operation.op == "schedule" and operation.id == id then return operation end
+      end
+      return nil
+    end
+
+    local setup_result = setup({
+      protocolVersion = 1,
+      serverTime = 1000,
+      players = players,
+      match = {
+        id = "mock-result-room",
+        ownerId = "p1",
+        startedAt = 100,
+        randomSeed = "0000000000000000000000000000002a",
+      },
+    })
+    local state = setup_result.state
+    state.phase = "hand_ended"
+    state.draw = false
+    state.matchEnded = false
+    state.results = { { winnerIndex = 1, yaku = {} } }
+    state.result = state.results[1]
+    state.nextDealerIndex = state.dealerIndex
+    state.nextHandNumber = state.handNumber + 1
+    state.nextRoundWind = state.roundWind
+    state.nextHonba = state.honba
+
+    local ready_one = on_action(state, { type = "result_ready" }, action_context(1, 1000))
+    state = ready_one.state
+    local after_one = scheduled(ready_one.timerOps, "mahjong-result")
+    local own_projection = view(state, {}, viewer_context(1, 1000))
+    local other_projection = view(state, {}, viewer_context(2, 1000))
+    local still_waiting = state.resultPage == 0
+
+    for seat = 2, 4 do
+      local ready = on_action(state, { type = "result_ready" }, action_context(seat, 1000 + seat))
+      state = ready.state
+      if seat == 4 then after_one = scheduled(ready.timerOps, "mahjong-result") end
+    end
+    local score_page_after_all_ready = state.resultPage == 1
+
+    for seat = 1, 4 do
+      local ready = on_action(state, { type = "result_ready" }, action_context(seat, 2000 + seat))
+      state = ready.state
+    end
+    local next_hand_after_all_ready = state.phase == "playing"
+
+    state.phase = "hand_ended"
+    state.draw = false
+    state.matchEnded = true
+    state.results = { { winnerIndex = 1, yaku = {} } }
+    state.result = state.results[1]
+    state.resultPage = nil
+    state.resultReadyPlayers = nil
+    state.resultDeadlineAt = nil
+    local terminal_ready = on_action(state, { type = "result_ready" }, action_context(1, 3000))
+    state = terminal_ready.state
+    local detail_timer = scheduled(terminal_ready.timerOps, "mahjong-result")
+    local score_timeout = on_timer(state, detail_timer, { firedAt = 11000 })
+    state = score_timeout.state
+    local result_timeout_advanced = state.resultPage == 1
+    local score_timer = scheduled(score_timeout.timerOps, "mahjong-result")
+    local final_timeout = on_timer(state, score_timer, { firedAt = 19000 })
+    state = final_timeout.state
+    local final_projection = view(state, {}, viewer_context(1, 19000))
+
+    result = {
+      resultTimerScheduled = after_one and after_one.afterMs > 0,
+      ownReadyOnly = own_projection.state.resultPageReady == true
+        and other_projection.state.resultPageReady == false,
+      stillWaiting = still_waiting,
+      scorePageAfterAllReady = score_page_after_all_ready,
+      nextHandAfterAllReady = next_hand_after_all_ready,
+      resultTimeoutAdvanced = result_timeout_advanced,
+      finalRankingVisible = final_projection.state.resultSummaryVisible == true,
+      finalRankingHasNoDeadline = final_projection.state.resultDeadlineAt == nil,
+      finalRankingHasNoTimer = scheduled(final_timeout.timerOps, "mahjong-result") == nil,
+    }
+  `);
+
+  assert.equal(result.resultTimerScheduled, true);
+  assert.equal(result.ownReadyOnly, true);
+  assert.equal(result.stillWaiting, true);
+  assert.equal(result.scorePageAfterAllReady, true);
+  assert.equal(result.nextHandAfterAllReady, true);
+  assert.equal(result.resultTimeoutAdvanced, true);
+  assert.equal(result.finalRankingVisible, true);
+  assert.equal(result.finalRankingHasNoDeadline, true);
+  assert.equal(result.finalRankingHasNoTimer, true);
+});

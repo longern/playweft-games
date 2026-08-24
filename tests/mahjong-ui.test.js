@@ -1328,7 +1328,8 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     html,
     /id="rematch-button" class="result-start-control"[^>]*aria-label="继续"[\s\S]*?id="rematch-button-label"[^>]*>继续<\/span>/,
   );
-  assert.match(view, /const rematchLabel = "继续"/);
+  assert.match(view, /const rematchLabel = resultPageReady \? "等待中" : "继续"/);
+  assert.match(view, /elements\.rematch\.disabled = resultPageReady/);
   assert.doesNotMatch(view, /你赢了/);
   assert.doesNotMatch(
     html,
@@ -1373,7 +1374,7 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   );
   assert.match(
     resultRenderer,
-    /this\.onResultSceneDoubleClick = \(event\) => \{\s*if \(this\.resultButtonHit\(event\)\) return;\s*this\.playStartButtonActivation\(\(\) => this\.onBlankDoubleClick\?\.\(\)\);\s*};/s,
+    /this\.onResultSceneDoubleClick = \(event\) => \{\s*if \(this\.startButtonDisabled\) return;\s*if \(this\.resultButtonHit\(event\)\) return;\s*this\.playStartButtonActivation\(\(\) => this\.onBlankDoubleClick\?\.\(\)\);\s*};/s,
   );
 });
 

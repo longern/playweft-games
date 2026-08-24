@@ -115,6 +115,7 @@ export class MahjongResultHandRenderer {
     this.destroyed = false;
     this.pendingRender = null;
     this.lastRender = null;
+    this.startButtonDisabled = false;
     this.contextLost = false;
     this.appearanceVersion = 0;
     this.animations = new ThreeAnimationController(() => this.drawFrame());
@@ -169,6 +170,7 @@ export class MahjongResultHandRenderer {
       }
     };
     this.onResultSceneDoubleClick = (event) => {
+      if (this.startButtonDisabled) return;
       if (this.resultButtonHit(event)) return;
       this.playStartButtonActivation(() => this.onBlankDoubleClick?.());
     };
@@ -366,9 +368,13 @@ export class MahjongResultHandRenderer {
     state,
     pageIndex = 0,
     playerName = "你",
-    { defaultNames = {}, playerNameIsAuthoritative = false } = {},
+    {
+      defaultNames = {},
+      playerNameIsAuthoritative = false,
+      resultPageReady = false,
+    } = {},
   ) {
-    const options = { defaultNames, playerNameIsAuthoritative };
+    const options = { defaultNames, playerNameIsAuthoritative, resultPageReady };
     this.lastRender = [state, pageIndex, playerName, options];
     if (!this.ready) {
       this.pendingRender = [state, pageIndex, playerName, options];
@@ -383,7 +389,7 @@ export class MahjongResultHandRenderer {
     }
     if (this.contextLost) return;
 
-    this.showStartButton("继续");
+    this.showStartButton(resultPageReady ? "等待中" : "继续", resultPageReady);
 
     if (safePage >= detailCount) {
       this.renderScoreSheet(state, playerName, options);
@@ -608,7 +614,8 @@ export class MahjongResultHandRenderer {
     this.animations.cancel("dora-breath");
   }
 
-  showStartButton(label) {
+  showStartButton(label, disabled = false) {
+    this.startButtonDisabled = disabled;
     if (!this.startButton?.object3d.visible) {
       this.cancelStartButtonAnimation();
       this.startButton?.setPressAmount(0);
@@ -658,6 +665,7 @@ export class MahjongResultHandRenderer {
   }
 
   playStartButtonActivation(onComplete) {
+    if (this.startButtonDisabled) return;
     if (!this.startButton?.object3d.visible) {
       onComplete?.();
       return;
@@ -673,7 +681,12 @@ export class MahjongResultHandRenderer {
   }
 
   resultButtonHit(event) {
-    if (!this.renderer || !this.camera || !this.startButton?.object3d.visible) {
+    if (
+      this.startButtonDisabled ||
+      !this.renderer ||
+      !this.camera ||
+      !this.startButton?.object3d.visible
+    ) {
       return false;
     }
     const bounds = this.renderer.domElement.getBoundingClientRect();

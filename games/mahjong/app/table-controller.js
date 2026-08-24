@@ -74,6 +74,7 @@ export function createMahjongTableController({
   let selectionBeforeRiichi = 0;
   let resultPageIndex = 0;
   let resultPageKey = "";
+  let resultPageReadyPending = false;
   let resultPageAnimating = false;
   let matchSummaryVisible = false;
   let voicedEventKey = "";
@@ -100,6 +101,7 @@ export function createMahjongTableController({
     clearActionUi();
     resultPageIndex = 0;
     resultPageKey = "";
+    resultPageReadyPending = false;
     resultPageAnimating = false;
     hideMatchSummary();
     resetResultPageTrack();
@@ -174,6 +176,8 @@ export function createMahjongTableController({
       defaultNames: getThemeDefaultNames?.(),
       playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
       serverTime: serverTimeAtSync,
+      resultPageReady:
+        state?.resultPageReady === true || resultPageReadyPending,
     }));
     if (matchSummaryVisible) {
       effectRunner.run("result hand cleanup", () => resultHandRenderer.hide());
@@ -182,6 +186,8 @@ export function createMahjongTableController({
       effectRunner.run("result hand", () => resultHandRenderer.render(renderState, resultPageIndex, getPlayerName?.(), {
         defaultNames: getThemeDefaultNames?.(),
         playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
+        resultPageReady:
+          state?.resultPageReady === true || resultPageReadyPending,
       }));
     }
   }
@@ -222,6 +228,32 @@ export function createMahjongTableController({
       elements.result.hidden ||
       elements.result.inert
     ) return;
+    if (getMode?.() === "room") {
+      if (state.matchEnded && state.resultSummaryVisible) return;
+      if (
+        state.resultPageReady === true ||
+        resultPageReadyPending ||
+        isActionInFlight?.()
+      ) return;
+      resultPageReadyPending = true;
+      const defaultNames = getThemeDefaultNames?.();
+      domView.renderResult(state, getPlayerName?.(), true, resultPageIndex, {
+        defaultNames,
+        playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
+        resultPageReady: true,
+      });
+      resultHandRenderer.render(state, resultPageIndex, getPlayerName?.(), {
+        defaultNames,
+        playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
+        resultPageReady: true,
+      });
+      const waiting = await advanceFromResult({ type: "result_ready" });
+      if (!waiting) {
+        resultPageReadyPending = false;
+        renderCurrentState();
+      }
+      return;
+    }
     const detailCount = resultDetailPageCount(state);
     resultPageAnimating = true;
     elements.rematch.disabled = true;
@@ -346,14 +378,27 @@ export function createMahjongTableController({
     const key = current?.phase === "hand_ended"
       ? [current.roundWind, current.handNumber, current.moveCount, current.winType || "draw", ...asArray(current.winners)].join(":")
       : "";
-    if (key === resultPageKey) return;
+    const page = current?.phase === "hand_ended" && getMode?.() === "room"
+      ? Math.max(0, Number(current.resultPage) || 0)
+      : 0;
+    resultPageReadyPending = current?.resultPageReady === true;
+    const keyChanged = key !== resultPageKey;
+    const pageChanged = page !== resultPageIndex;
+    if (!keyChanged && !pageChanged) return;
     resultPageKey = key;
-    resultPageIndex = 0;
+    resultPageIndex = page;
     resultPageAnimating = false;
-    hideMatchSummary();
-    elements.rematch.disabled = false;
+    if (current?.resultSummaryVisible === true) showMatchSummary();
+    else hideMatchSummary();
+    elements.rematch.disabled = current?.resultPageReady === true;
     elements.result.classList.remove("is-exiting");
     resetResultPageTrack();
+  }
+
+  function clearResultPageReadyPending() {
+    if (!resultPageReadyPending) return;
+    resultPageReadyPending = false;
+    renderCurrentState();
   }
 
   function showMatchSummary() {
@@ -800,6 +845,7 @@ export function createMahjongTableController({
     enterRiichiMode,
     cancelRiichiMode,
     continueResult,
+    clearResultPageReadyPending,
     restartMatchFromSummary,
     returnToSetupFromSummary,
     isResultBlankSpace,

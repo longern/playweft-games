@@ -1130,11 +1130,11 @@ function handleRoomActionResult() {
 }
 
 function handlePlayweftError(message, _code, requestId) {
-  if (
-    session.rejectRoomAction(requestId) &&
-    tableController.getState()?.phase === "hand_ended"
-  ) {
-    tableController.syncMatchMusic();
+  if (session.rejectRoomAction(requestId)) {
+    tableController.clearResultPageReadyPending();
+    if (tableController.getState()?.phase === "hand_ended") {
+      tableController.syncMatchMusic();
+    }
   }
   if (!tableController.getState()) {
     showLoadingError(message);
