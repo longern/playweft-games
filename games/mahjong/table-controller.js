@@ -67,6 +67,7 @@ export function createMahjongTableController({
   onReturnToSetup,
 } = {}) {
   let state;
+  let serverTimeAtSync = 0;
   let visibleEvents = [];
   let selectedTileId = 0;
   let riichiMode = false;
@@ -94,6 +95,7 @@ export function createMahjongTableController({
 
   function reset() {
     state = undefined;
+    serverTimeAtSync = 0;
     visibleEvents = [];
     clearActionUi();
     resultPageIndex = 0;
@@ -114,6 +116,10 @@ export function createMahjongTableController({
     if (!projection || (getMode?.() === "solo" && currentGame !== getGame?.())) return;
     const previousState = state;
     state = projection.state;
+    const projectionServerTime = Number(projection.serverTime);
+    serverTimeAtSync = Number.isFinite(projectionServerTime)
+      ? projectionServerTime
+      : 0;
     if (riichiMode && !state.legalActions?.canRiichi) {
       riichiMode = false;
       selectionBeforeRiichi = 0;
@@ -167,6 +173,7 @@ export function createMahjongTableController({
       riichiMode,
       defaultNames: getThemeDefaultNames?.(),
       playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
+      serverTime: serverTimeAtSync,
     }));
     if (matchSummaryVisible) {
       effectRunner.run("result hand cleanup", () => resultHandRenderer.hide());
@@ -187,6 +194,7 @@ export function createMahjongTableController({
     effectRunner.run("result exit DOM", () => domView.render({ ...renderState, legalActions: {} }, [], selectedTileId, getPlayerName?.(), {
       preserveResult: true,
       riichiMode,
+      serverTime: serverTimeAtSync,
       defaultNames: getThemeDefaultNames?.(),
       playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
     }));

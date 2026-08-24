@@ -58,7 +58,13 @@ export async function createLocalLuaGame(options = {}) {
   try {
     const sourceUrl = resolveLocalLuaSourceUrl(options.sourceUrl);
     const initialized = await request("init", {
-      options: { ...options, sourceUrl },
+      options: {
+        ...options,
+        sourceUrl,
+        extraSourceUrls: (options.extraSourceUrls ?? []).map((url) =>
+          resolveLocalLuaSourceUrl(url),
+        ),
+      },
       viewerId: options.playerId,
     });
     return {

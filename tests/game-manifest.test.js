@@ -123,7 +123,7 @@ test("Every game package has a strict Playweft Manifest v1 for bridge v1", async
         players: { min, max },
         server: {
           runtime: "lua",
-          entry: "./game.lua",
+          entry: game === "mahjong" ? "./game-online.lua" : "./game.lua",
           persistence: "durable",
         },
       },

@@ -1095,7 +1095,11 @@ async function handleRoomState(message) {
   if (playMode !== "room") return;
   roomPlayerId = message?.playerId || roomPlayerId;
   const projection = orientMahjongRoomProjection(
-    { state: message?.state, events: message?.events },
+    {
+      state: message?.state,
+      events: message?.events,
+      serverTime: message?.serverTime,
+    },
     roomPlayerId,
   );
   if (!projection?.state) return;

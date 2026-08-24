@@ -40,7 +40,7 @@
       },
       "server": {
         "runtime": "lua",
-        "entry": "./game.lua",
+        "entry": "./game-online.lua",
         "persistence": "durable"
       }
     }

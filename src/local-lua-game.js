@@ -217,6 +217,7 @@ end
  */
 export async function createLocalLuaGame({
   sourceUrl,
+  extraSourceUrls = [],
   players,
   playerId = players?.[0]?.id,
   randomSeed = crypto.randomUUID().replaceAll("-", ""),
@@ -227,12 +228,20 @@ export async function createLocalLuaGame({
     throw new TypeError("sourceUrl and at least one player are required");
   }
 
-  const response = await fetch(sourceUrl);
-  if (!response.ok) {
-    throw new Error(`Unable to load Lua rules (${response.status})`);
-  }
-
-  const source = await response.text();
+  const sourceUrls = [sourceUrl, ...extraSourceUrls];
+  const sources = await Promise.all(
+    sourceUrls.map(async (url) => {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Unable to load Lua rules (${response.status})`);
+      }
+      return response.text();
+    }),
+  );
+  // Keep the sources in one Lua chunk. The shared rules deliberately use
+  // local helpers, so executing the files separately would hide them from
+  // an appended solo AI or replay extension.
+  const source = sources.join("\n");
   // Materialize JS objects as Lua tables. Wasmoon's proxy mode exposes them as
   // userdata, which would not match the room runtime's ordinary action tables.
   const lua = await new LuaFactory().createEngine({ enableProxy: false });
