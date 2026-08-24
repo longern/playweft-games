@@ -1846,8 +1846,12 @@ test("mahjong animation controller shares one frame loop and deduplicates events
   let nextFrame = 0;
   let pendingFrame = null;
   let frameDraws = 0;
+  const shadowUpdates = [];
   const samples = { reveal: [], callout: [] };
-  const animations = new ThreeAnimationController(() => (frameDraws += 1), {
+  const animations = new ThreeAnimationController((updatesShadow) => {
+    frameDraws += 1;
+    shadowUpdates.push(updatesShadow);
+  }, {
     now: () => now,
     requestFrame(callback) {
       pendingFrame = callback;
@@ -1869,6 +1873,7 @@ test("mahjong animation controller shares one frame loop and deduplicates events
   animations.play({
     id: "hand-reveal",
     duration: 100,
+    updatesShadow: true,
     update: (progress) => samples.reveal.push(progress),
   });
   animations.play({
@@ -1882,6 +1887,7 @@ test("mahjong animation controller shares one frame loop and deduplicates events
   assert.deepEqual(samples.reveal, [0.5]);
   assert.deepEqual(samples.callout, [0.25]);
   assert.equal(frameDraws, 1);
+  assert.deepEqual(shadowUpdates, [true]);
   advance(100);
   assert.equal(animations.has("hand-reveal"), false);
   assert.equal(animations.has("action-callout"), true);
@@ -1899,6 +1905,7 @@ test("mahjong animation controller shares one frame loop and deduplicates events
   advance(225);
   advance(350);
   assert.deepEqual(breath, [0.25, 0.5]);
+  assert.deepEqual(shadowUpdates.slice(-2), [false, false]);
   assert.equal(animations.has("dora-breath"), true);
   animations.cancel("dora-breath");
   assert.equal(pendingFrame, null);

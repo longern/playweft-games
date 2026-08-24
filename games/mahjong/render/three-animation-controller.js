@@ -29,13 +29,22 @@ export class ThreeAnimationController {
     this.lastKeys.delete(id);
   }
 
-  play({ id, delay = 0, duration, repeat = false, update, complete }) {
+  play({
+    id,
+    delay = 0,
+    duration,
+    repeat = false,
+    updatesShadow = false,
+    update,
+    complete,
+  }) {
     if (this.destroyed) return false;
     const normalizedDuration = Math.max(1, Number(duration) || 1);
     this.tracks.set(id, {
       beginsAt: this.now() + Math.max(0, Number(delay) || 0),
       duration: normalizedDuration,
       repeat: repeat === true,
+      updatesShadow: updatesShadow === true,
       update,
       complete,
     });
@@ -50,7 +59,7 @@ export class ThreeAnimationController {
     if (finish) {
       track.update?.(1);
       track.complete?.();
-      this.onFrame?.();
+      this.onFrame?.(track.updatesShadow);
     }
     this.stopFrameIfIdle();
     return true;
@@ -79,6 +88,7 @@ export class ThreeAnimationController {
     this.frame = 0;
     if (this.destroyed) return;
     let changed = false;
+    let updatesShadow = false;
     for (const [id, track] of [...this.tracks]) {
       if (now < track.beginsAt) continue;
       const elapsed = Math.max(0, now - track.beginsAt);
@@ -87,12 +97,13 @@ export class ThreeAnimationController {
         : Math.min(1, elapsed / track.duration);
       track.update?.(progress);
       changed = true;
+      updatesShadow ||= track.updatesShadow;
       if (track.repeat) continue;
       if (progress < 1) continue;
       this.tracks.delete(id);
       track.complete?.();
     }
-    if (changed) this.onFrame?.();
+    if (changed) this.onFrame?.(updatesShadow);
     this.ensureFrame();
   }
 

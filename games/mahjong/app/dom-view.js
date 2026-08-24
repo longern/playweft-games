@@ -42,10 +42,6 @@ export class MahjongDomView {
     this.countdownServerTime = 0;
     this.countdownLocalTime = 0;
     this.countdownTimer = 0;
-    this.resultCountdownDeadlineAt = 0;
-    this.resultCountdownServerTime = 0;
-    this.resultCountdownLocalTime = 0;
-    this.resultCountdownTimer = 0;
     this.elements = collectElements();
     this.elements.actionBar.append(
       this.elements.abort,
@@ -126,7 +122,6 @@ export class MahjongDomView {
     this.renderMelds(state);
     this.renderActions(state, selectedTileId, riichiMode);
     this.renderCountdown(state, serverTime);
-    this.renderResultCountdown(state, serverTime);
     this.renderStatus(state, events, playerName, {
       defaultNames,
       playerNameIsAuthoritative,
@@ -532,73 +527,6 @@ export class MahjongDomView {
     }
   }
 
-  renderResultCountdown(state, serverTime) {
-    const element = this.elements.resultCountdown;
-    const deadline = Number(state?.resultDeadlineAt);
-    const syncedServerTime = Number(serverTime);
-    if (
-      !element ||
-      state?.phase !== "hand_ended" ||
-      !Number.isFinite(deadline) ||
-      deadline <= 0 ||
-      !Number.isFinite(syncedServerTime) ||
-      syncedServerTime <= 0
-    ) {
-      this.stopResultCountdown();
-      return;
-    }
-    if (
-      this.resultCountdownDeadlineAt !== deadline ||
-      this.resultCountdownServerTime !== syncedServerTime
-    ) {
-      this.resultCountdownDeadlineAt = deadline;
-      this.resultCountdownServerTime = syncedServerTime;
-      this.resultCountdownLocalTime = Date.now();
-    }
-    this.updateResultCountdown();
-    if (!this.resultCountdownTimer) {
-      this.resultCountdownTimer = globalThis.setInterval(
-        () => this.updateResultCountdown(),
-        250,
-      );
-    }
-  }
-
-  updateResultCountdown() {
-    const element = this.elements.resultCountdown;
-    if (
-      !element ||
-      !this.resultCountdownDeadlineAt ||
-      !this.resultCountdownServerTime
-    ) return;
-    const estimatedServerTime =
-      this.resultCountdownServerTime +
-      (Date.now() - this.resultCountdownLocalTime);
-    const remainingMs = Math.max(
-      0,
-      this.resultCountdownDeadlineAt - estimatedServerTime,
-    );
-    const remainingSeconds = Math.ceil(remainingMs / 1000);
-    element.textContent = String(remainingSeconds);
-    element.classList.toggle("is-urgent", remainingSeconds <= 5);
-    element.hidden = false;
-  }
-
-  stopResultCountdown() {
-    if (this.resultCountdownTimer) {
-      globalThis.clearInterval(this.resultCountdownTimer);
-      this.resultCountdownTimer = 0;
-    }
-    this.resultCountdownDeadlineAt = 0;
-    this.resultCountdownServerTime = 0;
-    this.resultCountdownLocalTime = 0;
-    if (this.elements.resultCountdown) {
-      this.elements.resultCountdown.hidden = true;
-      this.elements.resultCountdown.classList.remove("is-urgent");
-      this.elements.resultCountdown.textContent = "";
-    }
-  }
-
   createGroupedClaimAction(claims, kind) {
     const group = document.createElement("div");
     group.className = "claim-action-group";
@@ -973,7 +901,6 @@ function collectElements() {
     actionHint: document.querySelector("#action-hint"),
     actionBar: document.querySelector("#action-bar"),
     countdown: document.querySelector("#action-countdown"),
-    resultCountdown: document.querySelector("#result-countdown"),
     tenpaiPreview: document.querySelector("#tenpai-preview"),
     tenpaiWaits: document.querySelector("#tenpai-waits"),
     claims: document.querySelector("#claim-actions"),

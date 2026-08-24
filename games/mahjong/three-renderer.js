@@ -108,9 +108,9 @@ export class MahjongThreeRenderer {
     this.contextLost = false;
     this.destroyed = false;
     this.appearanceVersion = 0;
-    this.animations = new ThreeAnimationController(() => {
+    this.animations = new ThreeAnimationController((updatesShadow) => {
       if (!this.renderer || this.destroyed) return;
-      this.renderer.shadowMap.needsUpdate = true;
+      if (updatesShadow) this.renderer.shadowMap.needsUpdate = true;
       this.drawFrame();
     });
   }
@@ -690,6 +690,7 @@ export class MahjongThreeRenderer {
     this.animations.play({
       id: "new-hand-deal",
       duration: NEW_HAND_DEAL_DURATION_MS,
+      updatesShadow: true,
       update: (progress) => {
         if (this.dealInAnimation !== animation) return;
         const eased = newHandDealProgress(progress);
@@ -802,6 +803,7 @@ export class MahjongThreeRenderer {
       id: "hand-reveal",
       delay,
       duration: HAND_REVEAL_FALL_DURATION_MS,
+      updatesShadow: true,
       update: (progress) => {
         for (const { hinge, covered } of revealTiles) {
           const eased = handRevealFallProgress(progress);
@@ -845,6 +847,7 @@ export class MahjongThreeRenderer {
       id: "own-hand-crossfade",
       delay,
       duration: OWN_HAND_CROSSFADE_DURATION_MS,
+      updatesShadow: true,
       update: (progress) => {
         if (this.ownHandCrossfade !== animation) return;
         const eased = ownHandCrossfadeProgress(progress);
@@ -1023,6 +1026,7 @@ export class MahjongThreeRenderer {
     this.animations.play({
       id: "own-draw-entry",
       duration: OWN_DRAW_ENTRY_DURATION_MS,
+      updatesShadow: true,
       update: (progress) => {
         if (this.ownDrawAnimation !== animation) return;
         const eased = ownDrawEntryProgress(progress);
