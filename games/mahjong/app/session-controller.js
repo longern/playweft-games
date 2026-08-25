@@ -1,4 +1,7 @@
-import { automaticMahjongAction, sameMahjongAction } from "../rules/auto-actions.js";
+import {
+  automaticMahjongAction,
+  sameMahjongAction,
+} from "../rules/auto-actions.js";
 import {
   createMahjongAutoActionScheduler,
   shouldScheduleMahjongAiTurn,
@@ -32,7 +35,9 @@ export function createMahjongSessionController({
   scheduler = createMahjongAutoActionScheduler(),
   now = () => globalThis.performance?.now?.() ?? Date.now(),
   wait = (delay) =>
-    new Promise((resolve) => globalThis.setTimeout(resolve, Math.max(0, delay))),
+    new Promise((resolve) =>
+      globalThis.setTimeout(resolve, Math.max(0, delay)),
+    ),
 } = {}) {
   let actionInFlight = false;
   let roomActionRequestId = "";
@@ -118,7 +123,12 @@ export function createMahjongSessionController({
     }
   }
 
-  async function runAiTurn(generation, startedAt, minimumDelay) {
+  async function runAiTurn(
+    generation,
+    startedAt,
+    minimumDelay,
+    recoveryAttempt,
+  ) {
     const currentGame = getGame?.();
     const currentState = getState?.();
     if (
@@ -134,16 +144,22 @@ export function createMahjongSessionController({
 
     const initialTurnKey = aiTurnKey(currentState);
     let reschedule = false;
+    let recover = false;
     actionInFlight = true;
     try {
       const outcome = await currentGame.aiDecision(humanId);
+      if (!sameCurrentGame(currentGame) || !scheduler.isCurrent(generation)) {
+        return;
+      }
       if (
-        !sameCurrentGame(currentGame) ||
-        !scheduler.isCurrent(generation) ||
         outcome?.status !== "acted" ||
         !outcome.action ||
         outcome.version === undefined
       ) {
+        recover = outcome?.status !== "waiting_for_human";
+        if (recover) {
+          console.error("Mahjong AI returned an invalid decision", outcome);
+        }
         return;
       }
       const remainingDelay = minimumDelay - (now() - startedAt);
@@ -162,7 +178,13 @@ export function createMahjongSessionController({
       );
       if (!sameCurrentGame(currentGame)) return;
       if (!applied?.result?.accepted) {
+        console.error("Mahjong AI action was rejected", {
+          actorId: outcome.actorId,
+          action: outcome.action,
+          result: applied?.result,
+        });
         onAiActionRejected?.({ ...outcome, result: applied?.result });
+        recover = true;
         return;
       }
       await persistAcceptedAction?.(
@@ -174,10 +196,21 @@ export function createMahjongSessionController({
       reschedule = true;
       await refreshProjection?.(applied.projection);
     } catch (error) {
+      recover = true;
+      console.error("Mahjong AI decision failed", error);
       if (sameCurrentGame(currentGame)) onAiError?.(error);
     } finally {
       actionInFlight = false;
-      if (reschedule && sameCurrentGame(currentGame)) scheduleAi();
+      if (sameCurrentGame(currentGame) && (reschedule || recover)) {
+        if (reschedule) {
+          scheduleAi();
+        } else if (recoveryAttempt < 1) {
+          scheduleAi({
+            retryIn: delays?.ai ?? 0,
+            recoveryAttempt: recoveryAttempt + 1,
+          });
+        }
+      }
     }
   }
 
@@ -196,11 +229,9 @@ export function createMahjongSessionController({
       ...getAutoActions?.(),
       ...(skipPassClaims ? { passClaims: false } : {}),
     };
-    const autoAction = automaticMahjongAction(
-      currentState,
-      automaticActions,
-      { riichiMode: getRiichiMode?.() === true },
-    );
+    const autoAction = automaticMahjongAction(currentState, automaticActions, {
+      riichiMode: getRiichiMode?.() === true,
+    });
     if (!autoAction) return false;
     const visibleDecision = ["claim", "tsumo", "discard"].includes(
       autoAction.type,
@@ -224,7 +255,7 @@ export function createMahjongSessionController({
       visibleDecision
         ? Math.max(
             visualDelay,
-            autoAction.type === "claim" ? 0 : delays?.ownDrawEntry ?? 0,
+            autoAction.type === "claim" ? 0 : (delays?.ownDrawEntry ?? 0),
           ) + (delays?.autoDecision ?? 0)
         : 0,
     );
@@ -240,7 +271,11 @@ export function createMahjongSessionController({
     });
   }
 
-  function scheduleAi({ afterDealIn = false } = {}) {
+  function scheduleAi({
+    afterDealIn = false,
+    retryIn = 0,
+    recoveryAttempt = 0,
+  } = {}) {
     scheduler.cancel();
     const currentState = getState?.();
     if (
@@ -252,7 +287,7 @@ export function createMahjongSessionController({
       return;
     }
 
-    const visualDelay = afterDealIn ? delays?.newHandDeal ?? 0 : 0;
+    const visualDelay = afterDealIn ? (delays?.newHandDeal ?? 0) : 0;
     if (scheduleAutomaticAction(currentState, { visualDelay })) return;
 
     const automaticTile = automaticRiichiDiscard(currentState, humanId);
@@ -281,8 +316,9 @@ export function createMahjongSessionController({
           generation,
           startedAt,
           visualDelay + (delays?.ai ?? 0),
+          recoveryAttempt,
         ),
-      0,
+      retryIn,
     );
   }
 

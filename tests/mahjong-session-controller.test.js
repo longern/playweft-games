@@ -216,6 +216,97 @@ test("mahjong session drops an AI decision after the turn changes", async () => 
   assert.equal(applied, false);
 });
 
+test("mahjong session reschedules an AI turn when the decision is not actionable", async () => {
+  const state = {
+    phase: "playing",
+    turnIndex: 2,
+    moveCount: 4,
+    drawnTile: 19,
+  };
+  const game = {
+    async aiDecision() {
+      return { status: "idle", version: 4 };
+    },
+  };
+  const { controller, scheduler } = createController({
+    state,
+    game,
+    async wait() {},
+  });
+
+  controller.scheduleAi();
+  scheduler.scheduled[0].callback(scheduler.scheduled[0].generation);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(scheduler.scheduled.length, 2);
+  assert.equal(scheduler.scheduled[1].delay, 10);
+  assert.equal(controller.isActionInFlight(), false);
+
+  scheduler.scheduled[1].callback(scheduler.scheduled[1].generation);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(scheduler.scheduled.length, 2);
+  assert.equal(controller.isActionInFlight(), false);
+});
+
+test("mahjong session does not retry while the AI decision reports a human claimant", async () => {
+  const state = {
+    phase: "claiming",
+    turnIndex: 2,
+    moveCount: 4,
+  };
+  const game = {
+    async aiDecision() {
+      return { status: "waiting_for_human", version: 4, actorId: "human" };
+    },
+  };
+  const { controller, scheduler } = createController({ state, game });
+
+  controller.scheduleAi();
+  scheduler.scheduled[0].callback(scheduler.scheduled[0].generation);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(scheduler.scheduled.length, 1);
+  assert.equal(controller.isActionInFlight(), false);
+});
+
+test("mahjong session reschedules after an AI action is rejected", async () => {
+  const state = {
+    phase: "playing",
+    turnIndex: 2,
+    moveCount: 4,
+    drawnTile: 19,
+  };
+  const game = {
+    async aiDecision() {
+      return {
+        status: "acted",
+        version: 4,
+        actorId: "ai-1",
+        action: { type: "discard", tileId: 19 },
+      };
+    },
+    async action() {
+      return {
+        result: { accepted: false, error: { code: "stale" } },
+      };
+    },
+  };
+  const { controller, scheduler } = createController({
+    state,
+    game,
+    async wait() {},
+  });
+
+  controller.scheduleAi();
+  scheduler.scheduled[0].callback(scheduler.scheduled[0].generation);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(scheduler.scheduled.length, 2);
+  assert.equal(scheduler.scheduled[1].delay, 10);
+  assert.equal(controller.isActionInFlight(), false);
+});
+
 test("mahjong room actions stay locked until the matching room response settles", async () => {
   const sent = [];
   const { controller } = createController({

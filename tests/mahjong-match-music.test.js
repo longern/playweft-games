@@ -180,6 +180,33 @@ test("mahjong cancels an unfinished result fade when the next hand starts immedi
   );
 });
 
+test("mahjong fades out the match track before switching to riichi music", async () => {
+  const audio = new FakeAudio();
+  const { music, frames } = createMusic(audio);
+  const matchSource = "https://example.com/match.mp3";
+  const riichiSource = "https://example.com/riichi.mp3";
+
+  music.sync({ mode: "playing", source: matchSource });
+  await Promise.resolve();
+  assert.equal(audio.paused, false);
+
+  music.sync(
+    { mode: "playing", source: riichiSource },
+    { fadeIn: true, fadeOutBeforeSource: true },
+  );
+  assert.equal(audio.src, matchSource);
+  assert.equal(audio.paused, false);
+  assert.equal(frames.size, 1);
+
+  [...frames.values()][0](Number.MAX_SAFE_INTEGER);
+  assert.equal(audio.src, riichiSource);
+  assert.equal(audio.paused, false);
+  assert.equal(music.gain, 0);
+
+  await Promise.resolve();
+  assert.equal(frames.size, 2, "the new riichi track starts its fade-in after the old track fades out");
+});
+
 test("mahjong hand-end fade retains the embedded window animation-frame receiver", () => {
   const originalWindow = globalThis.window;
   const frames = new Map();

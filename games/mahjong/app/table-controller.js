@@ -29,7 +29,12 @@ const RESULT_PAGE_TRANSITION_MS = 920;
 const RESULT_EXIT_DURATION_MS = 320;
 const NEW_HAND_TABLE_PAUSE_MS = 360;
 const KAN_DRAW_PAUSE_MS = 300;
-const MATCH_SUMMARY_PORTRAIT_POSITIONS = ["0% 0%", "100% 0%", "0% 100%", "100% 100%"];
+const MATCH_SUMMARY_PORTRAIT_POSITIONS = [
+  "0% 0%",
+  "100% 0%",
+  "0% 100%",
+  "100% 100%",
+];
 const MATCH_SUMMARY_POSITIONS = ["bottom", "right", "top", "left"];
 
 /**
@@ -116,7 +121,8 @@ export function createMahjongTableController({
     if (!projection && getMode?.() === "solo") {
       projection = await currentGame?.view(humanId);
     }
-    if (!projection || (getMode?.() === "solo" && currentGame !== getGame?.())) return;
+    if (!projection || (getMode?.() === "solo" && currentGame !== getGame?.()))
+      return;
     const previousState = state;
     state = projection.state;
     const projectionServerTime = Number(projection.serverTime);
@@ -142,8 +148,14 @@ export function createMahjongTableController({
       ["result state", () => syncResultPage(state)],
       ["role voices", () => playRoleVoices(events)],
       ["kan draw presentation", () => queueKanDraw(events)],
-      ["hand insertion presentation", () => queueHandInsertion(previousState, events, ownDiscardedTile)],
-      ["hand-end presentation", () => presentation.syncHandEnd(handEndPresentationPlan(state))],
+      [
+        "hand insertion presentation",
+        () => queueHandInsertion(previousState, events, ownDiscardedTile),
+      ],
+      [
+        "hand-end presentation",
+        () => presentation.syncHandEnd(handEndPresentationPlan(state)),
+      ],
     ]);
     renderCurrentState({ animateDealIn });
     effectRunner.run("river tile sound", () => playRiverTileSound(events));
@@ -167,51 +179,84 @@ export function createMahjongTableController({
     const renderState = presentedState();
     const revealedPlayerIndices = handRevealPlayerIndices(state);
     const coveredPlayerIndices = handCoveredPlayerIndices(state);
-    effectRunner.run("table overlays", () => renderPresentationOverlays(renderState, { animateDealIn }));
-    effectRunner.run("table scene", () => visualRenderer.render(renderState, visibleEvents, {
-      ...domView.visualUi(getPlayerName?.(), selectedTileId),
-      dealInKey: animateDealIn ? handDealInKey(state) : "",
-      animateDealIn,
-      riichiMode,
-      riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),
-      showGameHints: settingsDialog.gameHintsEnabled,
-      revealPlayerIndices: revealedPlayerIndices,
-      coveredPlayerIndices,
-      handRevealKey: handEndPresentationKey(state),
-      animateHandReveal: revealedPlayerIndices.length + coveredPlayerIndices.length > 0 && !presentation.resultVisible,
-      handRevealDelay: isExhaustiveDrawRevealState(state) ? AUTO_DECISION_DELAY_MS : 0,
-      delayHandRevealForCallout: visibleEvents.some((event) => event.type === "won"),
-      deferredHandInsertionSeat: Number(presentation.handInsertion?.seat) || 0,
-      deferredHandInsertionIndex: Number(presentation.handInsertion?.rackIndex) || 0,
-    }));
+    effectRunner.run("table overlays", () =>
+      renderPresentationOverlays(renderState, { animateDealIn }),
+    );
+    effectRunner.run("table scene", () =>
+      visualRenderer.render(renderState, visibleEvents, {
+        ...domView.visualUi(getPlayerName?.(), selectedTileId),
+        dealInKey: animateDealIn ? handDealInKey(state) : "",
+        animateDealIn,
+        riichiMode,
+        riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),
+        showGameHints: settingsDialog.gameHintsEnabled,
+        revealPlayerIndices: revealedPlayerIndices,
+        coveredPlayerIndices,
+        handRevealKey: handEndPresentationKey(state),
+        animateHandReveal:
+          revealedPlayerIndices.length + coveredPlayerIndices.length > 0 &&
+          !presentation.resultVisible,
+        handRevealDelay: isExhaustiveDrawRevealState(state)
+          ? AUTO_DECISION_DELAY_MS
+          : 0,
+        delayHandRevealForCallout: visibleEvents.some(
+          (event) => event.type === "won",
+        ),
+        deferredHandInsertionSeat:
+          Number(presentation.handInsertion?.seat) || 0,
+        deferredHandInsertionIndex:
+          Number(presentation.handInsertion?.rackIndex) || 0,
+      }),
+    );
   }
 
-  function renderPresentationOverlays(renderState = presentedState(), { animateDealIn = false } = {}) {
+  function renderPresentationOverlays(
+    renderState = presentedState(),
+    { animateDealIn = false } = {},
+  ) {
     if (!renderState) return;
-    effectRunner.run("table DOM", () => domView.render(renderState, visibleEvents, selectedTileId, getPlayerName?.(), {
-      showResult: presentation.resultVisible,
-      showGameHints: settingsDialog.gameHintsEnabled,
-      showDrawReveal: isDrawRevealState(state) && presentation.drawRevealVisible && !presentation.resultVisible,
-      resultPage: resultPageIndex,
-      dealInKey: animateDealIn ? handDealInKey(state) : "",
-      animateDealIn,
-      riichiMode,
-      defaultNames: getThemeDefaultNames?.(),
-      playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
-      serverTime: serverTimeAtSync,
-      resultPageReady:
-        state?.resultPageReady === true || resultPageReadyPending,
-    }));
+    effectRunner.run("table DOM", () =>
+      domView.render(
+        renderState,
+        visibleEvents,
+        selectedTileId,
+        getPlayerName?.(),
+        {
+          showResult: presentation.resultVisible,
+          showGameHints: settingsDialog.gameHintsEnabled,
+          showDrawReveal:
+            isDrawRevealState(state) &&
+            presentation.drawRevealVisible &&
+            !presentation.resultVisible,
+          resultPage: resultPageIndex,
+          dealInKey: animateDealIn ? handDealInKey(state) : "",
+          animateDealIn,
+          riichiMode,
+          defaultNames: getThemeDefaultNames?.(),
+          playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
+          serverTime: serverTimeAtSync,
+          resultPageReady:
+            state?.resultPageReady === true || resultPageReadyPending,
+        },
+      ),
+    );
     if (matchSummaryVisible) {
       effectRunner.run("result hand cleanup", () => resultHandRenderer.hide());
       effectRunner.run("match summary", () => renderMatchSummary());
     } else {
-      effectRunner.run("result hand", () => resultHandRenderer.render(renderState, resultPageIndex, getPlayerName?.(), {
-        defaultNames: getThemeDefaultNames?.(),
-        playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
-        resultPageReady:
-          state?.resultPageReady === true || resultPageReadyPending,
-      }));
+      effectRunner.run("result hand", () =>
+        resultHandRenderer.render(
+          renderState,
+          resultPageIndex,
+          getPlayerName?.(),
+          {
+            defaultNames: getThemeDefaultNames?.(),
+            playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
+            resultPageReady:
+              state?.resultPageReady === true || resultPageReadyPending,
+          },
+        ),
+      );
     }
   }
 
@@ -220,28 +265,38 @@ export function createMahjongTableController({
     visibleEvents = [];
     selectedTileId = 0;
     riichiMode = false;
-    effectRunner.run("result exit DOM", () => domView.render({ ...renderState, legalActions: {} }, [], selectedTileId, getPlayerName?.(), {
-      preserveResult: true,
-      riichiMode,
-      serverTime: serverTimeAtSync,
-      defaultNames: getThemeDefaultNames?.(),
-      playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
-    }));
+    effectRunner.run("result exit DOM", () =>
+      domView.render(
+        { ...renderState, legalActions: {} },
+        [],
+        selectedTileId,
+        getPlayerName?.(),
+        {
+          preserveResult: true,
+          riichiMode,
+          serverTime: serverTimeAtSync,
+          defaultNames: getThemeDefaultNames?.(),
+          playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
+        },
+      ),
+    );
     const staticState = { ...renderState, legalActions: {} };
-    effectRunner.run("result exit scene", () => visualRenderer.render(staticState, [], {
-      ...domView.visualUi(getPlayerName?.(), selectedTileId),
-      riichiMode,
-      riichiCandidateTiles: [],
-      revealPlayerIndices: [],
-      coveredPlayerIndices: [],
-      handRevealKey: "",
-      animateHandReveal: false,
-      dealInKey: "",
-      animateDealIn: false,
-      delayHandRevealForCallout: false,
-      deferredHandInsertionSeat: 0,
-      deferredHandInsertionIndex: 0,
-    }));
+    effectRunner.run("result exit scene", () =>
+      visualRenderer.render(staticState, [], {
+        ...domView.visualUi(getPlayerName?.(), selectedTileId),
+        riichiMode,
+        riichiCandidateTiles: [],
+        revealPlayerIndices: [],
+        coveredPlayerIndices: [],
+        handRevealKey: "",
+        animateHandReveal: false,
+        dealInKey: "",
+        animateDealIn: false,
+        delayHandRevealForCallout: false,
+        deferredHandInsertionSeat: 0,
+        deferredHandInsertionIndex: 0,
+      }),
+    );
   }
 
   async function continueResult() {
@@ -250,14 +305,16 @@ export function createMahjongTableController({
       state?.phase !== "hand_ended" ||
       elements.result.hidden ||
       elements.result.inert
-    ) return;
+    )
+      return;
     if (getMode?.() === "room") {
       if (state.matchEnded && state.resultSummaryVisible) return;
       if (
         state.resultPageReady === true ||
         resultPageReadyPending ||
         isActionInFlight?.()
-      ) return;
+      )
+        return;
       resultPageReadyPending = true;
       const defaultNames = getThemeDefaultNames?.();
       domView.renderResult(state, getPlayerName?.(), true, resultPageIndex, {
@@ -284,7 +341,8 @@ export function createMahjongTableController({
       if (resultPageIndex < detailCount) {
         const outgoing = elements.resultDetailContent.cloneNode(true);
         copyCanvasBitmaps(elements.resultDetailContent, outgoing);
-        for (const node of [outgoing, ...outgoing.querySelectorAll("[id]")]) node.removeAttribute("id");
+        for (const node of [outgoing, ...outgoing.querySelectorAll("[id]")])
+          node.removeAttribute("id");
         outgoing.classList.add("is-step-previous");
         outgoing.setAttribute("aria-hidden", "true");
         elements.resultTrack.prepend(outgoing);
@@ -300,7 +358,11 @@ export function createMahjongTableController({
         });
         void elements.resultTrack.offsetWidth;
         elements.resultTrack.classList.add("is-step-advancing");
-        await waitForAnimation(elements.resultTrack, "result-page-step", RESULT_PAGE_TRANSITION_MS);
+        await waitForAnimation(
+          elements.resultTrack,
+          "result-page-step",
+          RESULT_PAGE_TRANSITION_MS,
+        );
         return;
       }
       if (state.matchEnded) {
@@ -314,12 +376,14 @@ export function createMahjongTableController({
       resultPageAnimating = false;
       elements.rematch.disabled = false;
       resetResultPageTrack();
-      if (state?.phase === "hand_ended") elements.result.classList.remove("is-exiting");
+      if (state?.phase === "hand_ended")
+        elements.result.classList.remove("is-exiting");
     }
   }
 
   async function restartMatchFromSummary() {
-    if (!matchSummaryVisible || !state?.matchEnded || resultPageAnimating) return;
+    if (!matchSummaryVisible || !state?.matchEnded || resultPageAnimating)
+      return;
     resultPageAnimating = true;
     elements.matchSummaryRematch.disabled = true;
     elements.matchSummarySetup.disabled = true;
@@ -332,12 +396,19 @@ export function createMahjongTableController({
       elements.matchSummaryRematch.disabled = false;
       elements.matchSummarySetup.disabled = false;
       resetResultPageTrack();
-      if (state?.phase === "hand_ended") elements.result.classList.remove("is-exiting");
+      if (state?.phase === "hand_ended")
+        elements.result.classList.remove("is-exiting");
     }
   }
 
   async function returnToSetupFromSummary() {
-    if (getMode?.() !== "solo" || !matchSummaryVisible || !state?.matchEnded || resultPageAnimating) return;
+    if (
+      getMode?.() !== "solo" ||
+      !matchSummaryVisible ||
+      !state?.matchEnded ||
+      resultPageAnimating
+    )
+      return;
     resultPageAnimating = true;
     elements.matchSummaryRematch.disabled = true;
     elements.matchSummarySetup.disabled = true;
@@ -346,7 +417,11 @@ export function createMahjongTableController({
       elements.setup.classList.add("is-prepared-for-result-exit");
       elements.setup.hidden = false;
       elements.result.classList.add("is-exiting");
-      await waitForAnimation(elements.result, "result-screen-exit", RESULT_EXIT_DURATION_MS);
+      await waitForAnimation(
+        elements.result,
+        "result-screen-exit",
+        RESULT_EXIT_DURATION_MS,
+      );
       hideMatchSummary();
       syncMatchMusic({ enabled: false });
       await onReturnToSetup?.();
@@ -370,7 +445,11 @@ export function createMahjongTableController({
       onAcceptedProjection: async (projection) => {
         renderResultExitTable(projection?.state);
         elements.result.classList.add("is-exiting");
-        await waitForAnimation(elements.result, "result-screen-exit", RESULT_EXIT_DURATION_MS);
+        await waitForAnimation(
+          elements.result,
+          "result-screen-exit",
+          RESULT_EXIT_DURATION_MS,
+        );
         hideMatchSummary();
         elements.result.hidden = true;
         elements.result.classList.remove("is-exiting");
@@ -387,7 +466,11 @@ export function createMahjongTableController({
     renderResultExitTable(state);
     elements.result.classList.add("is-exiting");
     try {
-      await waitForAnimation(elements.result, "result-screen-exit", RESULT_EXIT_DURATION_MS);
+      await waitForAnimation(
+        elements.result,
+        "result-screen-exit",
+        RESULT_EXIT_DURATION_MS,
+      );
       hideMatchSummary();
       elements.result.hidden = true;
       await waitForDelay(NEW_HAND_TABLE_PAUSE_MS);
@@ -398,12 +481,20 @@ export function createMahjongTableController({
   }
 
   function syncResultPage(current) {
-    const key = current?.phase === "hand_ended"
-      ? [current.roundWind, current.handNumber, current.moveCount, current.winType || "draw", ...asArray(current.winners)].join(":")
-      : "";
-    const page = current?.phase === "hand_ended" && getMode?.() === "room"
-      ? Math.max(0, Number(current.resultPage) || 0)
-      : 0;
+    const key =
+      current?.phase === "hand_ended"
+        ? [
+            current.roundWind,
+            current.handNumber,
+            current.moveCount,
+            current.winType || "draw",
+            ...asArray(current.winners),
+          ].join(":")
+        : "";
+    const page =
+      current?.phase === "hand_ended" && getMode?.() === "room"
+        ? Math.max(0, Number(current.resultPage) || 0)
+        : 0;
     resultPageReadyPending = current?.resultPageReady === true;
     const keyChanged = key !== resultPageKey;
     const pageChanged = page !== resultPageIndex;
@@ -448,26 +539,37 @@ export function createMahjongTableController({
     });
     const winner = rows[0];
     if (!winner) return;
-    elements.matchSummaryRows.replaceChildren(...rows.map((entry) => {
-      const row = document.createElement("tr");
-      for (const value of [`${entry.rank}位`, entry.name, String(entry.score)]) {
-        const cell = document.createElement("td");
-        cell.textContent = value;
-        row.append(cell);
-      }
-      return row;
-    }));
+    elements.matchSummaryRows.replaceChildren(
+      ...rows.map((entry) => {
+        const row = document.createElement("tr");
+        for (const value of [
+          `${entry.rank}位`,
+          entry.name,
+          String(entry.score),
+        ]) {
+          const cell = document.createElement("td");
+          cell.textContent = value;
+          row.append(cell);
+        }
+        return row;
+      }),
+    );
     renderMatchSummaryPortrait(winner.seat);
   }
 
   function renderMatchSummaryPortrait(seat) {
     const index = Number(seat) - 1;
     const position = MATCH_SUMMARY_POSITIONS[index] || "bottom";
-    const stationImage = elements.stations[position]?.querySelector("[data-player-avatar]");
+    const stationImage = elements.stations[position]?.querySelector(
+      "[data-player-avatar]",
+    );
     const source = stationImage?.dataset.source || "";
     const crop = elements.matchSummaryPhotoCrop;
     const image = elements.matchSummaryPhotoImage;
-    crop.style.setProperty("--match-summary-portrait-position", MATCH_SUMMARY_PORTRAIT_POSITIONS[index] || "0% 0%");
+    crop.style.setProperty(
+      "--match-summary-portrait-position",
+      MATCH_SUMMARY_PORTRAIT_POSITIONS[index] || "0% 0%",
+    );
     if (!source) {
       crop.classList.remove("is-custom");
       image.hidden = true;
@@ -494,7 +596,13 @@ export function createMahjongTableController({
   }
 
   function isResultBlankSpace(target) {
-    return target === elements.result || target === elements.resultStage || target === elements.resultTrack || target === elements.resultDetailContent || target === elements.resultScoreContent;
+    return (
+      target === elements.result ||
+      target === elements.resultStage ||
+      target === elements.resultTrack ||
+      target === elements.resultDetailContent ||
+      target === elements.resultScoreContent
+    );
   }
 
   function copyCanvasBitmaps(source, clone) {
@@ -512,14 +620,18 @@ export function createMahjongTableController({
   function resetResultPageTrack() {
     const { resultTrack } = elements;
     resultTrack.classList.add("is-step-resetting");
-    resultTrack.querySelectorAll(".is-step-previous").forEach((page) => page.remove());
+    resultTrack
+      .querySelectorAll(".is-step-previous")
+      .forEach((page) => page.remove());
     resultTrack.classList.remove("is-step-advancing");
     void resultTrack.offsetWidth;
     resultTrack.classList.remove("is-step-resetting");
   }
 
   function waitForDelay(duration) {
-    return new Promise((resolve) => browserWindow.setTimeout(resolve, duration));
+    return new Promise((resolve) =>
+      browserWindow.setTimeout(resolve, duration),
+    );
   }
 
   function waitForAnimation(element, animationName, duration) {
@@ -533,14 +645,22 @@ export function createMahjongTableController({
         resolve();
       };
       const handleAnimationEnd = (event) => {
-        if (event.target === element && event.animationName === animationName) finish();
+        if (event.target === element && event.animationName === animationName)
+          finish();
       };
       const fallbackTimer = browserWindow.setTimeout(finish, duration + 100);
       element.addEventListener("animationend", handleAnimationEnd);
     });
   }
 
-  function syncMatchMusic({ enabled, transition, userGesture = false, fadeIn = false, fadeOut = false } = {}) {
+  function syncMatchMusic({
+    enabled,
+    transition,
+    userGesture = false,
+    fadeIn = false,
+    fadeOut = false,
+    fadeOutBeforeSource = false,
+  } = {}) {
     const target = mahjongMatchMusicTarget({
       gameInitializing: getGameInitializing?.(),
       game: getGame?.(),
@@ -552,10 +672,14 @@ export function createMahjongTableController({
     });
     if (enabled === false) target.mode = "stopped";
     if (userGesture && target.mode !== "playing") return;
-    if (target.source) target.source = new URL(target.source, document.baseURI).href;
+    if (target.source)
+      target.source = new URL(target.source, document.baseURI).href;
     matchMusicController.sync(target, {
-      fadeIn: fadeIn || (target.mode === "playing" && matchMusicController.gain === 0),
+      fadeIn:
+        fadeIn ||
+        (target.mode === "playing" && matchMusicController.gain === 0),
       fadeOut,
+      ...(fadeOutBeforeSource ? { fadeOutBeforeSource: true } : {}),
     });
   }
 
@@ -574,7 +698,7 @@ export function createMahjongTableController({
       !hasMahjongRiichi(previousState) &&
       hasMahjongRiichi(currentState)
     ) {
-      syncMatchMusic({ fadeIn: true });
+      syncMatchMusic({ fadeIn: true, fadeOutBeforeSource: true });
     }
   }
 
@@ -594,25 +718,47 @@ export function createMahjongTableController({
   function playRoleVoices(events) {
     const voiceEvents = events.filter((event) => voiceCueForEvent(event));
     if (!voiceEvents.length) return;
-    const key = [Number(state?.moveCount) || 0, ...voiceEvents.map((event) => `${event.type}:${event.kind ?? event.method ?? ""}:${event.playerIndex}`)].join("|");
+    const key = [
+      Number(state?.moveCount) || 0,
+      ...voiceEvents.map(
+        (event) =>
+          `${event.type}:${event.kind ?? event.method ?? ""}:${event.playerIndex}`,
+      ),
+    ].join("|");
     if (key === voicedEventKey) return;
     voicedEventKey = key;
     for (const event of voiceEvents) {
       const cue = voiceCueForEvent(event);
-      if (event.type === "won") playRoleVoiceSequence(event.playerIndex, [cue, ...winningYakuVoiceCues(event.playerIndex)]);
+      if (event.type === "won")
+        playRoleVoiceSequence(event.playerIndex, [
+          cue,
+          ...winningYakuVoiceCues(event.playerIndex),
+        ]);
       else playRoleVoice(event.playerIndex, cue);
     }
   }
 
   function winningYakuVoiceCues(playerIndex) {
-    const score = asArray(state?.results).find((result) => Number(result?.winnerIndex) === Number(playerIndex));
-    return asArray(score?.yaku).map((yaku) => MAHJONG_YAKU_VOICE_KEYS[yaku?.name]).map((cue) => cue && `yaku:${cue}`).filter(Boolean);
+    const score = asArray(state?.results).find(
+      (result) => Number(result?.winnerIndex) === Number(playerIndex),
+    );
+    return asArray(score?.yaku)
+      .map((yaku) => MAHJONG_YAKU_VOICE_KEYS[yaku?.name])
+      .map((cue) => cue && `yaku:${cue}`)
+      .filter(Boolean);
   }
 
   function voiceCueForEvent(event) {
-    if (event?.type === "claimed") return ["chi", "pon", "kan"].includes(event.kind) || ["ankan", "kakan"].includes(event.kind) ? (event.kind === "ankan" || event.kind === "kakan" ? "kan" : event.kind) : "";
+    if (event?.type === "claimed")
+      return ["chi", "pon", "kan"].includes(event.kind) ||
+        ["ankan", "kakan"].includes(event.kind)
+        ? event.kind === "ankan" || event.kind === "kakan"
+          ? "kan"
+          : event.kind
+        : "";
     if (event?.type === "riichi") return "riichi";
-    if (event?.type === "won") return event.method === "tsumo" ? "tsumo" : "ron";
+    if (event?.type === "won")
+      return event.method === "tsumo" ? "tsumo" : "ron";
     return "";
   }
 
@@ -634,9 +780,14 @@ export function createMahjongTableController({
   }
 
   function playRoleVoiceSequence(playerIndex, cues) {
-    const sources = cues.map((cue) => getRoleVoiceSource(playerIndex, cue)).filter(Boolean);
+    const sources = cues
+      .map((cue) => getRoleVoiceSource(playerIndex, cue))
+      .filter(Boolean);
     if (!sources.length) return;
-    void sources.reduce((sequence, source) => sequence.then(() => playVoiceSource(source)), Promise.resolve());
+    void sources.reduce(
+      (sequence, source) => sequence.then(() => playVoiceSource(source)),
+      Promise.resolve(),
+    );
   }
 
   function getRoleVoiceSource(playerIndex, cue) {
@@ -649,7 +800,10 @@ export function createMahjongTableController({
   function playVoiceSource(source) {
     return new Promise((resolve) => {
       const audio = new Audio(source);
-      const finish = () => { audio.remove(); resolve(); };
+      const finish = () => {
+        audio.remove();
+        resolve();
+      };
       audio.preload = "auto";
       audio.addEventListener("ended", finish, { once: true });
       audio.addEventListener("error", finish, { once: true });
@@ -659,17 +813,42 @@ export function createMahjongTableController({
 
   function presentedState() {
     let presented = state;
-    if (presentation.kanDrawPending) presented = { ...presented, drawnTile: 0, drawnPlayerIndex: 0, legalActions: {} };
+    if (presentation.kanDrawPending)
+      presented = {
+        ...presented,
+        drawnTile: 0,
+        drawnPlayerIndex: 0,
+        legalActions: {},
+      };
     if (Number(presentation.handInsertion?.seat) !== 1) return presented;
-    return { ...presented, ownHand: presentation.handInsertion.ownHand, drawnTile: presentation.handInsertion.drawnTile };
+    return {
+      ...presented,
+      ownHand: presentation.handInsertion.ownHand,
+      drawnTile: presentation.handInsertion.drawnTile,
+    };
   }
 
   function queueKanDraw(events) {
-    const kan = asArray(events).find((event) => event?.type === "claimed" && ["kan", "ankan", "kakan"].includes(event.kind));
+    const kan = asArray(events).find(
+      (event) =>
+        event?.type === "claimed" &&
+        ["kan", "ankan", "kakan"].includes(event.kind),
+    );
     if (!kan) return;
-    const draw = asArray(events).find((event) => event?.type === "drew" && Number(event.playerIndex) === Number(kan.playerIndex));
+    const draw = asArray(events).find(
+      (event) =>
+        event?.type === "drew" &&
+        Number(event.playerIndex) === Number(kan.playerIndex),
+    );
     if (!draw) return;
-    const key = [Number(state?.roundWind) || 0, Number(state?.handNumber) || 0, Number(state?.honba) || 0, Number(state?.moveCount) || 0, kan.kind, Number(kan.playerIndex) || 0].join(":");
+    const key = [
+      Number(state?.roundWind) || 0,
+      Number(state?.handNumber) || 0,
+      Number(state?.honba) || 0,
+      Number(state?.moveCount) || 0,
+      kan.kind,
+      Number(kan.playerIndex) || 0,
+    ].join(":");
     presentation.scheduleKanDraw(key, KAN_DRAW_PAUSE_MS);
   }
 
@@ -678,79 +857,146 @@ export function createMahjongTableController({
       presentation.cancelHandInsertion();
       return;
     }
-    const discard = asArray(events).find((event) => (event?.type === "discarded" || event?.type === "riichi") && typeof event.fromDrawn === "boolean");
+    const discard = asArray(events).find(
+      (event) =>
+        (event?.type === "discarded" || event?.type === "riichi") &&
+        typeof event.fromDrawn === "boolean",
+    );
     if (!discard) return;
-    const key = [Number(state?.roundWind) || 0, Number(state?.handNumber) || 0, Number(state?.honba) || 0, Number(state?.moveCount) || 0, discard.type, Number(discard.playerIndex) || 0, Number(discard.tile) || 0, String(discard.fromDrawn)].join(":");
-    presentation.scheduleHandInsertion(key, deferredHandInsertion(previousState, events, { ownDiscardedTile }), HAND_INSERTION_DELAY_MS);
+    const key = [
+      Number(state?.roundWind) || 0,
+      Number(state?.handNumber) || 0,
+      Number(state?.honba) || 0,
+      Number(state?.moveCount) || 0,
+      discard.type,
+      Number(discard.playerIndex) || 0,
+      Number(discard.tile) || 0,
+      String(discard.fromDrawn),
+    ].join(":");
+    presentation.scheduleHandInsertion(
+      key,
+      deferredHandInsertion(previousState, events, { ownDiscardedTile }),
+      HAND_INSERTION_DELAY_MS,
+    );
   }
 
   function handEndPresentationKey(current) {
     if (current?.phase !== "hand_ended") return "";
-    if (current.result?.abortive === true) return `${current.moveCount}:abortive-draw:${current.abortiveReason || current.result.reason || "unknown"}`;
-    if (current.abortiveReason === "九种九牌" && Number(current.abortivePlayerIndex) > 0) return `${current.moveCount}:nine-terminals:${current.abortivePlayerIndex}`;
+    if (current.result?.abortive === true)
+      return `${current.moveCount}:abortive-draw:${current.abortiveReason || current.result.reason || "unknown"}`;
+    if (
+      current.abortiveReason === "九种九牌" &&
+      Number(current.abortivePlayerIndex) > 0
+    )
+      return `${current.moveCount}:nine-terminals:${current.abortivePlayerIndex}`;
     const exhaustive = exhaustiveDrawPresentation(current);
-    if (exhaustive.revealed.length + exhaustive.covered.length > 0) return `${current.moveCount}:exhaustive-draw`;
-    if (current.winType === "nagashi") return `${current.moveCount}:nagashi:${asArray(current.winners).join(",")}`;
+    if (exhaustive.revealed.length + exhaustive.covered.length > 0)
+      return `${current.moveCount}:exhaustive-draw`;
+    if (current.winType === "nagashi")
+      return `${current.moveCount}:nagashi:${asArray(current.winners).join(",")}`;
     if (current.draw) return "";
     const winners = asArray(current.winners);
-    return winners.length ? `${current.moveCount}:${current.winType}:${winners.join(",")}` : "";
+    return winners.length
+      ? `${current.moveCount}:${current.winType}:${winners.join(",")}`
+      : "";
   }
 
   function handDealInKey(current) {
     if (!current || current.phase === "hand_ended") return "";
-    return [Number(current.roundWind) || 0, Number(current.handNumber) || 0, Number(current.honba) || 0, Number(current.moveCount) || 0].join(":");
+    return [
+      Number(current.roundWind) || 0,
+      Number(current.handNumber) || 0,
+      Number(current.honba) || 0,
+      Number(current.moveCount) || 0,
+    ].join(":");
   }
 
   function isDrawRevealState(current) {
-    return current?.phase === "hand_ended" && (current.winType === "nagashi" || (current.draw === true && (current.result?.abortive === true || isExhaustiveDrawRevealState(current))));
+    return (
+      current?.phase === "hand_ended" &&
+      (current.winType === "nagashi" ||
+        (current.draw === true &&
+          (current.result?.abortive === true ||
+            isExhaustiveDrawRevealState(current))))
+    );
   }
 
   function isExhaustiveDrawRevealState(current) {
-    return current?.phase === "hand_ended" && current.draw === true && current.result?.abortive !== true && Array.isArray(current.result?.tenpai);
+    return (
+      current?.phase === "hand_ended" &&
+      current.draw === true &&
+      current.result?.abortive !== true &&
+      Array.isArray(current.result?.tenpai)
+    );
   }
 
   function handEndPresentationPlan(current) {
     const key = handEndPresentationKey(current);
     if (!key) return null;
     const showDrawReveal = isDrawRevealState(current);
-    const handMotionCount = handRevealPlayerIndices(current).length + handCoveredPlayerIndices(current).length;
+    const handMotionCount =
+      handRevealPlayerIndices(current).length +
+      handCoveredPlayerIndices(current).length;
     const waitForHandReveal = showDrawReveal && handMotionCount > 0;
     return {
       key,
       waitForHandReveal,
       showDrawReveal,
-      drawRevealDelay: waitForHandReveal ? DRAW_REVEAL_CARD_GAP_MS : DRAW_REVEAL_CARD_DELAY_MS,
-      drawRevealDuration: showDrawReveal ? drawRevealVisibleDuration(current) : 0,
+      drawRevealDelay: waitForHandReveal
+        ? DRAW_REVEAL_CARD_GAP_MS
+        : DRAW_REVEAL_CARD_DELAY_MS,
+      drawRevealDuration: showDrawReveal
+        ? drawRevealVisibleDuration(current)
+        : 0,
       resultDelay: HAND_END_PRESENTATION_DELAY_MS,
     };
   }
 
   function drawRevealVisibleDuration(current) {
-    const tenpaiPlayerCount = asArray(current?.result?.tenpaiWaits).filter((waits) => asArray(waits).length > 0).length;
-    return DRAW_REVEAL_VISIBLE_BASE_MS + DRAW_REVEAL_VISIBLE_EXTENSION_MS + tenpaiPlayerCount * DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS;
+    const tenpaiPlayerCount = asArray(current?.result?.tenpaiWaits).filter(
+      (waits) => asArray(waits).length > 0,
+    ).length;
+    return (
+      DRAW_REVEAL_VISIBLE_BASE_MS +
+      DRAW_REVEAL_VISIBLE_EXTENSION_MS +
+      tenpaiPlayerCount * DRAW_REVEAL_VISIBLE_PER_TENPAI_PLAYER_MS
+    );
   }
 
   function handRevealPlayerIndices(current) {
     if (current?.winType === "nagashi") return [];
     const exhaustive = exhaustiveDrawPresentation(current);
-    if (exhaustive.revealed.length + exhaustive.covered.length > 0) return exhaustive.revealed;
+    if (exhaustive.revealed.length + exhaustive.covered.length > 0)
+      return exhaustive.revealed;
     if (current?.abortiveReason === "九种九牌") {
       const seat = Number(current.abortivePlayerIndex) || 0;
       return seat > 0 ? [seat] : [];
     }
-    return asArray(current?.winners).map((id) => asArray(current.players).indexOf(id) + 1).filter((seat) => seat > 0);
+    return asArray(current?.winners)
+      .map((id) => asArray(current.players).indexOf(id) + 1)
+      .filter((seat) => seat > 0);
   }
 
   function handCoveredPlayerIndices(current) {
     const exhaustive = exhaustiveDrawPresentation(current);
-    return exhaustive.revealed.length + exhaustive.covered.length > 0 ? exhaustive.covered : [];
+    return exhaustive.revealed.length + exhaustive.covered.length > 0
+      ? exhaustive.covered
+      : [];
   }
 
   function selectTile(tileId) {
     const renderState = presentedState();
     const selectableTiles = orderedOwnTiles(renderState);
-    if (!selectableTiles.includes(Number(tileId)) || state?.phase === "hand_ended") return;
-    if (riichiMode && !asArray(state?.legalActions?.riichiTiles).includes(Number(tileId))) return;
+    if (
+      !selectableTiles.includes(Number(tileId)) ||
+      state?.phase === "hand_ended"
+    )
+      return;
+    if (
+      riichiMode &&
+      !asArray(state?.legalActions?.riichiTiles).includes(Number(tileId))
+    )
+      return;
     selectedTileId = selectedTileId === tileId ? 0 : tileId;
     renderTileSelection(renderState);
   }
@@ -770,25 +1016,35 @@ export function createMahjongTableController({
   }
 
   function renderTileSelection(renderState) {
-    const ui = domView.renderSelection(renderState, selectedTileId, getPlayerName?.(), { riichiMode, showGameHints: settingsDialog.gameHintsEnabled });
+    const ui = domView.renderSelection(
+      renderState,
+      selectedTileId,
+      getPlayerName?.(),
+      { riichiMode, showGameHints: settingsDialog.gameHintsEnabled },
+    );
     visualRenderer.updateSelection({
       ...ui,
       riichiMode,
       riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),
       showGameHints: settingsDialog.gameHintsEnabled,
       deferredHandInsertionSeat: Number(presentation.handInsertion?.seat) || 0,
-      deferredHandInsertionIndex: Number(presentation.handInsertion?.rackIndex) || 0,
+      deferredHandInsertionIndex:
+        Number(presentation.handInsertion?.rackIndex) || 0,
     });
   }
 
   function orderedOwnTiles(current) {
-    return [...asArray(current?.ownHand).map(Number), ...(Number(current?.drawnTile) > 0 ? [Number(current.drawnTile)] : [])];
+    return [
+      ...asArray(current?.ownHand).map(Number),
+      ...(Number(current?.drawnTile) > 0 ? [Number(current.drawnTile)] : []),
+    ];
   }
 
   function discardSelected() {
     if (!selectedTileId || !state?.legalActions?.canDiscard) return;
     if (riichiMode) {
-      if (!asArray(state.legalActions.riichiTiles).includes(selectedTileId)) return;
+      if (!asArray(state.legalActions.riichiTiles).includes(selectedTileId))
+        return;
       dispatch?.({ type: "riichi", tileId: selectedTileId });
       return;
     }
@@ -796,18 +1052,25 @@ export function createMahjongTableController({
   }
 
   function discardOwnTile(tileId) {
-    if (!canDiscardHandTile({
-      canDiscard: state?.legalActions?.canDiscard,
-      riichiDeclared: state?.riichi?.[state?.players?.[0]] === true,
-      drawnTile: state?.drawnTile,
-      tileId,
-    })) return;
+    if (
+      !canDiscardHandTile({
+        canDiscard: state?.legalActions?.canDiscard,
+        riichiDeclared: state?.riichi?.[state?.players?.[0]] === true,
+        drawnTile: state?.drawnTile,
+        tileId,
+      })
+    )
+      return;
     selectedTileId = Number(tileId) || 0;
     discardSelected();
   }
 
   function enterRiichiMode() {
-    if (!state?.legalActions?.canRiichi || !asArray(state.legalActions.riichiTiles).length) return;
+    if (
+      !state?.legalActions?.canRiichi ||
+      !asArray(state.legalActions.riichiTiles).length
+    )
+      return;
     selectionBeforeRiichi = selectedTileId;
     selectedTileId = 0;
     riichiMode = true;
@@ -817,7 +1080,11 @@ export function createMahjongTableController({
   function cancelRiichiMode() {
     if (!riichiMode) return;
     riichiMode = false;
-    selectedTileId = orderedOwnTiles(presentedState()).includes(selectionBeforeRiichi) ? selectionBeforeRiichi : 0;
+    selectedTileId = orderedOwnTiles(presentedState()).includes(
+      selectionBeforeRiichi,
+    )
+      ? selectionBeforeRiichi
+      : 0;
     selectionBeforeRiichi = 0;
     renderCurrentState();
   }
@@ -873,7 +1140,9 @@ export function createMahjongTableController({
     restartMatchFromSummary,
     returnToSetupFromSummary,
     isResultBlankSpace,
-    handRevealSettled(key) { presentation.handRevealSettled(key); },
+    handRevealSettled(key) {
+      presentation.handRevealSettled(key);
+    },
     suspend,
     resume,
     destroy,

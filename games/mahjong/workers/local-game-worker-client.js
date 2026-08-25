@@ -13,7 +13,10 @@ export async function createLocalLuaGame(options = {}) {
   let queue = Promise.resolve();
 
   const rejectPending = (error) => {
-    for (const { reject } of pending.values()) reject(error);
+    for (const { reject, timer } of pending.values()) {
+      if (timer !== undefined) globalThis.clearTimeout(timer);
+      reject(error);
+    }
     pending.clear();
   };
   worker.addEventListener("message", ({ data }) => {
@@ -35,17 +38,37 @@ export async function createLocalLuaGame(options = {}) {
     );
   });
 
-  const request = (type, payload) => {
+  const request = (type, payload, { timeoutMs = 0 } = {}) => {
     const run = () => {
       if (closed)
         return Promise.reject(new Error("The local Lua game is closed"));
       const id = ++requestId;
       return new Promise((resolve, reject) => {
-        pending.set(id, { resolve, reject });
+        let timer;
+        const settle = (callback) => (value) => {
+          if (timer !== undefined) globalThis.clearTimeout(timer);
+          callback(value);
+        };
+        pending.set(id, {
+          resolve: settle(resolve),
+          reject: settle(reject),
+          timer,
+        });
+        if (timeoutMs > 0) {
+          timer = globalThis.setTimeout(() => {
+            if (!pending.delete(id)) return;
+            reject(new Error(`Mahjong worker request timed out: ${type}`));
+          }, timeoutMs);
+          pending.get(id).timer = timer;
+        }
         try {
           worker.postMessage({ id, type, payload });
         } catch (error) {
+          const failedRequest = pending.get(id);
           pending.delete(id);
+          if (failedRequest?.timer !== undefined) {
+            globalThis.clearTimeout(failedRequest.timer);
+          }
           reject(error);
         }
       });
@@ -93,7 +116,11 @@ export async function createLocalLuaGame(options = {}) {
         return request("aiTurn", { viewerId });
       },
       aiDecision(viewerId = options.playerId) {
-        return request("aiDecision", { viewerId });
+        return request(
+          "aiDecision",
+          { viewerId },
+          { timeoutMs: Number(options.aiDecisionTimeoutMs) || 10000 },
+        );
       },
       aiAction(state, actorId) {
         return request("aiAction", { state, actorId });
@@ -142,10 +169,12 @@ function normalizeLegalActions(legalActions) {
       tileTypes: localLuaList(claim?.tileTypes),
       red: localLuaList(claim?.red),
     })),
-    tenpaiDiscards: localLuaList(legalActions.tenpaiDiscards).map((discard) => ({
-      ...discard,
-      waits: localLuaList(discard?.waits),
-    })),
+    tenpaiDiscards: localLuaList(legalActions.tenpaiDiscards).map(
+      (discard) => ({
+        ...discard,
+        waits: localLuaList(discard?.waits),
+      }),
+    ),
   };
 }
 

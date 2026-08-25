@@ -231,7 +231,7 @@ test("mahjong keeps the current match track unchanged when riichi music is not c
     ],
     [
       { mode: "playing", source: "https://example.com/mahjong/match.mp3" },
-      { fadeIn: true, fadeOut: false },
+      { fadeIn: true, fadeOut: false, fadeOutBeforeSource: true },
     ],
   ]);
 });

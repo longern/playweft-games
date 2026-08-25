@@ -31,9 +31,10 @@ export function mahjongMatchMusicTarget({
   riichiSource,
   transition,
 }) {
-  const source = transition === "next-hand"
-    ? matchSource
-    : mahjongMusicSourceForState({ matchSource, riichiSource, state });
+  const source =
+    transition === "next-hand"
+      ? matchSource
+      : mahjongMusicSourceForState({ matchSource, riichiSource, state });
   if (
     !isMahjongMatchMusicActive({ gameInitializing, game, playMode, state }) ||
     !source
@@ -81,9 +82,22 @@ export class MahjongMatchMusic {
     );
   }
 
-  sync({ mode, source }, { fadeIn = false, fadeOut = false } = {}) {
+  sync(
+    { mode, source },
+    { fadeIn = false, fadeOut = false, fadeOutBeforeSource = false } = {},
+  ) {
     if (mode === "stopped" || !source) {
       this.#stop();
+      return;
+    }
+    if (
+      fadeOutBeforeSource &&
+      this.#audio.src &&
+      this.#audio.src !== source &&
+      !this.#audio.paused &&
+      this.#gain > 0
+    ) {
+      this.#fadeOutAndSwitchSource(source, { fadeIn });
       return;
     }
     this.#setSource(source);
@@ -157,11 +171,12 @@ export class MahjongMatchMusic {
     this.#ensurePlayback({ fadeIn, keepMuted: false });
   }
 
-  fadeTo(targetGain, { pauseWhenSilent = false } = {}) {
+  fadeTo(targetGain, { pauseWhenSilent = false, onComplete } = {}) {
     this.cancelFade();
     const initialGain = this.#gain;
     if (initialGain === targetGain) {
       if (pauseWhenSilent && targetGain === 0) this.#audio.pause();
+      onComplete?.();
       return;
     }
     const startedAt = performance.now();
@@ -175,8 +190,21 @@ export class MahjongMatchMusic {
       }
       this.#fadeFrame = 0;
       if (pauseWhenSilent && targetGain === 0) this.#audio.pause();
+      onComplete?.();
     };
     this.#fadeFrame = this.#requestFrame(step);
+  }
+
+  #fadeOutAndSwitchSource(source, { fadeIn = false } = {}) {
+    const playRequest = ++this.#playRequest;
+    this.fadeTo(0, {
+      pauseWhenSilent: true,
+      onComplete: () => {
+        if (playRequest !== this.#playRequest) return;
+        this.#setSource(source);
+        this.#play({ fadeIn });
+      },
+    });
   }
 
   #ensurePlayback({ fadeIn, keepMuted }) {

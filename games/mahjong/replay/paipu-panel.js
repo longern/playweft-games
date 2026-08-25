@@ -1,9 +1,4 @@
-import {
-  Bookmark,
-  BookmarkCheck,
-  Play,
-  createIcons,
-} from "lucide";
+import { Bookmark, BookmarkCheck, Play, createIcons } from "lucide";
 
 const paipuIcons = { Bookmark, BookmarkCheck, Play };
 
@@ -23,7 +18,8 @@ export function createMahjongPaipuPanel({
   let returnFocus = null;
 
   async function show() {
-    if (!elements.panel || getGame() || getPlayMode() !== "solo" || open) return;
+    if (!elements.panel || getGame() || getPlayMode() !== "solo" || open)
+      return;
     if (openingFrame) window.cancelAnimationFrame(openingFrame);
     if (closingTimer) window.clearTimeout(closingTimer);
     openingFrame = 0;
@@ -52,10 +48,7 @@ export function createMahjongPaipuPanel({
     const reducedMotion =
       window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
     if (animate && !reducedMotion) {
-      closingTimer = window.setTimeout(
-        () => finishClose(restoreFocus),
-        240,
-      );
+      closingTimer = window.setTimeout(() => finishClose(restoreFocus), 240);
       return;
     }
     finishClose(restoreFocus);
@@ -84,7 +77,7 @@ export function createMahjongPaipuPanel({
       for (const summary of summaries) {
         elements.list.append(renderEntry(summary));
       }
-      createIcons({ icons: paipuIcons });
+      createIcons({ icons: paipuIcons, root: elements.list });
     } catch (error) {
       console.error("Unable to read Mahjong paipu list", error);
       elements.empty.textContent = "牌谱暂时无法读取";
@@ -136,7 +129,10 @@ export function createMahjongPaipuPanel({
   function formatDate(value) {
     const date = new Date(Number(value));
     return Number.isFinite(date.getTime())
-      ? date.toLocaleString("zh-CN", { dateStyle: "medium", timeStyle: "short" })
+      ? date.toLocaleString("zh-CN", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
       : "未知时间";
   }
 
