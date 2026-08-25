@@ -148,24 +148,30 @@
   display: none;
 }
 
-.tenpai-preview.is-furiten {
-  border-color: var(--mahjong-warning-border);
-  background: var(--mahjong-warning-fill);
-  color: var(--mahjong-warning-text);
-}
-
-.tenpai-preview.is-furiten .tenpai-wait-count {
-  color: var(--mahjong-warning-text);
-}
-
-.tenpai-preview.is-furiten .tenpai-wait-count.is-empty {
-  color: #8a5a10;
-}
-
 .tenpai-wait-list {
   display: grid;
   grid-template-columns: repeat(var(--tenpai-wait-columns), max-content);
   gap: 7px;
+}
+
+.tenpai-furiten-badge {
+  position: absolute;
+  z-index: 1;
+  top: calc(100% + 8px);
+  left: 50%;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--mahjong-warning-border);
+  color: #fff;
+  font-size: 0.75em;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.tenpai-furiten-badge[hidden] {
+  display: none;
 }
 
 .tenpai-wait {

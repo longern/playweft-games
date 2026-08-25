@@ -901,10 +901,11 @@ test("mahjong previews waits and visible-copy counts for the selected discard", 
   );
   assert.match(html, /id="tenpai-preview"[^>]*hidden/);
   assert.match(html, /id="tenpai-waits"/);
+  assert.match(html, /id="tenpai-furiten-badge"[^>]*hidden/);
   assert.match(view, /renderTenpaiPreview\(state, selectedTileId\)/);
   assert.match(
     view,
-    /waits\.length > 0\s*&&\s*tenpaiDiscardFuriten\(state\?\.legalActions, selectedTileId\)/s,
+    /tenpaiFuritenBadge\.hidden\s*=\s*\n?\s*waits\.length === 0\s*\|\|/s,
   );
   assert.match(view, /count\.textContent = `\$\{wait\.remaining\} 张`/);
   assert.match(

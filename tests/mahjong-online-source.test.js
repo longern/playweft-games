@@ -45,7 +45,7 @@ async function runOnlineMock(scenario) {
   }
 }
 
-async function runOnlineWithinRuntimeQuota(scenario) {
+async function runOnlineWithinRuntimeQuota(scenario, runtimeQuota = 50_000) {
   const fullSource = await readFile("games/mahjong/game.lua", "utf8");
   const source = buildMahjongOnlineSource(fullSource);
   const lua = await new LuaFactory().createEngine();
@@ -55,7 +55,7 @@ async function runOnlineWithinRuntimeQuota(scenario) {
       local __quota_sethook = debug.sethook
       local function __quota_hook()
         __quota_fuel = __quota_fuel + 1000
-        if __quota_fuel > 50000 then error("instruction quota exceeded", 0) end
+        if __quota_fuel > ${runtimeQuota} then error("instruction quota exceeded", 0) end
       end
       debug = nil
       local function __within_quota(callback)
@@ -447,6 +447,14 @@ test("a host-submitted AI riichi stays within the runtime instruction quota", as
 
 test("Mahjong settles a full exhaustive draw within the runtime instruction quota", async () => {
   const result = await runOnlineWithinRuntimeQuota(`
+    local function json_copy(value)
+      if type(value) ~= "table" then return value end
+      local copied = {}
+      for key, item in pairs(value) do
+        copied[json_copy(key)] = json_copy(item)
+      end
+      return copied
+    end
     local players = ${PLAYERS}
     local setup_result = __within_quota(function()
       return setup({
@@ -483,7 +491,10 @@ test("Mahjong settles a full exhaustive draw within the runtime instruction quot
           actor = { id = actor_id, isOwner = actor_id == "p1" },
         })
       end)
-      state, version = applied.state, version + 1
+      -- The room runtime receives a new Lua table reconstructed from persisted
+      -- JSON for every action.  Preserve that boundary here so the test cannot
+      -- accidentally depend on a Lua-global cache surviving between discards.
+      state, version = json_copy(applied.state), version + 1
     end
     result = {
       ended = state.phase == "hand_ended",
@@ -491,7 +502,7 @@ test("Mahjong settles a full exhaustive draw within the runtime instruction quot
       tenpaiSeats = #(state.result and state.result.tenpai or {}),
       actionCount = action_count,
     }
-  `);
+  `, 30_000);
 
   assert.equal(result.ended, true);
   assert.equal(result.exhaustive, true);

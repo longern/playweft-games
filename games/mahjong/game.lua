@@ -758,6 +758,30 @@ local function tenpai_report_for(state, player_id)
 	return normalized_tenpai_report(report, state.hands[player_id], state.melds[player_id])
 end
 
+-- The room runtime reconstructs Lua tables from persisted JSON for every
+-- call, so a Lua-global cache cannot survive from one discard to the next.
+-- Keep only final-four-discard results in the serializable hand state.  A
+-- player-supplied declaration is preferred when structurally valid; otherwise
+-- the room calculates that one player's result at their final discard.
+function late_wall_waits_for(state, player_id)
+	local hand, melds = state.hands[player_id], state.melds[player_id]
+	local key = tenpai_hand_key(hand, melds)
+	local stored = state.lateWallWaits and state.lateWallWaits[player_id]
+	if stored and stored.key == key and type(stored.waits) == "table" then
+		return stored.waits
+	end
+	local report = tenpai_report_for(state, player_id)
+	local waits
+	if report then
+		waits = report.tenpai and report.waits or {}
+	else
+		waits = waiting_types(hand, melds)
+	end
+	state.lateWallWaits = state.lateWallWaits or {}
+	state.lateWallWaits[player_id] = { key = key, waits = waits }
+	return waits
+end
+
 local function wait_shape_quality(hand, melds, winning_kind)
 	local candidate = copy_array(hand)
 	candidate[#candidate + 1] = (winning_kind - 1) * 4 + 1
@@ -1459,7 +1483,8 @@ local function is_furiten(state, player_id)
 	if state.tempFuriten[player_id] or state.riichiFuriten[player_id] then
 		return true
 	end
-	local waits, discarded = waiting_types(state.hands[player_id], state.melds[player_id]), {}
+	local waits, discarded = (state.riichiWaits and state.riichiWaits[player_id])
+		or waiting_types(state.hands[player_id], state.melds[player_id]), {}
 	for _, entry in ipairs(state.discards[player_id]) do
 		discarded[tile_type(entry.tile)] = true
 	end
@@ -1474,6 +1499,7 @@ end
 local function clear_hand_state(state)
 	state.hands, state.discards, state.melds = {}, {}, {}
 	state.riichi, state.doubleRiichi, state.ippatsu = {}, {}, {}
+	state.riichiWaits, state.lateWallWaits = {}, {}
 	state.riichiMarkerPending = {}
 	state.tempFuriten, state.riichiFuriten, state.firstTurn = {}, {}, {}
 	state.pao, state.kanByPlayer, state.kuikaeForbidden = {}, {}, {}
@@ -2040,9 +2066,8 @@ finish_exhaustive_draw = function(state)
 	end
 	local tenpai, tenpai_waits, count = {}, {}, 0
 	for seat, player_id in ipairs(state.players) do
-		local report = tenpai_report_for(state, player_id)
-		local waits = report and report.waits or waiting_types(state.hands[player_id], state.melds[player_id])
-		tenpai[seat] = report and report.tenpai or #waits > 0
+		local waits = late_wall_waits_for(state, player_id)
+		tenpai[seat] = #waits > 0
 		tenpai_waits[seat] = waits
 		if tenpai[seat] then
 			count = count + 1
@@ -2894,6 +2919,12 @@ local function perform_discard(state, tile_id, actor_id, seat, riichi_declared)
 		discardIndex = #state.discards[actor_id],
 		riichiDeclaration = riichi_declared == true,
 	}
+	-- Persist each player's final wait set during the final four discards. This
+	-- spreads any server fallback work across calls and also survives a room
+	-- runtime reload between those calls.
+	if #state.wall <= 3 then
+		late_wall_waits_for(state, actor_id)
+	end
 	local events = {
 		{
 			type = riichi_declared and "riichi" or "discarded",
@@ -3026,18 +3057,20 @@ local function apply_riichi(state, action, actor_id, seat)
 	if state.phase ~= "playing" or seat ~= state.turnIndex then
 		return rejected("not_your_turn")
 	end
-	-- The projection needs every legal riichi discard, but validation only
-	-- needs to check the tile actually submitted.  This avoids recalculating
-	-- the full tenpai search for every hand tile in the room runtime.
+	-- Calculate the final riichi waits once. The result is both the legality
+	-- check and the cache entry used by later furiten checks.
 	local candidate = hand_with_drawn(state, actor_id)
-	local riichi_allowed =
-		not state.riichi[actor_id]
-		and is_closed_hand(state.melds[actor_id])
-		and state.scores[seat] >= 1000
-		and #state.wall >= 4
-		and remove_tile(candidate, action.tileId)
-		and #waiting_types(candidate, state.melds[actor_id], "any") > 0
-	if not riichi_allowed then
+	if
+		state.riichi[actor_id]
+		or not is_closed_hand(state.melds[actor_id])
+		or state.scores[seat] < 1000
+		or #state.wall < 4
+		or not remove_tile(candidate, action.tileId)
+	then
+		return rejected("riichi_not_allowed")
+	end
+	candidate = waiting_types(candidate, state.melds[actor_id])
+	if #candidate == 0 then
 		return rejected("riichi_not_allowed")
 	end
 	state.scores[seat], state.riichiSticks = state.scores[seat] - 1000, state.riichiSticks + 1
@@ -3047,6 +3080,9 @@ local function apply_riichi(state, action, actor_id, seat)
 	if not result.accepted then
 		state.scores[seat], state.riichiSticks = state.scores[seat] + 1000, math.max(0, state.riichiSticks - 1)
 		state.riichi[actor_id], state.doubleRiichi[actor_id], state.ippatsu[actor_id] = false, false, false
+	else
+		state.riichiWaits = state.riichiWaits or {}
+		state.riichiWaits[actor_id] = candidate
 	end
 	return result
 end

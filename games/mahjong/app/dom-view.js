@@ -157,16 +157,15 @@ export class MahjongDomView {
   renderTenpaiPreview(state, selectedTileId) {
     if (!this.showGameHints) {
       this.elements.tenpaiPreview.hidden = true;
+      this.elements.tenpaiFuritenBadge.hidden = true;
       return;
     }
     const waits = tenpaiWaitsForDiscard(state?.legalActions, selectedTileId);
-    const { tenpaiPreview, tenpaiWaits } = this.elements;
+    const { tenpaiPreview, tenpaiWaits, tenpaiFuritenBadge } = this.elements;
     tenpaiPreview.hidden = waits.length === 0;
-    tenpaiPreview.classList.toggle(
-      "is-furiten",
-      waits.length > 0 &&
-        tenpaiDiscardFuriten(state?.legalActions, selectedTileId),
-    );
+    tenpaiFuritenBadge.hidden =
+      waits.length === 0 ||
+      !tenpaiDiscardFuriten(state?.legalActions, selectedTileId);
     tenpaiWaits.style.setProperty(
       "--tenpai-wait-columns",
       String(Math.min(7, waits.length)),
@@ -943,6 +942,7 @@ function collectElements() {
     countdown: document.querySelector("#action-countdown"),
     tenpaiPreview: document.querySelector("#tenpai-preview"),
     tenpaiWaits: document.querySelector("#tenpai-waits"),
+    tenpaiFuritenBadge: document.querySelector("#tenpai-furiten-badge"),
     claims: document.querySelector("#claim-actions"),
     pass: document.querySelector("#pass-button"),
     abort: document.querySelector("#abort-button"),
