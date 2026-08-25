@@ -1,0 +1,128 @@
+export function createMahjongPaipuPanel({
+  document,
+  window,
+  elements,
+  getGame,
+  getPlayMode,
+  listMahjongPaipuSummaries,
+  setMahjongPaipuPinned,
+  onReplay,
+}) {
+  let openingFrame = 0;
+  let closingTimer = 0;
+  let open = false;
+  let returnFocus = null;
+
+  async function show() {
+    if (!elements.panel || getGame() || getPlayMode() !== "solo" || open) return;
+    if (openingFrame) window.cancelAnimationFrame(openingFrame);
+    if (closingTimer) window.clearTimeout(closingTimer);
+    openingFrame = 0;
+    closingTimer = 0;
+    returnFocus = document.activeElement;
+    open = true;
+    elements.panel.classList.remove("is-open");
+    elements.panel.hidden = false;
+    await renderList();
+    openingFrame = window.requestAnimationFrame(() => {
+      openingFrame = 0;
+      if (!open) return;
+      elements.panel.classList.add("is-open");
+      elements.card?.focus({ preventScroll: true });
+    });
+  }
+
+  function hide({ animate = true, restoreFocus = true } = {}) {
+    if (!elements.panel || (!open && elements.panel.hidden)) return;
+    if (openingFrame) window.cancelAnimationFrame(openingFrame);
+    if (closingTimer) window.clearTimeout(closingTimer);
+    openingFrame = 0;
+    closingTimer = 0;
+    open = false;
+    elements.panel.classList.remove("is-open");
+    const reducedMotion =
+      window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+    if (animate && !reducedMotion) {
+      closingTimer = window.setTimeout(
+        () => finishClose(restoreFocus),
+        240,
+      );
+      return;
+    }
+    finishClose(restoreFocus);
+  }
+
+  function finishClose(restoreFocus) {
+    if (open || !elements.panel) return;
+    if (closingTimer) window.clearTimeout(closingTimer);
+    closingTimer = 0;
+    elements.panel.hidden = true;
+    elements.list.replaceChildren();
+    elements.empty.hidden = true;
+    if (restoreFocus) returnFocus?.focus?.({ preventScroll: true });
+    returnFocus = null;
+  }
+
+  async function renderList() {
+    elements.list.replaceChildren();
+    elements.empty.hidden = true;
+    try {
+      const summaries = await listMahjongPaipuSummaries();
+      if (!summaries.length) {
+        elements.empty.hidden = false;
+        return;
+      }
+      for (const summary of summaries) {
+        elements.list.append(renderEntry(summary));
+      }
+    } catch (error) {
+      console.error("Unable to read Mahjong paipu list", error);
+      elements.empty.textContent = "牌谱暂时无法读取";
+      elements.empty.hidden = false;
+    }
+  }
+
+  function renderEntry(summary) {
+    const item = document.createElement("li");
+    item.className = "paipu-entry";
+    const info = document.createElement("div");
+    info.className = "paipu-entry-info";
+    const title = document.createElement("strong");
+    title.textContent = `${summary.matchType === "hanchan" ? "南风场" : "东风场"} · ${summary.playerName || "你"}`;
+    const date = document.createElement("span");
+    date.textContent = `${formatDate(summary.endedAtMs)} · ${summary.handCount} 局 · ${summary.finalScores.join(" / ")}`;
+    info.append(title, date);
+    const actions = document.createElement("div");
+    actions.className = "paipu-entry-actions";
+    const replay = document.createElement("button");
+    replay.type = "button";
+    replay.textContent = "回放";
+    replay.addEventListener("click", () => void onReplay(summary.id));
+    const pin = document.createElement("button");
+    pin.type = "button";
+    pin.textContent = summary.pinned ? "已收藏" : "收藏";
+    pin.setAttribute("aria-pressed", String(summary.pinned));
+    pin.addEventListener("click", async () => {
+      pin.disabled = true;
+      try {
+        await setMahjongPaipuPinned(summary.id, !summary.pinned);
+        await renderList();
+      } catch (error) {
+        console.error("Unable to update Mahjong paipu favorite", error);
+        pin.disabled = false;
+      }
+    });
+    actions.append(replay, pin);
+    item.append(info, actions);
+    return item;
+  }
+
+  function formatDate(value) {
+    const date = new Date(Number(value));
+    return Number.isFinite(date.getTime())
+      ? date.toLocaleString("zh-CN", { dateStyle: "medium", timeStyle: "short" })
+      : "未知时间";
+  }
+
+  return { show, hide, renderList, isOpen: () => open };
+}

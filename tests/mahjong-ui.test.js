@@ -2899,6 +2899,10 @@ test("mahjong settings dialog combines operation controls and themed help", () =
     new URL("../games/mahjong/main.js", import.meta.url),
     "utf8",
   );
+  const soloController = readFileSync(
+    new URL("../games/mahjong/app/solo-match-controller.js", import.meta.url),
+    "utf8",
+  );
   const tableController = readFileSync(
     new URL("../games/mahjong/app/table-controller.js", import.meta.url),
     "utf8",
@@ -2963,7 +2967,7 @@ test("mahjong settings dialog combines operation controls and themed help", () =
   assert.match(dialog, /window\.localStorage\.setItem/);
   assert.match(main, /settingsDialog\.doubleClickTsumogiriEnabled/);
   assert.match(main, /settingsDialog\.doubleClickPassEnabled/);
-  assert.match(main, /settingsDialog\.setSoloMatchActive\(true\)/);
+  assert.match(soloController, /settingsDialog\.setSoloMatchActive\(true\)/);
   assert.match(main, /结束本局并返回标题/);
   assert.match(tableController, /cue\.volume \* settingsDialog\.discardVolumeScale/);
   assert.match(
@@ -2989,19 +2993,19 @@ test("mahjong shuffles behind a synchronized waiting-scene exit", () => {
     new URL("../games/mahjong/index.html", import.meta.url),
     "utf8",
   );
-  const main = readFileSync(
-    new URL("../games/mahjong/main.js", import.meta.url),
+  const soloController = readFileSync(
+    new URL("../games/mahjong/app/solo-match-controller.js", import.meta.url),
     "utf8",
   );
   assert.match(html, /class="loading-spinner"/);
   assert.doesNotMatch(html, /class="loading-mark"|正在摆好牌桌/);
   assert.match(
-    main,
-    /\[game\] = await Promise\.all\(\[\s*gamePreparation,\s*setupExit,\s*visualRendererReady,?\s*\]\)/,
+    soloController,
+    /const \[createdGame\] = await Promise\.all\(\[\s*gamePreparation,\s*setupExit,\s*visualRendererReady,?\s*\]\)/,
   );
   assert.match(
-    main,
-    /await tableController\.refresh\(game\.initialProjection, \{\s*animateDealIn: true,?\s*\}\)[\s\S]*?scheduleAi\(\{ afterDealIn: true \}\)/,
+    soloController,
+    /await tableController\.refresh\(createdGame\.initialProjection, \{\s*animateDealIn: true,?\s*\}\)[\s\S]*?scheduleAi\(\{ afterDealIn: true \}\)/,
   );
 });
 

@@ -17,7 +17,6 @@ import {
   HUMAN_ID,
   NEW_HAND_DEAL_DURATION_MS,
   OWN_DRAW_ENTRY_DURATION_MS,
-  PLAYERS,
 } from "./rules/constants.js";
 import { MahjongDomView } from "./app/dom-view.js";
 import { createMahjongSessionController } from "./app/session-controller.js";
@@ -26,7 +25,6 @@ import {
   asArray,
   blankDoubleClickAction,
   errorMessage,
-  resultDetailPageCount,
 } from "./rules/game-format.js";
 import { MahjongThreeRenderer } from "./three-renderer.js";
 import { MahjongResultHandRenderer } from "./result/result-hand-renderer.js";
@@ -35,6 +33,8 @@ import { createMahjongThemeController } from "./theme/theme-controller.js";
 import { createMahjongTableController } from "./app/table-controller.js";
 import { createMahjongEffectRunner } from "./app/effect-runner.js";
 import { createMahjongTransientNotice } from "./app/transient-notice.js";
+import { createMahjongReplayController } from "./app/replay-controller.js";
+import { createMahjongSoloMatchController } from "./app/solo-match-controller.js";
 import { createMahjongSettingsDialog } from "./settings-dialog.js";
 import { MahjongMatchMusic } from "./theme/match-music.js";
 import {
@@ -53,7 +53,6 @@ import { DEFAULT_MATCH_MUSIC_VOLUME } from "./theme/media-config.js";
 import {
   appendMahjongSoloAction,
   clearMahjongSoloSave,
-  createMahjongSoloSave,
   MAHJONG_SOLO_CHECKPOINT_VERSION,
   MAHJONG_SOLO_ENGINE_CHECKPOINT_VERSION,
   readMahjongSoloSave,
@@ -67,16 +66,18 @@ import {
   saveMahjongPaipu,
   setMahjongPaipuPinned,
 } from "./replay/paipu-store.js";
-import { replayMahjongSoloSave } from "./replay/solo-replay.js";
-import {
-  buildMahjongPaipuTimeline,
-  clampPaipuPosition,
-  paipuHandIndexAtPosition,
-  paipuNextHandPosition,
-  paipuPreviousHandPosition,
-} from "./replay/paipu-playback.js";
+import { createMahjongPaipuPanel } from "./replay/paipu-panel.js";
 import { mahjongInitialEntry } from "./app/entry-flow.js";
 import { orientMahjongRoomProjection } from "./rules/room-state.js";
+import {
+  buildRoomLegalState,
+  buildRoomTenpaiReportState,
+  roomAutomaticKey,
+  roomEarlyTenpaiStateKey,
+  roomLegalStateKey,
+  roomPlayerHasFutureNormalDraw,
+  roomTenpaiStateKey,
+} from "./rules/room-utils.js";
 import "../../src/base.css";
 import "./styles.css";
 
@@ -113,9 +114,6 @@ deferMahjongImageAssets({
 });
 
 const SETUP_EXIT_DURATION_MS = 560;
-const REPLAY_STEP_DELAY_MS = 780;
-const REPLAY_RESULT_PAGE_DELAY_MS = 2400;
-const REPLAY_SPEEDS = [0.5, 1, 2, 4];
 const LATE_WALL_REPORT_START = 4;
 const LATE_WALL_REPORT_BUDGET_MS = 500;
 const RIVER_BOTTOM_REPORT_BUDGET_MS = 500;
@@ -161,12 +159,9 @@ let session;
 let tableController;
 let playweftClient;
 let soloSave = readMahjongSoloSave();
-let replayRunId = 0;
 let replayState = null;
-let paipuOpeningFrame = 0;
-let paipuClosingTimer = 0;
-let paipuOpen = false;
-let paipuReturnFocus = null;
+let replayController;
+let soloController;
 
 const paipuElements = {
   entry: document.querySelector(".setup-paipu-entry"),
@@ -188,6 +183,17 @@ const replayElements = {
   stepForward: document.querySelector("#paipu-replay-step-forward"),
   progress: document.querySelector("#paipu-replay-progress"),
 };
+
+const paipuPanel = createMahjongPaipuPanel({
+  document,
+  window,
+  elements: paipuElements,
+  getGame: () => game,
+  getPlayMode: () => playMode,
+  listMahjongPaipuSummaries,
+  setMahjongPaipuPinned,
+  onReplay: (id) => replayMahjongPaipu(id),
+});
 
 const matchMusic = new Audio();
 matchMusic.loop = true;
@@ -425,6 +431,72 @@ session = createMahjongSessionController({
   },
 });
 
+replayController = createMahjongReplayController({
+  window,
+  elements,
+  replayElements,
+  getGame: () => game,
+  setGame: (value) => {
+    game = value;
+  },
+  getGameInitializing: () => gameInitializing,
+  setGameInitializing: (value) => {
+    gameInitializing = value;
+  },
+  getPlayMode: () => playMode,
+  setPlayMode: (value) => {
+    playMode = value;
+  },
+  getReplayState: () => replayState,
+  setReplayState: (value) => {
+    replayState = value;
+  },
+  closePaipuPanel,
+  loadMahjongPaipu,
+  tableController,
+  presentation,
+  settingsDialog,
+  session,
+  showMessage,
+  showSetup,
+});
+
+soloController = createMahjongSoloMatchController({
+  elements,
+  getGame: () => game,
+  setGame: (value) => {
+    game = value;
+  },
+  getGameInitializing: () => gameInitializing,
+  setGameInitializing: (value) => {
+    gameInitializing = value;
+  },
+  getPlayerName: () => playerName,
+  setPlayerName: (value) => {
+    playerName = value;
+  },
+  getAutoActions: () => autoActions,
+  setAutoActions: (value) => {
+    autoActions = value;
+  },
+  getSoloSave: () => soloSave,
+  setSoloSave: (value) => {
+    soloSave = value;
+  },
+  tableController,
+  themeController,
+  settingsDialog,
+  visualRendererReady,
+  beginSetupExit,
+  selectedMatchRules,
+  resetAutoActions,
+  syncAutoActionControls,
+  scheduleAi,
+  showLoadingError,
+  showSetup,
+  showSetupRecoveryError,
+});
+
 if (isStandalone) startMahjongEntry();
 revealMahjongAppAfterStyles();
 
@@ -516,599 +588,53 @@ function bindUiEvents() {
   document.addEventListener("keydown", resumeMatchMusic);
 }
 
-async function openPaipuPanel() {
-  if (!paipuElements.panel || game || playMode !== "solo") return;
-  if (paipuOpen) return;
-  if (paipuOpeningFrame) window.cancelAnimationFrame(paipuOpeningFrame);
-  if (paipuClosingTimer) window.clearTimeout(paipuClosingTimer);
-  paipuOpeningFrame = 0;
-  paipuClosingTimer = 0;
-  paipuReturnFocus = document.activeElement;
-  paipuOpen = true;
-  paipuElements.panel.classList.remove("is-open");
-  paipuElements.panel.hidden = false;
-  await renderPaipuList();
-  paipuOpeningFrame = window.requestAnimationFrame(() => {
-    paipuOpeningFrame = 0;
-    if (!paipuOpen) return;
-    paipuElements.panel.classList.add("is-open");
-    paipuElements.card?.focus({ preventScroll: true });
-  });
+function openPaipuPanel() {
+  return paipuPanel.show();
 }
 
-function closePaipuPanel({ animate = true, restoreFocus = true } = {}) {
-  if (!paipuElements.panel) return;
-  if (!paipuOpen && paipuElements.panel.hidden) return;
-  if (paipuOpeningFrame) window.cancelAnimationFrame(paipuOpeningFrame);
-  if (paipuClosingTimer) window.clearTimeout(paipuClosingTimer);
-  paipuOpeningFrame = 0;
-  paipuClosingTimer = 0;
-  paipuOpen = false;
-  paipuElements.panel.classList.remove("is-open");
-  const reducedMotion =
-    window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
-  if (animate && !reducedMotion) {
-    paipuClosingTimer = window.setTimeout(
-      () => finishPaipuClose(restoreFocus),
-      240,
-    );
-    return;
-  }
-  finishPaipuClose(restoreFocus);
-}
-
-function finishPaipuClose(restoreFocus) {
-  if (paipuOpen || !paipuElements.panel) return;
-  if (paipuClosingTimer) window.clearTimeout(paipuClosingTimer);
-  paipuClosingTimer = 0;
-  paipuElements.panel.hidden = true;
-  paipuElements.list.replaceChildren();
-  paipuElements.empty.hidden = true;
-  if (restoreFocus) paipuReturnFocus?.focus?.({ preventScroll: true });
-  paipuReturnFocus = null;
-}
-
-async function renderPaipuList() {
-  paipuElements.list.replaceChildren();
-  paipuElements.empty.hidden = true;
-  try {
-    const summaries = await listMahjongPaipuSummaries();
-    if (!summaries.length) {
-      paipuElements.empty.hidden = false;
-      return;
-    }
-    for (const summary of summaries)
-      paipuElements.list.append(renderPaipuEntry(summary));
-  } catch (error) {
-    console.error("Unable to read Mahjong paipu list", error);
-    paipuElements.empty.textContent = "牌谱暂时无法读取";
-    paipuElements.empty.hidden = false;
-  }
-}
-
-function renderPaipuEntry(summary) {
-  const item = document.createElement("li");
-  item.className = "paipu-entry";
-  const info = document.createElement("div");
-  info.className = "paipu-entry-info";
-  const title = document.createElement("strong");
-  title.textContent = `${summary.matchType === "hanchan" ? "南风场" : "东风场"} · ${summary.playerName || "你"}`;
-  const date = document.createElement("span");
-  date.textContent = `${formatPaipuDate(summary.endedAtMs)} · ${summary.handCount} 局 · ${summary.finalScores.join(" / ")}`;
-  info.append(title, date);
-  const actions = document.createElement("div");
-  actions.className = "paipu-entry-actions";
-  const replay = document.createElement("button");
-  replay.type = "button";
-  replay.textContent = "回放";
-  replay.addEventListener("click", () => void replayMahjongPaipu(summary.id));
-  const pin = document.createElement("button");
-  pin.type = "button";
-  pin.textContent = summary.pinned ? "已收藏" : "收藏";
-  pin.setAttribute("aria-pressed", String(summary.pinned));
-  pin.addEventListener("click", async () => {
-    pin.disabled = true;
-    try {
-      await setMahjongPaipuPinned(summary.id, !summary.pinned);
-      await renderPaipuList();
-    } catch (error) {
-      console.error("Unable to update Mahjong paipu favorite", error);
-      pin.disabled = false;
-    }
-  });
-  actions.append(replay, pin);
-  item.append(info, actions);
-  return item;
-}
-
-function formatPaipuDate(value) {
-  const date = new Date(Number(value));
-  return Number.isNaN(date.getTime())
-    ? "未知时间"
-    : date.toLocaleString("zh-CN", { dateStyle: "medium", timeStyle: "short" });
+function closePaipuPanel(options) {
+  return paipuPanel.hide(options);
 }
 
 async function replayMahjongPaipu(id) {
-  if (game || gameInitializing) return;
-  let record;
-  try {
-    record = await loadMahjongPaipu(id);
-  } catch (error) {
-    console.error("Unable to load Mahjong paipu", error);
-    showMessage("牌谱读取失败");
-    return;
-  }
-  let timeline;
-  try {
-    timeline = buildMahjongPaipuTimeline(record);
-  } catch (error) {
-    console.error("Mahjong paipu timeline is invalid", error);
-    showMessage("牌谱格式无效");
-    return;
-  }
-  closePaipuPanel({ animate: false, restoreFocus: false });
-  gameInitializing = true;
-  playMode = "replay";
-  elements.setup.hidden = true;
-  elements.result.hidden = true;
-  elements.loading.hidden = false;
-  elements.loading.classList.add("is-active");
-  try {
-    const replayGame = await createMahjongPaipuReplayGame(record, 0);
-    game = replayGame;
-    replayState = {
-      record,
-      timeline,
-      tileIdsByHand: record.hands.map((hand) =>
-        replayTileIdsForWall(hand.wall),
-      ),
-      position: 0,
-      speed: 1,
-      playing: false,
-      busy: false,
-      playbackRunId: 0,
-    };
-    presentation.suspend();
-    tableController.reset();
-    const initial = game.initialProjection;
-    await tableController.refresh(initial, { animateDealIn: true });
-    elements.loading.hidden = true;
-    elements.app.setAttribute("aria-busy", "false");
-    settingsDialog.setSoloMatchActive(true);
-    settingsDialog.setEndMatchLabel("返回大厅");
-    replayElements.controls.hidden = false;
-    renderMahjongPaipuReplayControls();
-  } catch (error) {
-    console.error("Mahjong paipu replay failed", error);
-    await exitMahjongPaipuReplay({ returnToSetup: true });
-    showMessage("牌谱回放无法启动");
-  } finally {
-    gameInitializing = false;
-    elements.loading.hidden = true;
-  }
-}
-
-async function createMahjongPaipuReplayGame(record, handIndex = 0) {
-  const hand = record.hands[handIndex];
-  if (!hand) throw new Error("Paipu hand is missing");
-  return createLocalLuaGame({
-    sourceUrl: "./game.lua",
-    players: record.players.map(({ id, name }) => ({ id, name })),
-    playerId: record.players[0].id,
-    // Replay walls and tile references are the source of truth. This value is
-    // only required by the engine's normal setup contract.
-    randomSeed: crypto.randomUUID().replaceAll("-", ""),
-    matchId: `replay-${record.id}-${crypto.randomUUID()}`,
-    settings: {
-      matchType: record.game.matchType,
-      rules: record.game.rules,
-      replayHand: {
-        wall: hand.wall,
-        round: hand.round,
-        startScores: hand.startScores,
-      },
-    },
-  });
-}
-
-function replayHandSetup(record, handIndex) {
-  const hand = record.hands[handIndex];
-  if (!hand) throw new Error("Paipu hand is missing");
-  return {
-    wall: hand.wall,
-    round: hand.round,
-    startScores: hand.startScores,
-  };
-}
-
-function replayActionForStep(state, step) {
-  const action = replayAction(
-    step.command.action,
-    state.tileIdsByHand[step.handIndex],
-  );
-  return {
-    action,
-    actorId: state.record.players[step.command.seat - 1]?.id,
-    animateDealIn: false,
-  };
+  return replayController?.replay(id);
 }
 
 async function advanceMahjongPaipuReplay() {
-  const state = replayState;
-  if (!state || state.busy || state.position >= state.timeline.steps.length)
-    return false;
-  state.busy = true;
-  renderMahjongPaipuReplayControls();
-  try {
-    const step = state.timeline.steps[state.position];
-    if (step.kind === "next-hand") {
-      const loaded = await game?.loadReplayHand(
-        replayHandSetup(state.record, step.handIndex),
-        state.record.players[0]?.id,
-      );
-      if (!loaded?.projection)
-        throw new Error("Replay hand could not be loaded");
-      if (state !== replayState) return false;
-      state.position += 1;
-      await tableController.refresh(loaded.projection, { animateDealIn: true });
-      return true;
-    }
-    const { action, actorId, animateDealIn } = replayActionForStep(state, step);
-    const outcome = await game?.action(action, actorId);
-    if (!outcome?.result?.accepted)
-      throw new Error("Replay action was rejected");
-    if (state !== replayState) return false;
-    state.position += 1;
-    await tableController.refresh(outcome.projection, {
-      animateDealIn,
-      ownDiscardedTile:
-        action.type === "discard" || action.type === "riichi"
-          ? Number(action.tileId) || 0
-          : 0,
-    });
-    return outcome.projection?.state?.phase === "hand_ended"
-      ? "hand-ended"
-      : true;
-  } catch (error) {
-    console.error("Mahjong paipu playback step failed", error);
-    pauseMahjongPaipuPlayback();
-    showMessage("牌谱回放中断");
-    return false;
-  } finally {
-    if (state === replayState) {
-      state.busy = false;
-      renderMahjongPaipuReplayControls();
-    }
-  }
+  return replayController?.advance() ?? false;
 }
 
 async function seekMahjongPaipuReplay(position) {
-  const state = replayState;
-  if (!state || state.busy) return;
-  const target = clampPaipuPosition(state.timeline, position);
-  if (target === state.position) {
-    renderMahjongPaipuReplayControls();
-    return;
-  }
-  pauseMahjongPaipuPlayback();
-  state.busy = true;
-  const seekRunId = ++replayRunId;
-  renderMahjongPaipuReplayControls();
-  try {
-    const handIndex = paipuHandIndexAtPosition(state.timeline, target);
-    const loaded = await game?.loadReplayHand(
-      replayHandSetup(state.record, handIndex),
-      state.record.players[0]?.id,
-    );
-    let projection = loaded?.projection;
-    if (!projection) throw new Error("Replay hand could not be loaded");
-    const handStart = state.timeline.handStarts[handIndex];
-    for (let index = handStart; index < target; index += 1) {
-      if (state !== replayState || seekRunId !== replayRunId) return;
-      const step = state.timeline.steps[index];
-      const { action, actorId } = replayActionForStep(state, step);
-      const outcome = await game?.action(action, actorId);
-      if (!outcome?.result?.accepted)
-        throw new Error("Replay seek action was rejected");
-      projection = outcome.projection;
-    }
-    if (state !== replayState || seekRunId !== replayRunId) return;
-    presentation.suspend();
-    tableController.reset();
-    elements.result.hidden = true;
-    state.position = target;
-    await tableController.refresh(projection, { animateDealIn: target === 0 });
-  } catch (error) {
-    console.error("Mahjong paipu seek failed", error);
-    showMessage("无法跳转到该位置");
-  } finally {
-    if (state === replayState) {
-      state.busy = false;
-      renderMahjongPaipuReplayControls();
-    }
-  }
+  return replayController?.seek(position);
 }
 
 async function toggleMahjongPaipuPlayback() {
-  const state = replayState;
-  if (!state || state.busy) return;
-  if (state.playing) {
-    pauseMahjongPaipuPlayback();
-    return;
-  }
-  if (state.position >= state.timeline.steps.length) return;
-  tableController.syncMatchMusic();
-  state.playing = true;
-  const runId = ++state.playbackRunId;
-  renderMahjongPaipuReplayControls();
-  while (
-    state === replayState &&
-    state.playing &&
-    runId === state.playbackRunId
-  ) {
-    const advanced = await advanceMahjongPaipuReplay();
-    if (
-      !advanced ||
-      !state.playing ||
-      state.position >= state.timeline.steps.length
-    )
-      break;
-    if (advanced === "hand-ended") {
-      const continued = await autoAdvanceMahjongPaipuResult(state, runId);
-      if (!continued) break;
-    }
-    await waitForReplayStep(state.speed);
-  }
-  if (state === replayState && runId === state.playbackRunId) {
-    state.playing = false;
-    renderMahjongPaipuReplayControls();
-  }
+  return replayController?.toggle();
 }
 
 function pauseMahjongPaipuPlayback() {
-  const state = replayState;
-  if (!state) return;
-  state.playing = false;
-  state.playbackRunId += 1;
-}
-
-async function autoAdvanceMahjongPaipuResult(state, playbackRunId) {
-  const resultShown = await waitForMahjongPaipuResult(state, playbackRunId);
-  if (!resultShown) return false;
-  const detailCount = resultDetailPageCount(tableController.getState());
-  for (let page = 0; page < detailCount; page += 1) {
-    await waitForReplayDelay(REPLAY_RESULT_PAGE_DELAY_MS);
-    if (!isMahjongPaipuPlaybackActive(state, playbackRunId)) return false;
-    await tableController.continueResult();
-  }
-  await waitForReplayDelay(REPLAY_RESULT_PAGE_DELAY_MS);
-  if (!isMahjongPaipuPlaybackActive(state, playbackRunId)) return false;
-  if (tableController.getState()?.matchEnded) return false;
-  await tableController.continueResult();
-  return (
-    isMahjongPaipuPlaybackActive(state, playbackRunId) &&
-    tableController.getState()?.phase !== "hand_ended"
-  );
-}
-
-async function waitForMahjongPaipuResult(state, playbackRunId) {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
-    if (!isMahjongPaipuPlaybackActive(state, playbackRunId)) return false;
-    // The panel is mounted while the hand-end reveal is still warming up.
-    // Autoplay must wait for the actual, interactive result page, then start
-    // its per-page dwell timer from that point.
-    if (
-      !elements.result.hidden &&
-      !elements.result.inert &&
-      elements.result.getAttribute("aria-hidden") === "false"
-    ) {
-      return true;
-    }
-    await new Promise((resolve) => window.setTimeout(resolve, 100));
-  }
-  return false;
-}
-
-function isMahjongPaipuPlaybackActive(state, playbackRunId) {
-  return (
-    state === replayState &&
-    state.playing &&
-    playbackRunId === state.playbackRunId
-  );
+  replayController?.pause();
 }
 
 async function advanceMahjongPaipuReplayFromResult(action) {
-  const state = replayState;
-  if (
-    !state ||
-    action?.type !== "next_hand" ||
-    state.timeline.steps[state.position]?.kind !== "next-hand"
-  ) {
-    return false;
-  }
-  await tableController.dismissResultForReplay();
-  return advanceMahjongPaipuReplay();
+  return replayController?.advanceFromResult(action) ?? false;
 }
 
 async function advanceToNextMahjongPaipuHand(state) {
-  const nextPosition = paipuNextHandPosition(state.timeline, state.position);
-  if (nextPosition === state.position) return;
-  if (
-    state.timeline.steps[state.position]?.kind === "next-hand" &&
-    tableController.getState()?.phase === "hand_ended"
-  ) {
-    await advanceMahjongPaipuReplayFromResult({ type: "next_hand" });
-    return;
-  }
-  await seekMahjongPaipuReplay(nextPosition);
+  return replayController?.nextHand(state);
 }
 
 function cycleMahjongPaipuReplaySpeed() {
-  const state = replayState;
-  if (!state || state.busy) return;
-  const current = REPLAY_SPEEDS.indexOf(state.speed);
-  state.speed = REPLAY_SPEEDS[(current + 1) % REPLAY_SPEEDS.length];
-  renderMahjongPaipuReplayControls();
+  replayController?.cycleSpeed();
 }
 
 function renderMahjongPaipuReplayControls() {
-  const state = replayState;
-  if (!state || !replayElements.controls) return;
-  const { timeline, position } = state;
-  const handIndex = paipuHandIndexAtPosition(timeline, position);
-  const hand = timeline.hands[handIndex];
-  const commandCount = timeline.steps
-    .slice(0, position)
-    .filter(
-      (step) => step.kind === "action" && step.handIndex === handIndex,
-    ).length;
-  const roundWind =
-    ["东", "南", "西", "北"][Math.max(0, Number(hand?.round?.wind) - 1)] ||
-    "牌谱";
-  const roundNumber = Number(hand?.round?.number) || handIndex + 1;
-  const completed = position >= timeline.steps.length;
-  replayElements.status.textContent = completed
-    ? "对局回放结束"
-    : `${roundWind}${roundNumber}局 · 第 ${commandCount} 手`;
-  replayElements.progress.max = String(timeline.steps.length);
-  replayElements.progress.value = String(position);
-  replayElements.progress.setAttribute(
-    "aria-valuetext",
-    `${position} / ${timeline.steps.length}`,
-  );
-  replayElements.controls.setAttribute("aria-busy", String(state.busy));
-  setMahjongPaipuReplayControlState(
-    replayElements.previousHand,
-    state.busy,
-    paipuPreviousHandPosition(timeline, position) === position,
-  );
-  setMahjongPaipuReplayControlState(
-    replayElements.nextHand,
-    state.busy,
-    paipuNextHandPosition(timeline, position) === position,
-  );
-  setMahjongPaipuReplayControlState(
-    replayElements.stepBack,
-    state.busy,
-    position === 0,
-  );
-  setMahjongPaipuReplayControlState(
-    replayElements.stepForward,
-    state.busy,
-    completed,
-  );
-  setMahjongPaipuReplayControlState(
-    replayElements.toggle,
-    state.busy,
-    completed,
-  );
-  setMahjongPaipuReplayControlState(replayElements.speed, state.busy, false);
-  replayElements.progress.setAttribute("aria-disabled", String(state.busy));
-  replayElements.speed.textContent = `${state.speed}×`;
-  replayElements.toggle.setAttribute(
-    "aria-label",
-    state.playing ? "暂停" : "播放",
-  );
-  replayElements.toggle.setAttribute("aria-pressed", String(state.playing));
-  replayElements.toggle.title = state.playing ? "暂停" : "播放";
-  replayElements.toggle
-    .querySelector('[data-lucide="play"]')
-    ?.toggleAttribute("hidden", state.playing);
-  replayElements.toggle
-    .querySelector('[data-lucide="pause"]')
-    ?.toggleAttribute("hidden", !state.playing);
+  replayController?.renderControls();
 }
 
-function setMahjongPaipuReplayControlState(element, busy, unavailable) {
-  element.disabled = unavailable;
-  element.setAttribute("aria-disabled", String(busy || unavailable));
+async function exitMahjongPaipuReplay(options) {
+  return replayController?.exit(options);
 }
-
-async function exitMahjongPaipuReplay({ returnToSetup = true } = {}) {
-  const state = replayState;
-  if (!state && playMode !== "replay") return;
-  replayRunId += 1;
-  pauseMahjongPaipuPlayback();
-  replayState = null;
-  replayElements.controls.hidden = true;
-  const replayGame = game;
-  game = undefined;
-  try {
-    session?.cancelScheduledActions();
-    tableController.syncMatchMusic({ enabled: false });
-    presentation.suspend();
-    replayGame?.close();
-    tableController.reset();
-  } catch (error) {
-    console.error("Mahjong paipu replay cleanup failed", error);
-  } finally {
-    elements.result.hidden = true;
-    elements.loading.hidden = true;
-    playMode = "solo";
-    settingsDialog.setOpen(false, { restoreFocus: false, animate: false });
-    settingsDialog.setSoloMatchActive(false);
-    settingsDialog.setEndMatchLabel("结束本局");
-    if (returnToSetup) showSetup();
-  }
-}
-
-function replayAction(action, replayTileIds) {
-  const replay = structuredClone(action);
-  if (replay.tile) {
-    const tileId = tileIdForReference(replay.tile, replayTileIds);
-    if (!tileId) throw new Error("Paipu action has an invalid tile reference");
-    replay.tileId = tileId;
-  }
-  delete replay.tile;
-  return replay;
-}
-
-function tileIdForReference(reference, replayTileIds) {
-  if (!Number.isInteger(reference?.ref)) return 0;
-  return replayTileIds?.[reference.ref] || 0;
-}
-
-function replayTileIdsForWall(wall) {
-  if (typeof wall !== "string" || wall.length !== 272) {
-    throw new Error("Paipu hand has an invalid wall");
-  }
-  const available = new Map();
-  for (let tileId = 1; tileId <= 136; tileId += 1) {
-    const code = tileCode(tileId);
-    const ids = available.get(code) || [];
-    ids.push(tileId);
-    available.set(code, ids);
-  }
-  const tileIds = [];
-  for (let offset = 0; offset < wall.length; offset += 2) {
-    const code = wall.slice(offset, offset + 2);
-    const ids = available.get(code);
-    if (!ids?.length) throw new Error("Paipu hand has an invalid tile code");
-    tileIds.push(ids.shift());
-  }
-  return tileIds;
-}
-
-function tileCode(tileId) {
-  if (tileId === 17) return "0m";
-  if (tileId === 53) return "0p";
-  if (tileId === 89) return "0s";
-  const kind = Math.floor((tileId - 1) / 4) + 1;
-  if (kind <= 27) {
-    return `${((kind - 1) % 9) + 1}${["m", "p", "s"][Math.floor((kind - 1) / 9)]}`;
-  }
-  return `${kind - 27}z`;
-}
-
-function waitForReplayStep(speed) {
-  const delay = REPLAY_STEP_DELAY_MS / Math.max(0.25, Number(speed) || 1);
-  return waitForReplayDelay(delay);
-}
-
-function waitForReplayDelay(delay) {
-  return new Promise((resolve) => window.setTimeout(resolve, delay));
-}
-
 function handlePlayweftReady(context) {
   playMode = context?.mode ?? "solo";
   if (playMode === "room") resetAutoActions({ persist: false });
@@ -1195,30 +721,6 @@ async function handleRoomState(message) {
   }
 }
 
-function roomLegalStateKey(state) {
-  return JSON.stringify([
-    state?.phase,
-    state?.turnIndex,
-    state?.moveCount,
-    state?.drawnTile,
-    state?.ownHand,
-    state?.legalContext?.kanCount,
-    state?.legalContext?.tempFuriten,
-    state?.legalContext?.riichiFuriten,
-    state?.legalContext?.firstTurn,
-  ]);
-}
-
-function roomAutomaticKey(state) {
-  return JSON.stringify([
-    state?.phase,
-    state?.turnIndex,
-    state?.moveCount,
-    state?.drawnTile,
-    state?.ownHand,
-  ]);
-}
-
 function scheduleRoomAutomaticAction() {
   const state = tableController.getState();
   const key = roomAutomaticKey(state);
@@ -1236,74 +738,6 @@ function scheduleRoomAutomaticAction() {
       roomAutomaticStateKey === key &&
       roomAutomaticKey(tableController.getState()) === key,
   });
-}
-
-function buildRoomLegalState(state) {
-  const context = state?.legalContext;
-  const playerId = roomPlayerId;
-  const doraTiles = asArray(context?.doraTiles);
-  const deadWall = Array.from({ length: doraTiles.length * 2 }, () => 0);
-  doraTiles.forEach((tile, index) => {
-    deadWall[index * 2] = Number(tile) || 0;
-  });
-  return {
-    players: asArray(state?.players),
-    phase: state?.phase,
-    turnIndex: Number(state?.turnIndex) || 0,
-    drawnTile: Number(state?.drawnTile) || 0,
-    hands: { [playerId]: asArray(state?.ownHand).map(Number) },
-    wall: Array.from(
-      { length: Math.max(0, Number(state?.wallCount) || 0) },
-      () => 0,
-    ),
-    deadWall,
-    kanCount: Number(context?.kanCount) || 0,
-    callOccurred: context?.callOccurred === true,
-    melds: context?.melds || {},
-    discards: context?.discards || {},
-    riichi: state?.riichi || {},
-    scores: asArray(state?.scores).map(Number),
-    matchType: state?.matchType,
-    roundWind: Number(state?.roundWind) || 0,
-    handNumber: Number(state?.handNumber) || 0,
-    dealerIndex: Number(state?.dealerIndex) || 0,
-    honba: Number(state?.honba) || 0,
-    riichiSticks: Number(state?.riichiSticks) || 0,
-    rules: state?.rules || {},
-    kuikaeForbidden: { [playerId]: context?.kuikaeForbidden || {} },
-    tempFuriten: { [playerId]: context?.tempFuriten === true },
-    riichiFuriten: { [playerId]: context?.riichiFuriten === true },
-    firstTurn: { [playerId]: context?.firstTurn === true },
-    doubleRiichi: { [playerId]: context?.doubleRiichi === true },
-    ippatsu: { [playerId]: context?.ippatsu === true },
-    rinshanWin: context?.rinshanWin === true,
-    chankanWin: context?.chankanWin === true,
-  };
-}
-
-function buildRoomTenpaiReportState(state) {
-  return {
-    players: asArray(state?.players),
-    phase: state?.phase,
-    turnIndex: Number(state?.turnIndex) || 0,
-    drawnTile: Number(state?.drawnTile) || 0,
-    hands: { [roomPlayerId]: asArray(state?.ownHand).map(Number) },
-    melds: state?.melds || {},
-  };
-}
-
-function roomTenpaiStateKey(state) {
-  const activePlayer = asArray(state?.players)[Number(state?.turnIndex) - 1];
-  return JSON.stringify([
-    state?.phase,
-    activePlayer,
-    state?.turnIndex,
-    state?.moveCount,
-    state?.wallCount,
-    state?.drawnTile,
-    state?.ownHand,
-    state?.melds?.[activePlayer],
-  ]);
 }
 
 async function ensureRoomTenpaiGame(state) {
@@ -1374,7 +808,7 @@ function scheduleRoomTenpaiReports(state) {
   roomTenpaiReports = undefined;
   const request = ++roomTenpaiRequest;
   const reportPromise = runRoomTenpaiReports(
-    buildRoomLegalState(state),
+    buildRoomLegalState(state, roomPlayerId),
     key,
     request,
   );
@@ -1425,30 +859,6 @@ async function roomTenpaiReportForDiscard(state, tileId) {
   }
 }
 
-function roomPlayerHasFutureNormalDraw(state, playerId) {
-  const players = asArray(state?.players);
-  const remainingDraws = Math.max(0, Number(state?.wallCount) || 0);
-  if (!players.length || remainingDraws === 0) return false;
-  const firstDrawIndex = Number(state?.turnIndex) % players.length;
-  for (let offset = 0; offset < remainingDraws; offset += 1) {
-    if (players[(firstDrawIndex + offset) % players.length] === playerId) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function roomEarlyTenpaiStateKey(state) {
-  return JSON.stringify([
-    state?.moveCount,
-    state?.phase,
-    state?.turnIndex,
-    state?.wallCount,
-    state?.ownHand,
-    state?.melds?.[roomPlayerId],
-  ]);
-}
-
 function scheduleRoomEarlyTenpaiReport(state, events) {
   const wallCount = Math.max(0, Number(state?.wallCount) || 0);
   const sawCall = asArray(events).some((event) => event?.type === "claimed");
@@ -1463,11 +873,14 @@ function scheduleRoomEarlyTenpaiReport(state, events) {
   ) {
     return;
   }
-  const key = roomEarlyTenpaiStateKey(state);
+  const key = roomEarlyTenpaiStateKey(state, roomPlayerId);
   if (key === roomTenpaiSupplementRequestedKey) return;
   roomTenpaiSupplementRequestedKey = key;
   const request = ++roomTenpaiSupplementRequest;
-  void runRoomEarlyTenpaiReport(buildRoomTenpaiReportState(state), request);
+  void runRoomEarlyTenpaiReport(
+    buildRoomTenpaiReportState(state, roomPlayerId),
+    request,
+  );
 }
 
 async function runRoomEarlyTenpaiReport(state, request) {
@@ -1516,7 +929,7 @@ async function sendRoomActionWithTenpaiReport(
     const key = roomTenpaiStateKey(state);
     if (Number(state?.wallCount) === 0) {
       const report = await roomTenpaiReportForDiscard(
-        buildRoomLegalState(state),
+        buildRoomLegalState(state, roomPlayerId),
         Number(action.tileId),
       );
       if (report) {
@@ -1572,7 +985,11 @@ function scheduleRoomLegalActions(state) {
   roomLegalRequestedKey = key;
   roomLegalAppliedKey = "";
   const request = ++roomLegalRequest;
-  void runRoomLegalActions(buildRoomLegalState(state), key, request);
+  void runRoomLegalActions(
+    buildRoomLegalState(state, roomPlayerId),
+    key,
+    request,
+  );
 }
 
 async function runRoomLegalActions(state, key, request) {
@@ -1800,122 +1217,13 @@ function requestPlatformAvatar(context) {
 }
 
 async function initialize(matchType = "east") {
-  if (playMode !== "solo" || game || gameInitializing) return;
-  gameInitializing = true;
-  tableController.syncMatchMusic();
-  const rules = selectedMatchRules();
-  elements.loading.classList.remove("is-active", "is-error");
-  elements.loadingMessage.hidden = true;
-  elements.loading.hidden = false;
-  void elements.loadingSpinner.offsetWidth;
-  const setupExit = beginSetupExit();
-  const randomSeed = crypto.randomUUID().replaceAll("-", "");
-  const matchId = `solo-${crypto.randomUUID()}`;
-  const gamePreparation = createLocalLuaGame({
-    sourceUrl: "./game.lua",
-    players: PLAYERS.map((player, index) => ({
-      ...player,
-      name: index === 0 ? playerName : player.name,
-    })),
-    playerId: HUMAN_ID,
-    randomSeed,
-    matchId,
-    settings: { matchType, rules },
-  });
-  try {
-    await themeController.rerollPortraits();
-    [game] = await Promise.all([
-      gamePreparation,
-      setupExit,
-      visualRendererReady,
-    ]);
-    resetAutoActions({ persist: false });
-    soloSave = createMahjongSoloSave({
-      randomSeed,
-      matchId,
-      matchType,
-      rules,
-      playerName,
-      autoActions,
-    });
-    writeMahjongSoloSave(soloSave);
-    await tableController.refresh(game.initialProjection, {
-      animateDealIn: true,
-    });
-    elements.app.setAttribute("aria-busy", "false");
-    elements.setup.hidden = true;
-    elements.loading.hidden = true;
-    settingsDialog.setSoloMatchActive(true);
-    settingsDialog.setEndMatchLabel("结束本局");
-    scheduleAi({ afterDealIn: true });
-  } catch (error) {
-    console.error(error);
-    await setupExit;
-    showLoadingError("牌桌准备失败，请刷新页面重试");
-  } finally {
-    gameInitializing = false;
-  }
+  if (playMode !== "solo") return;
+  return soloController?.initialize(matchType);
 }
 
 async function resumeSavedMatch() {
-  if (game || gameInitializing || !soloSave) return;
-  gameInitializing = true;
-  const save = soloSave;
-  elements.loading.classList.remove("is-active", "is-error");
-  elements.loadingMessage.hidden = true;
-  elements.loading.hidden = false;
-  void elements.loadingSpinner.offsetWidth;
-  elements.setup.hidden = true;
-  let restored;
-  try {
-    restored = await createLocalLuaGame({
-      sourceUrl: "./game.lua",
-      players: PLAYERS.map((player, index) => ({
-        ...player,
-        name: index === 0 ? save.playerName || playerName : player.name,
-      })),
-      playerId: HUMAN_ID,
-      randomSeed: save.randomSeed,
-      matchId: save.matchId,
-      settings: { matchType: save.matchType, rules: save.rules },
-    });
-    const projection = await replayMahjongSoloSave({
-      game: restored,
-      save,
-      playerId: HUMAN_ID,
-    });
-    await visualRendererReady;
-    game = restored;
-    await themeController.rerollPortraits();
-    if (save.playerName) playerName = save.playerName;
-    autoActions = { ...save.autoActions };
-    syncAutoActionControls();
-    await tableController.refresh(projection);
-    tableController.syncMatchMusic();
-    elements.app.setAttribute("aria-busy", "false");
-    elements.setup.hidden = true;
-    elements.loading.hidden = true;
-    settingsDialog.setSoloMatchActive(true);
-    settingsDialog.setEndMatchLabel("结束本局");
-    scheduleAi();
-  } catch (error) {
-    console.error(error);
-    restored?.close();
-    if (game === restored) game = undefined;
-    tableController.reset();
-    settingsDialog.setSoloMatchActive(false);
-    showSetup();
-    elements.loading.hidden = true;
-    showSetupRecoveryError(
-      error instanceof Error && error.message
-        ? error.message
-        : "Failed to restore saved game.",
-    );
-  } finally {
-    gameInitializing = false;
-  }
+  return soloController?.resumeSavedMatch();
 }
-
 async function persistAcceptedAction(
   action,
   actorId,
