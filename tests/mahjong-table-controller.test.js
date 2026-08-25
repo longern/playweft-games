@@ -142,6 +142,28 @@ test("mahjong table controller allows hand inspection without dispatching a turn
   assert.deepEqual(calls.at(-1), ["selection", 41]);
 });
 
+test("mahjong table controller submits the selected riichi tile", async () => {
+  const dispatched = [];
+  const { controller } = createController({
+    onDispatch: (action) => dispatched.push(action),
+  });
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 2,
+      ownHand: [41],
+      drawnTile: 42,
+      legalActions: { canDiscard: true, canRiichi: true, riichiTiles: [42] },
+    },
+    events: [],
+  });
+
+  controller.enterRiichiMode();
+  controller.discardOwnTile(42);
+
+  assert.deepEqual(dispatched, [{ type: "riichi", tileId: 42 }]);
+});
+
 test("mahjong keeps the current match track unchanged when riichi music is not configured", async () => {
   const musicCalls = [];
   const { controller } = createController({

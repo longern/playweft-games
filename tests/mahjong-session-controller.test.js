@@ -146,6 +146,25 @@ test("mahjong room actions stay locked until the matching room response settles"
   assert.equal(controller.isActionInFlight(), false);
 });
 
+test("mahjong room does not miss a rejection that arrives before an async transport returns its request id", async () => {
+  let controller;
+  ({ controller } = createController({
+    state: { phase: "playing" },
+    mode: "room",
+    callbacks: {
+      sendRoomAction(_action, { onRequestStarted }) {
+        const requestId = "request-1";
+        onRequestStarted(requestId);
+        queueMicrotask(() => controller.rejectRoomAction(requestId));
+        return requestId;
+      },
+    },
+  }));
+
+  assert.equal(await controller.dispatch({ type: "riichi", tileId: 57 }), true);
+  assert.equal(controller.isActionInFlight(), false);
+});
+
 test("mahjong room can submit the host's start action before a table state exists", async () => {
   const sent = [];
   const { controller } = createController({

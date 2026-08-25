@@ -448,36 +448,6 @@
   accent-color: #ba7a3d;
 }
 
-.setup-recovery-error {
-  position: absolute;
-  z-index: 4;
-  left: 50%;
-  bottom: 138px;
-  box-sizing: border-box;
-  max-width: min(520px, calc(100% - 48px));
-  margin: 0;
-  padding: 14px 22px;
-  border-radius: 14px;
-  background: rgba(0, 0, 0, 0.84);
-  color: #fff;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.35;
-  text-align: center;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(-50%, 10px);
-  transition:
-    opacity 180ms ease,
-    transform 180ms ease;
-}
-
-.setup-recovery-error.is-visible {
-  opacity: 1;
-  transform: translate(-50%, 0);
-}
-
 .loading-panel {
   position: absolute;
   z-index: 111;

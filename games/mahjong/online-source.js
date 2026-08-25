@@ -56,8 +56,9 @@ local function __mahjong_ai_context(state, actor_id)
   local dead_wall = {}
   for index = 1, (tonumber(state.kanCount) or 0) + 1 do
     -- Dora indicators are public; ura indicators and the rest of the dead wall
-    -- deliberately remain absent.
-    dead_wall[(index - 1) * 2 + 1] = state.deadWall and state.deadWall[(index - 1) * 2 + 1] or nil
+    -- stay false.  This must remain a dense vector for room serialization.
+    dead_wall[(index - 1) * 2 + 1] = state.deadWall and state.deadWall[(index - 1) * 2 + 1] or false
+    dead_wall[index * 2] = false
   end
   local claimants, claim_index = {}, 0
   if state.phase == "claiming" then

@@ -567,7 +567,7 @@ local function wait_is_thirteen_orphans(counts)
 	return unique == 13 and pair
 end
 
-local function waiting_types(hand, melds)
+local function waiting_types(hand, melds, mode)
 	local meld_count = #(melds or {})
 	if #hand ~= (4 - meld_count) * 3 + 1 then
 		return {}
@@ -593,6 +593,7 @@ local function waiting_types(hand, melds)
 		)
 	end
 	local needed_groups = 4 - meld_count
+	local stop_after_any = mode == "any"
 	local waits = {}
 	for component_index, component in ipairs(components) do
 		local added_signatures = wait_added_component_signatures(
@@ -613,6 +614,10 @@ local function waiting_types(hand, melds)
 					-- count as tenpai, but it may never require a fifth physical copy already
 					-- locked in this player's concealed hand and fixed groups.
 					if locked_counts[kind] < 4 and wait_mask_has(tile_mask, relative_kind) then
+						if stop_after_any then
+							component_signatures[component_index] = prior_signature
+							return { kind }
+						end
 						waits[kind] = true
 					end
 				end
@@ -625,6 +630,10 @@ local function waiting_types(hand, melds)
 			if locked_counts[kind] < 4 then
 				counts[kind] = counts[kind] + 1
 				if wait_is_seven_pairs(counts) or wait_is_thirteen_orphans(counts) then
+					if stop_after_any then
+						counts[kind] = counts[kind] - 1
+						return { kind }
+					end
 					waits[kind] = true
 				end
 				counts[kind] = counts[kind] - 1
@@ -2659,6 +2668,12 @@ end
 
 local function kuikae_forbidden_types(option)
 	local forbidden = {}
+	-- Room-state serialization treats numeric-key tables as arrays.  Keep this
+	-- vector dense so a forbidden tile such as kind 6 never becomes { [6] = true }
+	-- at the room boundary.
+	for kind = 1, 34 do
+		forbidden[kind] = false
+	end
 	if option.kind == "pon" or option.kind == "kan" then
 		local tile = option.tileIds[1]
 		if tile then
@@ -3001,11 +3016,18 @@ local function apply_riichi(state, action, actor_id, seat)
 	if state.phase ~= "playing" or seat ~= state.turnIndex then
 		return rejected("not_your_turn")
 	end
-	local allowed = {}
-	for _, tile in ipairs(riichi_discards(state, actor_id)) do
-		allowed[tile] = true
-	end
-	if not allowed[action.tileId] then
+	-- The projection needs every legal riichi discard, but validation only
+	-- needs to check the tile actually submitted.  This avoids recalculating
+	-- the full tenpai search for every hand tile in the room runtime.
+	local candidate = hand_with_drawn(state, actor_id)
+	local riichi_allowed =
+		not state.riichi[actor_id]
+		and is_closed_hand(state.melds[actor_id])
+		and state.scores[seat] >= 1000
+		and #state.wall >= 4
+		and remove_tile(candidate, action.tileId)
+		and #waiting_types(candidate, state.melds[actor_id], "any") > 0
+	if not riichi_allowed then
 		return rejected("riichi_not_allowed")
 	end
 	state.scores[seat], state.riichiSticks = state.scores[seat] - 1000, state.riichiSticks + 1
@@ -3206,8 +3228,10 @@ local function legal_actions(state, viewer_id, fast_projection)
 	end
 	if state.phase == "playing" and state.turnIndex == seat then
 		legal.canDiscard = true
-		for kind in pairs(state.kuikaeForbidden and state.kuikaeForbidden[viewer_id] or {}) do
-			legal.forbiddenDiscardTypes[#legal.forbiddenDiscardTypes + 1] = kind
+		for kind, is_forbidden in pairs(state.kuikaeForbidden and state.kuikaeForbidden[viewer_id] or {}) do
+			if is_forbidden then
+				legal.forbiddenDiscardTypes[#legal.forbiddenDiscardTypes + 1] = kind
+			end
 		end
 		table.sort(legal.forbiddenDiscardTypes)
 		-- The room service has a strict per-call instruction quota.  Exact

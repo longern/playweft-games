@@ -34,6 +34,7 @@ import { MahjongPresentationController } from "./app/presentation-controller.js"
 import { createMahjongThemeController } from "./theme/theme-controller.js";
 import { createMahjongTableController } from "./app/table-controller.js";
 import { createMahjongEffectRunner } from "./app/effect-runner.js";
+import { createMahjongTransientNotice } from "./app/transient-notice.js";
 import { createMahjongSettingsDialog } from "./settings-dialog.js";
 import { MahjongMatchMusic } from "./theme/match-music.js";
 import {
@@ -112,7 +113,6 @@ deferMahjongImageAssets({
 });
 
 const SETUP_EXIT_DURATION_MS = 560;
-const SETUP_RECOVERY_ERROR_DURATION_MS = 4600;
 const REPLAY_STEP_DELAY_MS = 780;
 const REPLAY_RESULT_PAGE_DELAY_MS = 2400;
 const REPLAY_SPEEDS = [0.5, 1, 2, 4];
@@ -148,7 +148,6 @@ let roomTenpaiReportsPromise;
 let roomTenpaiSupplementRequest = 0;
 let roomTenpaiSupplementRequestedKey = "";
 let roomTenpaiReportedKey = "";
-let setupRecoveryErrorTimer;
 let playMode = isStandalone ? "solo" : null;
 let autoActions = defaultAutoActions();
 let session;
@@ -211,6 +210,10 @@ const domView = new MahjongDomView({
   onDiscardTile: (tileId) => tableController?.discardOwnTile(tileId),
 });
 const { elements } = domView;
+const transientNotice = createMahjongTransientNotice({
+  element: elements.transientNotice,
+  window,
+});
 const settingsDialog = createMahjongSettingsDialog({
   trigger: elements.settingsButton,
   root: elements.settingsDialog,
@@ -1434,7 +1437,7 @@ async function runRoomEarlyTenpaiReport(state, request) {
   }
 }
 
-async function sendRoomActionWithTenpaiReport(action) {
+async function sendRoomActionWithTenpaiReport(action, { onRequestStarted } = {}) {
   let enrichedAction = action;
   let attachedReport;
   const state = tableController?.getState();
@@ -1463,7 +1466,8 @@ async function sendRoomActionWithTenpaiReport(action) {
     }
   }
   try {
-    const requestId = await playweftClient?.sendAction(enrichedAction);
+    const requestId = playweftClient?.sendAction(enrichedAction);
+    onRequestStarted?.(requestId);
     if (requestId && attachedReport?.key) roomTenpaiReportedKey = attachedReport.key;
     return requestId;
   } catch (error) {
@@ -1581,6 +1585,10 @@ function handlePlayweftError(message, _code, requestId) {
   }
   if (!tableController.getState()) {
     showLoadingError(message);
+    return;
+  }
+  if (playMode === "room") {
+    transientNotice.show(message);
     return;
   }
   showMessage(message);
@@ -1869,18 +1877,7 @@ function showRoomSetup() {
 }
 
 function showSetupRecoveryError(message) {
-  window.clearTimeout(setupRecoveryErrorTimer);
-  elements.setupRecoveryError.textContent = message;
-  elements.setupRecoveryError.hidden = false;
-  void elements.setupRecoveryError.offsetWidth;
-  elements.setupRecoveryError.classList.add("is-visible");
-  setupRecoveryErrorTimer = window.setTimeout(() => {
-    elements.setupRecoveryError.classList.remove("is-visible");
-    window.setTimeout(() => {
-      if (!elements.setupRecoveryError.classList.contains("is-visible"))
-        elements.setupRecoveryError.hidden = true;
-    }, 180);
-  }, SETUP_RECOVERY_ERROR_DURATION_MS);
+  transientNotice.show(message);
 }
 
 async function endSoloMatch() {

@@ -149,6 +149,47 @@ test("Mahjong rooms stay in a private game lobby until the owner starts the sele
   });
 });
 
+test("a non-owner room player can declare riichi from the private legal preview", async () => {
+  const result = await runOnlineMock(`
+    local setup_result = setup({
+      serverTime = 1000,
+      players = ${PLAYERS},
+      match = {
+        id = "room-riichi-flow",
+        ownerId = "p1",
+        randomSeed = "00000000000000000000000000003039",
+      },
+    })
+    local state = setup_result.state
+    state.phase, state.turnIndex, state.drawnTile = "playing", 2, 89
+    state.wall = { 1, 2, 3, 4 }
+    state.hands.p2 = { 5, 6, 9, 13, 17, 18, 21, 25, 49, 53, 57, 81, 85 }
+    state.melds.p2, state.discards.p2 = {}, {}
+    state.riichi.p2, state.tempFuriten.p2, state.riichiFuriten.p2 = false, false, false
+    state.firstTurn.p2, state.doubleRiichi.p2, state.ippatsu.p2 = false, false, false
+    local projection = view(state, {}, { viewer = { id = "p2", seat = 2, isOwner = false } })
+    local applied = on_action(state, { type = "riichi", tileId = 89 }, {
+      serverTime = 1001,
+      actor = { id = "p2", seat = 2, isOwner = false },
+    })
+    result = {
+      private_preview = projection.state.legalContext ~= nil,
+      server_preview_is_fast = projection.state.legalActions.canRiichi == false,
+      accepted = applied.accepted == true,
+      declared = applied.state.riichi.p2 == true,
+      paid_stick = applied.state.riichiSticks == 1,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    private_preview: true,
+    server_preview_is_fast: true,
+    accepted: true,
+    declared: true,
+    paid_stick: true,
+  });
+});
+
 test("Mahjong room opens and processes a discard within the runtime instruction quota", async () => {
   const result = await runOnlineWithinRuntimeQuota(`
     local players = {
@@ -189,6 +230,46 @@ test("Mahjong room opens and processes a discard within the runtime instruction 
   assert.equal(result.canDiscard, true);
   assert.equal(result.hasLocalPreviewContext, true);
   assert.equal(result.actionAccepted, true);
+});
+
+test("a host-submitted AI riichi stays within the runtime instruction quota", async () => {
+  const result = await runOnlineWithinRuntimeQuota(`
+    local setup_result = setup({
+      protocolVersion = 1,
+      serverTime = 1000,
+      players = {
+        { id = "p1", name = "East", seat = 1 },
+        { id = "p2", name = "South", seat = 2 },
+      },
+      match = {
+        id = "quota-ai-riichi",
+        ownerId = "p1",
+        randomSeed = "00000000000000000000000000001f00",
+      },
+    })
+    local state = setup_result.state
+    local ai_id = "mahjong-ai-3"
+    state.phase, state.turnIndex, state.drawnTile = "playing", 3, 57
+    state.wall = {}
+    for index = 1, 23 do state.wall[index] = index end
+    state.hands[ai_id] = { 5, 6, 9, 13, 17, 18, 21, 25, 49, 53, 81, 85, 89 }
+    state.melds[ai_id], state.discards[ai_id] = {}, {}
+    state.riichi[ai_id], state.tempFuriten[ai_id], state.riichiFuriten[ai_id] = false, false, false
+    state.firstTurn[ai_id], state.doubleRiichi[ai_id], state.ippatsu[ai_id] = false, false, false
+    local applied = __within_quota(function()
+      return on_action(state, {
+        type = "ai_turn",
+        playerId = ai_id,
+        action = { type = "riichi", tileId = 57 },
+      }, {
+        serverTime = 1001,
+        actor = { id = "p1", seat = 1, isOwner = true },
+      })
+    end)
+    result = applied.accepted == true
+  `);
+
+  assert.equal(result, true);
 });
 
 test("Mahjong settles a full exhaustive draw within the runtime instruction quota", async () => {
@@ -534,7 +615,7 @@ test("short Mahjong rooms fill missing seats with AI controlled by the owner", a
       host_hand_hidden = ai_context and ai_context.hands.host == nil,
       guest_hand_hidden = ai_context and ai_context.hands.guest == nil,
       wall_is_count_only = ai_context and #ai_context.wall == #state.wall and ai_context.wall[1] == false,
-      ura_hidden = ai_context and ai_context.deadWall[2] == nil,
+      ura_hidden = ai_context and ai_context.deadWall[2] == false,
       seed_hidden = ai_context and ai_context.seed == nil,
       active_has_deadline = active_view.state.turnDeadlineAt ~= nil,
       inactive_has_deadline = inactive_view.state.turnDeadlineAt ~= nil,
@@ -593,6 +674,58 @@ test("Mahjong room legal context includes the viewer's private furiten flags", a
   assert.deepEqual(result, {
     sentPrivateFuritenFlags: true,
   });
+});
+
+test("Mahjong rooms return a dense kuikae vector after a pon", async () => {
+  const result = await runOnlineMock(`
+    local function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+    local started = setup({
+      protocolVersion = 1,
+      serverTime = 1000,
+      players = ${PLAYERS},
+      match = { id = "room-pon-serialization", ownerId = "p1", randomSeed = "00000000000000000000000000000047" },
+    })
+    local state = started.state
+    state.phase, state.turnIndex, state.drawnTile = "claiming", 2, 0
+    state.hands.p2 = ids({ 1,1,2,3,4,5,6,7,8,9,10,28,29 })
+    state.discards.p1 = { { tile = 1, claimed = false } }
+    state.lastDiscard = { player = "p1", playerIndex = 1, tile = 1, discardIndex = 1 }
+    state.claimants = { {
+      playerId = "p2", playerIndex = 2, distance = 1,
+      options = { { kind = "pon", tileIds = { 2, 3 } } },
+    } }
+    state.claimResponses, state.claimIndex = {}, 1
+    local claimed = on_action(state, { type = "claim", option = 1 }, {
+      serverTime = 1001,
+      actor = { id = "p2", role = "player", seat = 2 },
+    })
+    local forbidden = claimed.state.kuikaeForbidden.p2
+    local dense = #forbidden == 34
+    for kind = 1, 34 do
+      if forbidden[kind] == nil then dense = false break end
+    end
+    local projection = view(claimed.state, {}, {
+      viewer = { id = "p2", role = "player", seat = 2, isOwner = false },
+    })
+    result = {
+      accepted = claimed.accepted == true,
+      dense = dense,
+      calledTypeForbidden = forbidden[1] == true,
+      legalTypes = projection.state.legalActions.forbiddenDiscardTypes,
+    }
+  `);
+
+  assert.equal(result.accepted, true);
+  assert.equal(result.dense, true);
+  assert.equal(result.calledTypeForbidden, true);
+  assert.deepEqual(result.legalTypes, [1]);
 });
 
 test("authoritative Mahjong timers auto-discard and auto-pass with stale protection", async () => {

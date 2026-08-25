@@ -46,13 +46,19 @@ export function createMahjongSessionController({
 
     if (getMode?.() === "room") {
       actionInFlight = true;
-      const requestId = await sendRoomAction?.(action);
+      const requestId = await sendRoomAction?.(action, {
+        onRequestStarted(startedRequestId) {
+          if (typeof startedRequestId === "string" && startedRequestId) {
+            roomActionRequestId = startedRequestId;
+          }
+        },
+      });
       if (!requestId) {
         actionInFlight = false;
         onRoomUnavailable?.();
         return false;
       }
-      roomActionRequestId = requestId;
+      if (!roomActionRequestId) roomActionRequestId = requestId;
       return true;
     }
 

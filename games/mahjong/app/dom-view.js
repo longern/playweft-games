@@ -932,7 +932,7 @@ function collectElements() {
     matchSummaryRematch: document.querySelector("#match-summary-rematch"),
     matchSummarySetup: document.querySelector("#match-summary-setup"),
     setup: document.querySelector("#setup-panel"),
-    setupRecoveryError: document.querySelector("#setup-recovery-error"),
+    transientNotice: document.querySelector("#mahjong-transient-notice"),
     opponentHands: {
       top: document.querySelector("#hand-top"),
       right: document.querySelector("#hand-right"),

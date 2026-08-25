@@ -550,7 +550,16 @@ test("Mahjong derives the same waits as complete structural validation", async (
       return tiles
     end
 
-    local checked, matched = 0, true
+    local function any_wait_matches(hand, melds)
+      local full, any = waiting_types(hand, melds), waiting_types(hand, melds, "any")
+      if #full == 0 then return #any == 0 end
+      for _, kind in ipairs(full) do
+        if kind == any[1] then return #any == 1 end
+      end
+      return false
+    end
+
+    local checked, matched, any_matched = 0, true, true
     for seed = 1, 80 do
       local state = setup({
         players = ${PLAYER_TABLE},
@@ -565,6 +574,7 @@ test("Mahjong derives the same waits as complete structural validation", async (
         ) then
           matched = false
         end
+        any_matched = any_matched and any_wait_matches(state.hands[player_id], state.melds[player_id])
       end
     end
 
@@ -575,19 +585,22 @@ test("Mahjong derives the same waits as complete structural validation", async (
       waiting_types(opened_hand, opened_melds),
       reference_waits(opened_hand, opened_melds)
     )
+    any_matched = any_matched and any_wait_matches(opened_hand, opened_melds)
     for _, hand in ipairs({
       ids({ 1,1, 2,2, 3,3, 4,4, 5,5, 6,6, 7 }),
       ids({ 1,9,10,18,19,27,28,29,30,31,32,33,34 }),
     }) do
       checked = checked + 1
       matched = matched and same_types(waiting_types(hand, {}), reference_waits(hand, {}))
+      any_matched = any_matched and any_wait_matches(hand, {})
     end
 
-    result = { checked = checked, matched = matched }
+    result = { checked = checked, matched = matched, any_matched = any_matched }
   `);
 
   assert.ok(result.checked > 0);
   assert.equal(result.matched, true);
+  assert.equal(result.any_matched, true);
 });
 
 test("Mahjong terminal view reveals tile faces and red-five identity", async () => {
