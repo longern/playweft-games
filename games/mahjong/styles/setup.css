@@ -463,6 +463,17 @@
   pointer-events: none;
 }
 
+/* Guests wait in the same lobby scene as the host setup instead of seeing
+ * an inactive table behind the waiting card. */
+.loading-panel.is-room-waiting {
+  background: #071713 var(--mahjong-setup-background-image, none) center / cover
+    no-repeat;
+}
+
+:root[data-mahjong-has-lobby] .loading-panel.is-room-waiting {
+  background-image: var(--mahjong-lobby-image);
+}
+
 .loading-card {
   box-sizing: border-box;
   width: 144px;

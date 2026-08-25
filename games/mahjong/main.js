@@ -133,11 +133,18 @@ let roomIsOwner = false;
 let roomAiGame;
 let roomAiPlayerIds = "";
 let roomAiBusy = false;
+let roomAiAwaitingState = false;
 let roomAiSchedule = 0;
+let roomAiWaitResolve;
+let roomAiGeneration = 0;
+let roomAiTurnKey = "";
+let roomAiState;
 let roomLegalGame;
 let roomLegalPlayerIds = "";
 let roomLegalRequest = 0;
 let roomLegalRequestedKey = "";
+let roomLegalAppliedKey = "";
+let roomAutomaticStateKey = "";
 let roomTenpaiGame;
 let roomTenpaiGameReady;
 let roomTenpaiPlayerIds = "";
@@ -493,16 +500,13 @@ function bindUiEvents() {
     toggleAutoAction("autoTsumogiri"),
   );
   for (const button of elements.setup.querySelectorAll("[data-match-type]")) {
-    button.addEventListener(
-      "click",
-      () => {
-        if (playMode === "room") {
-          void startRoomMatch(button.dataset.matchType);
-          return;
-        }
-        void initialize(button.dataset.matchType);
-      },
-    );
+    button.addEventListener("click", () => {
+      if (playMode === "room") {
+        void startRoomMatch(button.dataset.matchType);
+        return;
+      }
+      void initialize(button.dataset.matchType);
+    });
   }
   syncAutoActionControls();
   window.addEventListener("pagehide", handlePageHide);
@@ -1107,6 +1111,7 @@ function waitForReplayDelay(delay) {
 
 function handlePlayweftReady(context) {
   playMode = context?.mode ?? "solo";
+  if (playMode === "room") resetAutoActions({ persist: false });
   roomPlayerId = context?.playerId || "";
   roomIsOwner =
     context?.player?.isOwner === true ||
@@ -1130,7 +1135,10 @@ async function handleRoomState(message) {
   if (playMode !== "room") return;
   roomPlayerId = message?.playerId || roomPlayerId;
   roomIsOwner = message?.state?.roomIsOwner === true;
-  roomAiBusy = false;
+  if (roomAiAwaitingState) {
+    roomAiAwaitingState = false;
+    roomAiBusy = false;
+  }
   const projection = orientMahjongRoomProjection(
     {
       state: message?.state,
@@ -1140,6 +1148,19 @@ async function handleRoomState(message) {
     roomPlayerId,
   );
   if (!projection?.state) return;
+  const startsFreshAutoActionScope = asArray(projection.events).some(
+    (event) =>
+      event?.type === "match_started" ||
+      event?.type === "next_hand" ||
+      event?.type === "new_match",
+  );
+  if (startsFreshAutoActionScope) resetAutoActions({ persist: false });
+  syncRoomPassClaims(projection.state);
+  const nextAutomaticStateKey = roomAutomaticKey(projection.state);
+  if (nextAutomaticStateKey !== roomAutomaticStateKey) {
+    roomAutomaticStateKey = nextAutomaticStateKey;
+    session.cancelScheduledActions();
+  }
   if (projection.state.phase === "lobby") {
     session.confirmRoomState();
     gameInitializing = false;
@@ -1159,11 +1180,10 @@ async function handleRoomState(message) {
     await visualRendererReady;
     if (destroyed || playMode !== "room") return;
     await tableController.refresh(projection, { animateDealIn });
-    scheduleRoomLegalActions(message?.state);
+    scheduleRoomLegalActions(projection.state);
     scheduleRoomTenpaiReports(projection.state);
     scheduleRoomEarlyTenpaiReport(projection.state, projection.events);
-    if (!hadState)
-      tableController.syncMatchMusic({ fadeIn: true });
+    if (!hadState) tableController.syncMatchMusic({ fadeIn: true });
     gameInitializing = false;
     elements.app.setAttribute("aria-busy", "false");
     elements.setup.hidden = true;
@@ -1189,6 +1209,35 @@ function roomLegalStateKey(state) {
   ]);
 }
 
+function roomAutomaticKey(state) {
+  return JSON.stringify([
+    state?.phase,
+    state?.turnIndex,
+    state?.moveCount,
+    state?.drawnTile,
+    state?.ownHand,
+  ]);
+}
+
+function scheduleRoomAutomaticAction() {
+  const state = tableController.getState();
+  const key = roomAutomaticKey(state);
+  if (!key || key !== roomAutomaticStateKey) return;
+  if (
+    state?.phase === "playing" &&
+    roomLegalAppliedKey !== roomLegalStateKey(state)
+  )
+    return;
+  session.scheduleRoomAutomaticAction({
+    state,
+    isCurrent: () =>
+      !destroyed &&
+      playMode === "room" &&
+      roomAutomaticStateKey === key &&
+      roomAutomaticKey(tableController.getState()) === key,
+  });
+}
+
 function buildRoomLegalState(state) {
   const context = state?.legalContext;
   const playerId = roomPlayerId;
@@ -1203,7 +1252,10 @@ function buildRoomLegalState(state) {
     turnIndex: Number(state?.turnIndex) || 0,
     drawnTile: Number(state?.drawnTile) || 0,
     hands: { [playerId]: asArray(state?.ownHand).map(Number) },
-    wall: Array.from({ length: Math.max(0, Number(state?.wallCount) || 0) }, () => 0),
+    wall: Array.from(
+      { length: Math.max(0, Number(state?.wallCount) || 0) },
+      () => 0,
+    ),
     deadWall,
     kanCount: Number(context?.kanCount) || 0,
     callOccurred: context?.callOccurred === true,
@@ -1289,7 +1341,11 @@ async function ensureRoomTenpaiGame(state) {
 
 function scheduleRoomTenpaiReports(state) {
   const wallCount = Math.max(0, Number(state?.wallCount) || 0);
-  if (playMode !== "room" || state?.phase !== "playing" || wallCount > LATE_WALL_REPORT_START) {
+  if (
+    playMode !== "room" ||
+    state?.phase !== "playing" ||
+    wallCount > LATE_WALL_REPORT_START
+  ) {
     roomTenpaiRequest += 1;
     roomTenpaiRequestedKey = "";
     roomTenpaiReports = undefined;
@@ -1317,7 +1373,11 @@ function scheduleRoomTenpaiReports(state) {
   roomTenpaiRequestedKey = key;
   roomTenpaiReports = undefined;
   const request = ++roomTenpaiRequest;
-  const reportPromise = runRoomTenpaiReports(buildRoomLegalState(state), key, request);
+  const reportPromise = runRoomTenpaiReports(
+    buildRoomLegalState(state),
+    key,
+    request,
+  );
   roomTenpaiReportsPromise = reportPromise;
 }
 
@@ -1336,8 +1396,10 @@ async function runRoomTenpaiReports(state, key, request) {
       playMode !== "room" ||
       request !== roomTenpaiRequest ||
       key !== roomTenpaiRequestedKey
-    ) return undefined;
-    roomTenpaiReports = reports && typeof reports === "object" ? reports : undefined;
+    )
+      return undefined;
+    roomTenpaiReports =
+      reports && typeof reports === "object" ? reports : undefined;
     return roomTenpaiReports;
   } catch (error) {
     if (request === roomTenpaiRequest) {
@@ -1424,7 +1486,8 @@ async function runRoomEarlyTenpaiReport(state, request) {
       request !== roomTenpaiSupplementRequest ||
       !report?.key ||
       report.key === roomTenpaiReportedKey
-    ) return;
+    )
+      return;
     const requestId = playweftClient?.sendAction({
       type: "tenpai_report",
       tenpaiReport: report,
@@ -1437,7 +1500,10 @@ async function runRoomEarlyTenpaiReport(state, request) {
   }
 }
 
-async function sendRoomActionWithTenpaiReport(action, { onRequestStarted } = {}) {
+async function sendRoomActionWithTenpaiReport(
+  action,
+  { onRequestStarted } = {},
+) {
   let enrichedAction = action;
   let attachedReport;
   const state = tableController?.getState();
@@ -1468,7 +1534,8 @@ async function sendRoomActionWithTenpaiReport(action, { onRequestStarted } = {})
   try {
     const requestId = playweftClient?.sendAction(enrichedAction);
     onRequestStarted?.(requestId);
-    if (requestId && attachedReport?.key) roomTenpaiReportedKey = attachedReport.key;
+    if (requestId && attachedReport?.key)
+      roomTenpaiReportedKey = attachedReport.key;
     return requestId;
   } catch (error) {
     console.error("Mahjong room action failed", error);
@@ -1477,19 +1544,33 @@ async function sendRoomActionWithTenpaiReport(action, { onRequestStarted } = {})
 }
 
 function scheduleRoomLegalActions(state) {
-  const activePlayer = asArray(state?.players)[Number(state?.turnIndex) - 1];
+  const activeIndex =
+    state?.phase === "claiming"
+      ? Number(state?.responseIndex)
+      : Number(state?.turnIndex);
+  const activePlayer = asArray(state?.players)[activeIndex - 1];
+  if (state?.phase === "claiming" && activePlayer === roomPlayerId) {
+    roomLegalRequestedKey = "";
+    roomLegalAppliedKey = "";
+    roomLegalRequest += 1;
+    scheduleRoomAutomaticAction();
+    return;
+  }
   if (
     !state?.legalContext ||
     state?.phase !== "playing" ||
     activePlayer !== roomPlayerId
   ) {
     roomLegalRequestedKey = "";
+    roomLegalAppliedKey = "";
     roomLegalRequest += 1;
+    session.cancelScheduledActions();
     return;
   }
   const key = roomLegalStateKey(state);
   if (key === roomLegalRequestedKey) return;
   roomLegalRequestedKey = key;
+  roomLegalAppliedKey = "";
   const request = ++roomLegalRequest;
   void runRoomLegalActions(buildRoomLegalState(state), key, request);
 }
@@ -1513,8 +1594,11 @@ async function runRoomLegalActions(state, key, request) {
       playMode !== "room" ||
       request !== roomLegalRequest ||
       key !== roomLegalRequestedKey
-    ) return;
+    )
+      return;
     tableController.applyLegalActions(legalActions);
+    roomLegalAppliedKey = key;
+    scheduleRoomAutomaticAction();
   } catch (error) {
     if (request === roomLegalRequest) {
       console.error("Mahjong room legal-action preview failed", error);
@@ -1523,16 +1607,64 @@ async function runRoomLegalActions(state, key, request) {
 }
 
 function scheduleRoomAi(state) {
-  if (!roomIsOwner || !state?.aiTurn?.player || !state?.aiContext) return;
-  window.clearTimeout(roomAiSchedule);
-  roomAiSchedule = window.setTimeout(() => {
-    void runRoomAi(state.aiContext, state.aiTurn.player);
-  }, AI_DELAY_MS);
+  roomAiState = state;
+  const key = roomAiStateKey(state);
+  if (!roomIsOwner || !key) {
+    roomAiGeneration += 1;
+    roomAiTurnKey = "";
+    cancelRoomAiWait();
+    return;
+  }
+  if (key === roomAiTurnKey) return;
+  roomAiTurnKey = key;
+  const generation = ++roomAiGeneration;
+  cancelRoomAiWait();
+  void runRoomAi(
+    state.aiContext,
+    state.aiTurn.player,
+    key,
+    generation,
+    performance.now(),
+  );
 }
 
-async function runRoomAi(aiContext, actorId) {
-  if (roomAiBusy || !roomIsOwner || !aiContext || !actorId) return;
+function roomAiStateKey(state) {
+  if (!state?.aiTurn?.player || !state?.aiContext) return "";
+  return JSON.stringify([
+    state.phase,
+    state.turnIndex,
+    state.moveCount,
+    state.drawnTile,
+    state.lastDiscard,
+    state.aiTurn.player,
+  ]);
+}
+
+function waitForRoomAiPacing(startedAt) {
+  const remaining = AI_DELAY_MS - (performance.now() - startedAt);
+  if (remaining <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    roomAiWaitResolve = resolve;
+    roomAiSchedule = window.setTimeout(() => {
+      roomAiSchedule = 0;
+      roomAiWaitResolve = undefined;
+      resolve();
+    }, remaining);
+  });
+}
+
+function cancelRoomAiWait() {
+  window.clearTimeout(roomAiSchedule);
+  roomAiSchedule = 0;
+  const resolve = roomAiWaitResolve;
+  roomAiWaitResolve = undefined;
+  resolve?.();
+}
+
+async function runRoomAi(aiContext, actorId, turnKey, generation, startedAt) {
+  if (roomAiBusy || destroyed || !roomIsOwner || !aiContext || !actorId) return;
   roomAiBusy = true;
+  let submitted = false;
   try {
     const players = (aiContext.players || []).map((id) => ({
       id,
@@ -1549,19 +1681,32 @@ async function runRoomAi(aiContext, actorId) {
       roomAiPlayerIds = currentIds;
     }
     const outcome = await roomAiGame.aiAction(aiContext, actorId);
-    if (outcome?.status !== "acted" || !outcome.action) {
-      roomAiBusy = false;
+    if (outcome?.status !== "acted" || !outcome.action) return;
+    await waitForRoomAiPacing(startedAt);
+    if (
+      !roomIsOwner ||
+      destroyed ||
+      generation !== roomAiGeneration ||
+      turnKey !== roomAiTurnKey ||
+      turnKey !== roomAiStateKey(roomAiState)
+    )
       return;
-    }
     const requestId = playweftClient?.sendAction({
       type: "ai_turn",
       playerId: actorId,
       action: outcome.action,
     });
-    if (!requestId) roomAiBusy = false;
+    submitted = Boolean(requestId);
+    roomAiAwaitingState = submitted;
   } catch (error) {
-    roomAiBusy = false;
     console.error("Mahjong room AI failed", error);
+  } finally {
+    if (submitted) return;
+    roomAiBusy = false;
+    if (generation !== roomAiGeneration && roomAiState) {
+      roomAiTurnKey = "";
+      scheduleRoomAi(roomAiState);
+    }
   }
 }
 
@@ -1571,6 +1716,7 @@ function handleRoomActionResult() {
 
 function handlePlayweftError(message, _code, requestId) {
   roomAiBusy = false;
+  roomAiAwaitingState = false;
   if (session.rejectRoomAction(requestId)) {
     tableController.clearResultPageReadyPending();
     if (tableController.getState()?.phase === "hand_ended") {
@@ -1597,6 +1743,7 @@ function handlePlayweftError(message, _code, requestId) {
 function showRoomWaiting() {
   elements.setup.hidden = true;
   elements.loading.classList.remove("is-error");
+  elements.loading.classList.add("is-room-waiting");
   elements.loading.classList.add("is-active");
   elements.loadingMessage.textContent = "等待其他玩家加入…";
   elements.loadingMessage.hidden = false;
@@ -1814,10 +1961,18 @@ function defaultAutoActions() {
 }
 
 function toggleAutoAction(name) {
+  if (playMode === "room" && name === "passClaims") {
+    void session.dispatch({
+      type: "set_pass_claims",
+      enabled: !autoActions.passClaims,
+    });
+    return;
+  }
   autoActions = { ...autoActions, [name]: !autoActions[name] };
   syncAutoActionControls();
   persistAutoActions();
-  scheduleAi();
+  if (playMode === "room") scheduleRoomAutomaticAction();
+  else scheduleAi();
 }
 
 function resetAutoActions({ persist = true } = {}) {
@@ -1837,8 +1992,16 @@ function syncAutoActionControls() {
   }
 }
 
+function syncRoomPassClaims(state) {
+  if (playMode !== "room" || typeof state?.passClaimsEnabled !== "boolean")
+    return;
+  if (autoActions.passClaims === state.passClaimsEnabled) return;
+  autoActions = { ...autoActions, passClaims: state.passClaimsEnabled };
+  syncAutoActionControls();
+}
+
 function persistAutoActions() {
-  if (!soloSave) return;
+  if (playMode !== "solo" || !soloSave) return;
   const next = setMahjongSoloAutoActions(soloSave, autoActions);
   if (!next) return;
   soloSave = next;
@@ -1872,6 +2035,7 @@ function showRoomSetup() {
   elements.setup.classList.remove("is-leaving", "is-prepared-for-result-exit");
   for (const button of elements.setup.querySelectorAll("[data-match-type]"))
     button.disabled = false;
+  elements.loading.classList.remove("is-room-waiting");
   elements.loading.hidden = true;
   elements.setup.hidden = false;
 }
@@ -1991,7 +2155,7 @@ function resumeAfterSuspension() {
 function destroy() {
   if (destroyed) return;
   destroyed = true;
-  window.clearTimeout(roomAiSchedule);
+  cancelRoomAiWait();
   session?.cancelScheduledActions();
   tableController?.destroy();
   themeController.destroy();
@@ -2009,6 +2173,7 @@ function destroy() {
   roomAiGame = undefined;
   roomLegalRequest += 1;
   roomLegalRequestedKey = "";
+  roomLegalAppliedKey = "";
   roomLegalGame?.close();
   roomLegalGame = undefined;
   roomTenpaiRequest += 1;

@@ -94,6 +94,27 @@ test("local Mahjong AI can decide one named actor without applying an action", a
   assert.equal(game.view(HUMAN_ID).state.moveCount, projection.state.moveCount);
 });
 
+test("local Mahjong AI can decide its authoritative next action without applying it", async (t) => {
+  let game;
+  let projection;
+  for (let seed = 1; seed <= 16; seed += 1) {
+    game = await createGame(t, seed);
+    projection = game.view(HUMAN_ID);
+    if (projection.state.turnIndex !== 1) break;
+    game.close();
+    game = undefined;
+  }
+  t.after(() => game?.close());
+
+  assert.ok(game, "a deterministic seed should give an AI the opening turn");
+  const outcome = game.aiDecision(HUMAN_ID);
+
+  assert.equal(outcome.status, "acted");
+  assert.equal(outcome.actorId, projection.state.players[projection.state.turnIndex - 1]);
+  assert.ok(outcome.action?.type);
+  assert.equal(game.view(HUMAN_ID).state.moveCount, projection.state.moveCount);
+});
+
 test("local Mahjong runtime calculates a human turn's legal preview without mutating state", async (t) => {
   let game;
   let projection;

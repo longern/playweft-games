@@ -122,6 +122,14 @@ export function createMahjongTableController({
     serverTimeAtSync = Number.isFinite(projectionServerTime)
       ? projectionServerTime
       : 0;
+    if (
+      selectedTileId &&
+      (state?.phase === "hand_ended" ||
+        !orderedOwnTiles(state).includes(selectedTileId))
+    ) {
+      selectedTileId = 0;
+      selectionBeforeRiichi = 0;
+    }
     if (riichiMode && !state.legalActions?.canRiichi) {
       riichiMode = false;
       selectionBeforeRiichi = 0;

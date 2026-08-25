@@ -149,6 +149,179 @@ test("Mahjong rooms stay in a private game lobby until the owner starts the sele
   });
 });
 
+test("Mahjong room pass-claims stays private, skips calls, and preserves ron", async () => {
+  const result = await runOnlineMock(`
+    local function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+    local lobby = setup({
+      keepLobby = true,
+      serverTime = 1000,
+      players = ${PLAYERS},
+      match = {
+        id = "private-pass-claims",
+        ownerId = "p1",
+        randomSeed = "00000000000000000000000000000063",
+      },
+    })
+    local enabled = on_action(lobby.state, {
+      type = "set_pass_claims",
+      enabled = true,
+    }, { serverTime = 1001, actor = { id = "p2", seat = 2 } })
+    local started = on_action(enabled.state, {
+      type = "start_match",
+      matchType = "east",
+      rules = {},
+    }, { serverTime = 1002, actor = { id = "p1", seat = 1, isOwner = true } })
+    local started_setting = started.state.autoPassClaims.p2 == nil
+    local enabled_in_hand = on_action(started.state, {
+      type = "set_pass_claims",
+      enabled = true,
+    }, { serverTime = 1002.5, actor = { id = "p2", seat = 2 } })
+    local state = enabled_in_hand.state
+    state.phase, state.turnIndex, state.wall = "playing", 1, { 1, 2, 3, 4 }
+    state.hands.p1 = ids({ 2, 10,11,12,13,14,15,16,17,18,19,20,21,22 })
+    state.hands.p2 = ids({ 2,2,3,4,5,4,5,6,6,7,8,9,9 })
+    state.hands.p3 = ids({ 10,10,11,11,12,12,13,13,14,14,15,15,16 })
+    state.hands.p4 = ids({ 17,17,18,18,19,19,20,20,21,21,22,22,23 })
+    state.drawnTile = state.hands.p1[1]
+    for _, player_id in ipairs(state.players) do
+      state.melds[player_id], state.discards[player_id] = {}, {}
+      state.riichi[player_id], state.tempFuriten[player_id], state.riichiFuriten[player_id] = false, false, false
+    end
+    local discarded = on_action(state, { type = "discard", tileId = state.drawnTile }, {
+      serverTime = 1003,
+      actor = { id = "p1", seat = 1, isOwner = true },
+    })
+    local p2_view = view(discarded.state, {}, { viewer = { id = "p2", seat = 2 } })
+    local p1_view = view(discarded.state, {}, { viewer = { id = "p1", seat = 1 } })
+    local claims = p2_view.state.legalActions.claims
+    result = {
+      setting_accepted = enabled.accepted == true,
+      setting_cleared_for_first_hand = started_setting,
+      owner_cannot_see_guest_setting = p1_view.state.passClaimsEnabled == false,
+      guest_sees_own_setting = p2_view.state.passClaimsEnabled == true,
+      waiting_for_guest = p2_view.state.responseIndex == 2,
+      only_ron_remains = #claims == 1 and claims[1].kind == "ron",
+    }
+  `);
+
+  assert.deepEqual(result, {
+    setting_accepted: true,
+    setting_cleared_for_first_hand: true,
+    owner_cannot_see_guest_setting: true,
+    guest_sees_own_setting: true,
+    waiting_for_guest: true,
+    only_ron_remains: true,
+  });
+});
+
+test("Mahjong room clears private pass-claims settings at hand and match boundaries", async () => {
+  const result = await runOnlineMock(`
+    local setup_result = setup({
+      keepLobby = true,
+      serverTime = 1000,
+      players = ${PLAYERS},
+      match = {
+        id = "reset-pass-claims",
+        ownerId = "p1",
+        randomSeed = "00000000000000000000000000000065",
+      },
+    })
+    local started = on_action(setup_result.state, {
+      type = "start_match", matchType = "east", rules = {},
+    }, { serverTime = 1001, actor = { id = "p1", seat = 1, isOwner = true } })
+    local enabled = on_action(started.state, {
+      type = "set_pass_claims", enabled = true,
+    }, { serverTime = 1002, actor = { id = "p2", seat = 2 } })
+    local state = enabled.state
+    state.phase = "hand_ended"
+    state.matchEnded = false
+    state.nextDealerIndex = state.dealerIndex
+    state.nextHandNumber = state.handNumber + 1
+    state.nextRoundWind = state.roundWind
+    state.nextHonba = state.honba
+    local next_hand = on_action(state, { type = "next_hand" }, {
+      serverTime = 1003,
+      actor = { id = "p2", seat = 2 },
+    })
+    local next_hand_cleared = next_hand.accepted == true
+      and next_hand.state.autoPassClaims.p2 ~= true
+    local reenabled = on_action(next_hand.state, {
+      type = "set_pass_claims", enabled = true,
+    }, { serverTime = 1004, actor = { id = "p2", seat = 2 } })
+    reenabled.state.phase = "hand_ended"
+    reenabled.state.matchEnded = true
+    local new_match = on_action(reenabled.state, { type = "new_match" }, {
+      serverTime = 1005,
+      actor = { id = "p2", seat = 2 },
+    })
+    result = {
+      next_hand_cleared = next_hand_cleared,
+      new_match_cleared = new_match.accepted == true
+        and new_match.state.autoPassClaims.p2 ~= true,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    next_hand_cleared: true,
+    new_match_cleared: true,
+  });
+});
+
+test("enabling Mahjong room pass-claims immediately skips a pending non-ron call", async () => {
+  const result = await runOnlineMock(`
+    local setup_result = setup({
+      keepLobby = true,
+      serverTime = 1000,
+      players = ${PLAYERS},
+      match = {
+        id = "pending-pass-claims",
+        ownerId = "p1",
+        randomSeed = "00000000000000000000000000000064",
+      },
+    })
+    local state = on_action(setup_result.state, {
+      type = "start_match", matchType = "east", rules = {},
+    }, { serverTime = 1001, actor = { id = "p1", seat = 1, isOwner = true } }).state
+    state.phase, state.claimIndex, state.claimResponses = "claiming", 1, {}
+    state.claimants = {
+      {
+        playerId = "p2", playerIndex = 2, distance = 1,
+        options = { { kind = "pon", tileIds = { 1, 2 } } },
+        ronOpportunity = true,
+      },
+      {
+        playerId = "p3", playerIndex = 3, distance = 2,
+        options = { { kind = "pon", tileIds = { 3, 4 } } },
+        ronOpportunity = false,
+      },
+    }
+    state.tempFuriten.p2, state.riichiFuriten.p2 = false, false
+    local enabled = on_action(state, {
+      type = "set_pass_claims", enabled = true,
+    }, { serverTime = 1002, actor = { id = "p2", seat = 2 } })
+    result = {
+      accepted = enabled.accepted == true,
+      skipped_current_call = enabled.state.claimIndex == 2 and #enabled.state.claimResponses == 1,
+      no_ron_furiten = enabled.state.tempFuriten.p2 == false and enabled.state.riichiFuriten.p2 == false,
+      private_marker_cleared = enabled.state.autoPassClaimsApplying == nil,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    accepted: true,
+    skipped_current_call: true,
+    no_ron_furiten: true,
+    private_marker_cleared: true,
+  });
+});
+
 test("a non-owner room player can declare riichi from the private legal preview", async () => {
   const result = await runOnlineMock(`
     local setup_result = setup({
@@ -805,6 +978,164 @@ test("authoritative Mahjong timers auto-discard and auto-pass with stale protect
   assert.equal(result.foundClaimWindow, true);
   assert.equal(result.claimTimeoutEvent, true);
   assert.equal(result.claimMoved, true);
+});
+
+test("Mahjong room timeouts take wins and promptly tsumogiri a forced riichi draw", async () => {
+  const result = await runOnlineMock(`
+    local function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+
+    local function scheduled(ops)
+      for _, operation in ipairs(ops or {}) do
+        if operation.op == "schedule" and operation.id == "mahjong-turn" then return operation end
+      end
+      return nil
+    end
+
+    local function room_state(seed)
+      return setup({
+        protocolVersion = 1,
+        serverTime = 1000,
+        players = ${PLAYERS},
+        match = {
+          id = "timeout-defaults-" .. seed,
+          ownerId = "p1",
+          randomSeed = seed,
+        },
+      }).state
+    end
+
+    local riichi_state = room_state("00000000000000000000000000000068")
+    riichi_state.phase, riichi_state.turnIndex, riichi_state.drawnTile = "claiming", 4, 0
+    riichi_state.wall = { 53 }
+    riichi_state.hands.p1 = { 1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49 }
+    riichi_state.melds.p1, riichi_state.discards.p1 = {}, {}
+    riichi_state.riichi.p1, riichi_state.firstTurn.p1 = true, false
+    riichi_state.claimants = {
+      { playerId = "p2", playerIndex = 2, distance = 1, options = { { kind = "pon", tileIds = { 1, 2 } } }, ronOpportunity = false },
+    }
+    riichi_state.claimResponses, riichi_state.claimIndex = {}, 1
+    riichi_state.lastDiscard = { player = "p4", playerIndex = 4, tile = 1, discardIndex = 1 }
+    riichi_state.discards.p4 = { { tile = 1, claimed = false } }
+    local riichi_started = on_action(riichi_state, { type = "pass" }, {
+      serverTime = 1000,
+      actor = { id = "p2", seat = 2, isOwner = false },
+    })
+    local riichi_timer = scheduled(riichi_started.timerOps)
+    local riichi_timeout = on_timer(riichi_started.state, riichi_timer, { firedAt = 2000 })
+    local riichi_discard = riichi_timeout.state.discards.p1[#riichi_timeout.state.discards.p1]
+
+    local tsumo_state = room_state("00000000000000000000000000000069")
+    tsumo_state.phase, tsumo_state.turnIndex, tsumo_state.drawnTile = "playing", 1, 54
+    tsumo_state.wall = { 1, 2, 3, 4 }
+    tsumo_state.hands.p1 = ids({ 1,1,1, 2,3,4, 10,11,12, 19,20,21, 14 })
+    tsumo_state.melds.p1, tsumo_state.discards.p1 = {}, {}
+    local tsumo_timer = {
+      id = "mahjong-turn",
+      payload = {
+        phase = "playing",
+        turnIndex = 1,
+        claimIndex = tsumo_state.claimIndex,
+        moveCount = tsumo_state.moveCount,
+        drawnTile = tsumo_state.drawnTile,
+      },
+    }
+    local tsumo_timeout = on_timer(tsumo_state, tsumo_timer, { firedAt = 22000 })
+    local tsumo_won = false
+    for _, event in ipairs(tsumo_timeout.events or {}) do
+      if event.type == "won" and event.method == "tsumo" and event.player == "p1" then
+        tsumo_won = true
+      end
+    end
+
+    local ron_state = room_state("0000000000000000000000000000006a")
+    ron_state.phase, ron_state.turnIndex, ron_state.drawnTile = "playing", 1, 54
+    ron_state.wall = { 1, 2, 3, 4 }
+    ron_state.hands.p1 = { 1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49 }
+    ron_state.hands.p2 = ids({ 1,2,3, 4,5,6, 10,11,12, 32,32,32, 14 })
+    ron_state.hands.p3, ron_state.hands.p4 = {}, {}
+    ron_state.melds.p1, ron_state.melds.p2, ron_state.melds.p3, ron_state.melds.p4 = {}, {}, {}, {}
+    ron_state.discards.p1, ron_state.discards.p2, ron_state.discards.p3, ron_state.discards.p4 = {}, {}, {}, {}
+    local discarded = on_action(ron_state, { type = "discard", tileId = 54 }, {
+      serverTime = 1000,
+      actor = { id = "p1", seat = 1, isOwner = true },
+    })
+    local ron_timer = scheduled(discarded.timerOps)
+    local ron_timeout = on_timer(discarded.state, ron_timer, { firedAt = 10000 })
+    local ron_won = false
+    for _, event in ipairs(ron_timeout.events or {}) do
+      if event.type == "won" and event.method == "ron" and event.player == "p2" then
+        ron_won = true
+      end
+    end
+
+    result = {
+      riichiUsesShortGrace = riichi_timer and riichi_timer.afterMs == 520,
+      riichiDiscardedDraw = riichi_discard and riichi_discard.tsumogiri == true,
+      tsumoWon = tsumo_won and tsumo_timeout.state.phase == "hand_ended",
+      ronWon = ron_won and ron_timeout.state.phase == "hand_ended",
+    }
+  `);
+
+  assert.deepEqual(result, {
+    riichiUsesShortGrace: true,
+    riichiDiscardedDraw: true,
+    tsumoWon: true,
+    ronWon: true,
+  });
+});
+
+test("Mahjong room timeout win handling stays within the runtime instruction quota", async () => {
+  const result = await runOnlineWithinRuntimeQuota(`
+    local function ids(types)
+      local copies, tiles = {}, {}
+      for _, kind in ipairs(types) do
+        copies[kind] = (copies[kind] or 0) + 1
+        tiles[#tiles + 1] = (kind - 1) * 4 + copies[kind]
+      end
+      return tiles
+    end
+
+    local setup_result = setup({
+      protocolVersion = 1,
+      serverTime = 1000,
+      players = ${PLAYERS},
+      match = {
+        id = "quota-timeout-win",
+        ownerId = "p1",
+        randomSeed = "0000000000000000000000000000006b",
+      },
+    })
+    local state = setup_result.state
+    state.phase, state.turnIndex, state.drawnTile = "playing", 1, 54
+    state.wall = { 1, 2, 3, 4 }
+    state.hands.p1 = ids({ 1,1,1, 2,3,4, 10,11,12, 19,20,21, 14 })
+    state.melds.p1, state.discards.p1 = {}, {}
+    local timed_out = __within_quota(function()
+      return on_timer(state, {
+        id = "mahjong-turn",
+        payload = {
+          phase = "playing",
+          turnIndex = 1,
+          claimIndex = state.claimIndex,
+          moveCount = state.moveCount,
+          drawnTile = state.drawnTile,
+        },
+      }, { firedAt = 22000 })
+    end)
+    result = {
+      accepted = timed_out.accepted == true,
+      won = timed_out.state.phase == "hand_ended",
+    }
+  `);
+
+  assert.deepEqual(result, { accepted: true, won: true });
 });
 
 test("authoritative Mahjong result pages wait for every player, time out safely, and stop on the final ranking", async () => {

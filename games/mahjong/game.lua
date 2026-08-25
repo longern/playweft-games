@@ -2508,18 +2508,28 @@ local function begin_claims(state, discarder, tile)
 	for distance = 1, 3 do
 		local seat = ((discarder - 1 + distance) % 4) + 1
 		local options, ron_opportunity = claim_options(state, seat, discarder, tile)
+		local player_id = state.players[seat]
+		local auto_pass_claims = state.autoPassClaims and state.autoPassClaims[player_id] == true
+		if auto_pass_claims then
+			local ron_options = {}
+			for _, option in ipairs(options) do
+				if option.kind == "ron" then
+					ron_options[#ron_options + 1] = option
+				end
+			end
+			options = ron_options
+		end
 		if #options > 0 then
 			state.claimants[#state.claimants + 1] = {
-				playerId = state.players[seat],
+				playerId = player_id,
 				playerIndex = seat,
 				distance = distance,
 				options = options,
 				ronOpportunity = ron_opportunity,
 			}
-		elseif ron_opportunity then
+		elseif ron_opportunity and not auto_pass_claims then
 			-- Completing a structurally valid hand without a yaku is still a
 			-- missed ron opportunity and therefore creates temporary furiten.
-			local player_id = state.players[seat]
 			if state.riichi[player_id] then
 				state.riichiFuriten[player_id] = true
 			else
@@ -3072,7 +3082,9 @@ local function apply_claim_response(state, action, actor_id)
 		return rejected("claim_response_required")
 	end
 	local selected = option > 0 and claimant.options[option] or nil
-	local declined_ron = claimant.ronOpportunity == true and (not selected or selected.kind ~= "ron")
+	local declined_ron = claimant.ronOpportunity == true
+		and state.autoPassClaimsApplying ~= actor_id
+		and (not selected or selected.kind ~= "ron")
 	if declined_ron then
 		if state.riichi[actor_id] then
 			state.riichiFuriten[actor_id] = true

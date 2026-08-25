@@ -15,15 +15,39 @@ local __mahjong_result_timer_id = "mahjong-result"
 local __mahjong_discard_timeout_ms = 20000
 local __mahjong_claim_timeout_ms = 8000
 local __mahjong_result_timeout_ms = 8000
+local __mahjong_min_timer_delay_ms = 100
+local __mahjong_riichi_tsumogiri_delay_ms = 520
 
 local function __mahjong_now(context)
   return tonumber(context and (context.serverTime or context.firedAt)) or 0
+end
+
+local function __mahjong_timer_delay(delay)
+  return math.max(
+    __mahjong_min_timer_delay_ms,
+    math.min(3600000, math.floor(tonumber(delay) or __mahjong_min_timer_delay_ms))
+  )
 end
 
 local function __mahjong_clear_private_state(state)
   state.paipu = nil
   state.paipuTilePositions = nil
   state.replayWall = nil
+  state.autoPassClaimsApplying = nil
+end
+
+local function __mahjong_is_room_player(state, player_id)
+  for _, candidate in ipairs(state.players or {}) do
+    if candidate == player_id then return true end
+  end
+  return false
+end
+
+local function __mahjong_has_ron_option(claimant)
+  for _, option in ipairs(claimant and claimant.options or {}) do
+    if option.kind == "ron" then return true end
+  end
+  return false
 end
 
 local function __mahjong_stage_tenpai_report(state, action, player_id)
@@ -222,8 +246,27 @@ local function __mahjong_result_timer_matches(state, payload)
     and tonumber(payload.resultPage) == tonumber(state.resultPage)
 end
 
+-- Once a player has declared riichi, the drawn tile normally has to be
+-- discarded. Keep the normal turn window only when there is a meaningful
+-- choice left (win, abortive draw, or a legal post-riichi concealed kan).
+local function __mahjong_should_auto_riichi_tsumogiri(state, player_id, player_index)
+  if state.phase ~= "playing"
+    or state.riichi[player_id] ~= true
+    or (tonumber(state.drawnTile) or 0) <= 0 then
+    return false
+  end
+  if score_hand(state, player_index, state.drawnTile, "tsumo") then return false end
+  if can_abort_nine(state, player_id) then return false end
+  return #self_kan_options(state, player_id) == 0
+end
+
 local function __mahjong_timeout_ms(state)
   if state.phase == "playing" then
+    local player_index = tonumber(state.turnIndex) or 0
+    local player_id = state.players and state.players[player_index]
+    if player_id and __mahjong_should_auto_riichi_tsumogiri(state, player_id, player_index) then
+      return __mahjong_riichi_tsumogiri_delay_ms
+    end
     return __mahjong_discard_timeout_ms
   end
   if state.phase == "claiming" then
@@ -232,20 +275,35 @@ local function __mahjong_timeout_ms(state)
   return nil
 end
 
+local function __mahjong_timeout_playing_action(state, player_id, player_index)
+  local won = apply_tsumo(state, player_id, player_index)
+  if won and won.accepted then return won end
+  return perform_discard(state, state.drawnTile, player_id, player_index, false)
+end
+
+local function __mahjong_timeout_claim_action(state, claimant)
+  for option_index, option in ipairs(claimant.options or {}) do
+    if option.kind == "ron" then
+      return apply_claim_response(state, { type = "claim", option = option_index }, claimant.playerId)
+    end
+  end
+  return apply_claim_response(state, { type = "pass" }, claimant.playerId)
+end
+
 local function __mahjong_timer_ops(state, context)
   __mahjong_ensure_result_page(state, context)
   if __mahjong_result_page_needs_confirmation(state) then
     local now = __mahjong_now(context)
     local after_ms = __mahjong_result_timeout_ms
     if now > 0 and tonumber(state.resultDeadlineAt) then
-      after_ms = math.max(1, tonumber(state.resultDeadlineAt) - now)
+      after_ms = tonumber(state.resultDeadlineAt) - now
     end
     return {
       { op = "cancel", id = __mahjong_turn_timer_id },
       {
         op = "schedule",
         id = __mahjong_result_timer_id,
-        afterMs = after_ms,
+        afterMs = __mahjong_timer_delay(after_ms),
         payload = __mahjong_result_timer_payload(state),
       },
     }
@@ -264,7 +322,7 @@ local function __mahjong_timer_ops(state, context)
     {
       op = "schedule",
       id = __mahjong_turn_timer_id,
-      afterMs = delay,
+      afterMs = __mahjong_timer_delay(delay),
       payload = __mahjong_timer_payload(state),
     },
     { op = "cancel", id = __mahjong_result_timer_id },
@@ -307,6 +365,7 @@ function setup(context)
     aiPlayers = ai_players,
     lobbySeed = normalize_random_seed(context.match and context.match.randomSeed),
     roomOwnerId = context.match and context.match.ownerId,
+    autoPassClaims = {},
   }
   return {
     state = state,
@@ -317,6 +376,34 @@ end
 
 local __mahjong_online_action = on_action
 function on_action(state, action, context)
+  if action and action.type == "set_pass_claims" then
+    local actor_id = context and context.actor and context.actor.id
+    if not actor_id or not __mahjong_is_room_player(state, actor_id) then
+      return rejected("not_a_player")
+    end
+    if type(action.enabled) ~= "boolean" then
+      return rejected("invalid_pass_claims_setting")
+    end
+    state.autoPassClaims = state.autoPassClaims or {}
+    state.autoPassClaims[actor_id] = action.enabled
+    if action.enabled and state.phase == "claiming" then
+      local claimant = state.claimants and state.claimants[state.claimIndex]
+      if claimant and claimant.playerId == actor_id and not __mahjong_has_ron_option(claimant) then
+        state.autoPassClaimsApplying = actor_id
+        local passed = __mahjong_online_action(state, { type = "pass" }, context)
+        state.autoPassClaimsApplying = nil
+        if passed and passed.accepted and passed.state then
+          __mahjong_clear_private_state(passed.state)
+          passed.timerOps = __mahjong_timer_ops(passed.state, context)
+        end
+        return passed
+      end
+    end
+    local result = accepted(state, {})
+    __mahjong_clear_private_state(result.state)
+    result.timerOps = __mahjong_timer_ops(result.state, context)
+    return result
+  end
   if state.phase == "lobby" then
     if not action or action.type ~= "start_match" then
       return rejected("match_not_started")
@@ -340,6 +427,9 @@ function on_action(state, action, context)
       state.aiPlayers
     )
     started.roomOwnerId = state.roomOwnerId
+    -- Match starts are the first hand of a fresh game.  Match-local
+    -- automatic claim settings must not leak into it from the lobby.
+    started.autoPassClaims = {}
     local result = accepted(started, { { type = "match_started", player = actor.id } })
     __mahjong_clear_private_state(result.state)
     result.timerOps = __mahjong_timer_ops(result.state, context)
@@ -459,6 +549,13 @@ function on_action(state, action, context)
     state.pendingTenpaiReport = nil
     return result
   end
+  if action and (action.type == "next_hand" or action.type == "new_match") then
+    -- Keep the private setting aligned with the solo client: every newly
+    -- dealt hand (and every fresh match) starts with automatic calls disabled.
+    result.state.autoPassClaims = {}
+  else
+    result.state.autoPassClaims = state.autoPassClaims or {}
+  end
   __mahjong_commit_tenpai_report(result.state)
   __mahjong_clear_private_state(result.state)
   result.timerOps = __mahjong_timer_ops(result.state, context)
@@ -475,6 +572,7 @@ function view(state, events, context)
         playerNames = state.playerNames,
         aiPlayers = state.aiPlayers,
         roomIsOwner = context.viewer.isOwner == true,
+        passClaimsEnabled = state.autoPassClaims and state.autoPassClaims[context.viewer.id] == true or false,
       },
       events = {},
     }
@@ -496,6 +594,9 @@ function view(state, events, context)
       and state.turnDeadlineAt
       or nil
     projection.state.roomIsOwner = context.viewer.isOwner == true
+    projection.state.passClaimsEnabled = state.autoPassClaims
+      and state.autoPassClaims[viewer_id] == true
+      or false
     projection.state.resultPage = tonumber(state.resultPage) or 0
     projection.state.resultDeadlineAt = state.resultDeadlineAt
     projection.state.resultPageReady = state.resultReadyPlayers
@@ -570,7 +671,7 @@ function on_timer(state, timer, context)
         timerOps = __mahjong_timer_ops(state, context),
       }
     end
-    local result = perform_discard(state, state.drawnTile, player_id, player_index, false)
+    local result = __mahjong_timeout_playing_action(state, player_id, player_index)
     return __mahjong_with_timeout_event(result, state, context, player_id, player_index)
   end
   if state.phase == "claiming" then
@@ -583,7 +684,7 @@ function on_timer(state, timer, context)
       }
     end
     player_id, player_index = claimant.playerId, claimant.playerIndex
-    local result = apply_claim_response(state, { type = "pass" }, player_id)
+    local result = __mahjong_timeout_claim_action(state, claimant)
     return __mahjong_with_timeout_event(result, state, context, player_id, player_index)
   end
   return {
@@ -605,7 +706,11 @@ export function buildMahjongOnlineSource(source) {
     protocolStart < 0 ||
     aiClaimStart < 0 ||
     callbackStart < 0 ||
-    !(aiStart < protocolStart && protocolStart < aiClaimStart && aiClaimStart < callbackStart)
+    !(
+      aiStart < protocolStart &&
+      protocolStart < aiClaimStart &&
+      aiClaimStart < callbackStart
+    )
   ) {
     throw new Error("Mahjong Lua source markers are out of order");
   }

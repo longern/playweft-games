@@ -55,6 +55,9 @@ async function handle(type, payload) {
   if (type === "aiTurn") {
     return game.aiTurn(payload.viewerId);
   }
+  if (type === "aiDecision") {
+    return game.aiDecision(payload.viewerId);
+  }
   if (type === "aiAction") {
     return game.aiAction(payload.state, payload.actorId);
   }

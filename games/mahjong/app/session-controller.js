@@ -30,11 +30,23 @@ export function createMahjongSessionController({
   onAiError,
   delays,
   scheduler = createMahjongAutoActionScheduler(),
+  now = () => globalThis.performance?.now?.() ?? Date.now(),
+  wait = (delay) =>
+    new Promise((resolve) => globalThis.setTimeout(resolve, Math.max(0, delay))),
 } = {}) {
   let actionInFlight = false;
   let roomActionRequestId = "";
 
   const sameCurrentGame = (candidate) => candidate === getGame?.();
+
+  const aiTurnKey = (state) =>
+    JSON.stringify([
+      state?.phase,
+      state?.turnIndex,
+      state?.moveCount,
+      state?.drawnTile,
+      state?.lastDiscard,
+    ]);
 
   async function dispatch(
     action,
@@ -106,7 +118,7 @@ export function createMahjongSessionController({
     }
   }
 
-  async function runAiTurn(generation) {
+  async function runAiTurn(generation, startedAt, minimumDelay) {
     const currentGame = getGame?.();
     const currentState = getState?.();
     if (
@@ -120,31 +132,112 @@ export function createMahjongSessionController({
       return;
     }
 
+    const initialTurnKey = aiTurnKey(currentState);
     let reschedule = false;
     actionInFlight = true;
     try {
-      const outcome = await currentGame.aiTurn(humanId);
-      if (!sameCurrentGame(currentGame) || !outcome?.projection) return;
-      if (outcome.status === "acted" && !outcome.result?.accepted) {
-        onAiActionRejected?.(outcome);
+      const outcome = await currentGame.aiDecision(humanId);
+      if (
+        !sameCurrentGame(currentGame) ||
+        !scheduler.isCurrent(generation) ||
+        outcome?.status !== "acted" ||
+        !outcome.action ||
+        outcome.version === undefined
+      ) {
         return;
       }
-      if (outcome.status === "acted") {
-        await persistAcceptedAction?.(
-          outcome.action,
-          outcome.actorId,
-          outcome.projection,
-          currentGame,
-        );
-        reschedule = true;
+      const remainingDelay = minimumDelay - (now() - startedAt);
+      if (remainingDelay > 0) await wait(remainingDelay);
+      if (
+        !sameCurrentGame(currentGame) ||
+        !scheduler.isCurrent(generation) ||
+        aiTurnKey(getState?.()) !== initialTurnKey
+      ) {
+        return;
       }
-      await refreshProjection?.(outcome.projection);
+      const applied = await currentGame.action(
+        outcome.action,
+        outcome.actorId,
+        humanId,
+      );
+      if (!sameCurrentGame(currentGame)) return;
+      if (!applied?.result?.accepted) {
+        onAiActionRejected?.({ ...outcome, result: applied?.result });
+        return;
+      }
+      await persistAcceptedAction?.(
+        outcome.action,
+        outcome.actorId,
+        applied.projection,
+        currentGame,
+      );
+      reschedule = true;
+      await refreshProjection?.(applied.projection);
     } catch (error) {
       if (sameCurrentGame(currentGame)) onAiError?.(error);
     } finally {
       actionInFlight = false;
       if (reschedule && sameCurrentGame(currentGame)) scheduleAi();
     }
+  }
+
+  function scheduleAutomaticAction(
+    currentState,
+    { visualDelay = 0, isCurrent = () => true, skipPassClaims = false } = {},
+  ) {
+    if (
+      !currentState ||
+      currentState.phase === "hand_ended" ||
+      isKanDrawPending?.()
+    ) {
+      return false;
+    }
+    const automaticActions = {
+      ...getAutoActions?.(),
+      ...(skipPassClaims ? { passClaims: false } : {}),
+    };
+    const autoAction = automaticMahjongAction(
+      currentState,
+      automaticActions,
+      { riichiMode: getRiichiMode?.() === true },
+    );
+    if (!autoAction) return false;
+    const visibleDecision = ["claim", "tsumo", "discard"].includes(
+      autoAction.type,
+    );
+    scheduler.schedule(
+      (generation) => {
+        if (!scheduler.isCurrent(generation) || actionInFlight || !isCurrent())
+          return;
+        const latestAction = automaticMahjongAction(
+          getState?.(),
+          {
+            ...getAutoActions?.(),
+            ...(skipPassClaims ? { passClaims: false } : {}),
+          },
+          { riichiMode: getRiichiMode?.() === true },
+        );
+        if (isCurrent() && sameMahjongAction(latestAction, autoAction)) {
+          void dispatch(autoAction, { source: "automatic" });
+        }
+      },
+      visibleDecision
+        ? Math.max(
+            visualDelay,
+            autoAction.type === "claim" ? 0 : delays?.ownDrawEntry ?? 0,
+          ) + (delays?.autoDecision ?? 0)
+        : 0,
+    );
+    return true;
+  }
+
+  function scheduleRoomAutomaticAction({ state, isCurrent } = {}) {
+    scheduler.cancel();
+    if (getMode?.() !== "room") return;
+    scheduleAutomaticAction(state ?? getState?.(), {
+      isCurrent,
+      skipPassClaims: true,
+    });
   }
 
   function scheduleAi({ afterDealIn = false } = {}) {
@@ -160,36 +253,7 @@ export function createMahjongSessionController({
     }
 
     const visualDelay = afterDealIn ? delays?.newHandDeal ?? 0 : 0;
-    const autoAction = automaticMahjongAction(
-      currentState,
-      getAutoActions?.(),
-      { riichiMode: getRiichiMode?.() === true },
-    );
-    if (autoAction) {
-      const visibleDecision = ["claim", "tsumo", "discard"].includes(
-        autoAction.type,
-      );
-      scheduler.schedule(
-        (generation) => {
-          if (!scheduler.isCurrent(generation) || actionInFlight) return;
-          const latestAction = automaticMahjongAction(
-            getState?.(),
-            getAutoActions?.(),
-            { riichiMode: getRiichiMode?.() === true },
-          );
-          if (sameMahjongAction(latestAction, autoAction)) {
-            void dispatch(autoAction, { source: "automatic" });
-          }
-        },
-        visibleDecision
-          ? Math.max(
-              visualDelay,
-              autoAction.type === "claim" ? 0 : delays?.ownDrawEntry ?? 0,
-            ) + (delays?.autoDecision ?? 0)
-          : 0,
-      );
-      return;
-    }
+    if (scheduleAutomaticAction(currentState, { visualDelay })) return;
 
     const automaticTile = automaticRiichiDiscard(currentState, humanId);
     if (automaticTile) {
@@ -210,15 +274,22 @@ export function createMahjongSessionController({
     }
 
     if (!shouldScheduleMahjongAiTurn(currentState)) return;
+    const startedAt = now();
     scheduler.schedule(
-      (generation) => void runAiTurn(generation),
-      visualDelay + (delays?.ai ?? 0),
+      (generation) =>
+        void runAiTurn(
+          generation,
+          startedAt,
+          visualDelay + (delays?.ai ?? 0),
+        ),
+      0,
     );
   }
 
   return {
     dispatch,
     scheduleAi,
+    scheduleRoomAutomaticAction,
     cancelScheduledActions() {
       scheduler.cancel();
     },

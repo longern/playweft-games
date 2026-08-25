@@ -10,6 +10,7 @@ function createController({
   riichiMusicUrl = "",
   matchMusicController,
   activeGame = false,
+  mode = "solo",
 } = {}) {
   const calls = [];
   const game = activeGame ? {} : undefined;
@@ -30,8 +31,8 @@ function createController({
     },
     elements: {},
     domView: {
-      visualUi() {
-        return {};
+      visualUi(_playerName, selectedTileId) {
+        return selectedTileId ? { selectedTileId } : {};
       },
       render(state) {
         calls.push(["dom", state.moveCount]);
@@ -74,7 +75,7 @@ function createController({
     humanId: "human",
     getGame: () => game,
     getGameInitializing: () => false,
-    getMode: () => "solo",
+    getMode: () => mode,
     getPlayerName: () => "你",
     playerNameIsAuthoritative: () => false,
     getThemeAssetUrl: () => "",
@@ -140,6 +141,36 @@ test("mahjong table controller allows hand inspection without dispatching a turn
 
   assert.deepEqual(dispatched, []);
   assert.deepEqual(calls.at(-1), ["selection", 41]);
+});
+
+test("mahjong clears a selected discard when an authoritative room projection removes it", async () => {
+  const { controller, calls } = createController({ mode: "room" });
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 2,
+      ownHand: [41, 42],
+      legalActions: { canDiscard: true },
+    },
+    events: [],
+  });
+  controller.selectTile(41);
+
+  await controller.refresh({
+    state: {
+      phase: "claiming",
+      moveCount: 3,
+      ownHand: [42],
+      legalActions: {},
+    },
+    events: [{ type: "discarded", playerIndex: 1, tile: 41 }],
+  });
+
+  const latestScene = calls.filter(([kind]) => kind === "scene").at(-1);
+  assert.equal(latestScene[2].selectedTileId, undefined);
+  calls.length = 0;
+  controller.clearSelectedTile();
+  assert.deepEqual(calls, []);
 });
 
 test("mahjong table controller submits the selected riichi tile", async () => {

@@ -136,6 +136,22 @@ function __playweft_local_action(action, actor_id, action_at)
 end
 
 function __playweft_local_ai_turn(viewer_id, server_time)
+  local decision = __playweft_local_ai_decision(viewer_id)
+  local projection = __playweft_local_view(viewer_id, server_time)
+  if decision.status ~= "acted" then
+    decision.projection = projection
+    return decision
+  end
+  local result = __playweft_local_action(decision.action, decision.actorId, server_time)
+  if result.accepted ~= true then
+    error("AI action was rejected")
+  end
+  decision.result = result
+  decision.projection = __playweft_local_view(viewer_id, server_time)
+  return decision
+end
+
+function __playweft_local_ai_decision(viewer_id)
   local actor_id = nil
   if __local_state.phase == "playing" then
     actor_id = __local_state.players[__local_state.turnIndex]
@@ -144,15 +160,14 @@ function __playweft_local_ai_turn(viewer_id, server_time)
     actor_id = claimant and claimant.playerId or nil
   end
 
-  local projection = __playweft_local_view(viewer_id, server_time)
   if not actor_id then
-    return { status = "idle", projection = projection }
+    return { status = "idle", version = __local_version }
   end
   if actor_id == viewer_id then
     return {
       status = "waiting_for_human",
       actorId = actor_id,
-      projection = projection,
+      version = __local_version,
     }
   end
   if type(ai_action) ~= "function" then
@@ -162,16 +177,11 @@ function __playweft_local_ai_turn(viewer_id, server_time)
   if type(action) ~= "table" then
     error("AI did not provide an action for the active player")
   end
-  local result = __playweft_local_action(action, actor_id, server_time)
-  if result.accepted ~= true then
-    error("AI action was rejected")
-  end
   return {
     status = "acted",
     actorId = actor_id,
     action = action,
-    result = result,
-    projection = __playweft_local_view(viewer_id, server_time),
+    version = __local_version,
   }
 end
 
@@ -391,6 +401,7 @@ export async function createLocalLuaGame({
     const applyAction = lua.global.get("__playweft_local_action");
     const loadReplayHand = lua.global.get("__playweft_local_load_replay_hand");
     const advanceAiTurn = lua.global.get("__playweft_local_ai_turn");
+    const decideCurrentAiAction = lua.global.get("__playweft_local_ai_decision");
     const decideAiAction = lua.global.get("__playweft_local_ai_action");
     const readLegalActions = lua.global.get("__playweft_local_legal_actions");
     const readTenpaiReports = lua.global.get("__playweft_local_tenpai_reports");
@@ -435,6 +446,10 @@ export async function createLocalLuaGame({
       aiTurn(viewerId = playerId) {
         ensureOpen(closed);
         return advanceAiTurn(viewerId, Date.now());
+      },
+      aiDecision(viewerId = playerId) {
+        ensureOpen(closed);
+        return decideCurrentAiAction(viewerId);
       },
       aiAction(state, actorId) {
         ensureOpen(closed);

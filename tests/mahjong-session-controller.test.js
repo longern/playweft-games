@@ -29,6 +29,8 @@ function createController({
   autoActions = {},
   scheduler = createScheduler(),
   callbacks = {},
+  now,
+  wait,
 } = {}) {
   return {
     scheduler,
@@ -54,6 +56,8 @@ function createController({
         ownDrawEntry: 20,
       },
       scheduler,
+      now,
+      wait,
     }),
   };
 }
@@ -122,6 +126,96 @@ test("mahjong session gives automatic decisions their configured recognition del
   assert.equal(tsumogiri.scheduler.scheduled[0].delay, 60);
 });
 
+test("mahjong session starts an AI decision immediately and only waits for its remaining pace", async () => {
+  const state = {
+    phase: "playing",
+    turnIndex: 2,
+    moveCount: 4,
+    drawnTile: 19,
+  };
+  const calls = [];
+  const waits = [];
+  let clock = 100;
+  const game = {
+    async aiDecision() {
+      calls.push("decision");
+      clock = 106;
+      return {
+        status: "acted",
+        version: 4,
+        actorId: "ai-1",
+        action: { type: "discard", tileId: 19 },
+      };
+    },
+    async action(action, actorId) {
+      calls.push(`${actorId}:${action.type}`);
+      return {
+        result: { accepted: true },
+        projection: { state: { phase: "playing", moveCount: 5 }, events: [] },
+      };
+    },
+  };
+  const { controller, scheduler } = createController({
+    state,
+    game,
+    now: () => clock,
+    async wait(delay) {
+      waits.push(delay);
+      clock += delay;
+    },
+  });
+
+  controller.scheduleAi();
+  assert.equal(scheduler.scheduled[0].delay, 0);
+  scheduler.scheduled[0].callback(scheduler.scheduled[0].generation);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(calls, ["decision", "ai-1:discard"]);
+  assert.deepEqual(waits, [4]);
+});
+
+test("mahjong session drops an AI decision after the turn changes", async () => {
+  const state = {
+    phase: "playing",
+    turnIndex: 2,
+    moveCount: 4,
+    drawnTile: 19,
+  };
+  let releaseDecision;
+  let applied = false;
+  const game = {
+    aiDecision() {
+      return new Promise((resolve) => {
+        releaseDecision = () =>
+          resolve({
+            status: "acted",
+            version: 4,
+            actorId: "ai-1",
+            action: { type: "discard", tileId: 19 },
+          });
+      });
+    },
+    async action() {
+      applied = true;
+      return { result: { accepted: true }, projection: { state, events: [] } };
+    },
+  };
+  const { controller, scheduler } = createController({
+    state,
+    game,
+    async wait() {},
+  });
+
+  controller.scheduleAi();
+  scheduler.scheduled[0].callback(scheduler.scheduled[0].generation);
+  await Promise.resolve();
+  state.moveCount = 5;
+  releaseDecision();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(applied, false);
+});
+
 test("mahjong room actions stay locked until the matching room response settles", async () => {
   const sent = [];
   const { controller } = createController({
@@ -184,6 +278,50 @@ test("mahjong room can submit the host's start action before a table state exist
   );
   assert.deepEqual(sent, [{ type: "start_match", matchType: "hanchan" }]);
   assert.equal(controller.isActionInFlight(), true);
+});
+
+test("mahjong room auto actions submit wins and tsumogiri after the local delay", async () => {
+  const sent = [];
+  const state = {
+    phase: "playing",
+    turnIndex: 1,
+    drawnTile: 42,
+    legalActions: { canDiscard: true, canTsumo: true },
+  };
+  const { controller, scheduler } = createController({
+    state,
+    mode: "room",
+    autoActions: { autoWin: true, autoTsumogiri: true },
+    callbacks: {
+      sendRoomAction(action) {
+        sent.push(action);
+        return "auto-room-request";
+      },
+    },
+  });
+
+  controller.scheduleRoomAutomaticAction({ state, isCurrent: () => true });
+  assert.equal(scheduler.scheduled[0].delay, 60);
+  scheduler.scheduled[0].callback(scheduler.scheduled[0].generation);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(sent, [{ type: "tsumo" }]);
+});
+
+test("mahjong room leaves call passing to the server's private setting", () => {
+  const state = {
+    phase: "claiming",
+    legalActions: { claims: [{ kind: "pon", option: 1 }] },
+  };
+  const { controller, scheduler } = createController({
+    state,
+    mode: "room",
+    autoActions: { passClaims: true },
+  });
+
+  controller.scheduleRoomAutomaticAction({ state, isCurrent: () => true });
+
+  assert.equal(scheduler.scheduled.length, 0);
 });
 
 test("mahjong restores an accepted projection when a result transition fails", async () => {
