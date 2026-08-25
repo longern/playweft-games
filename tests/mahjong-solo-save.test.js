@@ -9,6 +9,7 @@ import {
   readMahjongSoloSave,
   setMahjongSoloAutoActions,
   setMahjongSoloCheckpoint,
+  setMahjongSoloOpponentPortraits,
   writeMahjongSoloSave,
 } from "../games/mahjong/replay/solo-save.js";
 
@@ -55,6 +56,34 @@ test("mahjong solo saves round-trip a deterministic action log", () => {
     JSON.parse(storage.getItem(MAHJONG_SOLO_SAVE_KEY)).savedAt > 0,
     true,
   );
+});
+
+test("mahjong solo saves retain the three opponent portraits", () => {
+  const save = createSave({
+    opponentPortraits: { right: "fox", opposite: "wolf", left: "cat" },
+  });
+  assert.deepEqual(save.opponentPortraits, {
+    right: "fox",
+    opposite: "wolf",
+    left: "cat",
+  });
+});
+
+test("mahjong solo saves update portraits after a new match reroll", () => {
+  const save = createSave({
+    opponentPortraits: { right: "fox", opposite: "wolf", left: "cat" },
+  });
+  const updated = setMahjongSoloOpponentPortraits(save, {
+    self: "self",
+    right: "panda",
+    opposite: "tanuki",
+    left: "fox",
+  });
+  assert.deepEqual(updated?.opponentPortraits, {
+    right: "panda",
+    opposite: "tanuki",
+    left: "fox",
+  });
 });
 
 test("mahjong solo saves reject corrupt or obsolete records", () => {
@@ -157,7 +186,7 @@ test("mahjong solo saves ignore malformed checkpoints and retain full replay", (
   assert.equal(restored.actions.length, 1);
 });
 
-test("mahjong solo saves upgrade version-one action logs without a checkpoint", () => {
+test("mahjong solo saves upgrade older action logs without a checkpoint or portraits", () => {
   const storage = createStorage();
   storage.setItem(
     MAHJONG_SOLO_SAVE_KEY,
@@ -170,7 +199,12 @@ test("mahjong solo saves upgrade version-one action logs without a checkpoint", 
   );
   const restored = readMahjongSoloSave(storage);
   assert.ok(restored);
-  assert.equal(restored.version, 2);
+  assert.equal(restored.version, 3);
   assert.equal(restored.checkpoint, null);
   assert.equal(restored.actions.length, 1);
+  assert.deepEqual(restored.opponentPortraits, {
+    right: "",
+    opposite: "",
+    left: "",
+  });
 });

@@ -1,5 +1,5 @@
 export const MAHJONG_SOLO_SAVE_KEY = "playweft.mahjong.solo-save.v1";
-export const MAHJONG_SOLO_SAVE_VERSION = 2;
+export const MAHJONG_SOLO_SAVE_VERSION = 3;
 export const MAHJONG_SOLO_CHECKPOINT_VERSION = 1;
 // Increment only when a game.lua state change cannot read an older raw state.
 export const MAHJONG_SOLO_ENGINE_CHECKPOINT_VERSION = 1;
@@ -47,6 +47,7 @@ export function createMahjongSoloSave({
   playerName,
   actions = [],
   autoActions,
+  opponentPortraits,
 } = {}) {
   return normalizeSave({
     version: MAHJONG_SOLO_SAVE_VERSION,
@@ -57,6 +58,7 @@ export function createMahjongSoloSave({
     playerName,
     actions,
     autoActions,
+    opponentPortraits,
   });
 }
 
@@ -91,10 +93,19 @@ export function setMahjongSoloAutoActions(save, autoActions) {
   };
 }
 
+export function setMahjongSoloOpponentPortraits(save, opponentPortraits) {
+  const normalized = normalizeSave(save);
+  if (!normalized) return null;
+  return {
+    ...normalized,
+    opponentPortraits: normalizeOpponentPortraits(opponentPortraits),
+  };
+}
+
 function normalizeSave(value) {
   if (
     !isPlainObject(value) ||
-    (value.version !== 1 && value.version !== MAHJONG_SOLO_SAVE_VERSION)
+    (value.version !== 1 && value.version !== 2 && value.version !== MAHJONG_SOLO_SAVE_VERSION)
   ) {
     return null;
   }
@@ -115,8 +126,19 @@ function normalizeSave(value) {
       actorId,
     })),
     autoActions: normalizeAutoActions(value.autoActions),
+    opponentPortraits: normalizeOpponentPortraits(value.opponentPortraits),
     checkpoint: normalizeCheckpoint(value.checkpoint, value.actions.length),
   };
+}
+
+function normalizeOpponentPortraits(value) {
+  const portraits = value && typeof value === "object" ? value : {};
+  return Object.fromEntries(
+    ["right", "opposite", "left"].map((position) => [
+      position,
+      typeof portraits[position] === "string" ? portraits[position] : "",
+    ]),
+  );
 }
 
 function normalizeCheckpoint(value, actionCount) {

@@ -27,7 +27,10 @@ import {
   TILE_SIZE,
 } from "../render/three-layout.js";
 import { tileFaceFrameIndex } from "../render/tile-texture-map.js";
-import { traditionalDrawReason, traditionalYakuName } from "../rules/yaku-display.js";
+import {
+  traditionalDrawReason,
+  traditionalYakuName,
+} from "../rules/yaku-display.js";
 
 const RESULT_TILE_WIDTH_PX = 33;
 const RESULT_TILE_HEIGHT_PX = 47;
@@ -42,6 +45,7 @@ export class MahjongDomView {
     this.countdownServerTime = 0;
     this.countdownLocalTime = 0;
     this.countdownTimer = 0;
+    this.pendingPlayerIdentityState = null;
     this.elements = collectElements();
     this.elements.actionBar.append(
       this.elements.abort,
@@ -231,7 +235,7 @@ export class MahjongDomView {
     };
   }
 
-  setPlayerAvatar(position, source) {
+  commitPlayerAvatar(position, source) {
     const avatar = this.elements.stations[position]?.querySelector(
       "[data-player-avatar]",
     );
@@ -242,30 +246,58 @@ export class MahjongDomView {
       avatar.style.removeProperty("background-image");
       delete avatar.dataset.source;
       delete avatar.dataset.pendingSource;
-      document.dispatchEvent(new Event("mahjong:player-avatar-changed"));
       return;
     }
-    if (
-      avatar.dataset.source === nextSource ||
-      avatar.dataset.pendingSource === nextSource
-    )
-      return;
+    avatar.dataset.source = nextSource;
+    delete avatar.dataset.pendingSource;
+    avatar.classList.remove("is-default-portrait");
+    avatar.style.backgroundImage = `url(${JSON.stringify(nextSource)})`;
+  }
 
-    avatar.dataset.pendingSource = nextSource;
-    const preload = new Image();
-    preload.onload = () => {
-      if (avatar.dataset.pendingSource !== nextSource) return;
-      avatar.dataset.source = nextSource;
-      delete avatar.dataset.pendingSource;
-      avatar.classList.remove("is-default-portrait");
-      avatar.style.backgroundImage = `url(${JSON.stringify(nextSource)})`;
+  applyPlayerIdentityState({ avatars = {}, names = {} } = {}) {
+    const state = {
+      avatars: { ...avatars },
+      names: { ...names },
+    };
+    this.pendingPlayerIdentityState = state;
+    const positions = Object.keys(state.avatars);
+    const preloads = positions.map((position) => {
+      const source = state.avatars[position];
+      if (typeof source !== "string" || !source) return Promise.resolve(true);
+      return new Promise((resolve) => {
+        const preload = new Image();
+        preload.onload = () => resolve(true);
+        preload.onerror = () => resolve(false);
+        preload.src = source;
+      });
+    });
+    return Promise.all(preloads).then((loaded) => {
+      if (this.pendingPlayerIdentityState !== state) return false;
+      for (const [index, position] of positions.entries()) {
+        this.commitPlayerAvatar(
+          position,
+          loaded[index] ? state.avatars[position] : "",
+        );
+        const name = state.names[position];
+        if (typeof name === "string" && name) {
+          const nameElement = this.elements.stations[position]?.querySelector(
+            "[data-name]",
+          );
+          if (nameElement) nameElement.textContent = name;
+        }
+      }
       document.dispatchEvent(new Event("mahjong:player-avatar-changed"));
-    };
-    preload.onerror = () => {
-      if (avatar.dataset.pendingSource !== nextSource) return;
-      delete avatar.dataset.pendingSource;
-    };
-    preload.src = nextSource;
+      return true;
+    });
+  }
+
+  clearResolvedWindBadges() {
+    for (const station of Object.values(this.elements.stations)) {
+      const windBadge = station?.querySelector("[data-wind]");
+      if (!windBadge) continue;
+      windBadge.textContent = "";
+      windBadge.classList.remove("is-east", "is-resolved");
+    }
   }
 
   renderStations(
@@ -289,6 +321,7 @@ export class MahjongDomView {
       const wind = seatWind(state, seat);
       const windBadge = station.querySelector("[data-wind]");
       windBadge.textContent = wind;
+      windBadge.classList.add("is-resolved");
       windBadge.classList.toggle("is-east", wind === "東");
       const consoleScore = this.elements.consoleScores[seat - 1];
       consoleScore.textContent = String(Number(state.scores?.[seat - 1] ?? 0));
@@ -496,16 +529,23 @@ export class MahjongDomView {
     }
     this.updateCountdown();
     if (!this.countdownTimer) {
-      this.countdownTimer = globalThis.setInterval(() => this.updateCountdown(), 250);
+      this.countdownTimer = globalThis.setInterval(
+        () => this.updateCountdown(),
+        250,
+      );
     }
   }
 
   updateCountdown() {
     const element = this.elements.countdown;
-    if (!element || !this.countdownDeadlineAt || !this.countdownServerTime) return;
+    if (!element || !this.countdownDeadlineAt || !this.countdownServerTime)
+      return;
     const estimatedServerTime =
       this.countdownServerTime + (Date.now() - this.countdownLocalTime);
-    const remainingMs = Math.max(0, this.countdownDeadlineAt - estimatedServerTime);
+    const remainingMs = Math.max(
+      0,
+      this.countdownDeadlineAt - estimatedServerTime,
+    );
     const remainingSeconds = Math.ceil(remainingMs / 1000);
     element.textContent = String(remainingSeconds);
     element.classList.toggle("is-urgent", remainingSeconds <= 5);

@@ -1,7 +1,7 @@
 import {
   MAHJONG_PORTRAIT_POSITIONS,
   normalizeMahjongPortraitPool,
-  resolveMahjongPortraitAppearance,
+  resolveMahjongPortraitDefaults,
 } from "./portrait-selection.js";
 
 const ASSET_GROUPS = [
@@ -76,9 +76,19 @@ export function normalizeMahjongDefaultAssetConfig(value) {
 export const MAHJONG_DEFAULT_ASSET_CONFIG =
   normalizeMahjongDefaultAssetConfig(injectedConfig);
 
-export function getMahjongDefaultAssetPack() {
+export function getMahjongDefaultAssetPack(appearanceOverride) {
   const config = MAHJONG_DEFAULT_ASSET_CONFIG;
-  const appearance = readAppearance(config);
+  const configuredAppearance = readAppearance(config);
+  const appearance = appearanceOverride && typeof appearanceOverride === "object"
+    ? {
+      ...configuredAppearance,
+      ...appearanceOverride,
+      portraits: {
+        ...configuredAppearance.portraits,
+        ...(appearanceOverride.portraits ?? {}),
+      },
+    }
+    : configuredAppearance;
   const assets = new Map();
   for (const position of PORTRAIT_POSITIONS) {
     addSelectedAsset(
@@ -181,10 +191,9 @@ function readAppearance(config) {
 
 function resolvePortraitAppearance(config, requested) {
   const choices = requested && typeof requested === "object" ? requested : {};
-  return resolveMahjongPortraitAppearance(
+  return resolveMahjongPortraitDefaults(
     config.catalog.portraits,
     choices,
-    config.portraitPool,
   );
 }
 

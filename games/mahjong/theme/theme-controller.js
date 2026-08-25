@@ -2,10 +2,12 @@ import {
   activateMahjongAssetPack,
   configureMahjongAssetPackAppearance,
   configureMahjongDefaultPackAppearance,
+  clearMahjongMatchPortraitRequest,
   createMahjongAssetPack,
   deactivateMahjongAssetPacks,
   deleteMahjongAssetPack,
   getMahjongAssetUrl,
+  getMahjongActivePortraits,
   getMahjongConfiguredAssetPacks,
   getMahjongDefaultNames,
   getMahjongDefaultPack,
@@ -13,6 +15,7 @@ import {
   getMahjongMatchMusicUrl,
   getMahjongRiichiMusicUrl,
   initializeMahjongAssetPacks,
+  applyMahjongMatchPortraits,
   listMahjongAssetPacks,
   rerollMahjongAssetPackPortraits,
 } from "./asset-packs.js";
@@ -33,12 +36,15 @@ export function createMahjongThemeController({
   copyrightElement,
   waitForRenderers,
   setRendererAppearance,
-  setPlayerAvatar,
-  hasPlatformAvatar = () => false,
+  setPlayerIdentityState,
+  initialMatchPortraitRequest,
   onAssetsChanged,
 } = {}) {
   let visualPacks = [];
-  const assetPacksReady = initializeMahjongAssetPacks().catch(() => new Map());
+  let platformAvatarSource = "";
+  const assetPacksReady = initializeMahjongAssetPacks(
+    initialMatchPortraitRequest,
+  ).catch(() => new Map());
 
   const onUploadChange = async () => {
     const archive = themeElements.upload.files?.[0];
@@ -152,16 +158,19 @@ export function createMahjongThemeController({
   };
 
   const onAssetPackChanged = () => {
-    void applyVisualPack();
-    syncDefaultMusicCopyright();
-    applyPackAvatars();
-    onAssetsChanged?.();
+    void (async () => {
+      await applyVisualPack();
+      syncDefaultMusicCopyright();
+      await applyPackAvatars();
+      onAssetsChanged?.();
+    })();
   };
 
   themeElements.upload.addEventListener("change", onUploadChange);
   themeElements.list.addEventListener("click", onThemeListClick);
   appearanceElements.controls.addEventListener("change", onAppearanceChange);
   browserWindow.addEventListener("mahjong:asset-pack-changed", onAssetPackChanged);
+  void assetPacksReady.then(() => applyPackAvatars());
 
   async function refreshThemePacks() {
     try {
@@ -181,6 +190,23 @@ export function createMahjongThemeController({
     });
   }
 
+  async function rerollPortraits(randomSeed) {
+    return rerollMahjongAssetPackPortraits(randomSeed);
+  }
+
+  async function applyMatchPortraits(savedPortraits, randomSeed) {
+    return applyMahjongMatchPortraits(savedPortraits, randomSeed);
+  }
+
+  async function clearMatchPortraits() {
+    return clearMahjongMatchPortraitRequest();
+  }
+
+  function setPlatformAvatar(source) {
+    platformAvatarSource = typeof source === "string" ? source : "";
+    void applyPackAvatars();
+  }
+
   function applyPackAvatars() {
     const portraitSlotByPosition = {
       bottom: "self",
@@ -188,10 +214,17 @@ export function createMahjongThemeController({
       top: "opposite",
       left: "left",
     };
+    const defaultNames = getMahjongDefaultNames();
+    const avatars = {};
+    const names = {};
     for (const [position, portraitSlot] of Object.entries(portraitSlotByPosition)) {
-      if (position === "bottom" && hasPlatformAvatar()) continue;
-      setPlayerAvatar?.(position, getMahjongAssetUrl(`portrait-${portraitSlot}`));
+      avatars[position] =
+        position === "bottom" && platformAvatarSource
+          ? platformAvatarSource
+          : getMahjongAssetUrl(`portrait-${portraitSlot}`);
+      if (position !== "bottom") names[position] = defaultNames[portraitSlot] || "";
     }
+    return setPlayerIdentityState?.({ avatars, names });
   }
 
   function syncDefaultMusicCopyright() {
@@ -402,7 +435,11 @@ export function createMahjongThemeController({
     applyVisualPack,
     applyPackAvatars,
     syncDefaultMusicCopyright,
-    rerollPortraits: rerollMahjongAssetPackPortraits,
+    rerollPortraits,
+    applyMatchPortraits,
+    clearMatchPortraits,
+    setPlatformAvatar,
+    getPortraits: getMahjongActivePortraits,
     getAssetUrl: getMahjongAssetUrl,
     getDefaultNames: getMahjongDefaultNames,
     getMatchMusicUrl: getMahjongMatchMusicUrl,

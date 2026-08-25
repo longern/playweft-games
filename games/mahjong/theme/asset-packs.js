@@ -10,7 +10,8 @@ import {
 import {
   MAHJONG_PORTRAIT_POSITIONS,
   normalizeMahjongPortraitPool,
-  resolveMahjongPortraitAppearance,
+  resolveMahjongMatchPortraits,
+  resolveMahjongPortraitDefaults,
 } from "./portrait-selection.js";
 
 const DB_NAME = "playweft-mahjong-asset-packs-v2";
@@ -98,8 +99,20 @@ let activePackOverridesMatchMusic = false;
 let activePackOverridesRiichiMusic = false;
 let transientPack = null;
 let assetPackStorageUnavailable = false;
+let activePortraits = {};
+let activeMatchPortraitRequest = null;
 
-export async function initializeMahjongAssetPacks() {
+export async function initializeMahjongAssetPacks(matchPortraitRequest) {
+  if (matchPortraitRequest && typeof matchPortraitRequest === "object") {
+    activeMatchPortraitRequest = {
+      savedPortraits:
+        matchPortraitRequest.savedPortraits &&
+        typeof matchPortraitRequest.savedPortraits === "object"
+          ? structuredClone(matchPortraitRequest.savedPortraits)
+          : {},
+      randomSeed: String(matchPortraitRequest.randomSeed ?? ""),
+    };
+  }
   // Apply build-time defaults synchronously so the first user gesture can
   // start default media before IndexedDB finishes reading local packs.
   applyResolvedAssets(null);
@@ -112,18 +125,51 @@ export async function initializeMahjongAssetPacks() {
   return active?.assets ?? new Map();
 }
 
-export async function rerollMahjongAssetPackPortraits() {
+export async function rerollMahjongAssetPackPortraits(randomSeed = "") {
+  activeMatchPortraitRequest = {
+    savedPortraits: {},
+    randomSeed: String(randomSeed),
+  };
   if (assetPackStorageUnavailable) {
-    if (transientPack) {
-      transientPack = rerollTransientPack(transientPack);
-      applyTransientAssets();
-    } else {
-      applyResolvedAssets(null);
-    }
+    if (transientPack) applyTransientAssets();
+    else applyResolvedAssets(null);
+    return getMahjongActivePortraits();
+  }
+  const active = await readActivePack();
+  applyResolvedAssets(active);
+  return getMahjongActivePortraits();
+}
+
+export async function applyMahjongMatchPortraits(savedPortraits, randomSeed) {
+  activeMatchPortraitRequest = {
+    savedPortraits: savedPortraits && typeof savedPortraits === "object"
+      ? structuredClone(savedPortraits)
+      : {},
+    randomSeed: String(randomSeed ?? ""),
+  };
+  if (assetPackStorageUnavailable) {
+    if (transientPack) applyResolvedAssets(transientPack);
+    else applyResolvedAssets(null);
+    return getMahjongActivePortraits();
+  }
+  const active = await readActivePack();
+  applyResolvedAssets(active);
+  return getMahjongActivePortraits();
+}
+
+export async function clearMahjongMatchPortraitRequest() {
+  activeMatchPortraitRequest = null;
+  if (assetPackStorageUnavailable) {
+    if (transientPack) applyTransientAssets();
+    else applyResolvedAssets(null);
     return;
   }
   const active = await readActivePack();
   applyResolvedAssets(active);
+}
+
+export function getMahjongActivePortraits() {
+  return { ...activePortraits };
 }
 
 export function getMahjongAssetUrl(slot) {
@@ -230,7 +276,6 @@ export async function listMahjongAssetPacks() {
           appearance: normaliseAppearance(
             pack.appearance,
             catalog,
-            pack.portraitPool,
           ),
           assetNames: records.map((asset) => asset.name),
         }];
@@ -368,7 +413,6 @@ export async function configureMahjongAssetPackAppearance(id, appearance) {
     const nextAppearance = normaliseAppearance(
       appearance,
       catalog,
-      transientPack.portraitPool,
     );
     transientPack = {
       ...transientPack,
@@ -394,7 +438,7 @@ export async function configureMahjongAssetPackAppearance(id, appearance) {
   packStore.put({
     ...pack,
     catalog,
-    appearance: normaliseAppearance(appearance, catalog, pack.portraitPool),
+    appearance: normaliseAppearance(appearance, catalog),
     updatedAt: Date.now(),
   });
   await transactionPromise(transaction);
@@ -490,50 +534,43 @@ function listTransientAssetPacks() {
   }];
 }
 
-function rerollTransientPack(pack) {
-  const appearance = normaliseAppearance(
-    pack.appearance,
-    pack.catalog,
-    pack.portraitPool,
-  );
-  return {
-    ...pack,
-    appearance,
-    defaultNames: portraitNames(pack.catalog, appearance),
-    assets: resolveAppearanceAssets(pack.stored, appearance, pack.catalog),
-    updatedAt: Date.now(),
-  };
-}
-
 function applyTransientAssets() {
-  if (transientPack?.active) {
-    applyActiveAssets(
-      transientPack.assets,
-      transientPack.defaultNames,
-      Boolean(transientPack.catalog.matchBgm.length),
-      Boolean(transientPack.catalog.riichiBgm.length),
-    );
-  } else {
-    applyResolvedAssets(null);
-  }
+  applyResolvedAssets(transientPack?.active ? transientPack : null);
 }
 
 function applyResolvedAssets(active) {
-  if (active) {
+  applyPackAssets(active || getMahjongDefaultAssetPack());
+}
+
+function applyPackAssets(pack) {
+  if (!activeMatchPortraitRequest) {
     applyActiveAssets(
-      active.assets,
-      active.defaultNames,
-      Boolean(active.catalog.matchBgm.length),
-      Boolean(active.catalog.riichiBgm.length),
+      pack.assets,
+      pack.defaultNames,
+      Boolean(pack.catalog.matchBgm.length),
+      Boolean(pack.catalog.riichiBgm.length),
+      pack.appearance.portraits,
     );
     return;
   }
-  const defaults = getMahjongDefaultAssetPack();
+  const { savedPortraits, randomSeed } = activeMatchPortraitRequest;
+  const portraits = resolveMahjongMatchPortraits(
+    pack.catalog.portraits,
+    savedPortraits,
+    pack.appearance.portraits,
+    pack.portraitPool,
+    randomSeed,
+  );
+  const appearance = { ...pack.appearance, portraits };
+  const assets = pack.stored
+    ? resolveAppearanceAssets(pack.stored, appearance, pack.catalog)
+    : getMahjongDefaultAssetPack({ portraits }).assets;
   applyActiveAssets(
-    defaults.assets,
-    defaults.defaultNames,
-    Boolean(defaults.catalog.matchBgm.length),
-    Boolean(defaults.catalog.riichiBgm.length),
+    assets,
+    portraitNames(pack.catalog, appearance),
+    Boolean(pack.catalog.matchBgm.length),
+    Boolean(pack.catalog.riichiBgm.length),
+    portraits,
   );
 }
 
@@ -551,7 +588,6 @@ async function readActivePack() {
       const appearance = normaliseAppearance(
         pack.appearance,
         catalog,
-        pack.portraitPool,
       );
       const stored = new Map(records.map((asset) => [asset.slot, asset]));
       return {
@@ -560,6 +596,7 @@ async function readActivePack() {
         appearance,
         defaultNames: portraitNames(catalog, appearance),
         assets: resolveAppearanceAssets(stored, appearance, catalog),
+        stored,
       };
     } catch {
       // Treat an invalid active record as absent. The caller will apply the
@@ -574,6 +611,7 @@ function applyActiveAssets(
   defaultNames = {},
   packOverridesMatchMusic = false,
   packOverridesRiichiMusic = false,
+  portraits = {},
 ) {
   for (const [, url] of objectUrls) URL.revokeObjectURL(url);
   objectUrls = new Map();
@@ -582,6 +620,7 @@ function applyActiveAssets(
   activePackOverridesRiichiMusic = packOverridesRiichiMusic;
   activeDefaultNames =
     defaultNames && typeof defaultNames === "object" ? defaultNames : {};
+  activePortraits = portraits && typeof portraits === "object" ? { ...portraits } : {};
   const root = document.documentElement;
   for (const [slot, record] of assets) {
     if (!record?.blob && !record?.url) continue;
@@ -686,7 +725,7 @@ export async function readMahjongAssetPackManifest(files) {
       value.defaults?.portraits?.pool,
       catalog.portraits,
     );
-    const appearance = normaliseAppearance(value.defaults, catalog, portraitPool);
+    const appearance = normaliseAppearance(value.defaults, catalog);
     return {
       name: typeof value.name === "string" ? value.name : "",
       catalog,
@@ -853,7 +892,7 @@ function catalogForPack(pack) {
   return catalog;
 }
 
-export function normaliseAppearance(appearance, catalog, portraitPool = []) {
+export function normaliseAppearance(appearance, catalog) {
   const choices =
     appearance && typeof appearance === "object" ? appearance : {};
   const portraits =
@@ -867,10 +906,9 @@ export function normaliseAppearance(appearance, catalog, portraitPool = []) {
       : (entries[0]?.id ?? "");
   };
   return {
-    portraits: resolveMahjongPortraitAppearance(
+    portraits: resolveMahjongPortraitDefaults(
       catalog?.portraits ?? [],
       portraits,
-      portraitPool,
     ),
     tablecloth: pick("tablecloths", choices.tablecloth),
     tableBackground: pick("tableBackgrounds", choices.tableBackground),

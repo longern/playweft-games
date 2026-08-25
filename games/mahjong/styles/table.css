@@ -463,6 +463,10 @@ a {
   font-synthesis: weight;
 }
 
+.wind-badge:not(.is-resolved) {
+  visibility: hidden;
+}
+
 .wind-badge.is-east {
   background: linear-gradient(145deg, #e9833f, #b84727);
   box-shadow:

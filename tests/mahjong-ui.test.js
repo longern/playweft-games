@@ -3343,11 +3343,44 @@ test("mahjong prefers the platform avatar for the local player", () => {
   assert.match(main, /capabilities\)\.includes\("user\.getProfile"\)/);
   assert.match(main, /getUserProfile\(\{ fields: \["avatar"\] \}\)/);
   assert.match(main, /const source = profile\?\.avatar\?\.src;/);
-  assert.match(main, /setPlayerAvatar\("bottom", source\)/);
+  assert.match(main, /themeController\.setPlatformAvatar/);
   assert.match(
     html,
     /class="player-avatar is-default-portrait"[^>]*data-player-avatar/,
   );
+  assert.match(view, /applyPlayerIdentityState/);
   assert.match(view, /const preload = new Image\(\)/);
   assert.match(view, /avatar\.classList\.remove\("is-default-portrait"\)/);
+});
+
+test("mahjong gates saved-match portrait placeholders until the assigned batch is ready", () => {
+  const main = readFileSync(
+    new URL("../games/mahjong/main.js", import.meta.url),
+    "utf8",
+  );
+  const theme = readFileSync(
+    new URL("../games/mahjong/theme/theme-controller.js", import.meta.url),
+    "utf8",
+  );
+  const view = readFileSync(
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(main, /initialMatchPortraitRequest: soloSave/);
+  assert.match(theme, /initializeMahjongAssetPacks\(\s*initialMatchPortraitRequest/);
+  assert.match(theme, /setPlayerIdentityState\?\.\(\{ avatars, names \}\)/);
+});
+
+test("mahjong wind badges stay empty until table state is rendered", () => {
+  const html = readFileSync(
+    new URL("../games/mahjong/index.html", import.meta.url),
+    "utf8",
+  );
+  const view = readFileSync(
+    new URL("../games/mahjong/app/dom-view.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(html, /class="wind-badge" data-wind><\/span>/);
+  assert.match(view, /windBadge\.classList\.add\("is-resolved"\)/);
+  assert.match(view, /clearResolvedWindBadges\(\)/);
 });

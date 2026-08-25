@@ -14,6 +14,7 @@ import {
   normalizeMahjongDefaultAssetConfig,
   portraitNames,
 } from "../games/mahjong/theme/default-assets.js";
+import { resolveMahjongMatchPortraits } from "../games/mahjong/theme/portrait-selection.js";
 
 test("mahjong music falls back when a pack has no music and preserves silence", () => {
   assert.equal(
@@ -142,9 +143,9 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
   );
   assert.deepEqual(manifest.appearance.portraits, {
     self: "fox",
-    right: "wolf",
-    opposite: "wolf",
-    left: "wolf",
+    right: "fox",
+    opposite: "",
+    left: "",
   });
   assert.equal(manifest.appearance.matchBgm, "night");
   assert.equal(manifest.appearance.riichiBgm, "duel");
@@ -176,7 +177,7 @@ test("mahjong asset packs reject the former object-shaped catalog", async () => 
   await assert.rejects(() => readMahjongAssetPackManifest(files), /格式无效/);
 });
 
-test("appearance independently selects each local seat and falls back to available art", () => {
+test("theme appearance keeps only explicitly configured portrait seats", () => {
   const catalog = {
     portraits: [{ id: "fox" }, { id: "wolf" }, { id: "cat" }],
     tablecloths: [{ id: "felt" }],
@@ -199,12 +200,25 @@ test("appearance independently selects each local seat and falls back to availab
     },
     catalog,
   );
-  assert.equal(appearance.portraits.self, "cat");
   assert.deepEqual(
-    new Set([appearance.portraits.right, appearance.portraits.opposite]),
-    new Set(["fox", "wolf"]),
+    normaliseAppearance(
+      {
+        portraits: { self: "cat", right: "wolf", opposite: "missing" },
+        tablecloth: "felt",
+        tableBackground: "missing",
+        tileBack: "cloud",
+        matchBgm: "dawn",
+        riichiBgm: "duel",
+        voice: false,
+      },
+      catalog,
+    ),
+    appearance,
   );
-  assert.equal(appearance.portraits.left, "fox");
+  assert.equal(appearance.portraits.self, "cat");
+  assert.equal(appearance.portraits.right, "wolf");
+  assert.equal(appearance.portraits.opposite, "");
+  assert.equal(appearance.portraits.left, "");
   const { portraits: _portraits, ...nonPortraitAppearance } = appearance;
   assert.deepEqual(nonPortraitAppearance, {
     tablecloth: "felt",
@@ -288,25 +302,29 @@ test("build-time default assets keep multiple remote choices and normalize defau
   assert.equal(config.catalog.tileBacks[0].label, "祥云");
 });
 
-test("portrait pools keep self fixed and ignore explicit opponent seats", () => {
+test("match portrait assignment keeps self fixed and uses the configured pool", () => {
   const catalog = [
     { id: "self" },
     { id: "right" },
     { id: "opposite" },
     { id: "left" },
   ];
-  const resolved = normaliseAppearance(
-    { portraits: { self: "self", right: "opposite" } },
-    { portraits: catalog },
+  const resolved = resolveMahjongMatchPortraits(
+    catalog,
+    {},
+    { self: "self" },
     ["right", "opposite", "left"],
-  ).portraits;
+    "portrait-test-seed",
+  );
   assert.equal(resolved.self, "self");
   assert.deepEqual(new Set([resolved.right, resolved.opposite, resolved.left]), new Set(["right", "opposite", "left"]));
-  const poolOnly = normaliseAppearance(
-    { portraits: { self: "self", right: "opposite" } },
-    { portraits: catalog },
+  const poolOnly = resolveMahjongMatchPortraits(
+    catalog,
+    {},
+    { self: "self" },
     ["right"],
-  ).portraits;
+    "portrait-test-seed",
+  );
   assert.deepEqual(poolOnly, {
     self: "self",
     right: "right",
@@ -315,12 +333,14 @@ test("portrait pools keep self fixed and ignore explicit opponent seats", () => 
   });
 });
 
-test("portrait pools repeat entries after unique portraits are exhausted", () => {
-  const onePortrait = normaliseAppearance(
-    { portraits: { self: "solo" } },
-    { portraits: [{ id: "solo" }] },
+test("match portrait assignment repeats entries after unique portraits are exhausted", () => {
+  const onePortrait = resolveMahjongMatchPortraits(
+    [{ id: "solo" }],
+    {},
+    { self: "solo" },
     ["solo"],
-  ).portraits;
+    "portrait-test-seed",
+  );
   assert.deepEqual(onePortrait, {
     self: "solo",
     right: "solo",
@@ -328,15 +348,64 @@ test("portrait pools repeat entries after unique portraits are exhausted", () =>
     left: "solo",
   });
 
-  const twoPortraits = normaliseAppearance(
-    { portraits: { self: "self" } },
-    { portraits: [{ id: "self" }, { id: "other" }] },
+  const twoPortraits = resolveMahjongMatchPortraits(
+    [{ id: "self" }, { id: "other" }],
+    {},
+    { self: "self" },
     ["other"],
-  ).portraits;
+    "portrait-test-seed",
+  );
   assert.equal(twoPortraits.self, "self");
   assert.equal(twoPortraits.right, "other");
   assert.equal(twoPortraits.opposite, "other");
   assert.equal(twoPortraits.left, "other");
+});
+
+test("saved opponent portraits survive refresh and missing theme portraits get stable replacements", () => {
+  const originalTheme = [
+    { id: "self" },
+    { id: "fox" },
+    { id: "wolf" },
+    { id: "cat" },
+  ];
+  const saved = { right: "fox", opposite: "wolf", left: "cat" };
+  assert.deepEqual(
+    resolveMahjongMatchPortraits(
+      originalTheme,
+      saved,
+      { self: "self", right: "cat", opposite: "fox", left: "wolf" },
+      ["fox", "wolf", "cat"],
+      "0123456789abcdef0123456789abcdef",
+    ),
+    { self: "self", ...saved },
+  );
+
+  const replacementTheme = [
+    { id: "self" },
+    { id: "fox" },
+    { id: "panda" },
+    { id: "tanuki" },
+  ];
+  const replacement = resolveMahjongMatchPortraits(
+    replacementTheme,
+    saved,
+    { self: "self", right: "panda", opposite: "tanuki", left: "fox" },
+    ["fox", "panda", "tanuki"],
+    "0123456789abcdef0123456789abcdef",
+  );
+  assert.equal(replacement.right, "fox");
+  assert.deepEqual(
+    resolveMahjongMatchPortraits(
+      replacementTheme,
+      saved,
+      { self: "self", right: "tanuki", opposite: "fox", left: "panda" },
+      ["fox", "panda", "tanuki"],
+      "0123456789abcdef0123456789abcdef",
+    ),
+    replacement,
+  );
+  assert.ok(["fox", "panda", "tanuki"].includes(replacement.opposite));
+  assert.ok(["fox", "panda", "tanuki"].includes(replacement.left));
 });
 
 test("portrait labels follow the currently assigned avatar seats", () => {

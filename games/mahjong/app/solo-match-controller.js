@@ -52,7 +52,7 @@ export function createMahjongSoloMatchController({
       settings: { matchType, rules },
     });
     try {
-      await themeController.rerollPortraits();
+      await themeController.rerollPortraits(randomSeed);
       const [createdGame] = await Promise.all([
         gamePreparation,
         setupExit,
@@ -67,6 +67,7 @@ export function createMahjongSoloMatchController({
         rules,
         playerName: getPlayerName(),
         autoActions: getAutoActions(),
+        opponentPortraits: themeController.getPortraits(),
       });
       setSoloSave(save);
       writeMahjongSoloSave(save);
@@ -118,7 +119,10 @@ export function createMahjongSoloMatchController({
       });
       await visualRendererReady;
       setGame(restored);
-      await themeController.rerollPortraits();
+      await themeController.applyMatchPortraits(
+        save.opponentPortraits,
+        save.randomSeed,
+      );
       if (save.playerName) setPlayerName(save.playerName);
       setAutoActions({ ...save.autoActions });
       syncAutoActionControls();

@@ -105,6 +105,7 @@ export function createMahjongTableController({
     resultPageAnimating = false;
     hideMatchSummary();
     resetResultPageTrack();
+    domView.clearResolvedWindBadges?.();
   }
 
   async function refresh(

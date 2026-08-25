@@ -58,6 +58,7 @@ import {
   readMahjongSoloSave,
   setMahjongSoloAutoActions,
   setMahjongSoloCheckpoint,
+  setMahjongSoloOpponentPortraits,
   writeMahjongSoloSave,
 } from "./replay/solo-save.js";
 import {
@@ -125,7 +126,6 @@ let endingSoloMatch = false;
 let destroyed = false;
 let playerName = "你";
 let hasPlatformName = false;
-let hasPlatformAvatar = false;
 let roomPlayerId = "";
 let roomIsOwner = false;
 let roomAiGame;
@@ -327,9 +327,13 @@ const themeController = createMahjongThemeController({
       visualRenderer.setAppearance({ tablecloth, tileBack }),
       resultHandRenderer.setAppearance({ tablecloth, tileBack }),
     ]),
-  setPlayerAvatar: (position, source) =>
-    domView.setPlayerAvatar(position, source),
-  hasPlatformAvatar: () => hasPlatformAvatar,
+  setPlayerIdentityState: (state) => domView.applyPlayerIdentityState(state),
+  initialMatchPortraitRequest: soloSave
+    ? {
+        savedPortraits: soloSave.opponentPortraits,
+        randomSeed: soloSave.randomSeed,
+      }
+    : undefined,
   onAssetsChanged() {
     tableController?.syncMatchMusic();
     if (tableController?.getState()) tableController.renderCurrentState();
@@ -360,7 +364,19 @@ tableController = createMahjongTableController({
   dispatch: (...args) => session?.dispatch(...args),
   isActionInFlight: () => session?.isActionInFlight() === true,
   scheduleAi: (...args) => session?.scheduleAi(...args),
-  onRerollPortraits: () => themeController.rerollPortraits(),
+  onRerollPortraits: async () => {
+    await themeController.rerollPortraits(
+      crypto.randomUUID().replaceAll("-", ""),
+    );
+    if (playMode !== "solo" || !soloSave) return;
+    const next = setMahjongSoloOpponentPortraits(
+      soloSave,
+      themeController.getPortraits(),
+    );
+    if (!next) return;
+    soloSave = next;
+    writeMahjongSoloSave(soloSave);
+  },
   onReplayAdvance: (action) => advanceMahjongPaipuReplayFromResult(action),
   onReturnToSetup: teardownCompletedSoloMatch,
 });
@@ -1193,26 +1209,20 @@ async function startRoomMatch(matchType = "east") {
 
 function requestPlatformAvatar(context) {
   const initialSource = context?.player?.avatar?.src;
-  if (typeof initialSource === "string" && initialSource) {
-    hasPlatformAvatar = true;
-    domView.setPlayerAvatar("bottom", initialSource);
-  } else {
-    themeController.applyPackAvatars();
-  }
+  themeController.setPlatformAvatar(
+    typeof initialSource === "string" ? initialSource : "",
+  );
   if (!asArray(context?.capabilities).includes("user.getProfile")) return;
   void playweftClient
     .getUserProfile({ fields: ["avatar"] })
     .then((profile) => {
       const source = profile?.avatar?.src;
-      if (typeof source === "string" && source) {
-        hasPlatformAvatar = true;
-        domView.setPlayerAvatar("bottom", source);
-      } else if (!initialSource) {
-        themeController.applyPackAvatars();
-      }
+      themeController.setPlatformAvatar(
+        typeof source === "string" ? source : initialSource || "",
+      );
     })
     .catch(() => {
-      if (!initialSource) themeController.applyPackAvatars();
+      themeController.setPlatformAvatar(initialSource || "");
     });
 }
 
@@ -1383,6 +1393,7 @@ async function teardownCompletedSoloMatch() {
   settingsDialog.setSoloMatchActive(false);
   settingsDialog.setEndMatchLabel("结束本局");
   clearSoloSave();
+  await themeController.clearMatchPortraits();
 }
 
 function beginSetupExit() {
