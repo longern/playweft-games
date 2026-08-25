@@ -31,6 +31,7 @@ function createController({
   callbacks = {},
   now,
   wait,
+  isKanDrawPending = () => false,
 } = {}) {
   return {
     scheduler,
@@ -41,7 +42,7 @@ function createController({
       getState: () => state,
       getAutoActions: () => autoActions,
       getRiichiMode: () => false,
-      isKanDrawPending: () => false,
+      isKanDrawPending,
       sendRoomAction: callbacks.sendRoomAction,
       persistAcceptedAction: callbacks.persistAcceptedAction,
       refreshProjection: callbacks.refreshProjection,
@@ -172,6 +173,187 @@ test("mahjong session starts an AI decision immediately and only waits for its r
 
   assert.deepEqual(calls, ["decision", "ai-1:discard"]);
   assert.deepEqual(waits, [4]);
+});
+
+test("mahjong session does not cancel an existing AI schedule while another action is in flight", async () => {
+  const state = {
+    phase: "playing",
+    turnIndex: 2,
+    moveCount: 4,
+    drawnTile: 19,
+  };
+  let resolveAction;
+  const game = {
+    action() {
+      return new Promise((resolve) => {
+        resolveAction = resolve;
+      });
+    },
+  };
+  const { controller, scheduler } = createController({ state, game });
+
+  controller.scheduleAi();
+  const generation = scheduler.scheduled[0].generation;
+  const pending = controller.dispatch(
+    { type: "discard", tileId: 19 },
+    { source: "automatic" },
+  );
+  controller.scheduleAi();
+
+  assert.equal(scheduler.isCurrent(generation), true);
+  assert.equal(scheduler.scheduled.length, 1);
+
+  resolveAction({
+    result: { accepted: true },
+    projection: { state, events: [] },
+  });
+  await pending;
+});
+
+test("mahjong session does not duplicate a schedule for the same turn", () => {
+  const state = {
+    phase: "playing",
+    turnIndex: 2,
+    moveCount: 4,
+    drawnTile: 19,
+  };
+  const { controller, scheduler } = createController({ state, game: {} });
+
+  controller.scheduleAi();
+  controller.scheduleAi();
+
+  assert.equal(scheduler.scheduled.length, 1);
+});
+
+test("mahjong session reconciles an automatic action that reaches an action lock", async () => {
+  const state = {
+    phase: "playing",
+    turnIndex: 1,
+    drawnTile: 19,
+    legalActions: { canDiscard: true },
+  };
+  let resolveAction;
+  const game = {
+    action() {
+      return new Promise((resolve) => {
+        resolveAction = resolve;
+      });
+    },
+  };
+  const { controller, scheduler } = createController({
+    state,
+    game,
+    autoActions: { autoTsumogiri: true },
+  });
+
+  controller.scheduleAi();
+  scheduler.scheduled[0].callback(scheduler.scheduled[0].generation);
+  await Promise.resolve();
+  assert.equal(controller.isActionInFlight(), true);
+
+  controller.scheduleAi();
+  assert.equal(scheduler.scheduled.length, 1);
+
+  resolveAction({
+    result: { accepted: true },
+    projection: { state, events: [] },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(controller.isActionInFlight(), false);
+  assert.equal(scheduler.scheduled.length, 2);
+});
+
+test("mahjong session waits for the kan presentation gate before scheduling AI", () => {
+  const state = {
+    phase: "playing",
+    turnIndex: 2,
+    moveCount: 4,
+    drawnTile: 19,
+  };
+  let kanDrawPending = true;
+  const { controller, scheduler } = createController({
+    state,
+    game: {},
+    isKanDrawPending: () => kanDrawPending,
+  });
+
+  assert.equal(controller.scheduleAi(), false);
+  assert.equal(scheduler.scheduled.length, 0);
+
+  kanDrawPending = false;
+  assert.equal(controller.scheduleAi(), true);
+  assert.equal(scheduler.scheduled.length, 1);
+});
+
+test("mahjong session retries one rejected automatic action and then stops", async () => {
+  const state = {
+    phase: "playing",
+    turnIndex: 1,
+    drawnTile: 19,
+    legalActions: { canDiscard: true },
+  };
+  let actionCalls = 0;
+  const game = {
+    async action() {
+      actionCalls += 1;
+      return { result: { accepted: false, error: { code: "stale" } } };
+    },
+  };
+  const { controller, scheduler } = createController({
+    state,
+    game,
+    autoActions: { autoTsumogiri: true },
+  });
+
+  controller.scheduleAi();
+  scheduler.scheduled[0].callback(scheduler.scheduled[0].generation);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(actionCalls, 1);
+  assert.equal(scheduler.scheduled.length, 2);
+
+  scheduler.scheduled[1].callback(scheduler.scheduled[1].generation);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(actionCalls, 2);
+  assert.equal(scheduler.scheduled.length, 2);
+  assert.equal(controller.isActionInFlight(), false);
+});
+
+test("mahjong room automation keeps one timer for an unchanged authoritative state", () => {
+  const state = {
+    phase: "playing",
+    turnIndex: 1,
+    drawnTile: 19,
+    legalActions: { canDiscard: true },
+  };
+  const { controller, scheduler } = createController({
+    state,
+    game: {},
+    mode: "room",
+    autoActions: { autoTsumogiri: true },
+  });
+
+  assert.equal(controller.scheduleRoomAutomaticAction({ state }), true);
+  const generation = scheduler.scheduled[0].generation;
+  assert.equal(controller.scheduleRoomAutomaticAction({ state }), true);
+
+  assert.equal(scheduler.scheduled.length, 1);
+  assert.equal(scheduler.isCurrent(generation), true);
+});
+
+test("mahjong room action errors release the action lock", async () => {
+  const { controller } = createController({
+    state: { phase: "playing" },
+    mode: "room",
+    callbacks: {
+      sendRoomAction() {
+        throw new Error("connection closed");
+      },
+    },
+  });
+
+  assert.equal(await controller.dispatch({ type: "discard", tileId: 3 }), false);
+  assert.equal(controller.isActionInFlight(), false);
 });
 
 test("mahjong session drops an AI decision after the turn changes", async () => {

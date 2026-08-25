@@ -722,6 +722,7 @@ async function handleRoomState(message) {
     await visualRendererReady;
     if (destroyed || playMode !== "room") return;
     await tableController.refresh(projection, { animateDealIn });
+    session.confirmRoomState();
     scheduleRoomLegalActions(projection.state);
     scheduleRoomTenpaiReports(projection.state);
     scheduleRoomEarlyTenpaiReport(projection.state, projection.events);
@@ -730,7 +731,6 @@ async function handleRoomState(message) {
     elements.app.setAttribute("aria-busy", "false");
     elements.setup.hidden = true;
     elements.loading.hidden = true;
-    session.confirmRoomState();
   } catch (error) {
     console.error("Mahjong room state failed to render", error);
     showLoadingError("房间状态加载失败，请稍后重试");
