@@ -63,7 +63,7 @@
   border-radius: 999px 0 0 999px;
   background: var(--mahjong-warning-fill);
   color: var(--mahjong-warning-text);
-  font-size: 22px;
+  font-size: 0.875em;
   font-weight: 850;
   line-height: 1;
   letter-spacing: 0.08em;
@@ -185,7 +185,7 @@
   background: #d32f2f;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
   color: #fff;
-  font-size: 18px;
+  font-size: 0.75em;
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
@@ -194,7 +194,7 @@
 
 .tenpai-wait-count {
   color: #f5e8c8;
-  font-size: 18px;
+  font-size: 0.75em;
   font-weight: 750;
   line-height: 1;
   white-space: nowrap;
@@ -294,7 +294,7 @@
   border-radius: 999px;
   box-shadow: 0 5px 14px rgba(0, 0, 0, 0.24);
   cursor: pointer;
-  font-size: 15px;
+  font-size: 0.875em;
   font-weight: 800;
   transition:
     filter 140ms ease,

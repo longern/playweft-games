@@ -1032,20 +1032,17 @@ test("mahjong uses a cancellable two-step riichi tile selection", () => {
     new URL("../games/mahjong/three-renderer.js", import.meta.url),
     "utf8",
   );
-  assert.match(
-    tableController,
-    /function enterRiichiMode\(\)/,
-  );
-  assert.match(
-    tableController,
-    /function cancelRiichiMode\(\)/,
-  );
+  assert.match(tableController, /function enterRiichiMode\(\)/);
+  assert.match(tableController, /function cancelRiichiMode\(\)/);
   assert.match(tableController, /selectionBeforeRiichi = selectedTileId/);
   assert.match(
     tableController,
     /orderedOwnTiles\(presentedState\(\)\)\.includes\(\s*selectionBeforeRiichi,?\s*\)/s,
   );
-  assert.match(tableController, /dispatch\?\.\(\{ type: "riichi", tileId: selectedTileId \}\)/);
+  assert.match(
+    tableController,
+    /dispatch\?\.\(\{ type: "riichi", tileId: selectedTileId \}\)/,
+  );
   assert.match(view, /elements\.cancelRiichi\.hidden = !riichiMode/);
   assert.match(
     view,
@@ -1276,7 +1273,10 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     /if \(state\.winType === "nagashi"\) \{\s*this\.hide\(\);/s,
   );
   const paperRenderer = readFileSync(
-    new URL("../games/mahjong/result/result-paper-renderer.js", import.meta.url),
+    new URL(
+      "../games/mahjong/result/result-paper-renderer.js",
+      import.meta.url,
+    ),
     "utf8",
   );
   assert.match(
@@ -1328,7 +1328,10 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
     html,
     /id="rematch-button" class="result-start-control"[^>]*aria-label="继续"[\s\S]*?id="rematch-button-label"[^>]*>继续<\/span>/,
   );
-  assert.match(view, /const rematchLabel = resultPageReady \? "等待中" : "继续"/);
+  assert.match(
+    view,
+    /const rematchLabel = resultPageReady \? "等待中" : "继续"/,
+  );
   assert.match(view, /elements\.rematch\.disabled = resultPageReady/);
   assert.doesNotMatch(view, /你赢了/);
   assert.doesNotMatch(
@@ -1362,7 +1365,10 @@ test("mahjong presents winning, exhaustive-draw, and nine-terminals hands before
   );
   assert.match(renderer, /settlePresentedTile\(hinge, covered\)/);
   assert.match(tableController, /const RESULT_PAGE_TRANSITION_MS = 920;/);
-  assert.match(tableController, /outgoing\.classList\.add\("is-step-previous"\)/);
+  assert.match(
+    tableController,
+    /outgoing\.classList\.add\("is-step-previous"\)/,
+  );
   assert.match(tableController, /elements\.resultTrack\.prepend\(outgoing\)/);
   assert.match(
     tableController,
@@ -1410,7 +1416,10 @@ test("mahjong keeps the result start button aligned across detail and score page
 
 test("mahjong result fu and han values are at least half the point-value size", () => {
   const paperRenderer = readFileSync(
-    new URL("../games/mahjong/result/result-paper-renderer.js", import.meta.url),
+    new URL(
+      "../games/mahjong/result/result-paper-renderer.js",
+      import.meta.url,
+    ),
     "utf8",
   );
   const scoreFields = paperRenderer.match(
@@ -1426,7 +1435,10 @@ test("mahjong result fu and han values are at least half the point-value size", 
 
 test("mahjong result yaku names are no more than 1.4 times the han-unit size", () => {
   const paperRenderer = readFileSync(
-    new URL("../games/mahjong/result/result-paper-renderer.js", import.meta.url),
+    new URL(
+      "../games/mahjong/result/result-paper-renderer.js",
+      import.meta.url,
+    ),
     "utf8",
   );
   assert.match(
@@ -1443,7 +1455,10 @@ test("mahjong result yaku names are no more than 1.4 times the han-unit size", (
 
 test("mahjong score-sheet instant photos use distinct subtle tilts", () => {
   const paperRenderer = readFileSync(
-    new URL("../games/mahjong/result/result-paper-renderer.js", import.meta.url),
+    new URL(
+      "../games/mahjong/result/result-paper-renderer.js",
+      import.meta.url,
+    ),
     "utf8",
   );
   assert.match(
@@ -1464,7 +1479,10 @@ test("mahjong score-sheet instant photos use distinct subtle tilts", () => {
 
 test("mahjong score-sheet deltas use a slightly heavier synthesized weight", () => {
   const paperRenderer = readFileSync(
-    new URL("../games/mahjong/result/result-paper-renderer.js", import.meta.url),
+    new URL(
+      "../games/mahjong/result/result-paper-renderer.js",
+      import.meta.url,
+    ),
     "utf8",
   );
   assert.match(paperRenderer, /scoreSheetNumberFont\(16, 600\)/);
@@ -1503,7 +1521,6 @@ test("mahjong defers default decorative images until after window load", () => {
     document.documentElement.dataset.mahjongDecorativeAssets,
     "ready",
   );
-
 });
 
 test("mahjong defers lobby decorative images until after window load", () => {
@@ -1548,7 +1565,10 @@ test("mahjong defers lobby decorative images until after window load", () => {
     new URL("../games/mahjong/main.js", import.meta.url),
     "utf8",
   );
-  assert.match(main, /import defaultPaipuNotebookUrl from "\.\/assets\/paipu-notebook-v1\.jpg\?url"/);
+  assert.match(
+    main,
+    /import defaultPaipuNotebookUrl from "\.\/assets\/paipu-notebook-v1\.jpg\?url"/,
+  );
   assert.match(main, /"paipu-notebook": defaultPaipuNotebookUrl/);
 
   const setupStyles = readFileSync(
@@ -1848,19 +1868,22 @@ test("mahjong animation controller shares one frame loop and deduplicates events
   let frameDraws = 0;
   const shadowUpdates = [];
   const samples = { reveal: [], callout: [] };
-  const animations = new ThreeAnimationController((updatesShadow) => {
-    frameDraws += 1;
-    shadowUpdates.push(updatesShadow);
-  }, {
-    now: () => now,
-    requestFrame(callback) {
-      pendingFrame = callback;
-      return ++nextFrame;
+  const animations = new ThreeAnimationController(
+    (updatesShadow) => {
+      frameDraws += 1;
+      shadowUpdates.push(updatesShadow);
     },
-    cancelFrame() {
-      pendingFrame = null;
+    {
+      now: () => now,
+      requestFrame(callback) {
+        pendingFrame = callback;
+        return ++nextFrame;
+      },
+      cancelFrame() {
+        pendingFrame = null;
+      },
     },
-  });
+  );
   const advance = (time) => {
     const callback = pendingFrame;
     pendingFrame = null;
@@ -2954,7 +2977,7 @@ test("mahjong settings dialog combines operation controls and themed help", () =
   assert.match(html, /双击空白处摸切/);
   assert.match(
     html,
-    /id="double-click-pass-setting"[^>]*>[\s\S]*?<strong>双击空白处跳过<\/strong>/,
+    /id="double-click-pass-setting"[^>]*type="checkbox"/,
   );
   assert.doesNotMatch(html, /settings-switch|轮到自己且已摸牌时/);
   assert.match(
@@ -2969,7 +2992,10 @@ test("mahjong settings dialog combines operation controls and themed help", () =
   assert.match(main, /settingsDialog\.doubleClickPassEnabled/);
   assert.match(soloController, /settingsDialog\.setSoloMatchActive\(true\)/);
   assert.match(main, /结束本局并返回标题/);
-  assert.match(tableController, /cue\.volume \* settingsDialog\.discardVolumeScale/);
+  assert.match(
+    tableController,
+    /cue\.volume \* settingsDialog\.discardVolumeScale/,
+  );
   assert.match(
     main,
     /passAvailable: !elements\.pass\.hidden && !elements\.pass\.disabled/,
@@ -3272,7 +3298,6 @@ test("mahjong renders a compact fixed five-slot dora rack", () => {
   assert.equal(traditionalDrawReason("九种九牌"), "九種九牌");
   assert.equal(traditionalDrawReason("四风连打"), "四風連打");
   assert.match(view, /state\.matchType === "hanchan" \? "四人南" : "四人東"/);
-
 });
 
 test("mahjong player nameplates leave scoring to the centre console", () => {
@@ -3319,7 +3344,10 @@ test("mahjong prefers the platform avatar for the local player", () => {
   assert.match(main, /getUserProfile\(\{ fields: \["avatar"\] \}\)/);
   assert.match(main, /const source = profile\?\.avatar\?\.src;/);
   assert.match(main, /setPlayerAvatar\("bottom", source\)/);
-  assert.match(html, /class="player-avatar is-default-portrait"[^>]*data-player-avatar/);
+  assert.match(
+    html,
+    /class="player-avatar is-default-portrait"[^>]*data-player-avatar/,
+  );
   assert.match(view, /const preload = new Image\(\)/);
   assert.match(view, /avatar\.classList\.remove\("is-default-portrait"\)/);
 });

@@ -1,3 +1,12 @@
+import {
+  Bookmark,
+  BookmarkCheck,
+  Play,
+  createIcons,
+} from "lucide";
+
+const paipuIcons = { Bookmark, BookmarkCheck, Play };
+
 export function createMahjongPaipuPanel({
   document,
   window,
@@ -75,6 +84,7 @@ export function createMahjongPaipuPanel({
       for (const summary of summaries) {
         elements.list.append(renderEntry(summary));
       }
+      createIcons({ icons: paipuIcons });
     } catch (error) {
       console.error("Unable to read Mahjong paipu list", error);
       elements.empty.textContent = "牌谱暂时无法读取";
@@ -96,12 +106,18 @@ export function createMahjongPaipuPanel({
     actions.className = "paipu-entry-actions";
     const replay = document.createElement("button");
     replay.type = "button";
-    replay.textContent = "回放";
+    replay.className = "paipu-entry-action";
+    replay.setAttribute("aria-label", "回放");
+    replay.title = "回放";
+    replay.innerHTML = '<i data-lucide="play" aria-hidden="true"></i>';
     replay.addEventListener("click", () => void onReplay(summary.id));
     const pin = document.createElement("button");
     pin.type = "button";
-    pin.textContent = summary.pinned ? "已收藏" : "收藏";
+    pin.className = "paipu-entry-action";
+    pin.setAttribute("aria-label", summary.pinned ? "取消收藏" : "收藏");
+    pin.title = summary.pinned ? "取消收藏" : "收藏";
     pin.setAttribute("aria-pressed", String(summary.pinned));
+    pin.innerHTML = `<i data-lucide="${summary.pinned ? "bookmark-check" : "bookmark"}" aria-hidden="true"></i>`;
     pin.addEventListener("click", async () => {
       pin.disabled = true;
       try {

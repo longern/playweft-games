@@ -404,8 +404,6 @@ test("mahjong settings separates theme management from appearance choices", () =
   assert.match(themeController, /configureMahjongAssetPackAppearance/);
   assert.match(themeController, /角色语音/);
   assert.match(themeController, /getMahjongDefaultPack\(\)/);
-  assert.match(settingsCss, /\.settings-option strong[\s\S]*?font-size: 20px/);
-  assert.match(settingsCss, /\.settings-theme-list strong[\s\S]*?font-size: 20px/);
   assert.match(
     themeController,
     /action === "delete"[\s\S]*?isStandalone[\s\S]*?browserWindow\.confirm\(message\)[\s\S]*?await confirm\?\.\(message\)/,

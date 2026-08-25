@@ -219,7 +219,7 @@
 .result-content > p {
   margin: 7px 0 16px;
   color: rgba(255, 255, 255, 0.62);
-  font-size: 1rem;
+  font-size: 0.875em;
 }
 
 .result-hands {
@@ -239,7 +239,7 @@
 
 .result-hand > strong {
   color: rgba(241, 211, 139, 0.9);
-  font-size: 0.88rem;
+  font-size: 0.75em;
   text-align: left;
 }
 
@@ -348,7 +348,6 @@
   column-gap: 24px;
   padding: 5px 0;
   color: rgba(255, 255, 255, 0.78);
-  font-size: 26px;
   line-height: 1.2;
 }
 
@@ -666,7 +665,7 @@
   z-index: 1;
   color: #eee2c2;
   font-family: "Mahjong Brush", ui-serif, serif;
-  font-size: 18px;
+  font-size: 0.75em;
   font-weight: 700;
   letter-spacing: 0.08em;
   line-height: 1.25;

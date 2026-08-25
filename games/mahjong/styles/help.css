@@ -139,14 +139,3 @@ body {
   font-size: 16px;
   line-height: 1.35;
 }
-
-@media (max-width: 440px) {
-  .help-page {
-    width: auto;
-    padding: 24px 22px 40px;
-  }
-
-  .rule-strip {
-    grid-template-columns: 1fr;
-  }
-}

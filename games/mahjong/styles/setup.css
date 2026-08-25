@@ -41,7 +41,7 @@
 .paipu-card {
   display: flex;
   width: min(720px, 100%);
-  max-height: min(640px, 90vh);
+  max-height: 640px;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(255, 235, 190, 0.22);
@@ -76,13 +76,13 @@
 }
 
 .paipu-header h2 {
-  font-size: 1.35rem;
+  font-size: 1.35em;
 }
 
 .paipu-header p {
   margin-top: 5px;
   color: rgba(255, 238, 204, 0.62);
-  font-size: 0.82rem;
+  font-size: 0.75em;
 }
 
 .paipu-close {
@@ -114,6 +114,7 @@
 .paipu-empty {
   padding: 46px 24px;
   color: rgba(255, 238, 204, 0.66);
+  font-size: 0.875em;
   text-align: center;
 }
 
@@ -133,48 +134,50 @@
   display: block;
 }
 
-.paipu-entry-info strong {
-  font-size: 0.98rem;
-}
-
 .paipu-entry-info span {
   margin-top: 5px;
   color: rgba(255, 238, 204, 0.64);
-  font-size: 0.78rem;
+  font-size: 0.75em;
 }
 
 .paipu-entry-actions {
   display: flex;
-  gap: 8px;
+  gap: 4px;
+  align-items: center;
 }
 
-.paipu-entry-actions button {
-  min-width: 58px;
-  padding: 7px 10px;
-  border: 1px solid rgba(255, 239, 204, 0.22);
-  border-radius: 9px;
-  background: rgba(255, 239, 204, 0.08);
+.paipu-entry-action {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
   color: #fff1d1;
-  font: inherit;
-  font-size: 0.78rem;
 }
 
-.paipu-entry-actions button:hover {
-  background: rgba(255, 239, 204, 0.16);
+.paipu-entry-action svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2;
 }
 
-@media (max-width: 640px) {
-  .paipu-panel {
-    padding: 12px;
+.paipu-entry-action:disabled {
+  opacity: 0.48;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .paipu-entry-action:hover {
+    background: rgba(255, 239, 204, 0.12);
+    color: #fff8e7;
   }
 
-  .paipu-card {
-    max-height: 94vh;
-    border-radius: 18px;
-  }
-
-  .paipu-entry {
-    grid-template-columns: 1fr;
+  .paipu-entry-action:active {
+    background: rgba(255, 239, 204, 0.18);
+    transform: scale(0.9);
   }
 }
 
@@ -421,7 +424,7 @@
 
 .rule-options summary {
   cursor: pointer;
-  font-size: 1.125rem;
+  font-size: 0.875em;
   font-weight: 800;
   text-align: center;
 }
@@ -441,7 +444,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 1rem;
+  font-size: 0.875em;
 }
 
 .rule-options input {
@@ -525,7 +528,7 @@
   max-width: 520px;
   margin: 18px 0 0;
   color: rgba(255, 239, 211, 0.9);
-  font-size: 1rem;
+  font-size: 0.875em;
 }
 
 .loading-panel.is-error .loading-spinner {
