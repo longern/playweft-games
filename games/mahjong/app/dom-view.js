@@ -913,6 +913,9 @@ function collectElements() {
     settingsTabs: [...document.querySelectorAll("[data-settings-tab]")],
     settingsPanels: [...document.querySelectorAll("[data-settings-panel]")],
     gameHints: document.querySelector("#game-hints-setting"),
+    autoWinAfterRiichi: document.querySelector(
+      "#auto-win-after-riichi-setting",
+    ),
     doubleClickTsumogiri: document.querySelector(
       "#double-click-tsumogiri-setting",
     ),

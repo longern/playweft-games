@@ -2978,6 +2978,11 @@ test("mahjong settings dialog combines operation controls and themed help", () =
   assert.match(html, /双击空白处摸切/);
   assert.match(
     html,
+    /id="auto-win-after-riichi-setting"[^>]*type="checkbox"/,
+  );
+  assert.match(html, /立直后自动和牌/);
+  assert.match(
+    html,
     /id="double-click-pass-setting"[^>]*type="checkbox"/,
   );
   assert.doesNotMatch(html, /settings-switch|轮到自己且已摸牌时/);
@@ -2989,8 +2994,12 @@ test("mahjong settings dialog combines operation controls and themed help", () =
   assert.match(helpHtml, /\.\/styles\/help\.css/);
   assert.match(dialog, /setSoloMatchActive\(active\)/);
   assert.match(dialog, /window\.localStorage\.setItem/);
+  assert.match(dialog, /AUTO_WIN_AFTER_RIICHI_KEY/);
+  assert.match(dialog, /autoWinAfterRiichiEnabled/);
   assert.match(main, /settingsDialog\.doubleClickTsumogiriEnabled/);
   assert.match(main, /settingsDialog\.doubleClickPassEnabled/);
+  assert.match(main, /enableAutoWinAfterRiichi/);
+  assert.match(main, /autoWinAfterRiichiManuallyDisabled/);
   assert.match(soloController, /settingsDialog\.setSoloMatchActive\(true\)/);
   assert.match(main, /结束本局并返回标题/);
   assert.match(

@@ -1,6 +1,7 @@
 const DOUBLE_CLICK_TSUMOGIRI_KEY = "playweft.mahjong.double-click-tsumogiri";
 const DOUBLE_CLICK_PASS_KEY = "playweft.mahjong.double-click-pass";
 const GAME_HINTS_KEY = "playweft.mahjong.game-hints";
+const AUTO_WIN_AFTER_RIICHI_KEY = "playweft.mahjong.auto-win-after-riichi";
 const DISCARD_VOLUME_KEY = "playweft.mahjong.discard-volume";
 const MUSIC_VOLUME_KEY = "playweft.mahjong.music-volume";
 const DEFAULT_DISCARD_VOLUME = 100;
@@ -17,6 +18,7 @@ export function createMahjongSettingsDialog({
   tabButtons,
   tabPanels,
   gameHints,
+  autoWinAfterRiichi,
   doubleClickTsumogiri,
   doubleClickPass,
   discardVolume,
@@ -33,6 +35,10 @@ export function createMahjongSettingsDialog({
   let closingTimer = 0;
   let restoreFocusAfterClose = true;
   gameHints.checked = readBooleanSetting(GAME_HINTS_KEY, true);
+  autoWinAfterRiichi.checked = readBooleanSetting(
+    AUTO_WIN_AFTER_RIICHI_KEY,
+    false,
+  );
   doubleClickTsumogiri.checked = readBooleanSetting(
     DOUBLE_CLICK_TSUMOGIRI_KEY,
     false,
@@ -203,6 +209,13 @@ export function createMahjongSettingsDialog({
     onGameHintsChange?.();
   }
 
+  function onAutoWinAfterRiichiSettingChange() {
+    writeBooleanSetting(
+      AUTO_WIN_AFTER_RIICHI_KEY,
+      autoWinAfterRiichi.checked,
+    );
+  }
+
   function onPassSettingChange() {
     writeBooleanSetting(DOUBLE_CLICK_PASS_KEY, doubleClickPass.checked);
   }
@@ -241,6 +254,10 @@ export function createMahjongSettingsDialog({
   surface.addEventListener("transitionend", onSurfaceTransitionEnd);
   document.addEventListener("keydown", onKeyDown);
   gameHints.addEventListener("change", onGameHintsSettingChange);
+  autoWinAfterRiichi.addEventListener(
+    "change",
+    onAutoWinAfterRiichiSettingChange,
+  );
   doubleClickTsumogiri.addEventListener("change", onTsumogiriSettingChange);
   doubleClickPass.addEventListener("change", onPassSettingChange);
   discardVolume.addEventListener("input", onDiscardVolumeInput);
@@ -253,6 +270,9 @@ export function createMahjongSettingsDialog({
   return {
     get gameHintsEnabled() {
       return gameHints.checked;
+    },
+    get autoWinAfterRiichiEnabled() {
+      return autoWinAfterRiichi.checked;
     },
     get doubleClickTsumogiriEnabled() {
       return doubleClickTsumogiri.checked;
@@ -286,6 +306,10 @@ export function createMahjongSettingsDialog({
       surface.removeEventListener("transitionend", onSurfaceTransitionEnd);
       document.removeEventListener("keydown", onKeyDown);
       gameHints.removeEventListener("change", onGameHintsSettingChange);
+      autoWinAfterRiichi.removeEventListener(
+        "change",
+        onAutoWinAfterRiichiSettingChange,
+      );
       doubleClickTsumogiri.removeEventListener(
         "change",
         onTsumogiriSettingChange,

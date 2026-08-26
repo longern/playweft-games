@@ -155,6 +155,8 @@ let roomTenpaiSupplementRequestedKey = "";
 let roomTenpaiReportedKey = "";
 let playMode = isStandalone ? "solo" : null;
 let autoActions = defaultAutoActions();
+let autoWinAfterRiichiKey = "";
+let autoWinAfterRiichiManuallyDisabled = false;
 let session;
 let tableController;
 let playweftClient;
@@ -237,6 +239,7 @@ const settingsDialog = createMahjongSettingsDialog({
   tabButtons: elements.settingsTabs,
   tabPanels: elements.settingsPanels,
   gameHints: elements.gameHints,
+  autoWinAfterRiichi: elements.autoWinAfterRiichi,
   doubleClickTsumogiri: elements.doubleClickTsumogiri,
   doubleClickPass: elements.doubleClickPass,
   discardVolume: elements.riverTileVolume,
@@ -410,7 +413,14 @@ session = createMahjongSessionController({
   onRoomUnavailable: () => showMessage("尚未连接到房间"),
   persistAcceptedAction,
   refreshProjection: tableController.refresh,
-  onSoloActionAccepted(action) {
+  onSoloActionAccepted(action, projection) {
+    if (action.type === "riichi") {
+      const event = asArray(projection?.events).find(
+        (candidate) =>
+          candidate?.type === "riichi" && Number(candidate.playerIndex) === 1,
+      );
+      enableAutoWinAfterRiichi(projection?.state, event);
+    }
     if (action.type === "next_hand" || action.type === "new_match")
       resetAutoActions();
     tableController.clearActionUi();
@@ -690,6 +700,10 @@ async function handleRoomState(message) {
     roomPlayerId,
   );
   if (!projection?.state) return;
+  const ownRiichiEvent = asArray(projection.events).find(
+    (event) =>
+      event?.type === "riichi" && Number(event.playerIndex) === 1,
+  );
   const startsFreshAutoActionScope = asArray(projection.events).some(
     (event) =>
       event?.type === "match_started" ||
@@ -722,6 +736,7 @@ async function handleRoomState(message) {
     await visualRendererReady;
     if (destroyed || playMode !== "room") return;
     await tableController.refresh(projection, { animateDealIn });
+    enableAutoWinAfterRiichi(projection.state, ownRiichiEvent);
     session.confirmRoomState();
     scheduleRoomLegalActions(projection.state);
     scheduleRoomTenpaiReports(projection.state);
@@ -1278,6 +1293,24 @@ function defaultAutoActions() {
   return { autoWin: false, passClaims: false, autoTsumogiri: false };
 }
 
+function enableAutoWinAfterRiichi(state, event) {
+  if (!settingsDialog.autoWinAfterRiichiEnabled) return;
+  const key = autoWinAfterRiichiStateKey(state, event);
+  if (
+    !key ||
+    key === autoWinAfterRiichiKey ||
+    autoWinAfterRiichiManuallyDisabled
+  )
+    return;
+  autoWinAfterRiichiKey = key;
+  if (autoActions.autoWin) return;
+  autoActions = { ...autoActions, autoWin: true };
+  syncAutoActionControls();
+  persistAutoActions();
+  if (playMode === "room") scheduleRoomAutomaticAction();
+  else scheduleAi();
+}
+
 function toggleAutoAction(name) {
   if (playMode === "room" && name === "passClaims") {
     void session.dispatch({
@@ -1286,7 +1319,11 @@ function toggleAutoAction(name) {
     });
     return;
   }
-  autoActions = { ...autoActions, [name]: !autoActions[name] };
+  const enabled = !autoActions[name];
+  autoActions = { ...autoActions, [name]: enabled };
+  if (name === "autoWin" && !enabled && autoWinAfterRiichiKey) {
+    autoWinAfterRiichiManuallyDisabled = true;
+  }
   syncAutoActionControls();
   persistAutoActions();
   if (playMode === "room") scheduleRoomAutomaticAction();
@@ -1295,8 +1332,21 @@ function toggleAutoAction(name) {
 
 function resetAutoActions({ persist = true } = {}) {
   autoActions = defaultAutoActions();
+  autoWinAfterRiichiKey = "";
+  autoWinAfterRiichiManuallyDisabled = false;
   syncAutoActionControls();
   if (persist) persistAutoActions();
+}
+
+function autoWinAfterRiichiStateKey(state, event) {
+  if (!state || !event) return "";
+  return [
+    Number(state.roundWind) || 0,
+    Number(state.handNumber) || 0,
+    Number(state.honba) || 0,
+    Number(state.moveCount) || 0,
+    Number(event.playerIndex) || 0,
+  ].join(":");
 }
 
 function syncAutoActionControls() {
