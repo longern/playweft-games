@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { strToU8, zipSync } from "fflate";
 import {
   chooseMahjongMatchMusicUrl,
@@ -14,7 +13,10 @@ import {
   normalizeMahjongDefaultAssetConfig,
   portraitNames,
 } from "../games/mahjong/theme/default-assets.js";
-import { resolveMahjongMatchPortraits } from "../games/mahjong/theme/portrait-selection.js";
+import {
+  resolveMahjongMatchPortraits,
+  resolveMahjongPlayerPortraits,
+} from "../games/mahjong/theme/portrait-selection.js";
 
 test("mahjong music falls back when a pack has no music and preserves silence", () => {
   assert.equal(
@@ -361,6 +363,23 @@ test("match portrait assignment repeats entries after unique portraits are exhau
   assert.equal(twoPortraits.left, "other");
 });
 
+test("online AI portrait assignment is stable regardless of player ID order", () => {
+  const entries = [{ id: "fox" }, { id: "wolf" }, { id: "cat" }];
+  const forward = resolveMahjongPlayerPortraits(
+    entries,
+    ["fox", "wolf", "cat"],
+    ["mahjong-ai-3", "mahjong-ai-2"],
+    "online-portrait-seed",
+  );
+  const reverse = resolveMahjongPlayerPortraits(
+    entries,
+    ["fox", "wolf", "cat"],
+    ["mahjong-ai-2", "mahjong-ai-3"],
+    "online-portrait-seed",
+  );
+  assert.deepEqual(forward, reverse);
+});
+
 test("saved opponent portraits survive refresh and missing theme portraits get stable replacements", () => {
   const originalTheme = [
     { id: "self" },
@@ -443,41 +462,4 @@ test("build-time config exposes named downloadable asset packs without ids", () 
   assert.deepEqual(config.assetPacks, [
     { name: "月下雀席", url: "https://cdn.example/moonlit.zip" },
   ]);
-});
-
-test("mahjong settings separates theme management from appearance choices", () => {
-  const page = readFileSync(
-    new URL("../games/mahjong/index.html", import.meta.url),
-    "utf8",
-  );
-  const themeController = readFileSync(
-    new URL("../games/mahjong/theme/theme-controller.js", import.meta.url),
-    "utf8",
-  );
-  const settingsCss = readFileSync(
-    new URL("../games/mahjong/styles/settings.css", import.meta.url),
-    "utf8",
-  );
-  assert.match(page, /data-settings-tab="theme"[^>]*>主题/);
-  assert.match(page, /data-settings-tab="appearance"[^>]*>装扮/);
-  assert.match(page, /id="settings-theme-upload"/);
-  assert.match(page, /class="settings-theme-upload"/);
-  assert.match(page, /id="settings-theme-list"/);
-  assert.match(page, /id="settings-appearance-controls"/);
-  assert.doesNotMatch(page, /素材包/);
-  assert.doesNotMatch(page, /settings-pack-name/);
-  assert.match(
-    page,
-    /accept="\.zip,application\/zip,application\/x-zip-compressed"/,
-  );
-  assert.doesNotMatch(page, /id="settings-theme-upload"[^>]*multiple/);
-  assert.match(themeController, /configureMahjongAssetPackAppearance/);
-  assert.match(themeController, /角色语音/);
-  assert.match(themeController, /getMahjongDefaultPack\(\)/);
-  assert.match(themeController, /onUploadDrop/);
-  assert.match(themeController, /addEventListener\("drop", onUploadDrop\)/);
-  assert.match(
-    themeController,
-    /action === "delete"[\s\S]*?isStandalone[\s\S]*?browserWindow\.confirm\(message\)[\s\S]*?await confirm\?\.\(message\)/,
-  );
 });

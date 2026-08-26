@@ -53,14 +53,41 @@ local function setup_players(context)
 		names[#names + 1] = type(player.name) == "string" and player.name or ""
 	end
 	local ai_players = {}
-	local ai_names = { "AI 東", "AI 南", "AI 西" }
+	local ai_count = 0
 	while #players < PLAYER_COUNT do
 		local ai_id = "mahjong-ai-" .. tostring(#players + 1)
+		ai_count = ai_count + 1
 		players[#players + 1] = ai_id
-		names[#names + 1] = ai_names[#players - 1] or ("AI " .. tostring(#players))
+		names[#names + 1] = "AI " .. tostring(ai_count)
 		ai_players[ai_id] = true
 	end
 	return players, names, ai_players
+end
+
+-- Seat assignment is a match-level decision. Keep the lobby's join order for
+-- display, then use this deterministic shuffle when the owner starts a room so
+-- humans and AI have exactly the same chance of occupying every seat. Names
+-- travel with player IDs; the returned order is fixed for the whole match.
+function mahjong_shuffle_match_players(players, names, seed)
+	local entries = {}
+	for index, player_id in ipairs(players or {}) do
+		entries[#entries + 1] = {
+			id = player_id,
+			name = names and names[index] or "",
+		}
+	end
+	local shuffle_seed = normalize_random_seed(seed)
+	for index = #entries, 2, -1 do
+		shuffle_seed = (shuffle_seed * RANDOM_MULTIPLIER) % RANDOM_MODULUS
+		local other = (shuffle_seed % index) + 1
+		entries[index], entries[other] = entries[other], entries[index]
+	end
+	local shuffled_players, shuffled_names = {}, {}
+	for index, entry in ipairs(entries) do
+		shuffled_players[index] = entry.id
+		shuffled_names[index] = entry.name
+	end
+	return shuffled_players, shuffled_names
 end
 
 local function player_index(state, player_id)

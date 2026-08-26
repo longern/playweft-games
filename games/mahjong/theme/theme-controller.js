@@ -7,17 +7,21 @@ import {
   deactivateMahjongAssetPacks,
   deleteMahjongAssetPack,
   getMahjongAssetUrl,
+  getMahjongDefaultAssetUrl,
   getMahjongActivePortraits,
   getMahjongConfiguredAssetPacks,
   getMahjongDefaultNames,
   getMahjongDefaultPack,
   getMahjongMatchMusicCopyright,
   getMahjongMatchMusicUrl,
+  getMahjongOnlineAiPortraitAssignments,
+  getMahjongOnlinePortraitContext,
   getMahjongRiichiMusicUrl,
   initializeMahjongAssetPacks,
   applyMahjongMatchPortraits,
   listMahjongAssetPacks,
   rerollMahjongAssetPackPortraits,
+  resolveMahjongOnlinePortrait,
 } from "./asset-packs.js";
 import { Check, Download, Trash2, createIcons } from "lucide";
 
@@ -223,7 +227,22 @@ export function createMahjongThemeController({
 
   function setPlatformAvatar(source) {
     platformAvatarSource = typeof source === "string" ? source : "";
-    void applyPackAvatars();
+    return applyPackAvatars();
+  }
+
+  function getRoomAvatarPreference() {
+    if (platformAvatarSource) return { kind: "platform" };
+    const { packId } = getMahjongOnlinePortraitContext();
+    const portraitId = getMahjongActivePortraits().self;
+    if (
+      typeof packId === "string" &&
+      packId &&
+      typeof portraitId === "string" &&
+      portraitId
+    ) {
+      return { kind: "theme", packId, portraitId };
+    }
+    return { kind: "platform" };
   }
 
   function applyPackAvatars() {
@@ -485,8 +504,13 @@ export function createMahjongThemeController({
     applyMatchPortraits,
     clearMatchPortraits,
     setPlatformAvatar,
+    getOnlineAiPortraitAssignments: getMahjongOnlineAiPortraitAssignments,
+    getOnlinePortraitContext: getMahjongOnlinePortraitContext,
+    resolveOnlinePortrait: resolveMahjongOnlinePortrait,
     getPortraits: getMahjongActivePortraits,
     getAssetUrl: getMahjongAssetUrl,
+    getDefaultAssetUrl: getMahjongDefaultAssetUrl,
+    getRoomAvatarPreference,
     getDefaultNames: getMahjongDefaultNames,
     getMatchMusicUrl: getMahjongMatchMusicUrl,
     getRiichiMusicUrl: getMahjongRiichiMusicUrl,

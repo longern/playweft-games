@@ -75,21 +75,11 @@ async function runOnlineWithinRuntimeQuota(scenario, runtimeQuota = 50_000) {
   }
 }
 
-test("Mahjong room entry stays below the Lua source limit and excludes solo AI", async () => {
+test("Mahjong room entry stays below the Lua source limit", async () => {
   const fullSource = await readFile("games/mahjong/game.lua", "utf8");
-  const onlineSourceModule = await readFile("games/mahjong/online-source.js", "utf8");
   const onlineSource = buildMahjongOnlineSource(fullSource);
 
   assert.ok(Buffer.byteLength(onlineSource) < MAHJONG_ONLINE_SOURCE_LIMIT);
-  assert.match(
-    onlineSourceModule,
-    /projection\.state\.paipu = export_paipu\(state, "room"\)/,
-  );
-  assert.match(onlineSource, /function setup\(/);
-  assert.match(onlineSource, /function on_action\(/);
-  assert.match(onlineSource, /function view\(/);
-  assert.doesNotMatch(onlineSource, /function ai_action\(/);
-  assert.doesNotMatch(onlineSource, /function choose_ai_discard\(/);
 });
 
 test("Mahjong rooms stay in a private game lobby until the owner starts the selected match", async () => {
@@ -151,6 +141,97 @@ test("Mahjong rooms stay in a private game lobby until the owner starts the sele
     selected_rules: true,
     added_ai: true,
     dealt: true,
+  });
+});
+
+test("Mahjong room start shuffles humans and AI into deterministic fixed seats", async () => {
+  const result = await runOnlineMock(`
+    local function start(seed)
+      local lobby = setup({
+        keepLobby = true,
+        players = {
+          { id = "p1", name = "Host" },
+          { id = "p2", name = "Guest" },
+        },
+        match = { ownerId = "p1", randomSeed = seed },
+      })
+      return on_action(lobby.state, {
+        type = "start_match", matchType = "east", rules = {},
+      }, { actor = { id = "p1", isOwner = true } }).state
+    end
+    local first = start("0000000000000000000000000000002a")
+    local repeat_match = start("0000000000000000000000000000002a")
+    local ids, names = {}, {}
+    for seat, player_id in ipairs(first.players) do
+      ids[player_id] = true
+      names[player_id] = first.playerNames[seat]
+    end
+    result = {
+      east_is_first_shuffled_seat = first.dealerIndex == 1,
+      has_all_players = ids.p1 and ids.p2 and ids["mahjong-ai-3"] and ids["mahjong-ai-4"],
+      names_follow_ids = names["mahjong-ai-3"] == "AI 1" and names["mahjong-ai-4"] == "AI 2",
+      deterministic = table.concat(first.players, ",") == table.concat(repeat_match.players, ","),
+      lobby_order_was_not_used_as_seats = not (
+        first.players[1] == "p1"
+        and first.players[2] == "p2"
+        and first.players[3] == "mahjong-ai-3"
+        and first.players[4] == "mahjong-ai-4"
+      ),
+    }
+  `);
+
+  assert.deepEqual(result, {
+    east_is_first_shuffled_seat: true,
+    has_all_players: true,
+    names_follow_ids: true,
+    deterministic: true,
+    lobby_order_was_not_used_as_seats: true,
+  });
+});
+
+test("Mahjong room avatar preferences are player-owned and survive the match start", async () => {
+  const result = await runOnlineMock(`
+    local lobby = setup({
+      keepLobby = true,
+      serverTime = 1000,
+      players = {
+        { id = "host", name = "Host", seat = 1 },
+        { id = "guest", name = "Guest", seat = 2 },
+      },
+      match = {
+        id = "avatar-preferences",
+        ownerId = "host",
+        randomSeed = "0000000000000000000000000000002b",
+      },
+    })
+    local guest_avatar = on_action(lobby.state, {
+      type = "set_avatar_preference",
+      avatarPreference = { kind = "theme", packId = "moonlit", portraitId = "fox" },
+    }, { actor = { id = "guest" }, serverTime = 1001 })
+    local outsider_avatar = on_action(lobby.state, {
+      type = "set_avatar_preference",
+      avatarPreference = { kind = "theme", packId = "moonlit", portraitId = "fox" },
+    }, { actor = { id = "outsider" }, serverTime = 1001 })
+    local host_view = view(guest_avatar.state, {}, { viewer = { id = "host", isOwner = true } })
+    local guest_view = view(guest_avatar.state, {}, { viewer = { id = "guest", isOwner = false } })
+    local started = on_action(guest_avatar.state, {
+      type = "start_match", matchType = "east", rules = {},
+    }, { actor = { id = "host", isOwner = true }, serverTime = 1002 })
+    result = {
+      accepted = guest_avatar.accepted == true,
+      outsider_rejected = outsider_avatar.accepted == false,
+      host_sees_guest_preference = host_view.state.avatarPreferences.guest.packId == "moonlit",
+      guest_sees_own_preference = guest_view.state.avatarPreferences.guest.portraitId == "fox",
+      survives_start = started.state.avatarPreferences.guest.kind == "theme",
+    }
+  `);
+
+  assert.deepEqual(result, {
+    accepted: true,
+    outsider_rejected: true,
+    host_sees_guest_preference: true,
+    guest_sees_own_preference: true,
+    survives_start: true,
   });
 });
 

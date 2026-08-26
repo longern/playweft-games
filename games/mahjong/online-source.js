@@ -45,6 +45,43 @@ local function __mahjong_is_room_player(state, player_id)
   return false
 end
 
+local function __mahjong_sanitize_ai_portraits(value, ai_players)
+  local result = {}
+  if type(value) ~= "table" then return result end
+  for player_id in pairs(ai_players or {}) do
+    local portrait = value[player_id]
+    if type(portrait) == "table"
+      and type(portrait.packId) == "string"
+      and type(portrait.portraitId) == "string"
+      and #portrait.packId <= 120
+      and #portrait.portraitId <= 120
+      and #portrait.packId > 0
+      and #portrait.portraitId > 0 then
+      result[player_id] = {
+        packId = portrait.packId,
+        portraitId = portrait.portraitId,
+      }
+    end
+  end
+  return result
+end
+
+local function __mahjong_sanitize_avatar_preference(value)
+  if type(value) ~= "table" then return { kind = "platform" } end
+  if value.kind == "theme"
+    and type(value.packId) == "string"
+    and type(value.portraitId) == "string"
+    and #value.packId > 0 and #value.packId <= 120
+    and #value.portraitId > 0 and #value.portraitId <= 120 then
+    return {
+      kind = "theme",
+      packId = value.packId,
+      portraitId = value.portraitId,
+    }
+  end
+  return { kind = "platform" }
+end
+
 local function __mahjong_has_ron_option(claimant)
   for _, option in ipairs(claimant and claimant.options or {}) do
     if option.kind == "ron" then return true end
@@ -367,6 +404,8 @@ function setup(context)
     aiPlayers = ai_players,
     lobbySeed = normalize_random_seed(context.match and context.match.randomSeed),
     roomOwnerId = context.match and context.match.ownerId,
+    aiPortraits = {},
+    avatarPreferences = {},
     autoPassClaims = {},
   }
   return {
@@ -378,6 +417,22 @@ end
 
 local __mahjong_online_action = on_action
 function on_action(state, action, context)
+  if action and action.type == "set_avatar_preference" then
+    local actor_id = context and context.actor and context.actor.id
+    if not actor_id or not __mahjong_is_room_player(state, actor_id) then
+      return rejected("not_a_player")
+    end
+    state.avatarPreferences = state.avatarPreferences or {}
+    state.avatarPreferences[actor_id] = __mahjong_sanitize_avatar_preference(
+      action.avatarPreference
+    )
+    local result = accepted(state, {
+      { type = "avatar_preference_changed", player = actor_id },
+    })
+    __mahjong_clear_private_state(result.state)
+    result.timerOps = __mahjong_timer_ops(result.state, context)
+    return result
+  end
   if action and action.type == "set_pass_claims" then
     local actor_id = context and context.actor and context.actor.id
     if not actor_id or not __mahjong_is_room_player(state, actor_id) then
@@ -420,15 +475,28 @@ function on_action(state, action, context)
     local settings = {
       matchType = action.matchType,
       rules = type(action.rules) == "table" and action.rules or {},
+      -- The shuffled seat at index 1 is East. Dealer selection remains
+      -- deterministic and independent from wall shuffling.
+      initialDealerSeat = 1,
     }
-    local started = new_match(
+    local seated_players, seated_names = mahjong_shuffle_match_players(
       state.players,
       state.playerNames,
+      state.lobbySeed
+    )
+    local started = new_match(
+      seated_players,
+      seated_names,
       state.lobbySeed,
       settings,
       state.aiPlayers
     )
     started.roomOwnerId = state.roomOwnerId
+    started.aiPortraits = __mahjong_sanitize_ai_portraits(
+      action.aiPortraits,
+      state.aiPlayers
+    )
+    started.avatarPreferences = state.avatarPreferences or {}
     -- Match starts are the first hand of a fresh game.  Match-local
     -- automatic claim settings must not leak into it from the lobby.
     started.autoPassClaims = {}
@@ -555,8 +623,10 @@ function on_action(state, action, context)
     -- Keep the private setting aligned with the solo client: every newly
     -- dealt hand (and every fresh match) starts with automatic calls disabled.
     result.state.autoPassClaims = {}
+    result.state.aiPortraits = state.aiPortraits or {}
   else
     result.state.autoPassClaims = state.autoPassClaims or {}
+    result.state.aiPortraits = state.aiPortraits or result.state.aiPortraits or {}
   end
   __mahjong_commit_tenpai_report(result.state)
   __mahjong_clear_private_state(result.state)
@@ -573,6 +643,9 @@ function view(state, events, context)
         players = state.players,
         playerNames = state.playerNames,
         aiPlayers = state.aiPlayers,
+        aiPortraits = state.aiPortraits or {},
+        avatarPreferences = state.avatarPreferences or {},
+        portraitSeed = state.lobbySeed,
         roomIsOwner = context.viewer.isOwner == true,
         passClaimsEnabled = state.autoPassClaims and state.autoPassClaims[context.viewer.id] == true or false,
       },
@@ -610,6 +683,9 @@ function view(state, events, context)
       projection.state.paipu = export_paipu(state, "room")
     end
     projection.state.aiPlayers = state.aiPlayers
+    projection.state.aiPortraits = state.aiPortraits or {}
+    projection.state.avatarPreferences = state.avatarPreferences or {}
+    projection.state.portraitSeed = state.seed or state.lobbySeed
     local ai_actor = context.viewer.isOwner and active_player or nil
     projection.state.aiTurn = ai_actor and state.aiPlayers and state.aiPlayers[ai_actor] and {
       player = ai_actor,

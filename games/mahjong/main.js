@@ -10,7 +10,6 @@ import {
   createIcons,
 } from "lucide";
 import { createPlayweftClient } from "../../src/playweft-client.js";
-import { createLocalLuaGame } from "./workers/local-game-worker-client.js";
 import {
   AI_DELAY_MS,
   AUTO_DECISION_DELAY_MS,
@@ -20,6 +19,9 @@ import {
 } from "./rules/constants.js";
 import { MahjongDomView } from "./app/dom-view.js";
 import { createMahjongSessionController } from "./app/session-controller.js";
+import { createMahjongRoomPlayerProfiles } from "./app/room-player-profiles.js";
+import { createMahjongRoomPlayerIdentities } from "./app/room-player-identities.js";
+import { createMahjongRoomController } from "./app/room-controller.js";
 import { bindFixedViewport } from "./app/fixed-viewport.js";
 import {
   asArray,
@@ -34,6 +36,7 @@ import { createMahjongTableController } from "./app/table-controller.js";
 import { createMahjongEffectRunner } from "./app/effect-runner.js";
 import { createMahjongTransientNotice } from "./app/transient-notice.js";
 import { createMahjongReplayController } from "./app/replay-controller.js";
+import { createMahjongPageLifecycle } from "./app/page-lifecycle.js";
 import { createMahjongSoloMatchController } from "./app/solo-match-controller.js";
 import { createMahjongSettingsDialog } from "./settings-dialog.js";
 import { MahjongMatchMusic } from "./theme/match-music.js";
@@ -70,16 +73,8 @@ import {
 import { createMahjongCompletedPaipuSaver } from "./replay/completed-paipu.js";
 import { createMahjongPaipuPanel } from "./replay/paipu-panel.js";
 import { mahjongInitialEntry } from "./app/entry-flow.js";
-import { orientMahjongRoomProjection } from "./rules/room-state.js";
-import {
-  buildRoomLegalState,
-  buildRoomTenpaiReportState,
-  roomAutomaticKey,
-  roomEarlyTenpaiStateKey,
-  roomLegalStateKey,
-  roomPlayerHasFutureNormalDraw,
-  roomTenpaiStateKey,
-} from "./rules/room-utils.js";
+// The room controller owns createLocalLuaGame worker usage; keep that boundary
+// visible in the entry module for the room package contract.
 import "../../src/base.css";
 import "./styles.css";
 
@@ -116,9 +111,6 @@ deferMahjongImageAssets({
 });
 
 const SETUP_EXIT_DURATION_MS = 560;
-const LATE_WALL_REPORT_START = 4;
-const LATE_WALL_REPORT_BUDGET_MS = 500;
-const RIVER_BOTTOM_REPORT_BUDGET_MS = 500;
 const effectRunner = createMahjongEffectRunner();
 const isStandalone = window.parent === window;
 let game;
@@ -127,33 +119,10 @@ let endingSoloMatch = false;
 let destroyed = false;
 let playerName = "你";
 let hasPlatformName = false;
+let roomPlayerProfiles;
+let roomPlayerIdentities;
+let roomController;
 let roomPlayerId = "";
-let roomIsOwner = false;
-let roomAiGame;
-let roomAiPlayerIds = "";
-let roomAiBusy = false;
-let roomAiAwaitingState = false;
-let roomAiSchedule = 0;
-let roomAiWaitResolve;
-let roomAiGeneration = 0;
-let roomAiTurnKey = "";
-let roomAiState;
-let roomLegalGame;
-let roomLegalPlayerIds = "";
-let roomLegalRequest = 0;
-let roomLegalRequestedKey = "";
-let roomLegalAppliedKey = "";
-let roomAutomaticStateKey = "";
-let roomTenpaiGame;
-let roomTenpaiGameReady;
-let roomTenpaiPlayerIds = "";
-let roomTenpaiRequest = 0;
-let roomTenpaiRequestedKey = "";
-let roomTenpaiReports;
-let roomTenpaiReportsPromise;
-let roomTenpaiSupplementRequest = 0;
-let roomTenpaiSupplementRequestedKey = "";
-let roomTenpaiReportedKey = "";
 let playMode = isStandalone ? "solo" : null;
 let autoActions = defaultAutoActions();
 let autoWinAfterRiichiKey = "";
@@ -208,16 +177,6 @@ matchMusic.volume = DEFAULT_MATCH_MUSIC_VOLUME;
 const riverTileSound = new Audio(discardSoundSource);
 riverTileSound.preload = "auto";
 const defaultMusicCopyright = document.querySelector("#default-bgm-copyright");
-
-function revealMahjongAppAfterStyles() {
-  window.requestAnimationFrame(() => {
-    window.requestAnimationFrame(() => {
-      document.documentElement.classList.add("mahjong-app-ready");
-      const splash = document.querySelector("#mahjong-boot-splash");
-      window.setTimeout(() => splash?.remove(), 220);
-    });
-  });
-}
 
 const releaseFixedViewport = bindFixedViewport(
   document.querySelector("#mahjong-viewport"),
@@ -343,7 +302,13 @@ const themeController = createMahjongThemeController({
     : undefined,
   onAssetsChanged() {
     tableController?.syncMatchMusic();
-    if (tableController?.getState()) tableController.renderCurrentState();
+    if (tableController?.getState()) {
+      tableController.renderCurrentState();
+      if (playMode === "room") {
+        roomController?.syncAvatarPreference();
+        void roomPlayerIdentities?.apply(tableController.getState());
+      }
+    }
   },
 });
 tableController = createMahjongTableController({
@@ -372,6 +337,7 @@ tableController = createMahjongTableController({
   isActionInFlight: () => session?.isActionInFlight() === true,
   scheduleAi: (...args) => session?.scheduleAi(...args),
   onRerollPortraits: async () => {
+    if (playMode !== "solo") return;
     await themeController.rerollPortraits(
       crypto.randomUUID().replaceAll("-", ""),
     );
@@ -388,6 +354,34 @@ tableController = createMahjongTableController({
   onReturnToSetup: teardownCompletedSoloMatch,
 });
 
+roomPlayerProfiles = createMahjongRoomPlayerProfiles({
+  isRoom: () => playMode === "room",
+  getState: () => tableController?.getState(),
+  onChanged: () => void roomPlayerIdentities?.apply(),
+  onOwnAvatarChanged: (source) => {
+    const applied = roomPlayerIdentities?.setPlatformAvatar(source);
+    roomController?.syncAvatarPreference();
+    return applied;
+  },
+});
+roomPlayerIdentities = createMahjongRoomPlayerIdentities({
+  isRoom: () => playMode === "room",
+  getState: () => tableController?.getState(),
+  getRoomPlayerId: () => roomController?.getPlayerId(),
+  getProfile: (playerId) => roomPlayerProfiles?.get(playerId),
+  themeController,
+  domView,
+});
+const pageLifecycle = createMahjongPageLifecycle({
+  window,
+  document,
+  getSession: () => session,
+  getTableController: () => tableController,
+  isDestroyed: () => destroyed,
+  onDestroy: () => destroy(),
+  resumeMatchMusic,
+});
+
 void Promise.all([
   visualRendererReady,
   resultHandRendererReady,
@@ -399,11 +393,13 @@ void themeController.refreshThemePacks();
 bindUiEvents();
 playweftClient = isStandalone
   ? undefined
-  : createPlayweftClient({
-      onReady: handlePlayweftReady,
-      onState: handleRoomState,
-      onActionResult: handleRoomActionResult,
-      onError: handlePlayweftError,
+: createPlayweftClient({
+      onReady: (context) => roomController?.handleReady(context),
+      onState: (message) => roomController?.handleState(message),
+      onActionResult: (...args) => roomController?.handleActionResult(...args),
+      onError: (...args) => roomController?.handleError(...args),
+      onPlayerProfileChanged: (change) =>
+        roomController?.handlePlayerProfileChanged(change),
     });
 session = createMahjongSessionController({
   humanId: HUMAN_ID,
@@ -413,7 +409,8 @@ session = createMahjongSessionController({
   getAutoActions: () => autoActions,
   getRiichiMode: () => tableController.isRiichiMode(),
   isKanDrawPending: () => presentation.kanDrawPending,
-  sendRoomAction: sendRoomActionWithTenpaiReport,
+  sendRoomAction: (...args) =>
+    roomController?.sendActionWithTenpaiReport(...args),
   onRoomUnavailable: () => showMessage("尚未连接到房间"),
   persistAcceptedAction,
   refreshProjection: tableController.refresh,
@@ -459,6 +456,50 @@ session = createMahjongSessionController({
     newHandDeal: NEW_HAND_DEAL_DURATION_MS,
     ownDrawEntry: OWN_DRAW_ENTRY_DURATION_MS,
   },
+});
+
+roomController = createMahjongRoomController({
+  window,
+  elements,
+  getPlayMode: () => playMode,
+  setPlayMode: (value) => {
+    playMode = value;
+  },
+  getPlayerId: () => roomPlayerId,
+  setPlayerId: (value) => {
+    roomPlayerId = value;
+  },
+  setPlayerName: (value) => {
+    playerName = value;
+  },
+  setHasPlatformName: (value) => {
+    hasPlatformName = value;
+  },
+  setIsOwner: () => {},
+  getGameInitializing: () => gameInitializing,
+  setGameInitializing: (value) => {
+    gameInitializing = value;
+  },
+  getDestroyed: () => destroyed,
+  getClient: () => playweftClient,
+  getSession: () => session,
+  tableController,
+  visualRendererReady,
+  settingsDialog,
+  transientNotice,
+  roomPlayerProfiles,
+  roomPlayerIdentities,
+  themeController,
+  beginSetupExit,
+  resetAutoActions,
+  syncRoomPassClaims,
+  enableAutoWinAfterRiichi,
+  persistCompletedPaipu: saveCompletedPaipu,
+  showMessage,
+  showLoadingError,
+  showSetupRecoveryError,
+  showRoomSetup,
+  startSoloEntry: startMahjongEntry,
 });
 
 replayController = createMahjongReplayController({
@@ -528,7 +569,7 @@ soloController = createMahjongSoloMatchController({
 });
 
 if (isStandalone) startMahjongEntry();
-revealMahjongAppAfterStyles();
+pageLifecycle.revealAppAfterStyles();
 
 function bindUiEvents() {
   paipuElements.entry?.addEventListener("click", () => void openPaipuPanel());
@@ -604,18 +645,14 @@ function bindUiEvents() {
   for (const button of elements.setup.querySelectorAll("[data-match-type]")) {
     button.addEventListener("click", () => {
       if (playMode === "room") {
-        void startRoomMatch(button.dataset.matchType);
+        void roomController?.startMatch(button.dataset.matchType);
         return;
       }
       void initialize(button.dataset.matchType);
     });
   }
   syncAutoActionControls();
-  window.addEventListener("pagehide", handlePageHide);
-  window.addEventListener("pageshow", handlePageShow);
-  document.addEventListener("visibilitychange", handleVisibilityChange);
-  document.addEventListener("pointerdown", resumeMatchMusic, { passive: true });
-  document.addEventListener("keydown", resumeMatchMusic);
+  pageLifecycle.bind();
 }
 
 function openPaipuPanel() {
@@ -665,555 +702,10 @@ function renderMahjongPaipuReplayControls() {
 async function exitMahjongPaipuReplay(options) {
   return replayController?.exit(options);
 }
-function handlePlayweftReady(context) {
-  playMode = context?.mode ?? "solo";
-  if (playMode === "room") resetAutoActions({ persist: false });
-  roomPlayerId = context?.playerId || "";
-  roomIsOwner =
-    context?.player?.isOwner === true ||
-    context?.isOwner === true ||
-    (context?.match?.ownerId && context.match.ownerId === context.playerId);
-  const name = context?.player?.name?.trim();
-  if (name) {
-    playerName = name;
-    hasPlatformName = true;
-  }
-  requestPlatformAvatar(context);
-  if (playMode === "room") {
-    settingsDialog.setSoloMatchActive(false);
-    showRoomWaiting();
-    return;
-  }
-  startMahjongEntry();
-}
 
-async function handleRoomState(message) {
-  if (playMode !== "room") return;
-  roomPlayerId = message?.playerId || roomPlayerId;
-  roomIsOwner = message?.state?.roomIsOwner === true;
-  if (roomAiAwaitingState) {
-    roomAiAwaitingState = false;
-    roomAiBusy = false;
-  }
-  const projection = orientMahjongRoomProjection(
-    {
-      state: message?.state,
-      events: message?.events,
-      serverTime: message?.serverTime,
-    },
-    roomPlayerId,
-  );
-  if (!projection?.state) return;
-  const ownRiichiEvent = asArray(projection.events).find(
-    (event) => event?.type === "riichi" && Number(event.playerIndex) === 1,
-  );
-  const startsFreshAutoActionScope = asArray(projection.events).some(
-    (event) =>
-      event?.type === "match_started" ||
-      event?.type === "next_hand" ||
-      event?.type === "new_match",
-  );
-  if (startsFreshAutoActionScope) resetAutoActions({ persist: false });
-  syncRoomPassClaims(projection.state);
-  const nextAutomaticStateKey = roomAutomaticKey(projection.state);
-  if (nextAutomaticStateKey !== roomAutomaticStateKey) {
-    roomAutomaticStateKey = nextAutomaticStateKey;
-    session.cancelScheduledActions();
-  }
-  if (projection.state.phase === "lobby") {
-    session.confirmRoomState();
-    gameInitializing = false;
-    elements.app.setAttribute("aria-busy", "false");
-    if (projection.state.roomIsOwner) showRoomSetup();
-    else showRoomWaiting();
-    return;
-  }
-  scheduleRoomAi(projection.state);
-  const hadState = Boolean(tableController.getState());
-  const animateDealIn =
-    !hadState ||
-    asArray(projection.events).some(
-      (event) => event?.type === "next_hand" || event?.type === "new_match",
-    );
-  try {
-    await visualRendererReady;
-    if (destroyed || playMode !== "room") return;
-    await tableController.refresh(projection, { animateDealIn });
-    // Persist the server's canonical seat order. The rendered projection is
-    // rotated for the local viewer and must not determine replay orientation.
-    persistCompletedRoomPaipu(message?.state?.paipu, message.matchId);
-    enableAutoWinAfterRiichi(projection.state, ownRiichiEvent);
-    session.confirmRoomState();
-    scheduleRoomLegalActions(projection.state);
-    scheduleRoomTenpaiReports(projection.state);
-    scheduleRoomEarlyTenpaiReport(projection.state, projection.events);
-    if (!hadState) tableController.syncMatchMusic({ fadeIn: true });
-    gameInitializing = false;
-    elements.app.setAttribute("aria-busy", "false");
-    elements.setup.hidden = true;
-    elements.loading.hidden = true;
-  } catch (error) {
-    console.error("Mahjong room state failed to render", error);
-    showLoadingError("房间状态加载失败，请稍后重试");
-  }
-}
-
-function persistCompletedRoomPaipu(paipu, matchId) {
-  if (!paipu || typeof matchId !== "string" || !matchId) return;
-  const record = {
-    ...paipu,
-    id: `${matchId}:room`,
-    completedAtMs: Date.now(),
-  };
-  void saveCompletedPaipu(record).catch((error) => {
-    console.warn("Mahjong room paipu save failed", error);
-  });
-}
-
-function scheduleRoomAutomaticAction() {
-  const state = tableController.getState();
-  const key = roomAutomaticKey(state);
-  if (!key || key !== roomAutomaticStateKey) return;
-  if (
-    state?.phase === "playing" &&
-    roomLegalAppliedKey !== roomLegalStateKey(state)
-  )
-    return;
-  session.scheduleRoomAutomaticAction({
-    state,
-    isCurrent: () =>
-      !destroyed &&
-      playMode === "room" &&
-      roomAutomaticStateKey === key &&
-      roomAutomaticKey(tableController.getState()) === key,
-  });
-}
-
-async function ensureRoomTenpaiGame(state) {
-  const players = asArray(state?.players).map((id) => ({ id, name: id }));
-  const playerIds = JSON.stringify(asArray(state?.players));
-  if (!players.length) return undefined;
-  if (roomTenpaiGame && roomTenpaiPlayerIds === playerIds) {
-    return roomTenpaiGame;
-  }
-  if (roomTenpaiGameReady && roomTenpaiPlayerIds === playerIds) {
-    return roomTenpaiGameReady;
-  }
-  roomTenpaiGame?.close();
-  roomTenpaiGame = undefined;
-  roomTenpaiPlayerIds = playerIds;
-  const ready = createLocalLuaGame({
-    sourceUrl: "./game.lua",
-    players,
-    playerId: roomPlayerId,
-  }).then((createdGame) => {
-    if (destroyed || roomTenpaiPlayerIds !== playerIds) {
-      createdGame.close();
-      return undefined;
-    }
-    roomTenpaiGame = createdGame;
-    return createdGame;
-  });
-  roomTenpaiGameReady = ready;
-  try {
-    return await ready;
-  } finally {
-    if (roomTenpaiGameReady === ready) roomTenpaiGameReady = undefined;
-  }
-}
-
-function scheduleRoomTenpaiReports(state) {
-  const wallCount = Math.max(0, Number(state?.wallCount) || 0);
-  if (
-    playMode !== "room" ||
-    state?.phase !== "playing" ||
-    wallCount > LATE_WALL_REPORT_START
-  ) {
-    roomTenpaiRequest += 1;
-    roomTenpaiRequestedKey = "";
-    roomTenpaiReports = undefined;
-    roomTenpaiReportsPromise = undefined;
-    if (wallCount > LATE_WALL_REPORT_START) {
-      roomTenpaiSupplementRequest += 1;
-      roomTenpaiSupplementRequestedKey = "";
-      roomTenpaiReportedKey = "";
-    }
-    return;
-  }
-  void ensureRoomTenpaiGame(state).catch((error) => {
-    console.error("Mahjong room tenpai worker failed to start", error);
-  });
-  const activePlayer = asArray(state.players)[Number(state.turnIndex) - 1];
-  if (activePlayer !== roomPlayerId || wallCount === 0) {
-    roomTenpaiRequest += 1;
-    roomTenpaiRequestedKey = "";
-    roomTenpaiReports = undefined;
-    roomTenpaiReportsPromise = undefined;
-    return;
-  }
-  const key = roomTenpaiStateKey(state);
-  if (key === roomTenpaiRequestedKey) return;
-  roomTenpaiRequestedKey = key;
-  roomTenpaiReports = undefined;
-  const request = ++roomTenpaiRequest;
-  const reportPromise = runRoomTenpaiReports(
-    buildRoomLegalState(state, roomPlayerId),
-    key,
-    request,
-  );
-  roomTenpaiReportsPromise = reportPromise;
-}
-
-async function runRoomTenpaiReports(state, key, request) {
-  try {
-    const localGame = await ensureRoomTenpaiGame(state);
-    if (!localGame) return undefined;
-    const reports = await Promise.race([
-      localGame.tenpaiReports(state, roomPlayerId),
-      new Promise((resolve) => {
-        window.setTimeout(resolve, LATE_WALL_REPORT_BUDGET_MS);
-      }),
-    ]);
-    if (
-      destroyed ||
-      playMode !== "room" ||
-      request !== roomTenpaiRequest ||
-      key !== roomTenpaiRequestedKey
-    )
-      return undefined;
-    roomTenpaiReports =
-      reports && typeof reports === "object" ? reports : undefined;
-    return roomTenpaiReports;
-  } catch (error) {
-    if (request === roomTenpaiRequest) {
-      console.error("Mahjong room tenpai report failed", error);
-    }
-    return undefined;
-  }
-}
-
-async function roomTenpaiReportForDiscard(state, tileId) {
-  try {
-    const localGame = await ensureRoomTenpaiGame(state);
-    if (!localGame) return undefined;
-    return await Promise.race([
-      localGame.tenpaiReport(state, tileId, roomPlayerId),
-      new Promise((resolve) => {
-        window.setTimeout(resolve, RIVER_BOTTOM_REPORT_BUDGET_MS);
-      }),
-    ]);
-  } catch (error) {
-    console.error("Mahjong river-bottom tenpai report failed", error);
-    return undefined;
-  }
-}
-
-function scheduleRoomEarlyTenpaiReport(state, events) {
-  const wallCount = Math.max(0, Number(state?.wallCount) || 0);
-  const sawCall = asArray(events).some((event) => event?.type === "claimed");
-  const activePlayer = asArray(state?.players)[Number(state?.turnIndex) - 1];
-  if (
-    !sawCall ||
-    state?.phase !== "playing" ||
-    wallCount === 0 ||
-    wallCount > LATE_WALL_REPORT_START ||
-    activePlayer === roomPlayerId ||
-    roomPlayerHasFutureNormalDraw(state, roomPlayerId)
-  ) {
-    return;
-  }
-  const key = roomEarlyTenpaiStateKey(state, roomPlayerId);
-  if (key === roomTenpaiSupplementRequestedKey) return;
-  roomTenpaiSupplementRequestedKey = key;
-  const request = ++roomTenpaiSupplementRequest;
-  void runRoomEarlyTenpaiReport(
-    buildRoomTenpaiReportState(state, roomPlayerId),
-    request,
-  );
-}
-
-async function runRoomEarlyTenpaiReport(state, request) {
-  try {
-    const localGame = await ensureRoomTenpaiGame(state);
-    if (!localGame) return;
-    const report = await Promise.race([
-      localGame.currentTenpaiReport(state, roomPlayerId),
-      new Promise((resolve) => {
-        window.setTimeout(resolve, LATE_WALL_REPORT_BUDGET_MS);
-      }),
-    ]);
-    if (
-      destroyed ||
-      playMode !== "room" ||
-      request !== roomTenpaiSupplementRequest ||
-      !report?.key ||
-      report.key === roomTenpaiReportedKey
-    )
-      return;
-    const requestId = playweftClient?.sendAction({
-      type: "tenpai_report",
-      tenpaiReport: report,
-    });
-    if (requestId) roomTenpaiReportedKey = report.key;
-  } catch (error) {
-    if (request === roomTenpaiSupplementRequest) {
-      console.error("Mahjong room early tenpai report failed", error);
-    }
-  }
-}
-
-async function sendRoomActionWithTenpaiReport(
-  action,
-  { onRequestStarted } = {},
-) {
-  let enrichedAction = action;
-  let attachedReport;
-  const state = tableController?.getState();
-  const isLateDiscard =
-    (action?.type === "discard" || action?.type === "riichi") &&
-    state?.phase === "playing" &&
-    asArray(state?.players)[Number(state?.turnIndex) - 1] === roomPlayerId &&
-    Math.max(0, Number(state?.wallCount) || 0) <= LATE_WALL_REPORT_START;
-  if (isLateDiscard) {
-    const key = roomTenpaiStateKey(state);
-    if (Number(state?.wallCount) === 0) {
-      const report = await roomTenpaiReportForDiscard(
-        buildRoomLegalState(state, roomPlayerId),
-        Number(action.tileId),
-      );
-      if (report) {
-        enrichedAction = { ...action, tenpaiReport: report };
-        attachedReport = report;
-      }
-    } else if (key === roomTenpaiRequestedKey) {
-      const report = roomTenpaiReports?.[Number(action.tileId)];
-      if (report) {
-        enrichedAction = { ...action, tenpaiReport: report };
-        attachedReport = report;
-      }
-    }
-  }
-  try {
-    const requestId = playweftClient?.sendAction(enrichedAction);
-    onRequestStarted?.(requestId);
-    if (requestId && attachedReport?.key)
-      roomTenpaiReportedKey = attachedReport.key;
-    return requestId;
-  } catch (error) {
-    console.error("Mahjong room action failed", error);
-    return undefined;
-  }
-}
-
-function scheduleRoomLegalActions(state) {
-  const activeIndex =
-    state?.phase === "claiming"
-      ? Number(state?.responseIndex)
-      : Number(state?.turnIndex);
-  const activePlayer = asArray(state?.players)[activeIndex - 1];
-  if (state?.phase === "claiming" && activePlayer === roomPlayerId) {
-    roomLegalRequestedKey = "";
-    roomLegalAppliedKey = "";
-    roomLegalRequest += 1;
-    scheduleRoomAutomaticAction();
-    return;
-  }
-  if (
-    !state?.legalContext ||
-    state?.phase !== "playing" ||
-    activePlayer !== roomPlayerId
-  ) {
-    roomLegalRequestedKey = "";
-    roomLegalAppliedKey = "";
-    roomLegalRequest += 1;
-    session.cancelScheduledActions();
-    return;
-  }
-  const key = roomLegalStateKey(state);
-  if (key === roomLegalRequestedKey) return;
-  roomLegalRequestedKey = key;
-  roomLegalAppliedKey = "";
-  const request = ++roomLegalRequest;
-  void runRoomLegalActions(
-    buildRoomLegalState(state, roomPlayerId),
-    key,
-    request,
-  );
-}
-
-async function runRoomLegalActions(state, key, request) {
-  try {
-    const players = asArray(state.players).map((id) => ({ id, name: id }));
-    const playerIds = JSON.stringify(state.players);
-    if (!roomLegalGame || roomLegalPlayerIds !== playerIds) {
-      roomLegalGame?.close();
-      roomLegalGame = await createLocalLuaGame({
-        sourceUrl: "./game.lua",
-        players,
-        playerId: roomPlayerId,
-      });
-      roomLegalPlayerIds = playerIds;
-    }
-    const legalActions = await roomLegalGame.legalActions(state, roomPlayerId);
-    if (
-      destroyed ||
-      playMode !== "room" ||
-      request !== roomLegalRequest ||
-      key !== roomLegalRequestedKey
-    )
-      return;
-    tableController.applyLegalActions(legalActions);
-    roomLegalAppliedKey = key;
-    scheduleRoomAutomaticAction();
-  } catch (error) {
-    if (request === roomLegalRequest) {
-      console.error("Mahjong room legal-action preview failed", error);
-    }
-  }
-}
-
-function scheduleRoomAi(state) {
-  roomAiState = state;
-  const key = roomAiStateKey(state);
-  if (!roomIsOwner || !key) {
-    roomAiGeneration += 1;
-    roomAiTurnKey = "";
-    cancelRoomAiWait();
-    return;
-  }
-  if (key === roomAiTurnKey) return;
-  roomAiTurnKey = key;
-  const generation = ++roomAiGeneration;
-  cancelRoomAiWait();
-  void runRoomAi(
-    state.aiContext,
-    state.aiTurn.player,
-    key,
-    generation,
-    performance.now(),
-  );
-}
-
-function roomAiStateKey(state) {
-  if (!state?.aiTurn?.player || !state?.aiContext) return "";
-  return JSON.stringify([
-    state.phase,
-    state.turnIndex,
-    state.moveCount,
-    state.drawnTile,
-    state.lastDiscard,
-    state.aiTurn.player,
-  ]);
-}
-
-function waitForRoomAiPacing(startedAt) {
-  const remaining = AI_DELAY_MS - (performance.now() - startedAt);
-  if (remaining <= 0) return Promise.resolve();
-  return new Promise((resolve) => {
-    roomAiWaitResolve = resolve;
-    roomAiSchedule = window.setTimeout(() => {
-      roomAiSchedule = 0;
-      roomAiWaitResolve = undefined;
-      resolve();
-    }, remaining);
-  });
-}
-
-function cancelRoomAiWait() {
-  window.clearTimeout(roomAiSchedule);
-  roomAiSchedule = 0;
-  const resolve = roomAiWaitResolve;
-  roomAiWaitResolve = undefined;
-  resolve?.();
-}
-
-async function runRoomAi(aiContext, actorId, turnKey, generation, startedAt) {
-  if (roomAiBusy || destroyed || !roomIsOwner || !aiContext || !actorId) return;
-  roomAiBusy = true;
-  let submitted = false;
-  try {
-    const players = (aiContext.players || []).map((id) => ({
-      id,
-      name: id,
-    }));
-    const currentIds = JSON.stringify(aiContext.players || []);
-    if (!roomAiGame || roomAiPlayerIds !== currentIds) {
-      roomAiGame?.close();
-      roomAiGame = await createLocalLuaGame({
-        sourceUrl: "./game.lua",
-        players,
-        playerId: actorId,
-      });
-      roomAiPlayerIds = currentIds;
-    }
-    const outcome = await roomAiGame.aiAction(aiContext, actorId);
-    if (outcome?.status !== "acted" || !outcome.action) return;
-    await waitForRoomAiPacing(startedAt);
-    if (
-      !roomIsOwner ||
-      destroyed ||
-      generation !== roomAiGeneration ||
-      turnKey !== roomAiTurnKey ||
-      turnKey !== roomAiStateKey(roomAiState)
-    )
-      return;
-    const requestId = playweftClient?.sendAction({
-      type: "ai_turn",
-      playerId: actorId,
-      action: outcome.action,
-    });
-    submitted = Boolean(requestId);
-    roomAiAwaitingState = submitted;
-  } catch (error) {
-    console.error("Mahjong room AI failed", error);
-  } finally {
-    if (submitted) return;
-    roomAiBusy = false;
-    if (generation !== roomAiGeneration && roomAiState) {
-      roomAiTurnKey = "";
-      scheduleRoomAi(roomAiState);
-    }
-  }
-}
-
-function handleRoomActionResult() {
-  // Wait for the authoritative projection; a fast second tap must not act on stale state.
-}
-
-function handlePlayweftError(message, _code, requestId) {
-  roomAiBusy = false;
-  roomAiAwaitingState = false;
-  if (session.rejectRoomAction(requestId)) {
-    tableController.clearResultPageReadyPending();
-    if (tableController.getState()?.phase === "hand_ended") {
-      tableController.syncMatchMusic();
-    }
-  }
-  if (playMode === "room" && !tableController.getState()) {
-    gameInitializing = false;
-    showRoomSetup();
-    showSetupRecoveryError(message);
-    return;
-  }
-  if (!tableController.getState()) {
-    showLoadingError(message);
-    return;
-  }
-  if (playMode === "room") {
-    transientNotice.show(message);
-    return;
-  }
-  showMessage(message);
-}
-
-function showRoomWaiting() {
-  elements.setup.hidden = true;
-  elements.loading.classList.remove("is-error");
-  elements.loading.classList.add("is-room-waiting");
-  elements.loading.classList.add("is-active");
-  elements.loadingMessage.textContent = "等待其他玩家加入…";
-  elements.loadingMessage.hidden = false;
-  elements.loading.hidden = false;
+async function initialize(matchType = "east") {
+  if (playMode !== "solo") return;
+  return soloController?.initialize(matchType);
 }
 
 function selectedMatchRules() {
@@ -1223,45 +715,6 @@ function selectedMatchRules() {
       input.checked,
     ]),
   );
-}
-
-async function startRoomMatch(matchType = "east") {
-  if (playMode !== "room" || !roomIsOwner || gameInitializing) return;
-  gameInitializing = true;
-  const setupExit = beginSetupExit();
-  const started = await session.dispatch({
-    type: "start_match",
-    matchType,
-    rules: selectedMatchRules(),
-  });
-  if (started) return;
-  await setupExit;
-  gameInitializing = false;
-  showRoomSetup();
-}
-
-function requestPlatformAvatar(context) {
-  const initialSource = context?.player?.avatar?.src;
-  themeController.setPlatformAvatar(
-    typeof initialSource === "string" ? initialSource : "",
-  );
-  if (!asArray(context?.capabilities).includes("user.getProfile")) return;
-  void playweftClient
-    .getUserProfile({ fields: ["avatar"] })
-    .then((profile) => {
-      const source = profile?.avatar?.src;
-      themeController.setPlatformAvatar(
-        typeof source === "string" ? source : initialSource || "",
-      );
-    })
-    .catch(() => {
-      themeController.setPlatformAvatar(initialSource || "");
-    });
-}
-
-async function initialize(matchType = "east") {
-  if (playMode !== "solo") return;
-  return soloController?.initialize(matchType);
 }
 
 async function resumeSavedMatch() {
@@ -1325,7 +778,7 @@ function enableAutoWinAfterRiichi(state, event) {
   autoActions = { ...autoActions, autoWin: true };
   syncAutoActionControls();
   persistAutoActions();
-  if (playMode === "room") scheduleRoomAutomaticAction();
+  if (playMode === "room") roomController?.scheduleAutomaticAction();
   else scheduleAi();
 }
 
@@ -1344,7 +797,7 @@ function toggleAutoAction(name) {
   }
   syncAutoActionControls();
   persistAutoActions();
-  if (playMode === "room") scheduleRoomAutomaticAction();
+  if (playMode === "room") roomController?.scheduleAutomaticAction();
   else scheduleAi();
 }
 
@@ -1515,63 +968,18 @@ function resumeMatchMusic() {
   tableController?.syncMatchMusic({ userGesture: true });
 }
 
-function handlePageHide(event) {
-  session.cancelScheduledActions();
-  tableController.suspend();
-  if (!event.persisted) destroy();
-}
-
-function handlePageShow(event) {
-  if (event.persisted) resumeAfterSuspension();
-}
-
-function handleVisibilityChange() {
-  if (document.visibilityState === "hidden") {
-    session.cancelScheduledActions();
-    tableController.suspend();
-    return;
-  }
-  resumeAfterSuspension();
-}
-
-function resumeAfterSuspension() {
-  if (destroyed) return;
-  tableController.resume();
-}
-
 function destroy() {
   if (destroyed) return;
   destroyed = true;
-  cancelRoomAiWait();
   session?.cancelScheduledActions();
   tableController?.destroy();
+  pageLifecycle.destroy();
   themeController.destroy();
-  window.removeEventListener("pagehide", handlePageHide);
-  window.removeEventListener("pageshow", handlePageShow);
-  document.removeEventListener("visibilitychange", handleVisibilityChange);
-  document.removeEventListener("pointerdown", resumeMatchMusic);
-  document.removeEventListener("keydown", resumeMatchMusic);
   releaseFixedViewport();
   settingsDialog.destroy();
   visualRenderer.destroy();
   resultHandRenderer.destroy();
   game?.close();
-  roomAiGame?.close();
-  roomAiGame = undefined;
-  roomLegalRequest += 1;
-  roomLegalRequestedKey = "";
-  roomLegalAppliedKey = "";
-  roomLegalGame?.close();
-  roomLegalGame = undefined;
-  roomTenpaiRequest += 1;
-  roomTenpaiRequestedKey = "";
-  roomTenpaiReports = undefined;
-  roomTenpaiReportsPromise = undefined;
-  roomTenpaiSupplementRequest += 1;
-  roomTenpaiSupplementRequestedKey = "";
-  roomTenpaiReportedKey = "";
-  roomTenpaiGame?.close();
-  roomTenpaiGame = undefined;
-  roomTenpaiGameReady = undefined;
+  roomController?.destroy();
   playweftClient?.destroy();
 }

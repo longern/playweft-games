@@ -103,6 +103,32 @@ export function resolveMahjongMatchPortraits(
   return result;
 }
 
+export function resolveMahjongPlayerPortraits(
+  entries,
+  portraitPool,
+  playerIds,
+  randomSeed = "",
+) {
+  const catalog = Array.isArray(entries) ? entries : [];
+  const validIds = new Set(catalog.map((entry) => entry.id));
+  const source = (
+    Array.isArray(portraitPool) && portraitPool.length
+      ? portraitPool
+      : catalog.map((entry) => entry.id)
+  ).filter((id) => id && validIds.has(id));
+  const ids = [...new Set((Array.isArray(playerIds) ? playerIds : [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean))].sort();
+  if (!source.length || !ids.length) return {};
+  const shuffled = seededShuffle(source, `${randomSeed}:mahjong-ai-portraits`);
+  return Object.fromEntries(
+    ids.map((playerId, index) => [
+      playerId,
+      shuffled[index % shuffled.length],
+    ]),
+  );
+}
+
 function nextPortrait(pool, used, repeatable, repeatIndex) {
   while (pool.length) {
     const id = pool.shift();

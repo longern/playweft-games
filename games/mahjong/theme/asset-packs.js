@@ -10,6 +10,7 @@ import {
 import {
   MAHJONG_PORTRAIT_POSITIONS,
   normalizeMahjongPortraitPool,
+  resolveMahjongPlayerPortraits,
   resolveMahjongMatchPortraits,
   resolveMahjongPortraitDefaults,
 } from "./portrait-selection.js";
@@ -101,6 +102,13 @@ let transientPack = null;
 let assetPackStorageUnavailable = false;
 let activePortraits = {};
 let activeMatchPortraitRequest = null;
+let activePackId = "__default__";
+let activePortraitCatalog = [];
+let activePortraitPool = [];
+let activePackStored = null;
+const onlinePortraitUrls = new Map();
+const onlinePortraitObjectUrls = new Set();
+const unavailableOnlinePortraits = new Set();
 
 export async function initializeMahjongAssetPacks(matchPortraitRequest) {
   if (matchPortraitRequest && typeof matchPortraitRequest === "object") {
@@ -172,8 +180,96 @@ export function getMahjongActivePortraits() {
   return { ...activePortraits };
 }
 
+export function getMahjongOnlinePortraitContext() {
+  return {
+    packId: activePackId,
+    catalog: activePortraitCatalog.map(({ id, label }) => ({ id, label })),
+    portraitPool: [...activePortraitPool],
+  };
+}
+
+export function getMahjongOnlineAiPortraitAssignments(playerIds, randomSeed = "") {
+  const assignments = resolveMahjongPlayerPortraits(
+    activePortraitCatalog,
+    activePortraitPool,
+    playerIds,
+    randomSeed,
+  );
+  return Object.fromEntries(
+    Object.entries(assignments).map(([playerId, portraitId]) => [
+      playerId,
+      { packId: activePackId, portraitId },
+    ]),
+  );
+}
+
+export async function resolveMahjongOnlinePortrait(reference) {
+  const packId = String(reference?.packId || "").trim();
+  const portraitId = String(reference?.portraitId || "").trim();
+  if (!packId || !portraitId) return null;
+  const cacheKey = `${packId}:${portraitId}`;
+  if (onlinePortraitUrls.has(cacheKey)) return onlinePortraitUrls.get(cacheKey);
+  if (unavailableOnlinePortraits.has(cacheKey)) return null;
+  if (packId === activePackId) {
+    const entry = activePortraitCatalog.find((candidate) => candidate.id === portraitId);
+    const record = activePackStored?.get?.(assetStorageSlot("portraits", portraitId));
+    const url = record?.blob
+      ? createOnlinePortraitObjectUrl(record.blob)
+      : record?.url || activeAssets.get(`portrait-${portraitId}`)?.url;
+    if (entry && url) {
+      onlinePortraitUrls.set(cacheKey, url);
+      return url;
+    }
+    unavailableOnlinePortraits.add(cacheKey);
+  }
+  if (packId === "__default__") {
+    const pack = getMahjongDefaultPack();
+    const entry = pack.catalog.portraits.find((candidate) => candidate.id === portraitId);
+    if (entry?.url) {
+      onlinePortraitUrls.set(cacheKey, entry.url);
+      return entry.url;
+    }
+    unavailableOnlinePortraits.add(cacheKey);
+    return null;
+  }
+  if (assetPackStorageUnavailable) return null;
+  try {
+    const database = await openDatabase();
+    const transaction = database.transaction([PACKS, ASSETS], "readonly");
+    const [pack, record] = await Promise.all([
+      requestPromise(transaction.objectStore(PACKS).get(packId)),
+      requestPromise(
+        transaction.objectStore(ASSETS).get([
+          packId,
+          assetStorageSlot("portraits", portraitId),
+        ]),
+      ),
+    ]);
+    const catalog = catalogForPack(pack);
+    if (!catalog.portraits.some((entry) => entry.id === portraitId) || !record) {
+      unavailableOnlinePortraits.add(cacheKey);
+      return null;
+    }
+    const url = record.blob
+      ? createOnlinePortraitObjectUrl(record.blob)
+      : record.url;
+    if (!url) {
+      unavailableOnlinePortraits.add(cacheKey);
+      return null;
+    }
+    onlinePortraitUrls.set(cacheKey, url);
+    return url;
+  } catch {
+    return null;
+  }
+}
+
 export function getMahjongAssetUrl(slot) {
   return activeAssets.get(slot)?.url ?? "";
+}
+
+export function getMahjongDefaultAssetUrl(slot) {
+  return getMahjongDefaultAssetPack().assets.get(slot)?.url ?? "";
 }
 
 export function chooseMahjongMatchMusicUrl(
@@ -543,6 +639,15 @@ function applyResolvedAssets(active) {
 }
 
 function applyPackAssets(pack) {
+  clearOnlinePortraitUrlCache();
+  activePackId = String(pack?.id || "__default__");
+  activePortraitCatalog = Array.isArray(pack?.catalog?.portraits)
+    ? [...pack.catalog.portraits]
+    : [];
+  activePortraitPool = Array.isArray(pack?.portraitPool)
+    ? [...pack.portraitPool]
+    : [];
+  activePackStored = pack?.stored instanceof Map ? pack.stored : null;
   if (!activeMatchPortraitRequest) {
     applyActiveAssets(
       pack.assets,
@@ -572,6 +677,19 @@ function applyPackAssets(pack) {
     Boolean(pack.catalog.riichiBgm.length),
     portraits,
   );
+}
+
+function createOnlinePortraitObjectUrl(blob) {
+  const url = URL.createObjectURL(blob);
+  onlinePortraitObjectUrls.add(url);
+  return url;
+}
+
+function clearOnlinePortraitUrlCache() {
+  for (const url of onlinePortraitObjectUrls) URL.revokeObjectURL(url);
+  onlinePortraitObjectUrls.clear();
+  onlinePortraitUrls.clear();
+  unavailableOnlinePortraits.clear();
 }
 
 async function readActivePack() {

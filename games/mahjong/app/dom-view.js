@@ -253,7 +253,7 @@ export class MahjongDomView {
     avatar.style.backgroundImage = `url(${JSON.stringify(nextSource)})`;
   }
 
-  applyPlayerIdentityState({ avatars = {}, names = {} } = {}) {
+  applyPlayerIdentityState({ avatars = {}, names = {}, fallbackAvatars = {} } = {}) {
     const state = {
       avatars: { ...avatars },
       names: { ...names },
@@ -275,7 +275,9 @@ export class MahjongDomView {
       for (const [index, position] of positions.entries()) {
         this.commitPlayerAvatar(
           position,
-          loaded[index] ? state.avatars[position] : "",
+          loaded[index]
+            ? state.avatars[position]
+            : fallbackAvatars[position] || "",
         );
         const name = state.names[position];
         if (typeof name === "string" && name) {
