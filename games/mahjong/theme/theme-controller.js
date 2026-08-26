@@ -47,9 +47,7 @@ export function createMahjongThemeController({
     initialMatchPortraitRequest,
   ).catch(() => new Map());
 
-  const onUploadChange = async () => {
-    const archive = themeElements.upload.files?.[0];
-    themeElements.upload.value = "";
+  const importThemeArchive = async (archive) => {
     if (!archive) return;
     try {
       visualPacks = await createMahjongAssetPack(archive);
@@ -57,6 +55,30 @@ export function createMahjongThemeController({
     } catch (error) {
       console.error("Mahjong theme import failed", error);
     }
+  };
+
+  const onUploadChange = () => {
+    const archive = themeElements.upload.files?.[0];
+    themeElements.upload.value = "";
+    void importThemeArchive(archive);
+  };
+
+  const onUploadDragOver = (event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    themeElements.uploadZone?.classList.add("is-drag-over");
+  };
+
+  const onUploadDragLeave = (event) => {
+    if (!themeElements.uploadZone?.contains(event.relatedTarget)) {
+      themeElements.uploadZone?.classList.remove("is-drag-over");
+    }
+  };
+
+  const onUploadDrop = (event) => {
+    event.preventDefault();
+    themeElements.uploadZone?.classList.remove("is-drag-over");
+    void importThemeArchive(event.dataTransfer.files?.[0]);
   };
 
   const onThemeListClick = async (event) => {
@@ -160,6 +182,9 @@ export function createMahjongThemeController({
   };
 
   themeElements.upload.addEventListener("change", onUploadChange);
+  themeElements.uploadZone?.addEventListener("dragover", onUploadDragOver);
+  themeElements.uploadZone?.addEventListener("dragleave", onUploadDragLeave);
+  themeElements.uploadZone?.addEventListener("drop", onUploadDrop);
   themeElements.list.addEventListener("click", onThemeListClick);
   themeElements.list.addEventListener("keydown", onThemeListKeydown);
   appearanceElements.controls.addEventListener("change", onAppearanceChange);
@@ -467,6 +492,9 @@ export function createMahjongThemeController({
     getRiichiMusicUrl: getMahjongRiichiMusicUrl,
     destroy() {
       themeElements.upload.removeEventListener("change", onUploadChange);
+      themeElements.uploadZone?.removeEventListener("dragover", onUploadDragOver);
+      themeElements.uploadZone?.removeEventListener("dragleave", onUploadDragLeave);
+      themeElements.uploadZone?.removeEventListener("drop", onUploadDrop);
       themeElements.list.removeEventListener("click", onThemeListClick);
       themeElements.list.removeEventListener("keydown", onThemeListKeydown);
       appearanceElements.controls.removeEventListener("change", onAppearanceChange);

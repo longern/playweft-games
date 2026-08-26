@@ -305,6 +305,7 @@ const resultHandRendererReady = resultHandRenderer.init().catch((error) => {
 
 const themePackElements = {
   upload: document.querySelector("#settings-theme-upload"),
+  uploadZone: document.querySelector(".settings-theme-upload"),
   list: document.querySelector("#settings-theme-list"),
 };
 const appearanceElements = {

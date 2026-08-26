@@ -122,8 +122,7 @@
   cursor: pointer;
   transition:
     background-color 120ms ease,
-    color 120ms ease,
-    transform 80ms ease;
+    color 120ms ease;
 }
 
 .settings-dialog-close svg {
@@ -146,7 +145,6 @@
 .settings-dialog-close:active {
   background: rgba(255, 255, 255, 0.17);
   color: #fff;
-  transform: scale(0.92);
 }
 
 .settings-tab-panel {
@@ -209,8 +207,7 @@
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.56);
   transition:
     background-color 140ms ease,
-    border-color 140ms ease,
-    transform 100ms ease;
+    border-color 140ms ease;
 }
 
 .settings-dialog-footer .settings-dialog-end-match {
@@ -267,7 +264,6 @@
 }
 
 .settings-dialog-footer button:active {
-  transform: translateY(1px);
   box-shadow:
     0 1px 3px rgba(0, 0, 0, 0.28),
     inset 0 2px 4px rgba(0, 0, 0, 0.24);
@@ -401,8 +397,7 @@
   cursor: pointer;
   transition:
     background-color 120ms ease,
-    border-color 120ms ease,
-    transform 80ms ease;
+    border-color 120ms ease;
 }
 
 .settings-theme-upload:hover {
@@ -410,8 +405,9 @@
   background: rgba(58, 112, 91, 0.28);
 }
 
-.settings-theme-upload:active {
-  transform: translateY(1px);
+.settings-theme-upload.is-drag-over {
+  border-color: #a8e0c7;
+  background: rgba(127, 205, 165, 0.2);
 }
 
 .settings-theme-upload input {
@@ -537,17 +533,12 @@
   cursor: pointer;
   transition:
     background-color 120ms ease,
-    color 120ms ease,
-    transform 80ms ease;
+    color 120ms ease;
 }
 
 .settings-theme-actions button:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #fff2cc;
-}
-
-.settings-theme-actions button:active {
-  transform: translateY(1px);
 }
 
 .settings-theme-actions button[data-pack-action="delete"] {

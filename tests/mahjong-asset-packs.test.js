@@ -461,6 +461,7 @@ test("mahjong settings separates theme management from appearance choices", () =
   assert.match(page, /data-settings-tab="theme"[^>]*>主题/);
   assert.match(page, /data-settings-tab="appearance"[^>]*>装扮/);
   assert.match(page, /id="settings-theme-upload"/);
+  assert.match(page, /class="settings-theme-upload"/);
   assert.match(page, /id="settings-theme-list"/);
   assert.match(page, /id="settings-appearance-controls"/);
   assert.doesNotMatch(page, /素材包/);
@@ -473,6 +474,8 @@ test("mahjong settings separates theme management from appearance choices", () =
   assert.match(themeController, /configureMahjongAssetPackAppearance/);
   assert.match(themeController, /角色语音/);
   assert.match(themeController, /getMahjongDefaultPack\(\)/);
+  assert.match(themeController, /onUploadDrop/);
+  assert.match(themeController, /addEventListener\("drop", onUploadDrop\)/);
   assert.match(
     themeController,
     /action === "delete"[\s\S]*?isStandalone[\s\S]*?browserWindow\.confirm\(message\)[\s\S]*?await confirm\?\.\(message\)/,

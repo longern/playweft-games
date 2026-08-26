@@ -177,7 +177,6 @@
 
   .paipu-entry-action:active {
     background: rgba(255, 239, 204, 0.18);
-    transform: scale(0.9);
   }
 }
 
