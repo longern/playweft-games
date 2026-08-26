@@ -67,6 +67,7 @@ import {
   saveMahjongPaipu,
   setMahjongPaipuPinned,
 } from "./replay/paipu-store.js";
+import { createMahjongCompletedPaipuSaver } from "./replay/completed-paipu.js";
 import { createMahjongPaipuPanel } from "./replay/paipu-panel.js";
 import { mahjongInitialEntry } from "./app/entry-flow.js";
 import { orientMahjongRoomProjection } from "./rules/room-state.js";
@@ -195,6 +196,9 @@ const paipuPanel = createMahjongPaipuPanel({
   listMahjongPaipuSummaries,
   setMahjongPaipuPinned,
   onReplay: (id) => replayMahjongPaipu(id),
+});
+const saveCompletedPaipu = createMahjongCompletedPaipuSaver({
+  save: saveMahjongPaipu,
 });
 
 const matchMusic = new Audio();
@@ -701,8 +705,7 @@ async function handleRoomState(message) {
   );
   if (!projection?.state) return;
   const ownRiichiEvent = asArray(projection.events).find(
-    (event) =>
-      event?.type === "riichi" && Number(event.playerIndex) === 1,
+    (event) => event?.type === "riichi" && Number(event.playerIndex) === 1,
   );
   const startsFreshAutoActionScope = asArray(projection.events).some(
     (event) =>
@@ -736,6 +739,9 @@ async function handleRoomState(message) {
     await visualRendererReady;
     if (destroyed || playMode !== "room") return;
     await tableController.refresh(projection, { animateDealIn });
+    // Persist the server's canonical seat order. The rendered projection is
+    // rotated for the local viewer and must not determine replay orientation.
+    persistCompletedRoomPaipu(message?.state?.paipu, message.matchId);
     enableAutoWinAfterRiichi(projection.state, ownRiichiEvent);
     session.confirmRoomState();
     scheduleRoomLegalActions(projection.state);
@@ -750,6 +756,18 @@ async function handleRoomState(message) {
     console.error("Mahjong room state failed to render", error);
     showLoadingError("房间状态加载失败，请稍后重试");
   }
+}
+
+function persistCompletedRoomPaipu(paipu, matchId) {
+  if (!paipu || typeof matchId !== "string" || !matchId) return;
+  const record = {
+    ...paipu,
+    id: `${matchId}:room`,
+    completedAtMs: Date.now(),
+  };
+  void saveCompletedPaipu(record).catch((error) => {
+    console.warn("Mahjong room paipu save failed", error);
+  });
 }
 
 function scheduleRoomAutomaticAction() {
@@ -1282,7 +1300,7 @@ async function persistAcceptedAction(
   if (projection?.state?.matchEnded && currentGame?.exportPaipu) {
     try {
       const paipu = await currentGame.exportPaipu();
-      if (paipu?.status === "completed") await saveMahjongPaipu(paipu);
+      if (paipu?.status === "completed") await saveCompletedPaipu(paipu);
     } catch (error) {
       console.warn("Mahjong paipu save failed", error);
     }

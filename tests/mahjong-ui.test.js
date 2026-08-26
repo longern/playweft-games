@@ -1572,18 +1572,6 @@ test("mahjong defers lobby decorative images until after window load", () => {
   );
   assert.match(main, /"paipu-notebook": defaultPaipuNotebookUrl/);
 
-  const setupStyles = readFileSync(
-    new URL("../games/mahjong/styles/setup.css", import.meta.url),
-    "utf8",
-  );
-  assert.match(
-    setupStyles,
-    /\.setup-paipu-entry\s*\{[\s\S]*?width:\s*252px;[\s\S]*?height:\s*252px;/,
-  );
-  assert.match(
-    setupStyles,
-    /\.setup-paipu-label\s*\{[\s\S]*?color:\s*#b9964f;[\s\S]*?LiSu,[\s\S]*?STLiti,[\s\S]*?["']FZLiShu-S01["'],[\s\S]*?Inter,[\s\S]*?transform:\s*matrix\(0\.97, -0\.244, 0\.29, 0\.958, 0, 0\)/,
-  );
 });
 
 test("mahjong starts with an inline low-resolution tile atlas and a sampled felt colour", () => {

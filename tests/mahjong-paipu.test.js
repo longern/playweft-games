@@ -7,6 +7,7 @@ import {
   summarizeMahjongPaipu,
   validateMahjongPaipu,
 } from "../games/mahjong/replay/paipu-store.js";
+import { createMahjongCompletedPaipuSaver } from "../games/mahjong/replay/completed-paipu.js";
 
 const HUMAN_ID = "human";
 const PLAYERS = [
@@ -17,6 +18,30 @@ const PLAYERS = [
 ];
 
 const seedFor = (value) => value.toString(16).padStart(32, "0");
+
+test("completed Mahjong paipu writes are deduplicated by match id", async () => {
+  const writes = [];
+  const save = createMahjongCompletedPaipuSaver({
+    save: async (record) => {
+      writes.push(record.id);
+      await Promise.resolve();
+      return { saved: true };
+    },
+  });
+  const record = { id: "room-1:room", status: "completed" };
+
+  await Promise.all([save(record), save({ ...record })]);
+
+  assert.deepEqual(writes, [record.id]);
+  assert.deepEqual(await save({ ...record }), {
+    saved: false,
+    reason: "duplicate",
+  });
+  assert.deepEqual(await save({ id: "", status: "completed" }), {
+    saved: false,
+    reason: "incomplete",
+  });
+});
 
 async function createGame(t, seed) {
   const source = await readFile("games/mahjong/game.lua", "utf8");

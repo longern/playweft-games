@@ -58,6 +58,52 @@ function rotateEvent(event, viewerSeat) {
   };
 }
 
+function rotatePaipu(record, viewerSeat) {
+  if (!record || typeof record !== "object") return record;
+  const players = asArray(record.players)
+    .map((player) => ({
+      ...player,
+      seat: rotateSeat(player?.seat, viewerSeat),
+    }))
+    .sort((left, right) => Number(left.seat) - Number(right.seat));
+  return {
+    ...record,
+    players,
+    hands: asArray(record.hands).map((hand) => ({
+      ...hand,
+      startScores: rotateSeatOrder(hand.startScores, viewerSeat),
+      round: hand.round
+        ? { ...hand.round, dealerSeat: rotateSeat(hand.round.dealerSeat, viewerSeat) }
+        : hand.round,
+      commands: asArray(hand.commands).map((command) => ({
+        ...command,
+        seat: rotateSeat(command?.seat, viewerSeat),
+      })),
+      events: asArray(hand.events).map((event) => rotateEvent(event, viewerSeat)),
+      end: hand.end
+        ? {
+            ...hand.end,
+            winners: asArray(hand.end.winners).map((seat) =>
+              rotateSeat(seat, viewerSeat),
+            ),
+            result: rotateResult(hand.end.result, viewerSeat),
+            results: asArray(hand.end.results).map((result) =>
+              rotateResult(result, viewerSeat),
+            ),
+            scores: rotateSeatOrder(hand.end.scores, viewerSeat),
+          }
+        : hand.end,
+    })),
+    final: record.final
+      ? {
+          ...record.final,
+          scores: rotateSeatOrder(record.final.scores, viewerSeat),
+          ranks: rotateSeatOrder(record.final.ranks, viewerSeat),
+        }
+      : record.final,
+  };
+}
+
 /**
  * Reorients a room projection so its viewer is always presentation seat one.
  * Tile maps remain keyed by stable player IDs; only seat-indexed fields move.
@@ -88,6 +134,7 @@ export function orientMahjongRoomProjection(projection, playerId) {
     results: asArray(source.results).map((result) =>
       rotateResult(result, viewerSeat),
     ),
+    paipu: rotatePaipu(source.paipu, viewerSeat),
   };
 
   return {

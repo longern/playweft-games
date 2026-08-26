@@ -4621,7 +4621,7 @@ function setup(context)
 	return new_match(players, names, normalize_random_seed(context.match.randomSeed), settings, ai_players)
 end
 
-function export_paipu(state)
+function export_paipu(state, mode)
 	local source = state.paipu
 	if type(source) ~= "table" then
 		return nil
@@ -4632,7 +4632,7 @@ function export_paipu(state)
 			seat = seat,
 			id = player_id,
 			name = state.playerNames[seat],
-			kind = seat == 1 and "human" or "ai",
+			kind = state.aiPlayers and state.aiPlayers[player_id] and "ai" or "human",
 		}
 	end
 	local ranks = {}
@@ -4649,7 +4649,7 @@ function export_paipu(state)
 		format = source.format,
 		formatVersion = source.formatVersion,
 		game = {
-			mode = "solo",
+			mode = mode or "solo",
 			matchType = state.matchType,
 			rules = copy_record_value(state.rules),
 			initialScores = copy_record_value(source.initialScores),

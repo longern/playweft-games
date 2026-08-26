@@ -77,9 +77,14 @@ async function runOnlineWithinRuntimeQuota(scenario, runtimeQuota = 50_000) {
 
 test("Mahjong room entry stays below the Lua source limit and excludes solo AI", async () => {
   const fullSource = await readFile("games/mahjong/game.lua", "utf8");
+  const onlineSourceModule = await readFile("games/mahjong/online-source.js", "utf8");
   const onlineSource = buildMahjongOnlineSource(fullSource);
 
   assert.ok(Buffer.byteLength(onlineSource) < MAHJONG_ONLINE_SOURCE_LIMIT);
+  assert.match(
+    onlineSourceModule,
+    /projection\.state\.paipu = export_paipu\(state, "room"\)/,
+  );
   assert.match(onlineSource, /function setup\(/);
   assert.match(onlineSource, /function on_action\(/);
   assert.match(onlineSource, /function view\(/);
@@ -739,7 +744,7 @@ test("four-player room mock advances a complete Mahjong hand through the online 
       allViewsPrivate = allViewsPrivate,
       allActionIdsUnique = allActionIdsUnique,
       timerContractOk = timerContractOk,
-      paipuRemoved = state.paipu == nil and state.paipuTilePositions == nil,
+      paipuRetained = state.paipu ~= nil and state.paipuTilePositions == nil,
     }
   `);
 
@@ -748,7 +753,7 @@ test("four-player room mock advances a complete Mahjong hand through the online 
   assert.equal(result.allViewsPrivate, true);
   assert.equal(result.allActionIdsUnique, true);
   assert.equal(result.timerContractOk, true);
-  assert.equal(result.paipuRemoved, true);
+  assert.equal(result.paipuRetained, true);
   assert.equal(result.version, result.acceptedCount);
   assert.ok(result.steps > 20 && result.steps <= 220);
 });
@@ -1254,6 +1259,9 @@ test("authoritative Mahjong result pages wait for every player, time out safely,
       nextHandAfterAllReady = next_hand_after_all_ready,
       resultTimeoutAdvanced = result_timeout_advanced,
       finalRankingVisible = final_projection.state.resultSummaryVisible == true,
+      finalRankingHasPaipu = final_projection.state.paipu ~= nil
+        and final_projection.state.paipu.status == "completed"
+        and final_projection.state.paipu.game.mode == "room",
       finalRankingHasNoDeadline = final_projection.state.resultDeadlineAt == nil,
       finalRankingHasNoTimer = scheduled(final_timeout.timerOps, "mahjong-result") == nil,
     }
@@ -1266,6 +1274,7 @@ test("authoritative Mahjong result pages wait for every player, time out safely,
   assert.equal(result.nextHandAfterAllReady, true);
   assert.equal(result.resultTimeoutAdvanced, true);
   assert.equal(result.finalRankingVisible, true);
+  assert.equal(result.finalRankingHasPaipu, true);
   assert.equal(result.finalRankingHasNoDeadline, true);
   assert.equal(result.finalRankingHasNoTimer, true);
 });

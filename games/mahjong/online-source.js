@@ -30,7 +30,9 @@ local function __mahjong_timer_delay(delay)
 end
 
 local function __mahjong_clear_private_state(state)
-  state.paipu = nil
+  -- The paipu is authoritative match history and must survive every action so
+  -- the final room projection can export it. Only transient replay fields are
+  -- cleared here.
   state.paipuTilePositions = nil
   state.replayWall = nil
   state.autoPassClaimsApplying = nil
@@ -604,6 +606,9 @@ function view(state, events, context)
       or false
     projection.state.resultSummaryVisible = state.matchEnded == true
       and tonumber(state.resultPage) == __mahjong_result_summary_page(state)
+    if projection.state.resultSummaryVisible then
+      projection.state.paipu = export_paipu(state, "room")
+    end
     projection.state.aiPlayers = state.aiPlayers
     local ai_actor = context.viewer.isOwner and active_player or nil
     projection.state.aiTurn = ai_actor and state.aiPlayers and state.aiPlayers[ai_actor] and {
