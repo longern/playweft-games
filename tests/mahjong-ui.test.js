@@ -1582,7 +1582,7 @@ test("mahjong defers lobby decorative images until after window load", () => {
   );
   assert.match(
     setupStyles,
-    /\.setup-paipu-label\s*\{[\s\S]*?color:\s*#b9964f;[\s\S]*?transform:\s*matrix\(0\.97, -0\.244, 0\.29, 0\.958, 0, 0\)/,
+    /\.setup-paipu-label\s*\{[\s\S]*?color:\s*#b9964f;[\s\S]*?LiSu,[\s\S]*?STLiti,[\s\S]*?["']FZLiShu-S01["'],[\s\S]*?Inter,[\s\S]*?transform:\s*matrix\(0\.97, -0\.244, 0\.29, 0\.958, 0, 0\)/,
   );
 });
 

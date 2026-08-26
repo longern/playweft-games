@@ -260,7 +260,16 @@
   height: auto;
   padding: 0;
   color: #b9964f;
-  font-family: "Songti SC", STSong, SimSun, serif;
+  font-family:
+    LiSu,
+    STLiti,
+    "FZLiShu-S01",
+    "FZLiBian-S01",
+    Inter,
+    "Noto Sans SC",
+    "PingFang SC",
+    system-ui,
+    sans-serif;
   font-size: 26px;
   font-weight: 700;
   letter-spacing: 0.18em;

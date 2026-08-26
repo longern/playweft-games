@@ -19,6 +19,7 @@ import {
   listMahjongAssetPacks,
   rerollMahjongAssetPackPortraits,
 } from "./asset-packs.js";
+import { Check, Download, Trash2, createIcons } from "lucide";
 
 const DEFAULT_VISUAL_PACK_ID = "__default__";
 
@@ -50,21 +51,19 @@ export function createMahjongThemeController({
     const archive = themeElements.upload.files?.[0];
     themeElements.upload.value = "";
     if (!archive) return;
-    themeElements.feedback.textContent = "正在保存主题包…";
     try {
       visualPacks = await createMahjongAssetPack(archive);
       renderThemePacks();
-      themeElements.feedback.textContent = "已导入并启用主题包。";
     } catch (error) {
-      themeElements.feedback.textContent =
-        error instanceof Error ? error.message : "导入主题包失败";
+      console.error("Mahjong theme import failed", error);
     }
   };
 
   const onThemeListClick = async (event) => {
     const button = event.target.closest("button");
-    const id = button?.dataset.packId;
-    const action = button?.dataset.packAction;
+    const item = event.target.closest("li[data-pack-id]");
+    const id = button?.dataset.packId || item?.dataset.packId;
+    const action = button?.dataset.packAction || (item ? "activate" : "");
     const packUrl = button?.dataset.packUrl;
     if (!action) return;
     if (action === "download") {
@@ -73,7 +72,6 @@ export function createMahjongThemeController({
         (pack) => pack.url === packUrl,
       );
       if (!configuredPack) return;
-      themeElements.feedback.textContent = `正在下载「${configuredPack.name}」…`;
       try {
         const response = await fetch(configuredPack.url);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -87,12 +85,8 @@ export function createMahjongThemeController({
           sourceUrl: configuredPack.url,
         });
         renderThemePacks();
-        themeElements.feedback.textContent = "已下载并启用主题包。";
       } catch (error) {
-        themeElements.feedback.textContent =
-          error instanceof Error
-            ? `主题包下载失败：${error.message}`
-            : "主题包下载失败";
+        console.error("Mahjong theme download failed", error);
       }
       return;
     }
@@ -104,8 +98,6 @@ export function createMahjongThemeController({
         : await confirm?.(message);
       if (!confirmed) return;
     }
-    themeElements.feedback.textContent =
-      action === "delete" ? "正在删除…" : "正在切换主题包…";
     try {
       visualPacks =
         action === "delete"
@@ -114,16 +106,17 @@ export function createMahjongThemeController({
             ? await deactivateMahjongAssetPacks()
             : await activateMahjongAssetPack(id);
       renderThemePacks();
-      themeElements.feedback.textContent =
-        action === "delete"
-          ? "已删除主题包。"
-          : id === DEFAULT_VISUAL_PACK_ID
-            ? "已切回默认主题。"
-            : "已启用主题包。";
-    } catch {
-      themeElements.feedback.textContent =
-        action === "delete" ? "删除主题包失败" : "切换主题包失败";
+    } catch (error) {
+      console.error("Mahjong theme action failed", error);
     }
+  };
+
+  const onThemeListKeydown = (event) => {
+    if (event.target.closest("button")) return;
+    const item = event.target.closest("li[data-pack-id]");
+    if (!item || (event.key !== "Enter" && event.key !== " ")) return;
+    event.preventDefault();
+    void onThemeListClick({ target: item });
   };
 
   const onAppearanceChange = async (event) => {
@@ -168,6 +161,7 @@ export function createMahjongThemeController({
 
   themeElements.upload.addEventListener("change", onUploadChange);
   themeElements.list.addEventListener("click", onThemeListClick);
+  themeElements.list.addEventListener("keydown", onThemeListKeydown);
   appearanceElements.controls.addEventListener("change", onAppearanceChange);
   browserWindow.addEventListener("mahjong:asset-pack-changed", onAssetPackChanged);
   void assetPacksReady.then(() => applyPackAvatars());
@@ -241,25 +235,39 @@ export function createMahjongThemeController({
     const localItems = packs.map((pack) => {
       const item = document.createElement("li");
       item.classList.toggle("is-active", pack.active);
+      item.dataset.packId = pack.id;
       const details = document.createElement("span");
-      const title = document.createElement("strong");
+      details.className = "settings-theme-row-details";
+      const title = document.createElement("span");
+      title.className = "settings-theme-title";
       title.textContent = pack.name;
       const summary = document.createElement("small");
       summary.textContent = pack.isDefault
         ? "内置主题包"
         : `${pack.assetNames.length} 项装扮内容`;
       details.append(title, summary);
+      const select = document.createElement("button");
+      select.type = "button";
+      select.className = "settings-theme-select";
+      select.dataset.packAction = "activate";
+      select.dataset.packId = pack.id;
+      select.disabled = pack.active;
+      select.append(details);
       const actions = document.createElement("span");
       actions.className = "settings-theme-actions";
       if (pack.active) {
-        const active = document.createElement("em");
-        active.textContent = "使用中";
+        const active = document.createElement("span");
+        active.className = "settings-theme-current";
+        active.setAttribute("aria-label", "当前使用中");
+        active.title = "当前使用中";
+        const icon = document.createElement("i");
+        icon.dataset.lucide = "check";
+        icon.setAttribute("aria-hidden", "true");
+        active.append(icon);
         actions.append(active);
-      } else {
-        actions.append(createVisualPackButton("使用", "activate", pack.id));
       }
-      if (!pack.isDefault) actions.append(createVisualPackButton("删除", "delete", pack.id));
-      item.append(details, actions);
+      if (!pack.isDefault) actions.append(createVisualPackButton("删除", "delete", pack.id, "trash-2"));
+      item.append(select, actions);
       return item;
     });
     const downloadedUrls = new Set(
@@ -271,20 +279,23 @@ export function createMahjongThemeController({
         const item = document.createElement("li");
         item.className = "is-remote";
         const details = document.createElement("span");
-        const title = document.createElement("strong");
+        details.className = "settings-theme-row-details";
+        const title = document.createElement("span");
+        title.className = "settings-theme-title";
         title.textContent = pack.name;
         const summary = document.createElement("small");
         summary.textContent = "在线主题包";
         details.append(title, summary);
         const actions = document.createElement("span");
         actions.className = "settings-theme-actions";
-        const download = createVisualPackButton("下载", "download");
+        const download = createVisualPackButton("下载", "download", "", "download");
         download.dataset.packUrl = pack.url;
         actions.append(download);
         item.append(details, actions);
         return item;
       });
     themeElements.list.replaceChildren(...localItems, ...remoteItems);
+    createIcons({ icons: { Check, Download, Trash2 }, root: themeElements.list });
     renderAppearanceSettings();
   }
 
@@ -420,12 +431,22 @@ export function createMahjongThemeController({
     return row;
   }
 
-  function createVisualPackButton(label, action, id = "") {
+  function createVisualPackButton(label, action, id = "", iconName = "") {
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.packAction = action;
     if (id) button.dataset.packId = id;
-    button.textContent = label;
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    if (iconName) {
+      button.className = "settings-theme-icon-button";
+      const icon = document.createElement("i");
+      icon.dataset.lucide = iconName;
+      icon.setAttribute("aria-hidden", "true");
+      button.append(icon);
+    } else {
+      button.textContent = label;
+    }
     return button;
   }
 
@@ -447,6 +468,7 @@ export function createMahjongThemeController({
     destroy() {
       themeElements.upload.removeEventListener("change", onUploadChange);
       themeElements.list.removeEventListener("click", onThemeListClick);
+      themeElements.list.removeEventListener("keydown", onThemeListKeydown);
       appearanceElements.controls.removeEventListener("change", onAppearanceChange);
       browserWindow.removeEventListener("mahjong:asset-pack-changed", onAssetPackChanged);
     },
