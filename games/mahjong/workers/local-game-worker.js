@@ -45,6 +45,7 @@ async function handle(type, payload) {
       projection: game.loadReplayHand(payload.hand, payload.viewerId),
     };
   }
+  if (type === "replayActions") return replayActions(payload);
   if (type === "action") {
     const result = game.action(payload.action, payload.actorId);
     return {
@@ -74,4 +75,64 @@ async function handle(type, payload) {
     return game.currentTenpaiReport(payload.state, payload.viewerId);
   }
   throw new TypeError(`Unknown Mahjong worker request: ${type}`);
+}
+
+function replayActions({
+  actions,
+  checkpoint,
+  checkpointActionIndex = 0,
+  replayHand,
+  restart = false,
+  viewerId,
+} = {}) {
+  if (!Array.isArray(actions)) {
+    throw new TypeError("Mahjong replay actions must be an array");
+  }
+
+  let firstAction = 0;
+  let checkpointError;
+  if (replayHand) {
+    game.loadReplayHand(replayHand, viewerId);
+  } else if (checkpoint) {
+    const actionIndex = Number(checkpointActionIndex);
+    if (
+      !Number.isInteger(actionIndex) ||
+      actionIndex < 0 ||
+      actionIndex > actions.length
+    ) {
+      throw new TypeError("Mahjong checkpoint action index is invalid");
+    }
+    try {
+      game.restoreCheckpoint(checkpoint, viewerId);
+      firstAction = actionIndex;
+    } catch (error) {
+      checkpointError = {
+        name: error?.name || "Error",
+        message: error?.message || "Mahjong checkpoint could not be restored",
+      };
+      game.restart(viewerId);
+    }
+  } else if (restart) {
+    game.restart(viewerId);
+  } else {
+    throw new TypeError(
+      "Mahjong replay needs a checkpoint, replay hand, or restart",
+    );
+  }
+
+  for (let index = firstAction; index < actions.length; index += 1) {
+    const entry = actions[index];
+    if (!entry || typeof entry !== "object") {
+      throw new TypeError(`Mahjong replay action ${index} is invalid`);
+    }
+    const result = game.action(entry.action, entry.actorId);
+    if (result?.accepted) continue;
+    const code = result?.error?.code || "unknown";
+    throw new Error(`Mahjong replay action ${index} was rejected: ${code}`);
+  }
+
+  return {
+    projection: game.view(viewerId),
+    checkpointError,
+  };
 }

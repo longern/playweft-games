@@ -13,25 +13,19 @@ export async function replayMahjongSoloSave({
       error,
     ),
 }) {
-  let projection = game.initialProjection;
-  let actions = save.actions;
-  if (save.checkpoint) {
-    try {
-      const restored = await game.restoreCheckpoint(save.checkpoint, playerId);
-      projection = restored.projection;
-      actions = save.actions.slice(save.checkpoint.actionIndex);
-    } catch (error) {
-      onCheckpointError(error);
-    }
+  const replayed = await game.replayActions(save.actions, {
+    checkpoint: save.checkpoint,
+    checkpointActionIndex: save.checkpoint?.actionIndex,
+    restart: !save.checkpoint,
+    viewerId: playerId,
+  });
+  if (replayed?.checkpointError) {
+    const error = new Error(replayed.checkpointError.message);
+    error.name = replayed.checkpointError.name || "Error";
+    onCheckpointError(error);
   }
-  for (const { action, actorId } of actions) {
-    const outcome = await game.action(action, actorId);
-    if (!outcome.result?.accepted) {
-      throw new Error(
-        `saved action rejected: ${outcome.result?.error?.code || "unknown"}`,
-      );
-    }
-    projection = outcome.projection;
+  if (!replayed?.projection) {
+    throw new Error("saved match replay did not return a projection");
   }
-  return projection;
+  return replayed.projection;
 }

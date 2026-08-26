@@ -439,6 +439,11 @@ export async function createLocalLuaGame({
         ensureOpen(closed);
         return applyAction(action, actorId, Date.now());
       },
+      restart(viewerId = playerId) {
+        ensureOpen(closed);
+        setupLocal(context, matchId, Date.now());
+        return readView(viewerId, Date.now());
+      },
       loadReplayHand(replayHand, viewerId = playerId) {
         ensureOpen(closed);
         return loadReplayHand(replayHand, viewerId, Date.now()).projection;

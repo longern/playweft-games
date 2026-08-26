@@ -109,6 +109,16 @@ export async function createLocalLuaGame(options = {}) {
       loadReplayHand(hand, viewerId = options.playerId) {
         return request("loadReplayHand", { hand, viewerId });
       },
+      replayActions(actions, replayOptions = {}) {
+        return request("replayActions", {
+          actions,
+          checkpoint: replayOptions.checkpoint,
+          checkpointActionIndex: replayOptions.checkpointActionIndex,
+          replayHand: replayOptions.replayHand,
+          restart: replayOptions.restart === true,
+          viewerId: replayOptions.viewerId ?? options.playerId,
+        });
+      },
       action(action, actorId = options.playerId, viewerId = options.playerId) {
         return request("action", { action, actorId, viewerId });
       },

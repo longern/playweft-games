@@ -136,6 +136,29 @@ test("mahjong paipu loads a selected hand into the existing local game", async (
   assert.equal(projection.state.wallCount, 69);
 });
 
+test("mahjong local runtime can restart after an interrupted replay", async (t) => {
+  let game;
+  for (let seed = 1; seed <= 16; seed += 1) {
+    game = await createGame(t, seed);
+    if (game.view(HUMAN_ID).state.turnIndex === 1) break;
+    game.close();
+    game = undefined;
+  }
+  t.after(() => game?.close());
+
+  assert.ok(game, "a deterministic seed should give the human the opening turn");
+  const before = game.view(HUMAN_ID);
+  const tileId = Number(before.state.drawnTile) || before.state.ownHand.at(-1);
+  assert.equal(game.action({ type: "discard", tileId }, HUMAN_ID).accepted, true);
+
+  const restarted = game.restart(HUMAN_ID);
+
+  assert.equal(restarted.state.moveCount, before.state.moveCount);
+  assert.equal(restarted.state.turnIndex, before.state.turnIndex);
+  assert.deepEqual(restarted.state.ownHand, before.state.ownHand);
+  assert.equal(restarted.state.drawnTile, before.state.drawnTile);
+});
+
 test("mahjong paipu storage accepts completed records and derives a history summary", () => {
   const wall = "1m".repeat(4) + "2m".repeat(132);
   const record = {

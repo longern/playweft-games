@@ -206,23 +206,22 @@ export function createMahjongReplayController({
     renderControls();
     try {
       const handIndex = paipuHandIndexAtPosition(current.timeline, target);
-      const loaded = await getGame()?.loadReplayHand(
-        handSetup(current.record, handIndex),
-        current.record.players[0]?.id,
-      );
-      let projection = loaded?.projection;
-      if (!projection) throw new Error("Replay hand could not be loaded");
       const handStart = current.timeline.handStarts[handIndex];
+      const actions = [];
       for (let index = handStart; index < target; index += 1) {
         if (current !== state() || seekRunId !== replayRunId) return;
         const { action, actorId } = actionForStep(
           current,
           current.timeline.steps[index],
         );
-        const outcome = await getGame()?.action(action, actorId);
-        if (!outcome?.result?.accepted) throw new Error("Replay seek action was rejected");
-        projection = outcome.projection;
+        actions.push({ action, actorId });
       }
+      const replayed = await getGame()?.replayActions(actions, {
+        replayHand: handSetup(current.record, handIndex),
+        viewerId: current.record.players[0]?.id,
+      });
+      const projection = replayed?.projection;
+      if (!projection) throw new Error("Replay hand could not be loaded");
       if (current !== state() || seekRunId !== replayRunId) return;
       presentation.suspend();
       tableController.reset();

@@ -12,29 +12,37 @@ test("mahjong replay falls back to the action log when a checkpoint cannot load"
     ],
   };
   const originalSave = structuredClone(save);
-  const applied = [];
+  const replayCalls = [];
   const game = {
-    initialProjection: { state: { moveCount: 0 } },
-    async restoreCheckpoint() {
-      throw new Error("bad checkpoint");
-    },
-    async action(action, actorId) {
-      applied.push({ action, actorId });
+    async replayActions(actions, options) {
+      replayCalls.push({ actions, options });
       return {
-        result: { accepted: true },
-        projection: { state: { moveCount: applied.length } },
+        projection: { state: { moveCount: actions.length } },
+        checkpointError: { name: "Error", message: "bad checkpoint" },
       };
     },
   };
+
+  let checkpointError;
 
   const projection = await replayMahjongSoloSave({
     game,
     save,
     playerId: "human",
-    onCheckpointError() {},
+    onCheckpointError(error) {
+      checkpointError = error;
+    },
   });
 
-  assert.deepEqual(applied, originalSave.actions);
+  assert.equal(replayCalls.length, 1);
+  assert.deepEqual(replayCalls[0].actions, originalSave.actions);
+  assert.deepEqual(replayCalls[0].options, {
+    checkpoint: originalSave.checkpoint,
+    checkpointActionIndex: 1,
+    restart: false,
+    viewerId: "human",
+  });
+  assert.equal(checkpointError?.message, "bad checkpoint");
   assert.equal(projection.state.moveCount, 2);
   assert.deepEqual(save, originalSave);
 });
@@ -45,15 +53,14 @@ test("mahjong replay keeps the saved action log intact when replay is rejected",
   };
   const originalSave = structuredClone(save);
   const game = {
-    initialProjection: { state: { moveCount: 0 } },
-    async action() {
-      return { result: { accepted: false, error: { code: "wrong_turn" } } };
+    async replayActions() {
+      throw new Error("Mahjong replay action 0 was rejected: wrong_turn");
     },
   };
 
   await assert.rejects(
     replayMahjongSoloSave({ game, save, playerId: "human" }),
-    /saved action rejected: wrong_turn/,
+    /replay action 0 was rejected: wrong_turn/,
   );
   assert.deepEqual(save, originalSave);
 });
