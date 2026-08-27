@@ -102,6 +102,7 @@ export class MahjongDomView {
       resultPageReady = false,
       riichiMode = false,
       showGameHints = true,
+      hideCountdown = false,
       confirmedTenpai = null,
       tenpaiPreview = null,
       defaultNames = {},
@@ -158,7 +159,7 @@ export class MahjongDomView {
     this.renderRivers(state, events);
     this.renderMelds(state);
     this.renderActions(state, selectedTileId, riichiMode, confirmedTenpai);
-    this.renderCountdown(state, serverTime);
+    this.renderCountdown(state, serverTime, { hidden: hideCountdown });
     this.renderStatus(state, events, playerName, {
       defaultNames,
       playerNameIsAuthoritative,
@@ -581,7 +582,7 @@ export class MahjongDomView {
           : "等待其他玩家";
   }
 
-  renderCountdown(state, serverTime) {
+  renderCountdown(state, serverTime, { hidden = false } = {}) {
     const element = this.elements.countdown;
     const deadline = Number(state?.turnDeadlineAt);
     const syncedServerTime = Number(serverTime);
@@ -591,6 +592,7 @@ export class MahjongDomView {
       deadline <= 0 ||
       !Number.isFinite(syncedServerTime) ||
       syncedServerTime <= 0 ||
+      hidden ||
       state?.phase === "hand_ended"
     ) {
       this.stopCountdown();

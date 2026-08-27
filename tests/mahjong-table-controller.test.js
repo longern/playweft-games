@@ -219,6 +219,9 @@ test("mahjong keeps confirmed tenpai through remote draws and clears it on the n
       phase: "playing",
       moveCount: 4,
       turnIndex: 1,
+      players: ["human"],
+      roundWind: 1,
+      handNumber: 1,
       ownHand: [41],
       legalActions: {
         canDiscard: true,
@@ -428,6 +431,9 @@ test("mahjong clears a dragged discard preview while waiting for room confirmati
       phase: "playing",
       moveCount: 4,
       turnIndex: 1,
+      players: ["human"],
+      roundWind: 1,
+      handNumber: 1,
       ownHand: [41],
       legalActions: {
         canDiscard: true,
@@ -447,6 +453,7 @@ test("mahjong clears a dragged discard preview while waiting for room confirmati
   controller.discardOwnTile(41);
 
   assert.equal(domOptions.at(-1).tenpaiPreview, null);
+  assert.equal(domOptions.at(-1).hideCountdown, true);
 });
 
 test("mahjong keeps the current match track unchanged when riichi music is not configured", async () => {

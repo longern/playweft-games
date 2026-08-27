@@ -94,6 +94,7 @@ export function createMahjongTableController({
   let playedRiverTileSoundKey = "";
   let pendingDiscard = null;
   let pendingDiscardRecovery = null;
+  let discardSubmissionPending = false;
   let postDiscardTenpai = null;
   let postDiscardTenpaiHandKey = "";
   let pendingPostDiscardTenpai = null;
@@ -120,6 +121,7 @@ export function createMahjongTableController({
   function reset() {
     pendingDiscard = null;
     pendingDiscardRecovery = null;
+    discardSubmissionPending = false;
     postDiscardTenpai = null;
     postDiscardTenpaiHandKey = "";
     pendingPostDiscardTenpai = null;
@@ -153,6 +155,7 @@ export function createMahjongTableController({
     const previousState = state;
     state = projection.state;
     reconcilePendingDiscard(state);
+    if (!pendingDiscard) discardSubmissionPending = false;
     if (!hasLocalRiichi(state)) {
       lockedRiichiTenpai = null;
       riichiTenpaiRequest += 1;
@@ -248,7 +251,6 @@ export function createMahjongTableController({
           Number(presentation.handInsertion?.seat) || 0,
         deferredHandInsertionIndex:
           Number(presentation.handInsertion?.rackIndex) || 0,
-        ...(pendingDiscard ? { pendingDiscard } : {}),
       }),
     );
   }
@@ -280,6 +282,7 @@ export function createMahjongTableController({
           defaultNames: getThemeDefaultNames?.(),
           playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
           serverTime: serverTimeAtSync,
+          hideCountdown: discardSubmissionPending,
           resultPageReady:
             state?.resultPageReady === true || resultPageReadyPending,
         },
@@ -1334,6 +1337,7 @@ export function createMahjongTableController({
       ? createMahjongPendingDiscard(state, action)
       : null;
     clearTenpaiPreviewIntent({ source: "drag" });
+    discardSubmissionPending = true;
     if (nextPending) {
       pendingDiscard = nextPending;
       pendingPostDiscardTenpai = nextPostDiscardTenpai;
@@ -1349,9 +1353,22 @@ export function createMahjongTableController({
     } else {
       postDiscardTenpai = nextPostDiscardTenpai;
       postDiscardTenpaiHandKey = "";
+      renderPresentationOverlays();
     }
     const dispatched = dispatch?.(action);
-    if (!nextPending) return dispatched;
+    if (!nextPending) {
+      if (dispatched === false) {
+        discardSubmissionPending = false;
+        renderPresentationOverlays();
+      } else if (typeof dispatched?.then === "function") {
+        void dispatched.then((accepted) => {
+          if (accepted !== false) return;
+          discardSubmissionPending = false;
+          renderPresentationOverlays();
+        });
+      }
+      return dispatched;
+    }
     if (dispatched === false) {
       rollbackPendingDiscard(nextPending.key);
     } else if (typeof dispatched?.then === "function") {
@@ -1368,6 +1385,7 @@ export function createMahjongTableController({
     const recovery = pendingDiscardRecovery;
     pendingDiscard = null;
     pendingDiscardRecovery = null;
+    discardSubmissionPending = false;
     pendingPostDiscardTenpai = null;
     postDiscardTenpai = null;
     postDiscardTenpaiHandKey = "";

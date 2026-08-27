@@ -8,7 +8,6 @@ export const OWN_HAND_CROSSFADE_DURATION_MS = 150;
 export const OWN_TILE_HOVER_DURATION_MS = 90;
 export const OWN_TILE_HOVER_LIFT = 5;
 export const OWN_TILE_SELECTION_DURATION_MS = 120;
-export const PENDING_DISCARD_DURATION_MS = 160;
 
 export { NEW_HAND_DEAL_DURATION_MS, OWN_DRAW_ENTRY_DURATION_MS };
 
@@ -47,11 +46,6 @@ export function ownDrawEntryProgress(value) {
 }
 
 export function ownTileSelectionProgress(value) {
-  const time = Math.max(0, Math.min(1, Number(value) || 0));
-  return 1 - (1 - time) ** 3;
-}
-
-export function pendingDiscardProgress(value) {
   const time = Math.max(0, Math.min(1, Number(value) || 0));
   return 1 - (1 - time) ** 3;
 }
