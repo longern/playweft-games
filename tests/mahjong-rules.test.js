@@ -422,10 +422,13 @@ test("Mahjong marks waits that have no yaku on ron", async () => {
     state.scores[1] = 25000
     local riichi_legal = legal_actions(state, "p1")
     local riichi_option = discard_option(riichi_legal, 25)
+    state.riichi.p1 = true
+    local declared_riichi_option = discard_option(legal_actions(state, "p1"), 25)
     state.drawnTile = 117
     result = {
       ronWindHasNoYaku = waits[30] == true,
-      riichiWaitHasYaku = riichi_option.waits[1].noYaku == false,
+      riichiCandidateStillHasNoYaku = riichi_option.waits[1].noYaku == true,
+      declaredRiichiWaitHasYaku = declared_riichi_option.waits[1].noYaku == false,
       riichiAvailable = #riichi_legal.riichiTiles > 0,
       tsumoWindCanWin = legal_actions(state, "p1").canTsumo == true,
     }
@@ -433,7 +436,8 @@ test("Mahjong marks waits that have no yaku on ron", async () => {
 
   assert.deepEqual(result, {
     ronWindHasNoYaku: true,
-    riichiWaitHasYaku: true,
+    riichiCandidateStillHasNoYaku: true,
+    declaredRiichiWaitHasYaku: true,
     riichiAvailable: true,
     tsumoWindCanWin: true,
   });

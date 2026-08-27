@@ -85,13 +85,17 @@ export function tenpaiDiscardFuriten(legalActions, tileId) {
   return tenpaiDiscardOption(legalActions, tileId)?.furiten === true;
 }
 
-export function tenpaiWaitsForDiscard(legalActions, tileId) {
+export function tenpaiWaitsForDiscard(
+  legalActions,
+  tileId,
+  { declaringRiichi = false } = {},
+) {
   const option = tenpaiDiscardOption(legalActions, tileId);
   return asArray(option?.waits)
     .map((wait) => ({
       type: Number(wait?.type) || 0,
       remaining: Math.max(0, Math.min(4, Math.trunc(Number(wait?.remaining) || 0))),
-      noYaku: wait?.noYaku === true,
+      noYaku: !declaringRiichi && wait?.noYaku === true,
     }))
     .filter((wait) => wait.type >= 1 && wait.type <= 34);
 }

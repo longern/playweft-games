@@ -613,6 +613,7 @@ export function createMahjongRoomController({
     roomAiAwaitingState = false;
     const session = getSession?.();
     if (session?.rejectRoomAction(requestId)) {
+      tableController.rollbackPendingDiscard?.();
       tableController.clearResultPageReadyPending();
       if (tableController.getState()?.phase === "hand_ended")
         tableController.syncMatchMusic();

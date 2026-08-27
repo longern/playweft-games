@@ -433,7 +433,10 @@ session = createMahjongSessionController({
   isKanDrawPending: () => presentation.kanDrawPending,
   sendRoomAction: (...args) =>
     roomController?.sendActionWithTenpaiReport(...args),
-  onRoomUnavailable: () => showMessage("尚未连接到房间"),
+  onRoomUnavailable: () => {
+    tableController.rollbackPendingDiscard();
+    showMessage("尚未连接到房间");
+  },
   persistAcceptedAction,
   refreshProjection: tableController.refresh,
   onSoloActionAccepted(action, projection) {
@@ -448,8 +451,12 @@ session = createMahjongSessionController({
       resetAutoActions();
     tableController.clearActionUi();
   },
-  onActionRejected: (code) => showMessage(errorMessage(code)),
+  onActionRejected: (code) => {
+    tableController.rollbackPendingDiscard();
+    showMessage(errorMessage(code));
+  },
   onActionError(error) {
+    tableController.rollbackPendingDiscard();
     console.error("Mahjong action failed", error);
     showMessage("动作处理失败，请重试");
   },

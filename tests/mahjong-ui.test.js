@@ -751,6 +751,13 @@ test("mahjong previews waits and visible-copy counts for the selected discard", 
     { type: 9, remaining: 3, noYaku: true },
     { type: 28, remaining: 0, noYaku: false },
   ]);
+  assert.deepEqual(
+    tenpaiWaitsForDiscard(legalActions, 42, { declaringRiichi: true }),
+    [
+      { type: 9, remaining: 3, noYaku: false },
+      { type: 28, remaining: 0, noYaku: false },
+    ],
+  );
   assert.deepEqual(tenpaiWaitsForDiscard(legalActions, 41), []);
   assert.deepEqual(tenpaiWaitsForDiscard({}, 42), []);
   assert.equal(tenpaiDiscardFuriten(legalActions, 42), true);

@@ -17,6 +17,11 @@ import {
   matchResultRows,
   resultDetailPageCount,
 } from "../rules/game-format.js";
+import {
+  applyMahjongPendingDiscard,
+  createMahjongPendingDiscard,
+  pendingDiscardState,
+} from "./pending-discard.js";
 import { MAHJONG_YAKU_VOICE_KEYS } from "../theme/asset-packs.js";
 import {
   hasMahjongRiichi,
@@ -85,6 +90,8 @@ export function createMahjongTableController({
   let matchSummaryVisible = false;
   let voicedEventKey = "";
   let playedRiverTileSoundKey = "";
+  let pendingDiscard = null;
+  let pendingDiscardRecovery = null;
 
   function getState() {
     return state;
@@ -101,6 +108,8 @@ export function createMahjongTableController({
   }
 
   function reset() {
+    pendingDiscard = null;
+    pendingDiscardRecovery = null;
     state = undefined;
     serverTimeAtSync = 0;
     visibleEvents = [];
@@ -126,6 +135,7 @@ export function createMahjongTableController({
       return;
     const previousState = state;
     state = projection.state;
+    reconcilePendingDiscard(state);
     const projectionServerTime = Number(projection.serverTime);
     serverTimeAtSync = Number.isFinite(projectionServerTime)
       ? projectionServerTime
@@ -207,6 +217,7 @@ export function createMahjongTableController({
           Number(presentation.handInsertion?.seat) || 0,
         deferredHandInsertionIndex:
           Number(presentation.handInsertion?.rackIndex) || 0,
+        ...(pendingDiscard ? { pendingDiscard } : {}),
       }),
     );
   }
@@ -825,12 +836,23 @@ export function createMahjongTableController({
         drawnPlayerIndex: 0,
         legalActions: {},
       };
-    if (Number(presentation.handInsertion?.seat) !== 1) return presented;
-    return {
-      ...presented,
-      ownHand: presentation.handInsertion.ownHand,
-      drawnTile: presentation.handInsertion.drawnTile,
-    };
+    if (Number(presentation.handInsertion?.seat) === 1) {
+      presented = {
+        ...presented,
+        ownHand: presentation.handInsertion.ownHand,
+        drawnTile: presentation.handInsertion.drawnTile,
+      };
+    }
+    return pendingDiscard
+      ? applyMahjongPendingDiscard(presented, pendingDiscard)
+      : presented;
+  }
+
+  function reconcilePendingDiscard(nextState) {
+    const status = pendingDiscardState(nextState, pendingDiscard);
+    if (status !== "confirmed" && status !== "rejected") return;
+    pendingDiscard = null;
+    pendingDiscardRecovery = null;
   }
 
   function queueKanDraw(events) {
@@ -1047,16 +1069,20 @@ export function createMahjongTableController({
 
   function discardSelected() {
     if (!selectedTileId || !state?.legalActions?.canDiscard) return;
+    if (isActionInFlight?.()) return;
+    let action;
     if (riichiMode) {
       if (!asArray(state.legalActions.riichiTiles).includes(selectedTileId))
         return;
-      dispatch?.({ type: "riichi", tileId: selectedTileId });
-      return;
+      action = { type: "riichi", tileId: selectedTileId };
+    } else {
+      action = { type: "discard", tileId: selectedTileId };
     }
-    dispatch?.({ type: "discard", tileId: selectedTileId });
+    submitDiscard(action);
   }
 
   function discardOwnTile(tileId) {
+    if (isActionInFlight?.()) return;
     if (
       !canDiscardHandTile({
         canDiscard: state?.legalActions?.canDiscard,
@@ -1068,6 +1094,53 @@ export function createMahjongTableController({
       return;
     selectedTileId = Number(tileId) || 0;
     discardSelected();
+  }
+
+  function submitDiscard(action) {
+    const nextPending = getMode?.() === "room"
+      ? createMahjongPendingDiscard(state, action)
+      : null;
+    if (nextPending) {
+      pendingDiscard = nextPending;
+      pendingDiscardRecovery = {
+        selectedTileId,
+        riichiMode,
+        selectionBeforeRiichi,
+      };
+      selectedTileId = 0;
+      riichiMode = false;
+      selectionBeforeRiichi = 0;
+      renderCurrentState();
+    }
+    const dispatched = dispatch?.(action);
+    if (!nextPending) return dispatched;
+    if (dispatched === false) {
+      rollbackPendingDiscard(nextPending.key);
+    } else if (typeof dispatched?.then === "function") {
+      void dispatched.then((accepted) => {
+        if (accepted !== false) return;
+        rollbackPendingDiscard(nextPending.key);
+      });
+    }
+    return dispatched;
+  }
+
+  function rollbackPendingDiscard(key = "") {
+    if (!pendingDiscard || (key && key !== pendingDiscard.key)) return false;
+    const recovery = pendingDiscardRecovery;
+    pendingDiscard = null;
+    pendingDiscardRecovery = null;
+    if (
+      recovery &&
+      state?.legalActions?.canDiscard === true &&
+      orderedOwnTiles(state).includes(recovery.selectedTileId)
+    ) {
+      selectedTileId = recovery.selectedTileId;
+      riichiMode = recovery.riichiMode;
+      selectionBeforeRiichi = recovery.selectionBeforeRiichi;
+    }
+    if (state) renderCurrentState();
+    return true;
   }
 
   function enterRiichiMode() {
@@ -1138,6 +1211,7 @@ export function createMahjongTableController({
     previewDraggedTile,
     restoreSelectedTilePreview,
     discardOwnTile,
+    rollbackPendingDiscard,
     enterRiichiMode,
     cancelRiichiMode,
     continueResult,

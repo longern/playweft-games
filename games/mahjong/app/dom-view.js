@@ -161,7 +161,9 @@ export class MahjongDomView {
       this.elements.tenpaiFuritenBadge.hidden = true;
       return;
     }
-    const waits = tenpaiWaitsForDiscard(state?.legalActions, selectedTileId);
+    const waits = tenpaiWaitsForDiscard(state?.legalActions, selectedTileId, {
+      declaringRiichi: this.riichiMode,
+    });
     const { tenpaiPreview, tenpaiWaits, tenpaiFuritenBadge } = this.elements;
     tenpaiPreview.hidden = waits.length === 0;
     tenpaiFuritenBadge.hidden =

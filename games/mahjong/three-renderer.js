@@ -70,6 +70,7 @@ import {
   OWN_TILE_HOVER_DURATION_MS,
   OWN_TILE_HOVER_LIFT,
   OWN_TILE_SELECTION_DURATION_MS,
+  PENDING_DISCARD_DURATION_MS,
   handRevealStartDelay,
   handRevealFallProgress,
   newHandDealProgress,
@@ -77,6 +78,7 @@ import {
   ownDrawEntryKey,
   ownDrawEntryProgress,
   ownTileSelectionProgress,
+  pendingDiscardProgress,
   shouldCrossfadeOwnHand,
 } from "./render/three-motion.js";
 
@@ -100,6 +102,7 @@ export class MahjongThreeRenderer {
     this.ownTileMotions = [];
     this.dealInTiles = [];
     this.dealInAnimation = null;
+    this.pendingDiscardAnimation = null;
     this.ownTileRecords = new Map();
     this.activeOwnTileIds = new Set();
     this.highlightableTiles = new Set();
@@ -365,6 +368,13 @@ export class MahjongThreeRenderer {
     }
     this.pendingRender = null;
     this.cancelDrag(false);
+    const pendingDiscardKey = String(ui?.pendingDiscard?.key || "");
+    if (
+      this.pendingDiscardAnimation?.key &&
+      this.pendingDiscardAnimation.key !== pendingDiscardKey
+    ) {
+      this.cancelPendingDiscard();
+    }
     const drawEntryKey = ownDrawEntryKey(state);
     const newDrawEntry = this.animations.claim("own-draw-entry", drawEntryKey);
     this.animateOwnDrawEntry = Boolean(this.state && newDrawEntry);
@@ -1051,6 +1061,7 @@ export class MahjongThreeRenderer {
 
   drawRivers(state) {
     const riverEntries = [];
+    const pending = this.ui?.pendingDiscard;
     for (let seat = 1; seat <= 4; seat += 1) {
       const position = POSITIONS[seat - 1];
       const river = asArray(state.discards?.[state.players[seat - 1]]);
@@ -1078,6 +1089,13 @@ export class MahjongThreeRenderer {
           this.highlightedType === Number(discard.type) ? "match" : "";
         riverEntries.push({
           key: `${seat}:${sourceIndex}`,
+          seat,
+          pending:
+            seat === 1 &&
+            pending?.playerId === state.players?.[0] &&
+            sourceIndex === Number(pending.riverSourceIndex) &&
+            Number(discard.type) === Number(pending.type) &&
+            discard.red === pending.red,
           transform,
           jitter: planarTileJitter(
             `${seat}:river:${sourceIndex}:${discard.type}`,
@@ -1128,13 +1146,66 @@ export class MahjongThreeRenderer {
       record.tile,
       entry.options.highlight === "match",
     );
-    record.node.position.set(
-      entry.transform.x,
-      entry.transform.y,
-      entry.transform.z,
-    );
-    record.node.rotation.y = entry.transform.yaw;
-    applyPlanarJitter(record.node, entry.transform.yaw, entry.jitter);
+    const animating = this.pendingDiscardAnimation?.record === record;
+    if (!animating) {
+      record.node.position.set(
+        entry.transform.x,
+        entry.transform.y,
+        entry.transform.z,
+      );
+      record.node.rotation.y = entry.transform.yaw;
+      record.node.scale.setScalar(1);
+      applyPlanarJitter(record.node, entry.transform.yaw, entry.jitter);
+    }
+    if (created && entry.pending) this.startPendingDiscard(record, entry);
+  }
+
+  startPendingDiscard(record, entry) {
+    this.cancelPendingDiscard();
+    const target = record.node.position.clone();
+    const outwardX = Math.sin(entry.transform.yaw);
+    const outwardZ = Math.cos(entry.transform.yaw);
+    const animation = {
+      key: String(this.ui?.pendingDiscard?.key || ""),
+      record,
+      target,
+      start: target.clone().set(
+        target.x + outwardX * 1.8,
+        target.y + 0.72,
+        target.z + outwardZ * 1.8,
+      ),
+    };
+    this.pendingDiscardAnimation = animation;
+    record.node.position.copy(animation.start);
+    record.node.scale.setScalar(0.94);
+    this.animations.play({
+      id: "pending-discard",
+      duration: PENDING_DISCARD_DURATION_MS,
+      updatesShadow: true,
+      update: (progress) => {
+        if (this.pendingDiscardAnimation !== animation) return;
+        const eased = pendingDiscardProgress(progress);
+        record.node.position.lerpVectors(animation.start, animation.target, eased);
+        record.node.scale.setScalar(0.94 + 0.06 * eased);
+      },
+      complete: () => this.finishPendingDiscard(animation),
+    });
+  }
+
+  cancelPendingDiscard() {
+    this.animations.cancel("pending-discard");
+    const animation = this.pendingDiscardAnimation;
+    if (!animation) return;
+    animation.record.node.position.copy(animation.target);
+    animation.record.node.scale.setScalar(1);
+    this.pendingDiscardAnimation = null;
+  }
+
+  finishPendingDiscard(animation) {
+    animation.record.node.position.copy(animation.target);
+    animation.record.node.scale.setScalar(1);
+    if (this.pendingDiscardAnimation === animation)
+      this.pendingDiscardAnimation = null;
   }
 
   drawMelds(state) {
@@ -1404,6 +1475,7 @@ export class MahjongThreeRenderer {
     this.cancelOwnHandCrossfade();
     this.cancelOwnDrawEntry();
     this.cancelOwnTileMotion();
+    this.cancelPendingDiscard();
     this.cancelDrag(false);
     this.riverLayer?.clear();
     this.renderer?.domElement.removeEventListener(
