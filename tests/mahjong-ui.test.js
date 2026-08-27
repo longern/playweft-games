@@ -1078,6 +1078,18 @@ test("mahjong score sheets retain the latest scored hands and show each change f
   );
 });
 
+test("mahjong score sheets keep columns in the opening East South West North order", () => {
+  const rows = resultScoreSheetRows({
+    initialDealerIndex: 3,
+    scoreHistory: [
+      { scores: [25_000, 25_000, 25_000, 25_000] },
+      { scores: [24_000, 25_000, 25_000, 26_000] },
+    ],
+  });
+  assert.deepEqual(rows[0].scores, [25_000, 26_000, 24_000, 25_000]);
+  assert.deepEqual(rows[0].deltas, [0, 1_000, -1_000, 0]);
+});
+
 test("mahjong result melds use the same physical tile scale as the hand", () => {
   const layout = resultMeldDisplayLayout(
     { kind: "pon", tiles: [14, 14, 14], fromIndex: 2 },

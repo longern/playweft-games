@@ -31,6 +31,7 @@ import {
   traditionalDrawReason,
   traditionalYakuName,
 } from "../rules/yaku-display.js";
+import { getMahjongBuiltinCharacterPosition } from "../theme/builtin-characters.js";
 
 const RESULT_TILE_WIDTH_PX = 33;
 const RESULT_TILE_HEIGHT_PX = 47;
@@ -234,7 +235,7 @@ export class MahjongDomView {
     };
   }
 
-  commitPlayerAvatar(position, source) {
+  commitPlayerPortrait(position, source, builtinCharacterId = "") {
     const avatar = this.elements.stations[position]?.querySelector(
       "[data-player-avatar]",
     );
@@ -243,25 +244,46 @@ export class MahjongDomView {
     if (!nextSource) {
       avatar.classList.add("is-default-portrait");
       avatar.style.removeProperty("background-image");
+      const builtinPosition = getMahjongBuiltinCharacterPosition(
+        builtinCharacterId,
+      );
+      if (builtinPosition) {
+        avatar.dataset.builtinCharacter = builtinCharacterId;
+        avatar.style.setProperty(
+          "--mahjong-default-portrait-position",
+          builtinPosition,
+        );
+      } else {
+        delete avatar.dataset.builtinCharacter;
+        avatar.style.removeProperty("--mahjong-default-portrait-position");
+      }
       delete avatar.dataset.source;
       delete avatar.dataset.pendingSource;
       return;
     }
     avatar.dataset.source = nextSource;
     delete avatar.dataset.pendingSource;
+    delete avatar.dataset.builtinCharacter;
     avatar.classList.remove("is-default-portrait");
     avatar.style.backgroundImage = `url(${JSON.stringify(nextSource)})`;
+    avatar.style.removeProperty("--mahjong-default-portrait-position");
   }
 
-  applyPlayerIdentityState({ avatars = {}, names = {}, fallbackAvatars = {} } = {}) {
+  applyPlayerIdentityState({
+    portraits = {},
+    names = {},
+    fallbackPortraits = {},
+    builtinCharacters = {},
+  } = {}) {
     const state = {
-      avatars: { ...avatars },
+      portraits: { ...portraits },
       names: { ...names },
+      builtinCharacters: { ...builtinCharacters },
     };
     this.pendingPlayerIdentityState = state;
-    const positions = Object.keys(state.avatars);
+    const positions = Object.keys(state.portraits);
     const preloads = positions.map((position) => {
-      const source = state.avatars[position];
+      const source = state.portraits[position];
       if (typeof source !== "string" || !source) return Promise.resolve(true);
       return new Promise((resolve) => {
         const preload = new Image();
@@ -273,11 +295,12 @@ export class MahjongDomView {
     return Promise.all(preloads).then((loaded) => {
       if (this.pendingPlayerIdentityState !== state) return false;
       for (const [index, position] of positions.entries()) {
-        this.commitPlayerAvatar(
+        this.commitPlayerPortrait(
           position,
           loaded[index]
-            ? state.avatars[position]
-            : fallbackAvatars[position] || "",
+            ? state.portraits[position]
+            : fallbackPortraits[position] || "",
+          state.builtinCharacters[position],
         );
         const name = state.names[position];
         if (typeof name === "string" && name) {
@@ -287,7 +310,6 @@ export class MahjongDomView {
           if (nameElement) nameElement.textContent = name;
         }
       }
-      document.dispatchEvent(new Event("mahjong:player-avatar-changed"));
       return true;
     });
   }

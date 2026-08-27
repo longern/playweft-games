@@ -123,6 +123,7 @@ export function orientMahjongRoomProjection(projection, playerId) {
       ...entry,
       scores: rotateSeatOrder(entry?.scores, viewerSeat),
     })),
+    initialDealerIndex: rotateSeat(source.initialDealerIndex, viewerSeat),
     dealerIndex: rotateSeat(source.dealerIndex, viewerSeat),
     turnIndex: rotateSeat(source.turnIndex, viewerSeat),
     responseIndex: rotateSeat(source.responseIndex, viewerSeat),

@@ -1,12 +1,8 @@
-const POSITIONS = ["bottom", "right", "top", "left"];
-const PORTRAIT_SLOTS = {
-  bottom: "self",
-  right: "right",
-  top: "opposite",
-  left: "left",
-};
+import { getMahjongBuiltinCharacterForKey } from "../theme/builtin-characters.js";
 
-export function createMahjongRoomPlayerIdentities({
+const POSITIONS = ["bottom", "right", "top", "left"];
+
+export function createMahjongRoomPlayerPresentations({
   isRoom,
   getState,
   getRoomPlayerId,
@@ -15,73 +11,131 @@ export function createMahjongRoomPlayerIdentities({
   domView,
 } = {}) {
   let applyRequest = 0;
-  let ownAvatarSource = "";
+  let ownPlatformPortraitSource = "";
+  let latestState;
+  let resolvedPresentations = new Map();
+  const presentationSubscribers = new Set();
+
+  function presentationForPlayer(state, playerId) {
+    return state?.playerPresentations?.[playerId] || {};
+  }
+
+  function builtinCharacterFor(playerId, presentation) {
+    return String(presentation?.builtinCharacterId || "") ||
+      getMahjongBuiltinCharacterForKey(playerId);
+  }
+
+  async function resolveThemePortrait(presentation) {
+    const character = presentation?.themeCharacter;
+    if (!character?.packId || !character?.characterId) return "";
+    return (await themeController.resolveCharacterPortrait?.(character)) || "";
+  }
 
   async function apply(state = getState?.()) {
     if (!isRoom?.() || !Array.isArray(state?.players)) return false;
+    latestState = state;
     const request = ++applyRequest;
-    const aiIds = Object.keys(state.aiPlayers || {});
-    const seed = String(
-      state.portraitSeed ?? state.seed ?? state.lobbySeed ?? "",
-    );
-    const fallbackAssignments =
-      themeController.getOnlineAiPortraitAssignments(aiIds, seed);
-    const platformPlaceholder = themeController.getDefaultAssetUrl(
-      "portrait-self",
-    );
-    const avatars = {};
-    const fallbackAvatars = {};
+    const portraits = {};
+    const fallbackPortraits = {};
+    const builtinCharacters = {};
     const names = {};
+    const nextPresentations = new Map();
     for (const [index, playerId] of state.players.entries()) {
       const position = POSITIONS[index];
       if (!position || !playerId) continue;
-      const fallbackUrl = themeController.getAssetUrl(
-        `portrait-${PORTRAIT_SLOTS[position]}`,
-      );
-      fallbackAvatars[position] = fallbackUrl;
+      const presentation = state.aiPlayers?.[playerId]
+        ? state.aiPresentations?.[playerId] || {}
+        : presentationForPlayer(state, playerId);
+      const builtinCharacterId = builtinCharacterFor(playerId, presentation);
+      builtinCharacters[position] = builtinCharacterId;
+      fallbackPortraits[position] = "";
       if (state.aiPlayers?.[playerId]) {
-        const references = [
-          state.aiPortraits?.[playerId],
-          fallbackAssignments[playerId],
-        ];
-        let source = null;
-        for (const reference of references) {
-          source = await themeController.resolveOnlinePortrait(reference);
-          if (source) break;
-        }
-        avatars[position] = source || fallbackUrl;
+        portraits[position] = await resolveThemePortrait(presentation);
+        nextPresentations.set(playerId, {
+          source: portraits[position],
+          builtinCharacterId,
+        });
         continue;
       }
       const profile = getProfile?.(playerId);
-      const preference = state.avatarPreferences?.[playerId] ?? {
-        kind: "platform",
-      };
-      if (preference.kind === "theme") {
-        avatars[position] =
-          (await themeController.resolveOnlinePortrait(preference)) ||
-          platformPlaceholder;
-      } else {
-        avatars[position] =
-          profile?.avatarSource ||
-          (playerId === getRoomPlayerId?.() ? ownAvatarSource : "") ||
-          platformPlaceholder;
-      }
+      const platformSource =
+        profile?.platformPortraitSource ||
+        (playerId === getRoomPlayerId?.() ? ownPlatformPortraitSource : "");
+      portraits[position] =
+        presentation.portraitMode === "platform" && platformSource
+          ? platformSource
+          : await resolveThemePortrait(presentation);
+      nextPresentations.set(playerId, {
+        source: portraits[position],
+        builtinCharacterId,
+      });
       if (profile?.name) names[position] = profile.name;
     }
     if (request !== applyRequest) return false;
+    const changedPlayerIds = changedPresentationPlayerIds(
+      resolvedPresentations,
+      nextPresentations,
+    );
+    resolvedPresentations = nextPresentations;
+    if (changedPlayerIds.length) {
+      for (const listener of presentationSubscribers) {
+        listener({ changedPlayerIds });
+      }
+    }
     return domView.applyPlayerIdentityState({
-      avatars,
+      portraits,
+      fallbackPortraits,
+      builtinCharacters,
       names,
-      fallbackAvatars,
     });
   }
 
-  function setPlatformAvatar(source) {
-    ownAvatarSource = typeof source === "string" ? source : "";
-    const applied = themeController.setPlatformAvatar(ownAvatarSource);
+  async function resolveCharacterVoice(playerIndex, cue) {
+    const playerId = latestState?.players?.[Number(playerIndex) - 1];
+    if (!playerId) return "";
+    const presentation = latestState.aiPlayers?.[playerId]
+      ? latestState.aiPresentations?.[playerId]
+      : presentationForPlayer(latestState, playerId);
+    const character = presentation?.themeCharacter;
+    if (!character?.packId || !character?.characterId) return "";
+    return (await themeController.resolveCharacterVoice?.(character, cue)) || "";
+  }
+
+  function setPlatformPortraitSource(source) {
+    ownPlatformPortraitSource = typeof source === "string" ? source : "";
+    const applied = themeController.setPlatformAvatar(ownPlatformPortraitSource);
     if (!isRoom?.() || !getState?.()) return applied;
     return Promise.resolve(applied).then(() => apply());
   }
 
-  return { apply, setPlatformAvatar };
+  function getPlayerPresentation({ playerId } = {}) {
+    const value = resolvedPresentations.get(playerId);
+    return value ? { ...value } : undefined;
+  }
+
+  function subscribePlayerPresentations(listener) {
+    if (typeof listener !== "function") return () => {};
+    presentationSubscribers.add(listener);
+    return () => presentationSubscribers.delete(listener);
+  }
+
+  return {
+    apply,
+    getPlayerPresentation,
+    subscribePlayerPresentations,
+    resolveCharacterVoice,
+    setPlatformPortraitSource,
+  };
+}
+
+function changedPresentationPlayerIds(previous, next) {
+  const playerIds = new Set([...previous.keys(), ...next.keys()]);
+  return [...playerIds].filter((playerId) => {
+    const before = previous.get(playerId) || {};
+    const after = next.get(playerId) || {};
+    return (
+      before.source !== after.source ||
+      before.builtinCharacterId !== after.builtinCharacterId
+    );
+  });
 }

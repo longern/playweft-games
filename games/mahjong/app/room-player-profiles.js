@@ -4,7 +4,7 @@ export function createMahjongRoomPlayerProfiles({
   isRoom,
   getState,
   onChanged,
-  onOwnAvatarChanged,
+  onOwnPlatformPortraitChanged,
 } = {}) {
   let client;
   let capabilities = new Set();
@@ -13,8 +13,8 @@ export function createMahjongRoomPlayerProfiles({
   const retryAt = new Map();
   const retryTimers = new Map();
   const requestVersions = new Map();
-  let ownAvatarSource = "";
-  let ownAvatarRequestVersion = 0;
+  let ownPlatformPortraitSource = "";
+  let ownPlatformPortraitRequestVersion = 0;
 
   function setContext({ nextClient, nextCapabilities } = {}) {
     client = nextClient;
@@ -57,10 +57,10 @@ export function createMahjongRoomPlayerProfiles({
         const name = typeof profile?.name === "string"
           ? profile.name.trim()
           : "";
-        const avatarSource = typeof profile?.avatar?.src === "string"
+        const platformPortraitSource = typeof profile?.avatar?.src === "string"
           ? profile.avatar.src
           : null;
-        profiles.set(playerId, { name, avatarSource });
+        profiles.set(playerId, { name, platformPortraitSource });
         retryAt.delete(playerId);
         const retryTimer = retryTimers.get(playerId);
         if (retryTimer) clearTimeout(retryTimer);
@@ -98,24 +98,24 @@ export function createMahjongRoomPlayerProfiles({
     request(getState?.(), { force: true, playerIds: [playerId] });
   }
 
-  function requestOwnAvatar({ initialSource, reset = false } = {}) {
-    const version = ++ownAvatarRequestVersion;
+  function requestOwnPlatformPortrait({ initialSource, reset = false } = {}) {
+    const version = ++ownPlatformPortraitRequestVersion;
     if (typeof initialSource === "string" || reset) {
-      ownAvatarSource = typeof initialSource === "string" ? initialSource : "";
-      onOwnAvatarChanged?.(ownAvatarSource);
+      ownPlatformPortraitSource = typeof initialSource === "string" ? initialSource : "";
+      onOwnPlatformPortraitChanged?.(ownPlatformPortraitSource);
     }
     if (!client || !capabilities.has("user.getProfile")) return;
     void client
       .getUserProfile({ fields: ["avatar"] })
       .then((profile) => {
-        if (version !== ownAvatarRequestVersion) return;
+        if (version !== ownPlatformPortraitRequestVersion) return;
         const source = profile?.avatar?.src;
-        ownAvatarSource = typeof source === "string" ? source : "";
-        onOwnAvatarChanged?.(ownAvatarSource);
+        ownPlatformPortraitSource = typeof source === "string" ? source : "";
+        onOwnPlatformPortraitChanged?.(ownPlatformPortraitSource);
       })
       .catch(() => {
-        if (version === ownAvatarRequestVersion) {
-          onOwnAvatarChanged?.(ownAvatarSource);
+        if (version === ownPlatformPortraitRequestVersion) {
+          onOwnPlatformPortraitChanged?.(ownPlatformPortraitSource);
         }
       });
   }
@@ -124,7 +124,7 @@ export function createMahjongRoomPlayerProfiles({
     setContext,
     request,
     handleChanged,
-    requestOwnAvatar,
+    requestOwnPlatformPortrait,
     get(playerId) {
       return profiles.get(playerId);
     },

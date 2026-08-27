@@ -20,7 +20,7 @@ import {
 import { MahjongDomView } from "./app/dom-view.js";
 import { createMahjongSessionController } from "./app/session-controller.js";
 import { createMahjongRoomPlayerProfiles } from "./app/room-player-profiles.js";
-import { createMahjongRoomPlayerIdentities } from "./app/room-player-identities.js";
+import { createMahjongRoomPlayerPresentations } from "./app/room-player-identities.js";
 import { createMahjongRoomController } from "./app/room-controller.js";
 import { bindFixedViewport } from "./app/fixed-viewport.js";
 import {
@@ -120,7 +120,7 @@ let destroyed = false;
 let playerName = "你";
 let hasPlatformName = false;
 let roomPlayerProfiles;
-let roomPlayerIdentities;
+let roomPlayerPresentations;
 let roomController;
 let roomPlayerId = "";
 let playMode = isStandalone ? "solo" : null;
@@ -298,19 +298,23 @@ const themeController = createMahjongThemeController({
     ? {
         savedPortraits: soloSave.opponentPortraits,
         randomSeed: soloSave.randomSeed,
-      }
+    }
     : undefined,
+  isRoomActive: () => playMode === "room",
   onAssetsChanged() {
     tableController?.syncMatchMusic();
+    if (playMode === "room") roomController?.syncPlayerPresentation();
     if (tableController?.getState()) {
       tableController.renderCurrentState();
       if (playMode === "room") {
-        roomController?.syncAvatarPreference();
-        void roomPlayerIdentities?.apply(tableController.getState());
+        void roomPlayerPresentations?.apply(tableController.getState());
       }
     }
   },
 });
+// Create the stable local default before either solo play or room identity is
+// entered. A room later replaces HUMAN_ID with the authoritative player ID.
+themeController.setRoomPlayerIdentity?.(HUMAN_ID);
 tableController = createMahjongTableController({
   document,
   window,
@@ -330,6 +334,8 @@ tableController = createMahjongTableController({
   getPlayerName: () => playerName,
   playerNameIsAuthoritative: () => hasPlatformName,
   getThemeAssetUrl: themeController.getAssetUrl,
+  getRoomCharacterVoiceSource: (...args) =>
+    roomPlayerPresentations?.resolveCharacterVoice(...args),
   getThemeDefaultNames: themeController.getDefaultNames,
   getThemeMatchMusicUrl: themeController.getMatchMusicUrl,
   getThemeRiichiMusicUrl: themeController.getRiichiMusicUrl,
@@ -357,20 +363,36 @@ tableController = createMahjongTableController({
 roomPlayerProfiles = createMahjongRoomPlayerProfiles({
   isRoom: () => playMode === "room",
   getState: () => tableController?.getState(),
-  onChanged: () => void roomPlayerIdentities?.apply(),
-  onOwnAvatarChanged: (source) => {
-    const applied = roomPlayerIdentities?.setPlatformAvatar(source);
-    roomController?.syncAvatarPreference();
+  onChanged: () => void roomPlayerPresentations?.apply(),
+  onOwnPlatformPortraitChanged: (source) => {
+    const applied = roomPlayerPresentations?.setPlatformPortraitSource(source);
+    roomController?.syncPlayerPresentation();
     return applied;
   },
 });
-roomPlayerIdentities = createMahjongRoomPlayerIdentities({
+roomPlayerPresentations = createMahjongRoomPlayerPresentations({
   isRoom: () => playMode === "room",
   getState: () => tableController?.getState(),
   getRoomPlayerId: () => roomController?.getPlayerId(),
   getProfile: (playerId) => roomPlayerProfiles?.get(playerId),
   themeController,
   domView,
+});
+resultHandRenderer.setPlayerPresentationProvider({
+  get: (context) =>
+    playMode === "room"
+      ? roomPlayerPresentations?.getPlayerPresentation(context)
+      : themeController.getPlayerPresentation(context),
+  subscribe: (listener) => {
+    const unsubscribeRoom = roomPlayerPresentations.subscribePlayerPresentations(
+      listener,
+    );
+    const unsubscribeTheme = themeController.subscribePlayerPresentations(listener);
+    return () => {
+      unsubscribeRoom();
+      unsubscribeTheme();
+    };
+  },
 });
 const pageLifecycle = createMahjongPageLifecycle({
   window,
@@ -488,7 +510,7 @@ roomController = createMahjongRoomController({
   settingsDialog,
   transientNotice,
   roomPlayerProfiles,
-  roomPlayerIdentities,
+  roomPlayerPresentations,
   themeController,
   beginSetupExit,
   resetAutoActions,

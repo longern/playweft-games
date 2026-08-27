@@ -15,6 +15,13 @@ const PLAYERS = `{
 }`;
 
 const AUTO_START_ROOM_FOR_EXISTING_SCENARIOS = String.raw`
+  local function __test_seat_of(state, player_id)
+    for seat, id in ipairs(state.players or {}) do
+      if id == player_id then return seat end
+    end
+    return nil
+  end
+
   local __test_lobby_setup = setup
   function setup(context)
     local lobby = __test_lobby_setup(context)
@@ -84,7 +91,7 @@ test("Mahjong room entry stays below the Lua source limit", async () => {
 
 test("Mahjong rooms stay in a private game lobby until the owner starts the selected match", async () => {
   const result = await runOnlineMock(`
-    local setup_result = setup({
+    local lobby = setup({
       keepLobby = true,
       serverTime = 1000,
       players = {
@@ -97,7 +104,7 @@ test("Mahjong rooms stay in a private game lobby until the owner starts the sele
         randomSeed = "0000000000000000000000000000002a",
       },
     })
-    local state = setup_result.state
+    local state = lobby.state
     local host_lobby = view(state, {}, { viewer = { id = "host", isOwner = true } })
     local guest_lobby = view(state, {}, { viewer = { id = "guest", isOwner = false } })
     local rejected_start = on_action(state, {
@@ -189,7 +196,7 @@ test("Mahjong room start shuffles humans and AI into deterministic fixed seats",
   });
 });
 
-test("Mahjong room avatar preferences are player-owned and survive the match start", async () => {
+test("Mahjong room player presentations are player-owned and survive the match start", async () => {
   const result = await runOnlineMock(`
     local lobby = setup({
       keepLobby = true,
@@ -199,39 +206,76 @@ test("Mahjong room avatar preferences are player-owned and survive the match sta
         { id = "guest", name = "Guest", seat = 2 },
       },
       match = {
-        id = "avatar-preferences",
+        id = "player-presentations",
         ownerId = "host",
         randomSeed = "0000000000000000000000000000002b",
       },
     })
-    local guest_avatar = on_action(lobby.state, {
-      type = "set_avatar_preference",
-      avatarPreference = { kind = "theme", packId = "moonlit", portraitId = "fox" },
+    local guest_presentation = on_action(lobby.state, {
+      type = "set_player_presentation",
+      playerPresentation = {
+        portraitMode = "platform",
+        themeCharacter = { packId = "moonlit", characterId = "fox" },
+        builtinCharacterId = "builtin-2",
+      },
     }, { actor = { id = "guest" }, serverTime = 1001 })
-    local outsider_avatar = on_action(lobby.state, {
-      type = "set_avatar_preference",
-      avatarPreference = { kind = "theme", packId = "moonlit", portraitId = "fox" },
+    local outsider_presentation = on_action(lobby.state, {
+      type = "set_player_presentation",
+      playerPresentation = {
+        portraitMode = "character",
+        builtinCharacterId = "builtin-1",
+      },
     }, { actor = { id = "outsider" }, serverTime = 1001 })
-    local host_view = view(guest_avatar.state, {}, { viewer = { id = "host", isOwner = true } })
-    local guest_view = view(guest_avatar.state, {}, { viewer = { id = "guest", isOwner = false } })
-    local started = on_action(guest_avatar.state, {
+    local host_view = view(guest_presentation.state, {}, { viewer = { id = "host", isOwner = true } })
+    local guest_view = view(guest_presentation.state, {}, { viewer = { id = "guest", isOwner = false } })
+    local started = on_action(guest_presentation.state, {
       type = "start_match", matchType = "east", rules = {},
     }, { actor = { id = "host", isOwner = true }, serverTime = 1002 })
     result = {
-      accepted = guest_avatar.accepted == true,
-      outsider_rejected = outsider_avatar.accepted == false,
-      host_sees_guest_preference = host_view.state.avatarPreferences.guest.packId == "moonlit",
-      guest_sees_own_preference = guest_view.state.avatarPreferences.guest.portraitId == "fox",
-      survives_start = started.state.avatarPreferences.guest.kind == "theme",
+      accepted = guest_presentation.accepted == true,
+      outsider_rejected = outsider_presentation.accepted == false,
+      host_sees_theme_character = host_view.state.playerPresentations.guest.themeCharacter.characterId == "fox",
+      host_sees_builtin_fallback = host_view.state.playerPresentations.guest.builtinCharacterId == "builtin-2",
+      guest_sees_platform_mode = guest_view.state.playerPresentations.guest.portraitMode == "platform",
+      survives_start = started.state.playerPresentations.guest.builtinCharacterId == "builtin-2",
     }
   `);
 
   assert.deepEqual(result, {
     accepted: true,
     outsider_rejected: true,
-    host_sees_guest_preference: true,
-    guest_sees_own_preference: true,
+    host_sees_theme_character: true,
+    host_sees_builtin_fallback: true,
+    guest_sees_platform_mode: true,
     survives_start: true,
+  });
+});
+
+test("Mahjong room requires and shares a built-in character fallback", async () => {
+  const result = await runOnlineMock(`
+    local lobby = setup({
+      keepLobby = true,
+      players = { { id = "host", name = "Host" }, { id = "guest", name = "Guest" } },
+      match = { ownerId = "host", randomSeed = "0000000000000000000000000000002c" },
+    })
+    local changed = on_action(lobby.state, {
+      type = "set_player_presentation",
+      playerPresentation = {
+        portraitMode = "character",
+        builtinCharacterId = "builtin-4",
+      },
+    }, { actor = { id = "guest" } })
+    local projected = view(changed.state, {}, { viewer = { id = "host", isOwner = true } })
+    result = {
+      accepted = changed.accepted == true,
+      mode = projected.state.playerPresentations.guest.portraitMode,
+      characterId = projected.state.playerPresentations.guest.builtinCharacterId,
+    }
+  `);
+  assert.deepEqual(result, {
+    accepted: true,
+    mode: "character",
+    characterId: "builtin-4",
   });
 });
 
@@ -270,7 +314,9 @@ test("Mahjong room pass-claims stays private, skips calls, and preserves ron", a
       enabled = true,
     }, { serverTime = 1002.5, actor = { id = "p2", seat = 2 } })
     local state = enabled_in_hand.state
-    state.phase, state.turnIndex, state.wall = "playing", 1, { 1, 2, 3, 4 }
+    local p1_seat = __test_seat_of(state, "p1")
+    local p2_seat = __test_seat_of(state, "p2")
+    state.phase, state.turnIndex, state.wall = "playing", p1_seat, { 1, 2, 3, 4 }
     state.hands.p1 = ids({ 2, 10,11,12,13,14,15,16,17,18,19,20,21,22 })
     state.hands.p2 = ids({ 2,2,3,4,5,4,5,6,6,7,8,9,9 })
     state.hands.p3 = ids({ 10,10,11,11,12,12,13,13,14,14,15,15,16 })
@@ -282,17 +328,17 @@ test("Mahjong room pass-claims stays private, skips calls, and preserves ron", a
     end
     local discarded = on_action(state, { type = "discard", tileId = state.drawnTile }, {
       serverTime = 1003,
-      actor = { id = "p1", seat = 1, isOwner = true },
+      actor = { id = "p1", seat = p1_seat, isOwner = true },
     })
-    local p2_view = view(discarded.state, {}, { viewer = { id = "p2", seat = 2 } })
-    local p1_view = view(discarded.state, {}, { viewer = { id = "p1", seat = 1 } })
+    local p2_view = view(discarded.state, {}, { viewer = { id = "p2", seat = p2_seat } })
+    local p1_view = view(discarded.state, {}, { viewer = { id = "p1", seat = p1_seat } })
     local claims = p2_view.state.legalActions.claims
     result = {
       setting_accepted = enabled.accepted == true,
       setting_cleared_for_first_hand = started_setting,
       owner_cannot_see_guest_setting = p1_view.state.passClaimsEnabled == false,
       guest_sees_own_setting = p2_view.state.passClaimsEnabled == true,
-      waiting_for_guest = p2_view.state.responseIndex == 2,
+      waiting_for_guest = p2_view.state.responseIndex == p2_seat,
       only_ron_remains = #claims == 1 and claims[1].kind == "ron",
     }
   `);
@@ -493,7 +539,8 @@ test("Mahjong room opens and processes a discard within the runtime instruction 
 
 test("a host-submitted AI riichi stays within the runtime instruction quota", async () => {
   const result = await runOnlineWithinRuntimeQuota(`
-    local setup_result = setup({
+    local lobby = setup({
+      keepLobby = true,
       protocolVersion = 1,
       serverTime = 1000,
       players = {
@@ -506,9 +553,12 @@ test("a host-submitted AI riichi stays within the runtime instruction quota", as
         randomSeed = "00000000000000000000000000001f00",
       },
     })
-    local state = setup_result.state
+    local state = on_action(lobby.state, {
+      type = "start_match", matchType = "east", rules = {},
+    }, { actor = { id = "p1", isOwner = true } }).state
     local ai_id = "mahjong-ai-3"
-    state.phase, state.turnIndex, state.drawnTile = "playing", 3, 57
+    local ai_seat = __test_seat_of(state, ai_id)
+    state.phase, state.turnIndex, state.drawnTile = "playing", ai_seat, 57
     state.wall = {}
     for index = 1, 23 do state.wall[index] = index end
     state.hands[ai_id] = { 5, 6, 9, 13, 17, 18, 21, 25, 49, 53, 81, 85, 89 }
@@ -709,11 +759,10 @@ test("Mahjong stores a delayed player declaration without resetting the turn tim
 
 test("four-player room mock advances a complete Mahjong hand through the online entry", async () => {
   const result = await runOnlineMock(`
-    local players = ${PLAYERS}
     local setup_result = setup({
       protocolVersion = 1,
       serverTime = 1000,
-      players = players,
+      players = ${PLAYERS},
       match = {
         id = "mock-room-1",
         ownerId = "p1",
@@ -722,6 +771,10 @@ test("four-player room mock advances a complete Mahjong hand through the online 
       },
     })
     local state = setup_result.state
+    local players = {}
+    for seat, player_id in ipairs(state.players) do
+      players[seat] = { id = player_id, seat = seat }
+    end
     local setup_timer = setup_result.timerOps and setup_result.timerOps[1]
     local timerContractOk = setup_timer
       and setup_timer.op == "schedule"
@@ -745,7 +798,7 @@ test("four-player room mock advances a complete Mahjong hand through the online 
           id = player_id,
           role = "player",
           seat = seat,
-          isOwner = seat == 1,
+          isOwner = player_id == "p1",
         },
       }
     end
@@ -781,7 +834,7 @@ test("four-player room mock advances a complete Mahjong hand through the online 
           id = actor.id,
           role = "player",
           seat = actor_seat,
-          isOwner = actor_seat == 1,
+          isOwner = actor.id == "p1",
         },
       })
       if not result.accepted then return false end
@@ -856,6 +909,12 @@ test("short Mahjong rooms fill missing seats with AI controlled by the owner", a
       },
     })
     local state = setup_result.state
+    local active_ai
+    for player_id in pairs(state.aiPlayers or {}) do
+      active_ai = player_id
+      break
+    end
+    state.turnIndex = __test_seat_of(state, active_ai)
     local ai_count = 0
     for _ in pairs(state.aiPlayers or {}) do ai_count = ai_count + 1 end
     local owner_view = view(state, {}, {
@@ -929,12 +988,13 @@ test("Mahjong room legal context includes the viewer's private furiten flags", a
       match = { id = "room-legal-preview", ownerId = "p1", randomSeed = "00000000000000000000000000000052" },
     })
     local state = setup_result.state
-    state.phase, state.turnIndex, state.wall = "playing", 1, { 1, 2, 3, 4 }
+    local p1_seat = __test_seat_of(state, "p1")
+    state.phase, state.turnIndex, state.wall = "playing", p1_seat, { 1, 2, 3, 4 }
     state.hands.p1 = ids({ 2,2,3,4,5,5,6,7, 13,14,15, 21,22 })
     state.drawnTile = ids({ 23 })[1]
     state.melds.p1, state.discards.p1 = {}, {}
     state.tempFuriten.p1, state.riichiFuriten.p1 = false, false
-    local projection = view(state, {}, { viewer = { id = "p1", seat = 1, isOwner = true } })
+    local projection = view(state, {}, { viewer = { id = "p1", seat = p1_seat, isOwner = true } })
     local context = projection.state.legalContext
     result = {
       sentPrivateFuritenFlags = context.tempFuriten == false and context.riichiFuriten == false,
@@ -963,18 +1023,20 @@ test("Mahjong rooms return a dense kuikae vector after a pon", async () => {
       match = { id = "room-pon-serialization", ownerId = "p1", randomSeed = "00000000000000000000000000000047" },
     })
     local state = started.state
-    state.phase, state.turnIndex, state.drawnTile = "claiming", 2, 0
+    local p1_seat = __test_seat_of(state, "p1")
+    local p2_seat = __test_seat_of(state, "p2")
+    state.phase, state.turnIndex, state.drawnTile = "claiming", p1_seat, 0
     state.hands.p2 = ids({ 1,1,2,3,4,5,6,7,8,9,10,28,29 })
     state.discards.p1 = { { tile = 1, claimed = false } }
-    state.lastDiscard = { player = "p1", playerIndex = 1, tile = 1, discardIndex = 1 }
+    state.lastDiscard = { player = "p1", playerIndex = p1_seat, tile = 1, discardIndex = 1 }
     state.claimants = { {
-      playerId = "p2", playerIndex = 2, distance = 1,
+      playerId = "p2", playerIndex = p2_seat, distance = 1,
       options = { { kind = "pon", tileIds = { 2, 3 } } },
     } }
     state.claimResponses, state.claimIndex = {}, 1
     local claimed = on_action(state, { type = "claim", option = 1 }, {
       serverTime = 1001,
-      actor = { id = "p2", role = "player", seat = 2 },
+      actor = { id = "p2", role = "player", seat = p2_seat },
     })
     local forbidden = claimed.state.kuikaeForbidden.p2
     local dense = #forbidden == 34
@@ -982,7 +1044,7 @@ test("Mahjong rooms return a dense kuikae vector after a pon", async () => {
       if forbidden[kind] == nil then dense = false break end
     end
     local projection = view(claimed.state, {}, {
-      viewer = { id = "p2", role = "player", seat = 2, isOwner = false },
+      viewer = { id = "p2", role = "player", seat = p2_seat, isOwner = false },
     })
     result = {
       accepted = claimed.accepted == true,
@@ -1109,27 +1171,32 @@ test("Mahjong room timeouts take wins and promptly tsumogiri a forced riichi dra
     end
 
     local riichi_state = room_state("00000000000000000000000000000068")
-    riichi_state.phase, riichi_state.turnIndex, riichi_state.drawnTile = "claiming", 4, 0
+    local riichi = {
+      p1Seat = __test_seat_of(riichi_state, "p1"),
+    }
+    riichi.discarderSeat = (riichi.p1Seat + 2) % 4 + 1
+    riichi.discarder = riichi_state.players[riichi.discarderSeat]
+    riichi_state.phase, riichi_state.turnIndex, riichi_state.drawnTile = "claiming", riichi.discarderSeat, 0
     riichi_state.wall = { 53 }
     riichi_state.hands.p1 = { 1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49 }
     riichi_state.melds.p1, riichi_state.discards.p1 = {}, {}
     riichi_state.riichi.p1, riichi_state.firstTurn.p1 = true, false
     riichi_state.claimants = {
-      { playerId = "p2", playerIndex = 2, distance = 1, options = { { kind = "pon", tileIds = { 1, 2 } } }, ronOpportunity = false },
+      { playerId = "p2", playerIndex = __test_seat_of(riichi_state, "p2"), distance = 1, options = { { kind = "pon", tileIds = { 1, 2 } } }, ronOpportunity = false },
     }
     riichi_state.claimResponses, riichi_state.claimIndex = {}, 1
-    riichi_state.lastDiscard = { player = "p4", playerIndex = 4, tile = 1, discardIndex = 1 }
-    riichi_state.discards.p4 = { { tile = 1, claimed = false } }
+    riichi_state.lastDiscard = { player = riichi.discarder, playerIndex = riichi.discarderSeat, tile = 1, discardIndex = 1 }
+    riichi_state.discards[riichi.discarder] = { { tile = 1, claimed = false } }
     local riichi_started = on_action(riichi_state, { type = "pass" }, {
       serverTime = 1000,
-      actor = { id = "p2", seat = 2, isOwner = false },
+      actor = { id = "p2", seat = __test_seat_of(riichi_state, "p2"), isOwner = false },
     })
     local riichi_timer = scheduled(riichi_started.timerOps)
     local riichi_timeout = on_timer(riichi_started.state, riichi_timer, { firedAt = 2000 })
     local riichi_discard = riichi_timeout.state.discards.p1[#riichi_timeout.state.discards.p1]
 
     local tsumo_state = room_state("00000000000000000000000000000069")
-    tsumo_state.phase, tsumo_state.turnIndex, tsumo_state.drawnTile = "playing", 1, 54
+    tsumo_state.phase, tsumo_state.turnIndex, tsumo_state.drawnTile = "playing", __test_seat_of(tsumo_state, "p1"), 54
     tsumo_state.wall = { 1, 2, 3, 4 }
     tsumo_state.hands.p1 = ids({ 1,1,1, 2,3,4, 10,11,12, 19,20,21, 14 })
     tsumo_state.melds.p1, tsumo_state.discards.p1 = {}, {}
@@ -1137,7 +1204,7 @@ test("Mahjong room timeouts take wins and promptly tsumogiri a forced riichi dra
       id = "mahjong-turn",
       payload = {
         phase = "playing",
-        turnIndex = 1,
+        turnIndex = __test_seat_of(tsumo_state, "p1"),
         claimIndex = tsumo_state.claimIndex,
         moveCount = tsumo_state.moveCount,
         drawnTile = tsumo_state.drawnTile,
@@ -1152,7 +1219,7 @@ test("Mahjong room timeouts take wins and promptly tsumogiri a forced riichi dra
     end
 
     local ron_state = room_state("0000000000000000000000000000006a")
-    ron_state.phase, ron_state.turnIndex, ron_state.drawnTile = "playing", 1, 54
+    ron_state.phase, ron_state.turnIndex, ron_state.drawnTile = "playing", __test_seat_of(ron_state, "p1"), 54
     ron_state.wall = { 1, 2, 3, 4 }
     ron_state.hands.p1 = { 1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49 }
     ron_state.hands.p2 = ids({ 1,2,3, 4,5,6, 10,11,12, 32,32,32, 14 })
@@ -1161,7 +1228,7 @@ test("Mahjong room timeouts take wins and promptly tsumogiri a forced riichi dra
     ron_state.discards.p1, ron_state.discards.p2, ron_state.discards.p3, ron_state.discards.p4 = {}, {}, {}, {}
     local discarded = on_action(ron_state, { type = "discard", tileId = 54 }, {
       serverTime = 1000,
-      actor = { id = "p1", seat = 1, isOwner = true },
+      actor = { id = "p1", seat = __test_seat_of(ron_state, "p1"), isOwner = true },
     })
     local ron_timer = scheduled(discarded.timerOps)
     local ron_timeout = on_timer(discarded.state, ron_timer, { firedAt = 10000 })
@@ -1210,7 +1277,8 @@ test("Mahjong room timeout win handling stays within the runtime instruction quo
       },
     })
     local state = setup_result.state
-    state.phase, state.turnIndex, state.drawnTile = "playing", 1, 54
+    local p1_seat = __test_seat_of(state, "p1")
+    state.phase, state.turnIndex, state.drawnTile = "playing", p1_seat, 54
     state.wall = { 1, 2, 3, 4 }
     state.hands.p1 = ids({ 1,1,1, 2,3,4, 10,11,12, 19,20,21, 14 })
     state.melds.p1, state.discards.p1 = {}, {}
@@ -1219,7 +1287,7 @@ test("Mahjong room timeout win handling stays within the runtime instruction quo
         id = "mahjong-turn",
         payload = {
           phase = "playing",
-          turnIndex = 1,
+          turnIndex = p1_seat,
           claimIndex = state.claimIndex,
           moveCount = state.moveCount,
           drawnTile = state.drawnTile,

@@ -61,6 +61,7 @@ export function createMahjongTableController({
   getPlayerName,
   playerNameIsAuthoritative,
   getThemeAssetUrl,
+  getRoomCharacterVoiceSource,
   getThemeDefaultNames,
   getThemeMatchMusicUrl,
   getThemeRiichiMusicUrl,
@@ -767,34 +768,38 @@ export function createMahjongTableController({
   }
 
   function playRoleVoice(playerIndex, cue, delay = 0) {
-    const position = playerPosition(playerIndex);
-    const source = position && getThemeAssetUrl?.(`voice-${position}:${cue}`);
-    if (!source) return;
-    browserWindow.setTimeout(() => {
-      const audio = new Audio(source);
-      audio.preload = "auto";
-      audio.addEventListener("ended", () => audio.remove(), { once: true });
-      audio.addEventListener("error", () => audio.remove(), { once: true });
-      void audio.play().catch(() => audio.remove());
-    }, delay);
+    void getRoleVoiceSource(playerIndex, cue).then((source) => {
+      if (!source) return;
+      browserWindow.setTimeout(() => {
+        const audio = new Audio(source);
+        audio.preload = "auto";
+        audio.addEventListener("ended", () => audio.remove(), { once: true });
+        audio.addEventListener("error", () => audio.remove(), { once: true });
+        void audio.play().catch(() => audio.remove());
+      }, delay);
+    });
   }
 
   function playRoleVoiceSequence(playerIndex, cues) {
-    const sources = cues
-      .map((cue) => getRoleVoiceSource(playerIndex, cue))
-      .filter(Boolean);
-    if (!sources.length) return;
-    void sources.reduce(
-      (sequence, source) => sequence.then(() => playVoiceSource(source)),
-      Promise.resolve(),
-    );
+    void Promise.all(cues.map((cue) => getRoleVoiceSource(playerIndex, cue)))
+      .then((sources) => sources.filter(Boolean))
+      .then((sources) => {
+        if (!sources.length) return;
+        return sources.reduce(
+          (sequence, source) => sequence.then(() => playVoiceSource(source)),
+          Promise.resolve(),
+        );
+      });
   }
 
   function getRoleVoiceSource(playerIndex, cue) {
+    if (getMode?.() === "room") {
+      return Promise.resolve(getRoomCharacterVoiceSource?.(playerIndex, cue) || "");
+    }
     const position = playerPosition(playerIndex);
     const isYaku = cue.startsWith("yaku:");
     const slot = `voice-${position}:${isYaku ? "yaku:" : ""}${isYaku ? cue.slice(5) : cue}`;
-    return position ? getThemeAssetUrl?.(slot) : "";
+    return Promise.resolve(position ? getThemeAssetUrl?.(slot) : "");
   }
 
   function playVoiceSource(source) {

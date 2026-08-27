@@ -105,10 +105,13 @@ let activeMatchPortraitRequest = null;
 let activePackId = "__default__";
 let activePortraitCatalog = [];
 let activePortraitPool = [];
+let activeCharacterVoiceCatalog = [];
 let activePackStored = null;
 const onlinePortraitUrls = new Map();
 const onlinePortraitObjectUrls = new Set();
 const unavailableOnlinePortraits = new Set();
+const onlineCharacterVoiceUrls = new Map();
+const unavailableOnlineCharacterVoices = new Set();
 
 export async function initializeMahjongAssetPacks(matchPortraitRequest) {
   if (matchPortraitRequest && typeof matchPortraitRequest === "object") {
@@ -258,6 +261,87 @@ export async function resolveMahjongOnlinePortrait(reference) {
       return null;
     }
     onlinePortraitUrls.set(cacheKey, url);
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+export async function resolveMahjongOnlineCharacterVoice(reference, cue) {
+  const packId = String(reference?.packId || "").trim();
+  const characterId = String(reference?.characterId || "").trim();
+  const voiceCue = String(cue || "").trim();
+  if (!packId || !characterId || !voiceCue) return null;
+  const cacheKey = `${packId}:${characterId}:${voiceCue}`;
+  if (onlineCharacterVoiceUrls.has(cacheKey)) {
+    return onlineCharacterVoiceUrls.get(cacheKey);
+  }
+  if (unavailableOnlineCharacterVoices.has(cacheKey)) return null;
+  const voiceAssetId = `${characterId}:${voiceCue}`;
+  if (packId === activePackId) {
+    const voiceSet = activeCharacterVoiceCatalog.find(
+      (entry) => entry.characterId === characterId,
+    );
+    const assetPath = voiceCue.startsWith("yaku:")
+      ? voiceSet?.yaku?.[voiceCue.slice(5)]
+      : voiceSet?.lines?.[voiceCue];
+    const record = activePackStored?.get?.(assetStorageSlot("voices", voiceAssetId));
+    const url = record?.blob
+      ? createOnlinePortraitObjectUrl(record.blob)
+      : record?.url || assetPath || "";
+    if (url) {
+      onlineCharacterVoiceUrls.set(cacheKey, url);
+      return url;
+    }
+    unavailableOnlineCharacterVoices.add(cacheKey);
+    return null;
+  }
+  if (packId === "__default__") {
+    const voiceSet = getMahjongDefaultPack().catalog.voices?.find(
+      (entry) => entry.characterId === characterId,
+    );
+    const url = voiceCue.startsWith("yaku:")
+      ? voiceSet?.yaku?.[voiceCue.slice(5)]
+      : voiceSet?.lines?.[voiceCue];
+    if (url) {
+      onlineCharacterVoiceUrls.set(cacheKey, url);
+      return url;
+    }
+    unavailableOnlineCharacterVoices.add(cacheKey);
+    return null;
+  }
+  if (assetPackStorageUnavailable) return null;
+  try {
+    const database = await openDatabase();
+    const transaction = database.transaction([PACKS, ASSETS], "readonly");
+    const [pack, record] = await Promise.all([
+      requestPromise(transaction.objectStore(PACKS).get(packId)),
+      requestPromise(
+        transaction.objectStore(ASSETS).get([
+          packId,
+          assetStorageSlot("voices", voiceAssetId),
+        ]),
+      ),
+    ]);
+    const catalog = catalogForPack(pack);
+    const voiceSet = catalog.voices.find(
+      (entry) => entry.characterId === characterId,
+    );
+    const declared = voiceCue.startsWith("yaku:")
+      ? voiceSet?.yaku?.[voiceCue.slice(5)]
+      : voiceSet?.lines?.[voiceCue];
+    if (!declared || !record) {
+      unavailableOnlineCharacterVoices.add(cacheKey);
+      return null;
+    }
+    const url = record.blob
+      ? createOnlinePortraitObjectUrl(record.blob)
+      : record.url;
+    if (!url) {
+      unavailableOnlineCharacterVoices.add(cacheKey);
+      return null;
+    }
+    onlineCharacterVoiceUrls.set(cacheKey, url);
     return url;
   } catch {
     return null;
@@ -647,6 +731,9 @@ function applyPackAssets(pack) {
   activePortraitPool = Array.isArray(pack?.portraitPool)
     ? [...pack.portraitPool]
     : [];
+  activeCharacterVoiceCatalog = Array.isArray(pack?.catalog?.voices)
+    ? [...pack.catalog.voices]
+    : [];
   activePackStored = pack?.stored instanceof Map ? pack.stored : null;
   if (!activeMatchPortraitRequest) {
     applyActiveAssets(
@@ -690,6 +777,8 @@ function clearOnlinePortraitUrlCache() {
   onlinePortraitObjectUrls.clear();
   onlinePortraitUrls.clear();
   unavailableOnlinePortraits.clear();
+  onlineCharacterVoiceUrls.clear();
+  unavailableOnlineCharacterVoices.clear();
 }
 
 async function readActivePack() {

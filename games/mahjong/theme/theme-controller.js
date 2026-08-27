@@ -21,9 +21,12 @@ import {
   applyMahjongMatchPortraits,
   listMahjongAssetPacks,
   rerollMahjongAssetPackPortraits,
+  resolveMahjongOnlineCharacterVoice,
   resolveMahjongOnlinePortrait,
 } from "./asset-packs.js";
 import { Check, Download, Trash2, createIcons } from "lucide";
+import { getOrCreateMahjongDefaultCharacter } from "./default-character.js";
+import { getMahjongBuiltinCharacterForKey } from "./builtin-characters.js";
 
 const DEFAULT_VISUAL_PACK_ID = "__default__";
 
@@ -44,9 +47,13 @@ export function createMahjongThemeController({
   setPlayerIdentityState,
   initialMatchPortraitRequest,
   onAssetsChanged,
+  isRoomActive,
 } = {}) {
   let visualPacks = [];
   let platformAvatarSource = "";
+  let roomPlayerIdentity = "anonymous";
+  let defaultCharacter;
+  const playerPresentationSubscribers = new Set();
   const assetPacksReady = initializeMahjongAssetPacks(
     initialMatchPortraitRequest,
   ).catch(() => new Map());
@@ -193,7 +200,11 @@ export function createMahjongThemeController({
   themeElements.list.addEventListener("keydown", onThemeListKeydown);
   appearanceElements.controls.addEventListener("change", onAppearanceChange);
   browserWindow.addEventListener("mahjong:asset-pack-changed", onAssetPackChanged);
-  void assetPacksReady.then(() => applyPackAvatars());
+  void assetPacksReady.then(() => {
+    ensureDefaultCharacter();
+    void applyPackAvatars();
+    onAssetsChanged?.();
+  });
 
   async function refreshThemePacks() {
     try {
@@ -230,22 +241,82 @@ export function createMahjongThemeController({
     return applyPackAvatars();
   }
 
-  function getRoomAvatarPreference() {
-    if (platformAvatarSource) return { kind: "platform" };
-    const { packId } = getMahjongOnlinePortraitContext();
-    const portraitId = getMahjongActivePortraits().self;
-    if (
-      typeof packId === "string" &&
-      packId &&
-      typeof portraitId === "string" &&
-      portraitId
-    ) {
-      return { kind: "theme", packId, portraitId };
-    }
-    return { kind: "platform" };
+  function setRoomPlayerIdentity(identity) {
+    roomPlayerIdentity = String(identity || "anonymous");
+    return ensureDefaultCharacter();
+  }
+
+  function ensureDefaultCharacter() {
+    if (defaultCharacter) return { ...defaultCharacter };
+    defaultCharacter = getOrCreateMahjongDefaultCharacter();
+    return defaultCharacter ? { ...defaultCharacter } : null;
+  }
+
+  function getRoomPlayerPresentation() {
+    const builtin = ensureDefaultCharacter();
+    const activePortraits = getMahjongActivePortraits();
+    const theme = getMahjongOnlinePortraitContext();
+    const characterId = String(activePortraits.self || "");
+    const hasThemeCharacter =
+      characterId && theme.catalog.some((entry) => entry.id === characterId);
+    return {
+      portraitMode: platformAvatarSource ? "platform" : "character",
+      ...(hasThemeCharacter
+        ? {
+            themeCharacter: {
+              packId: theme.packId,
+              characterId,
+            },
+          }
+        : {}),
+      ...(builtin?.characterId
+        ? { builtinCharacterId: builtin.characterId }
+        : {}),
+    };
+  }
+
+  function getDefaultCharacter() {
+    return ensureDefaultCharacter();
+  }
+
+  function getOnlineAiCharacterAssignments(playerIds, randomSeed = "") {
+    const portraits = getMahjongOnlineAiPortraitAssignments(playerIds, randomSeed);
+    return Object.fromEntries(
+      (Array.isArray(playerIds) ? playerIds : []).map((playerId) => {
+        const portrait = portraits[playerId];
+        return [
+          playerId,
+          {
+            ...(portrait?.packId && portrait?.portraitId
+              ? {
+                  themeCharacter: {
+                    packId: portrait.packId,
+                    characterId: portrait.portraitId,
+                  },
+                }
+              : {}),
+            builtinCharacterId: getMahjongBuiltinCharacterForKey(
+              `${randomSeed}:${playerId}`,
+            ),
+          },
+        ];
+      }),
+    );
+  }
+
+  function resolveCharacterPortrait(reference) {
+    return resolveMahjongOnlinePortrait({
+      packId: reference?.packId,
+      portraitId: reference?.characterId,
+    });
+  }
+
+  function resolveCharacterVoice(reference, cue) {
+    return resolveMahjongOnlineCharacterVoice(reference, cue);
   }
 
   function applyPackAvatars() {
+    if (isRoomActive?.()) return false;
     const portraitSlotByPosition = {
       bottom: "self",
       right: "right",
@@ -253,16 +324,41 @@ export function createMahjongThemeController({
       left: "left",
     };
     const defaultNames = getMahjongDefaultNames();
-    const avatars = {};
+    const portraits = {};
     const names = {};
     for (const [position, portraitSlot] of Object.entries(portraitSlotByPosition)) {
-      avatars[position] =
+      portraits[position] =
         position === "bottom" && platformAvatarSource
           ? platformAvatarSource
           : getMahjongAssetUrl(`portrait-${portraitSlot}`);
       if (position !== "bottom") names[position] = defaultNames[portraitSlot] || "";
     }
-    return setPlayerIdentityState?.({ avatars, names });
+    const applied = setPlayerIdentityState?.({ portraits, names });
+    for (const listener of playerPresentationSubscribers) listener();
+    return applied;
+  }
+
+  function getPlayerPresentation({ seat } = {}) {
+    const position = ["bottom", "right", "top", "left"][Number(seat) - 1];
+    const portraitSlot = {
+      bottom: "self",
+      right: "right",
+      top: "opposite",
+      left: "left",
+    }[position];
+    if (!portraitSlot) return undefined;
+    return {
+      source:
+        position === "bottom" && platformAvatarSource
+          ? platformAvatarSource
+          : getMahjongAssetUrl(`portrait-${portraitSlot}`),
+    };
+  }
+
+  function subscribePlayerPresentations(listener) {
+    if (typeof listener !== "function") return () => {};
+    playerPresentationSubscribers.add(listener);
+    return () => playerPresentationSubscribers.delete(listener);
   }
 
   function syncDefaultMusicCopyright() {
@@ -504,13 +600,18 @@ export function createMahjongThemeController({
     applyMatchPortraits,
     clearMatchPortraits,
     setPlatformAvatar,
-    getOnlineAiPortraitAssignments: getMahjongOnlineAiPortraitAssignments,
+    setRoomPlayerIdentity,
+    getOnlineAiCharacterAssignments,
     getOnlinePortraitContext: getMahjongOnlinePortraitContext,
-    resolveOnlinePortrait: resolveMahjongOnlinePortrait,
+    resolveCharacterPortrait,
+    resolveCharacterVoice,
     getPortraits: getMahjongActivePortraits,
     getAssetUrl: getMahjongAssetUrl,
     getDefaultAssetUrl: getMahjongDefaultAssetUrl,
-    getRoomAvatarPreference,
+    getRoomPlayerPresentation,
+    getPlayerPresentation,
+    subscribePlayerPresentations,
+    getDefaultCharacter,
     getDefaultNames: getMahjongDefaultNames,
     getMatchMusicUrl: getMahjongMatchMusicUrl,
     getRiichiMusicUrl: getMahjongRiichiMusicUrl,

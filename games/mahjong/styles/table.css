@@ -423,6 +423,7 @@ a {
 .player-avatar.is-default-portrait {
   background-image: var(--mahjong-default-portrait-image, none);
   background-size: 200% 200%;
+  background-position: var(--mahjong-default-portrait-position, 0% 0%);
 }
 
 .player-station > .player-name {
@@ -507,16 +508,16 @@ a {
   left: 24px;
 }
 .player-bottom .player-avatar.is-default-portrait {
-  background-position: 0 0;
+  --mahjong-default-portrait-position: 0% 0%;
 }
 .player-right .player-avatar.is-default-portrait {
-  background-position: 100% 0;
+  --mahjong-default-portrait-position: 100% 0%;
 }
 .player-top .player-avatar.is-default-portrait {
-  background-position: 0 100%;
+  --mahjong-default-portrait-position: 0% 100%;
 }
 .player-left .player-avatar.is-default-portrait {
-  background-position: 100% 100%;
+  --mahjong-default-portrait-position: 100% 100%;
 }
 
 .player-dock {

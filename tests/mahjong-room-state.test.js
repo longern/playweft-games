@@ -10,6 +10,7 @@ test("room projection keeps its viewer at the bottom without changing private ti
       playerNames: ["一", "二", "三", "四"],
       scores: [21000, 22000, 23000, 24000],
       scoreHistory: [{ scores: [21000, 22000, 23000, 24000] }],
+      initialDealerIndex: 1,
       dealerIndex: 2,
       turnIndex: 4,
       responseIndex: 1,
@@ -65,6 +66,7 @@ test("room projection keeps its viewer at the bottom without changing private ti
   assert.deepEqual(oriented.state.playerNames, ["三", "四", "一", "二"]);
   assert.deepEqual(oriented.state.scores, [23000, 24000, 21000, 22000]);
   assert.deepEqual(oriented.state.scoreHistory[0].scores, [23000, 24000, 21000, 22000]);
+  assert.equal(oriented.state.initialDealerIndex, 3);
   assert.equal(oriented.state.dealerIndex, 4);
   assert.equal(oriented.state.turnIndex, 2);
   assert.equal(oriented.state.responseIndex, 3);

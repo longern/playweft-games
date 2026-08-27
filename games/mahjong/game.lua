@@ -2217,6 +2217,7 @@ local function new_match(players, names, seed, settings, ai_players)
 		local seat_draw = (state.seed * RANDOM_MULTIPLIER) % RANDOM_MODULUS
 		state.dealerIndex = (seat_draw % PLAYER_COUNT) + 1
 	end
+	state.initialDealerIndex = state.dealerIndex
 	deal(state)
 	return state
 end
@@ -4737,6 +4738,7 @@ function view(state, events, context)
 			roundWind = state.roundWind,
 			handNumber = state.handNumber,
 			dealerIndex = state.dealerIndex,
+			initialDealerIndex = state.initialDealerIndex,
 			honba = state.honba,
 			riichiSticks = state.riichiSticks,
 			scores = state.scores,

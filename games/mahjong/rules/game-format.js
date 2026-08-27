@@ -453,6 +453,7 @@ export function matchResultRows(
 }
 
 export function resultScoreSheetRows(state) {
+  const seatOrder = initialWindSeatOrder(state);
   const history = asArray(state?.scoreHistory)
     .map((entry) => ({
       roundWind: Number(entry?.roundWind) || 1,
@@ -469,12 +470,22 @@ export function resultScoreSheetRows(state) {
       return {
         round: scoreSheetRoundLabel(entry.roundWind, entry.handNumber),
         honba: entry.honba,
-        scores: entry.scores,
-        deltas: entry.scores.map((score, seat) =>
-          previous ? score - previous.scores[seat] : 0),
+        scores: seatOrder.map((seat) => entry.scores[seat - 1]),
+        deltas: seatOrder.map((seat) => {
+          const score = entry.scores[seat - 1];
+          return previous ? score - previous.scores[seat - 1] : 0;
+        }),
       };
     })
     .slice(1);
+}
+
+export function initialWindSeatOrder(state) {
+  const eastSeat = Math.max(
+    1,
+    Math.min(4, Number(state?.initialDealerIndex) || Number(state?.dealerIndex) || 1),
+  );
+  return Array.from({ length: 4 }, (_, offset) => ((eastSeat - 1 + offset) % 4) + 1);
 }
 
 export function visibleScoreSheetRows(rows, maxRows) {

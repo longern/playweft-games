@@ -29,6 +29,7 @@ import tileFacesUrl from "../assets/tiles/riichi-faces.webp?url";
 import tileFacesPlaceholderUrl from "../assets/tiles/riichi-faces-placeholder.webp?url";
 import playerPortraitsUrl from "../assets/player-portraits-v1.jpg?url";
 import { afterWindowLoad } from "../theme/deferred-visual-assets.js";
+import { getMahjongBuiltinCharacterPosition } from "../theme/builtin-characters.js";
 import {
   asArray,
   doraTypeCounts,
@@ -37,8 +38,11 @@ import {
   resultDetailPageCount,
   resultBasePaymentTotal,
   resultIndicatorSlots,
-  resultScoreSheetRows,
 } from "../rules/game-format.js";
+import {
+  createMahjongScoreSheetModel,
+  scoreSheetPortraitSources,
+} from "./score-sheet-model.js";
 import { MELD_GROUP_GAP, TILE_SIZE } from "../render/three-layout.js";
 import {
   RESULT_HAND_SHADOW_OPACITY,
@@ -117,6 +121,9 @@ export class MahjongResultHandRenderer {
     this.lastRender = null;
     this.startButtonDisabled = false;
     this.contextLost = false;
+    this.playerPresentationProvider = null;
+    this.unsubscribePlayerPresentations = null;
+    this.scoreSheetModel = null;
     this.appearanceVersion = 0;
     this.animations = new ThreeAnimationController(() => this.drawFrame());
   }
@@ -211,15 +218,6 @@ export class MahjongResultHandRenderer {
       "webglcontextrestored",
       this.onContextRestored,
     );
-    this.onStationAvatarChanged = () => {
-      if (this.destroyed || !this.paper?.photoCards.visible) return;
-      this.syncScorePortraitOverlay(renderedStationPortraitSources());
-    };
-    document.addEventListener(
-      "mahjong:player-avatar-changed",
-      this.onStationAvatarChanged,
-    );
-
     this.scene = new Scene();
     this.camera = new PerspectiveCamera(
       resultHandVerticalFov(VIEW_ASPECT),
@@ -452,18 +450,23 @@ export class MahjongResultHandRenderer {
     this.paper.object3d.position.z = RESULT_SCORE_PAPER_Z;
     this.scoreHost.prepend(this.renderer.domElement);
     this.scoreHost.classList.add("is-three-result-rendered");
-    const sheet = {
-      playerNames: playerDisplayNames(state, {
+    const playerNames = playerDisplayNames(state, {
         playerName,
         defaultNames,
         playerNameIsAuthoritative,
-      }),
-      rows: resultScoreSheetRows(state),
-      portraitSources: renderedStationPortraitSources(),
+      });
+    this.scoreSheetModel = createMahjongScoreSheetModel(state, {
+      playerNames,
+      getPlayerPresentation: (context) =>
+        this.playerPresentationProvider?.get?.(context),
+    });
+    const sheet = {
+      playerNames: this.scoreSheetModel.columns.map((column) => column.name),
+      rows: this.scoreSheetModel.rows,
     };
     this.scoreSheetRenderVersion = (this.scoreSheetRenderVersion ?? 0) + 1;
     this.paper.renderScoreSheet(sheet);
-    this.syncScorePortraitOverlay(sheet.portraitSources);
+    this.syncScoreSheetPortraits();
     this.drawFrame();
   }
 
@@ -583,6 +586,7 @@ export class MahjongResultHandRenderer {
     this.cancelStartButtonAnimation();
     this.cancelScoreSheetRender();
     this.hideScorePortraitOverlay();
+    this.scoreSheetModel = null;
     this.host.classList.remove("is-three-result-rendered");
     this.scoreHost?.classList.remove("is-three-result-rendered");
     this.handsHost?.classList.remove("is-three-rendered");
@@ -720,10 +724,13 @@ export class MahjongResultHandRenderer {
       const image = document.createElement("img");
       image.alt = "";
       image.decoding = "async";
-      image.addEventListener("error", () => {
-        crop.classList.add("is-default-portrait");
-        crop.style.backgroundImage = `url(${JSON.stringify(playerPortraitsUrl)})`;
-        image.hidden = true;
+        image.addEventListener("error", () => {
+          crop.classList.add("is-default-portrait");
+          crop.style.backgroundImage = `url(${JSON.stringify(playerPortraitsUrl)})`;
+          crop.style.backgroundPosition =
+            getMahjongBuiltinCharacterPosition(crop.dataset.builtinCharacter) ||
+            DEFAULT_PORTRAIT_POSITIONS[index];
+          image.hidden = true;
         image.removeAttribute("src");
         delete image.dataset.source;
       });
@@ -739,7 +746,19 @@ export class MahjongResultHandRenderer {
     if (!this.scorePortraitOverlay || !this.paper?.photoCards.visible) return;
     this.scorePortraitOverlay.hidden = false;
     this.scorePortraitFrames.forEach(({ crop, image }, index) => {
-      const source = typeof sources[index] === "string" ? sources[index] : "";
+      const presentation = sources[index] && typeof sources[index] === "object"
+        ? sources[index]
+        : { source: typeof sources[index] === "string" ? sources[index] : "" };
+      const source = presentation.source || "";
+      const builtinPosition = getMahjongBuiltinCharacterPosition(
+        presentation.builtinCharacterId,
+      );
+      if (presentation.builtinCharacterId) {
+        crop.dataset.builtinCharacter = presentation.builtinCharacterId;
+      } else {
+        delete crop.dataset.builtinCharacter;
+      }
+      crop.style.backgroundPosition = builtinPosition || DEFAULT_PORTRAIT_POSITIONS[index];
       const useDefault = !source;
       crop.classList.toggle("is-default-portrait", useDefault);
       crop.style.backgroundImage = useDefault
@@ -758,6 +777,29 @@ export class MahjongResultHandRenderer {
       }
     });
     this.positionScorePortraitOverlay();
+  }
+
+  setPlayerPresentationProvider(provider) {
+    this.unsubscribePlayerPresentations?.();
+    this.unsubscribePlayerPresentations = null;
+    this.playerPresentationProvider = provider || null;
+    const subscribe = provider?.subscribe;
+    if (typeof subscribe === "function") {
+      this.unsubscribePlayerPresentations = subscribe(() => {
+        if (this.destroyed || !this.paper?.photoCards.visible) return;
+        this.syncScoreSheetPortraits();
+      });
+    }
+  }
+
+  syncScoreSheetPortraits() {
+    if (!this.scoreSheetModel) return;
+    this.syncScorePortraitOverlay(
+      scoreSheetPortraitSources(
+        this.scoreSheetModel,
+        (context) => this.playerPresentationProvider?.get?.(context),
+      ),
+    );
   }
 
   positionScorePortraitOverlay() {
@@ -834,10 +876,8 @@ export class MahjongResultHandRenderer {
       "dblclick",
       this.onResultSceneDoubleClick,
     );
-    document.removeEventListener(
-      "mahjong:player-avatar-changed",
-      this.onStationAvatarChanged,
-    );
+    this.unsubscribePlayerPresentations?.();
+    this.unsubscribePlayerPresentations = null;
     this.scorePortraitOverlay?.remove();
     this.tileFactory?.destroy();
     this.animations.destroy();
@@ -851,15 +891,6 @@ export class MahjongResultHandRenderer {
   }
 }
 
-function renderedStationPortraitSources() {
-  return ["bottom", "right", "top", "left"].map((position) => {
-    const image = document.querySelector(
-      `.player-${position} [data-player-avatar]`,
-    );
-    if (!image) return "";
-    return image.dataset.source || image.currentSrc || "";
-  });
-}
 
 function scorePortraitCropRect(points) {
   if (!Array.isArray(points) || points.length !== 4) return null;

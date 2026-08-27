@@ -36,7 +36,7 @@ export function createMahjongRoomController({
   settingsDialog,
   transientNotice,
   roomPlayerProfiles,
-  roomPlayerIdentities,
+  roomPlayerPresentations,
   themeController,
   beginSetupExit,
   resetAutoActions,
@@ -76,7 +76,7 @@ export function createMahjongRoomController({
   let roomTenpaiSupplementRequest = 0;
   let roomTenpaiSupplementRequestedKey = "";
   let roomTenpaiReportedKey = "";
-  let avatarPreferenceKey = "";
+  let playerPresentationKey = "";
 
   function isRoom() {
     return getPlayMode?.() === "room";
@@ -86,9 +86,10 @@ export function createMahjongRoomController({
     setPlayMode?.(context?.mode ?? "solo");
     // A reconnect may attach this controller to a fresh room state. The
     // preference must be sent again even when the local choice is unchanged.
-    avatarPreferenceKey = "";
+    playerPresentationKey = "";
     if (isRoom()) resetAutoActions?.({ persist: false });
     setPlayerId?.(context?.playerId || "");
+    themeController.setRoomPlayerIdentity?.(context?.playerId || "");
     roomPlayerProfiles?.setContext({
       nextClient: getClient?.(),
       nextCapabilities: context?.capabilities,
@@ -103,11 +104,11 @@ export function createMahjongRoomController({
       setPlayerName?.(name);
       setHasPlatformName?.(true);
     }
-    roomPlayerProfiles?.requestOwnAvatar({
+    roomPlayerProfiles?.requestOwnPlatformPortrait({
       initialSource: context?.player?.avatar?.src,
       reset: true,
     });
-    syncAvatarPreference({ force: true });
+    syncPlayerPresentation({ force: true });
     if (isRoom()) {
       settingsDialog?.setSoloMatchActive(false);
       showRoomWaiting();
@@ -121,22 +122,21 @@ export function createMahjongRoomController({
       playerId === getPlayerId?.() &&
       (!Array.isArray(fields) || fields.includes("avatar"))
     ) {
-      roomPlayerProfiles?.requestOwnAvatar();
+      roomPlayerProfiles?.requestOwnPlatformPortrait();
     }
     roomPlayerProfiles?.handleChanged({ playerId });
   }
 
-  function syncAvatarPreference({ force = false } = {}) {
+  function syncPlayerPresentation({ force = false } = {}) {
     if (!isRoom() || !getSession?.()) return false;
-    const preference =
-      themeController.getRoomAvatarPreference?.() || { kind: "platform" };
-    const key = JSON.stringify(preference);
-    if (!force && key === avatarPreferenceKey) return false;
-    avatarPreferenceKey = key;
+    const presentation = themeController.getRoomPlayerPresentation?.() || {};
+    const key = JSON.stringify(presentation);
+    if (!force && key === playerPresentationKey) return false;
+    playerPresentationKey = key;
     return Boolean(
       getSession().dispatch({
-        type: "set_avatar_preference",
-        avatarPreference: preference,
+        type: "set_player_presentation",
+        playerPresentation: presentation,
       }),
     );
   }
@@ -196,8 +196,9 @@ export function createMahjongRoomController({
     try {
       await visualRendererReady;
       if (getDestroyed?.() || !isRoom()) return;
+      const presentationApplied = roomPlayerPresentations?.apply(projection.state);
       await tableController.refresh(projection, { animateDealIn });
-      await roomPlayerIdentities?.apply(projection.state);
+      await presentationApplied;
       persistCompletedRoomPaipu(message?.state?.paipu, message.matchId);
       enableAutoWinAfterRiichi?.(projection.state, ownRiichiEvent);
       session?.confirmRoomState();
@@ -656,10 +657,10 @@ export function createMahjongRoomController({
     if (!isRoom() || !roomIsOwner || getGameInitializing?.()) return;
     setGameInitializing?.(true);
     const setupExit = beginSetupExit();
-    let aiPortraits = {};
+    let aiPresentations = {};
     try {
       await themeController.ready;
-      aiPortraits = themeController.getOnlineAiPortraitAssignments(
+      aiPresentations = themeController.getOnlineAiCharacterAssignments(
         roomLobbyAiPlayerIds,
         crypto.randomUUID().replaceAll("-", ""),
       );
@@ -670,7 +671,7 @@ export function createMahjongRoomController({
       type: "start_match",
       matchType,
       rules: selectedMatchRules(),
-      aiPortraits,
+      aiPresentations,
     });
     if (started) return;
     await setupExit;
@@ -708,7 +709,7 @@ export function createMahjongRoomController({
     sendActionWithTenpaiReport,
     scheduleAutomaticAction,
     startMatch,
-    syncAvatarPreference,
+    syncPlayerPresentation,
     showRoomWaiting,
     getPlayerId: () => getPlayerId?.() || "",
     isOwner: () => roomIsOwner,
