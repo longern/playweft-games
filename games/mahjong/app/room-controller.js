@@ -76,6 +76,8 @@ export function createMahjongRoomController({
   let roomTenpaiSupplementRequest = 0;
   let roomTenpaiSupplementRequestedKey = "";
   let roomTenpaiReportedKey = "";
+  let roomRiichiTenpaiRequest = 0;
+  let roomRiichiTenpaiKey = "";
   let playerPresentationKey = "";
 
   function isRoom() {
@@ -203,6 +205,7 @@ export function createMahjongRoomController({
       enableAutoWinAfterRiichi?.(projection.state, ownRiichiEvent);
       session?.confirmRoomState();
       scheduleRoomLegalActions(projection.state);
+      scheduleRoomRiichiTenpai(projection.state);
       scheduleRoomTenpaiReports(projection.state);
       scheduleRoomEarlyTenpaiReport(projection.state, projection.events);
       if (!hadState) tableController.syncMatchMusic({ fadeIn: true });
@@ -275,6 +278,62 @@ export function createMahjongRoomController({
       return await ready;
     } finally {
       if (roomTenpaiGameReady === ready) roomTenpaiGameReady = undefined;
+    }
+  }
+
+  function scheduleRoomRiichiTenpai(state) {
+    const playerId = getPlayerId?.();
+    if (
+      !isRoom() ||
+      state?.phase !== "playing" ||
+      state?.riichi?.[playerId] !== true
+    ) {
+      roomRiichiTenpaiRequest += 1;
+      roomRiichiTenpaiKey = "";
+      tableController.applyRiichiTenpai(null);
+      return;
+    }
+    const context = state.legalContext ?? {};
+    const key = JSON.stringify([
+      state.moveCount,
+      state.turnIndex,
+      state.drawnTile,
+      state.ownHand,
+      state.riichi?.[playerId],
+      context.melds,
+      context.discards,
+      context.tempFuriten,
+      context.riichiFuriten,
+    ]);
+    if (key === roomRiichiTenpaiKey) return;
+    roomRiichiTenpaiKey = key;
+    const request = ++roomRiichiTenpaiRequest;
+    void runRoomRiichiTenpai(
+      buildRoomLegalState(state, playerId),
+      key,
+      request,
+    );
+  }
+
+  async function runRoomRiichiTenpai(state, key, request) {
+    try {
+      const localGame = await ensureRoomTenpaiGame(state);
+      if (!localGame) return;
+      const report = await localGame.currentTenpaiReport(
+        state,
+        getPlayerId?.(),
+      );
+      if (
+        getDestroyed?.() ||
+        !isRoom() ||
+        request !== roomRiichiTenpaiRequest ||
+        key !== roomRiichiTenpaiKey
+      )
+        return;
+      tableController.applyRiichiTenpai(report?.tenpai ? report : null);
+    } catch (error) {
+      if (request === roomRiichiTenpaiRequest)
+        console.error("Mahjong riichi tenpai preview failed", error);
     }
   }
 
@@ -696,6 +755,8 @@ export function createMahjongRoomController({
     roomTenpaiSupplementRequest += 1;
     roomTenpaiSupplementRequestedKey = "";
     roomTenpaiReportedKey = "";
+    roomRiichiTenpaiRequest += 1;
+    roomRiichiTenpaiKey = "";
     roomTenpaiGame?.close();
     roomTenpaiGame = undefined;
     roomTenpaiGameReady = undefined;

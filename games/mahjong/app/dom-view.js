@@ -11,12 +11,11 @@ import {
   orderedHand,
   partitionClaimActions,
   playerDisplayName,
+  confirmedTenpaiSummary,
   riverDisplayEntries,
   roundLabel,
   resultDetailPageCount,
   seatWind,
-  tenpaiDiscardFuriten,
-  tenpaiWaitsForDiscard,
   tileFace,
   tileType,
 } from "../rules/game-format.js";
@@ -37,10 +36,19 @@ const RESULT_TILE_WIDTH_PX = 33;
 const RESULT_TILE_HEIGHT_PX = 47;
 
 export class MahjongDomView {
-  constructor({ onAction, onSelectTile, onDiscardTile }) {
+  constructor({
+    onAction,
+    onSelectTile,
+    onDiscardTile,
+    onTenpaiPreviewStart,
+    onTenpaiPreviewEnd,
+  }) {
     this.onAction = onAction;
     this.onSelectTile = onSelectTile;
     this.onDiscardTile = onDiscardTile;
+    this.onTenpaiPreviewStart = onTenpaiPreviewStart;
+    this.onTenpaiPreviewEnd = onTenpaiPreviewEnd;
+    this.tenpaiStatusPointerId = 0;
     this.lastEventKey = "";
     this.countdownDeadlineAt = 0;
     this.countdownServerTime = 0;
@@ -55,8 +63,30 @@ export class MahjongDomView {
       this.elements.tsumo,
       this.elements.pass,
       this.elements.cancelRiichi,
+      this.elements.tenpaiCount,
       this.elements.furiten,
     );
+    for (const element of [this.elements.tenpaiCount, this.elements.furiten]) {
+      element.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        this.tenpaiStatusPointerId = event.pointerId;
+        element.setPointerCapture?.(event.pointerId);
+        this.onTenpaiPreviewStart?.(event.pointerId);
+      });
+      const endPreview = (event) => {
+        if (
+          !this.tenpaiStatusPointerId ||
+          (event?.pointerId && event.pointerId !== this.tenpaiStatusPointerId)
+        )
+          return;
+        this.tenpaiStatusPointerId = 0;
+        this.onTenpaiPreviewEnd?.(event?.pointerId || 0);
+      };
+      element.addEventListener("pointerup", endPreview);
+      element.addEventListener("pointercancel", endPreview);
+      element.addEventListener("lostpointercapture", endPreview);
+    }
   }
 
   render(
@@ -72,6 +102,8 @@ export class MahjongDomView {
       resultPageReady = false,
       riichiMode = false,
       showGameHints = true,
+      confirmedTenpai = null,
+      tenpaiPreview = null,
       defaultNames = {},
       playerNameIsAuthoritative = false,
       serverTime = 0,
@@ -122,10 +154,10 @@ export class MahjongDomView {
     );
     this.riichiMode = riichiMode;
     this.renderHands(state, selectedTileId, riichiMode);
-    this.renderTenpaiPreview(state, selectedTileId);
+    this.renderTenpaiPreview(state, tenpaiPreview);
     this.renderRivers(state, events);
     this.renderMelds(state);
-    this.renderActions(state, selectedTileId, riichiMode);
+    this.renderActions(state, selectedTileId, riichiMode, confirmedTenpai);
     this.renderCountdown(state, serverTime);
     this.renderStatus(state, events, playerName, {
       defaultNames,
@@ -141,34 +173,36 @@ export class MahjongDomView {
     }
   }
 
-  renderSelection(
-    state,
-    selectedTileId,
-    playerName,
-    { riichiMode = false, showGameHints = true } = {},
-  ) {
+  renderSelection(state, selectedTileId, playerName, {
+    riichiMode = false,
+    showGameHints = true,
+    tenpaiPreview = null,
+  } = {}) {
     this.riichiMode = riichiMode;
     this.showGameHints = showGameHints;
     this.updateHandSelection(selectedTileId);
     this.renderTypeHighlights(selectedTileId);
-    this.renderTenpaiPreview(state, selectedTileId);
+    this.renderTenpaiPreview(state, tenpaiPreview);
     return this.visualUi(playerName, selectedTileId);
   }
 
-  renderTenpaiPreview(state, selectedTileId) {
-    if (!this.showGameHints) {
+  renderTenpaiPreview(state, tenpaiPreview = null) {
+    if (!this.showGameHints || !tenpaiPreview?.waits) {
       this.elements.tenpaiPreview.hidden = true;
       this.elements.tenpaiFuritenBadge.hidden = true;
       return;
     }
-    const waits = tenpaiWaitsForDiscard(state?.legalActions, selectedTileId, {
-      declaringRiichi: this.riichiMode,
-    });
-    const { tenpaiPreview, tenpaiWaits, tenpaiFuritenBadge } = this.elements;
-    tenpaiPreview.hidden = waits.length === 0;
+    const summary = confirmedTenpaiSummary(state, tenpaiPreview);
+    const waits = summary.waits;
+    const {
+      tenpaiPreview: tenpaiPreviewElement,
+      tenpaiWaits,
+      tenpaiFuritenBadge,
+    } = this.elements;
+    tenpaiPreviewElement.hidden = waits.length === 0;
     tenpaiFuritenBadge.hidden =
       waits.length === 0 ||
-      !tenpaiDiscardFuriten(state?.legalActions, selectedTileId);
+      !summary.furiten;
     tenpaiWaits.style.setProperty(
       "--tenpai-wait-columns",
       String(Math.min(7, waits.length)),
@@ -463,7 +497,7 @@ export class MahjongDomView {
     }
   }
 
-  renderActions(state, selectedTileId, riichiMode = false) {
+  renderActions(state, selectedTileId, riichiMode = false, confirmedTenpai) {
     const legal = state.legalActions ?? {};
     const { elements } = this;
     elements.claims.replaceChildren();
@@ -473,6 +507,7 @@ export class MahjongDomView {
       elements.abort.hidden = true;
       elements.tsumo.hidden = true;
       elements.riichi.hidden = true;
+      elements.tenpaiCount.hidden = true;
       elements.furiten.hidden = true;
       elements.actionHint.textContent = "选择一张牌宣言立直";
       return;
@@ -519,7 +554,24 @@ export class MahjongDomView {
     elements.tsumo.hidden = !legal.canTsumo;
     elements.riichi.hidden = !legal.canRiichi;
     elements.riichi.disabled = false;
-    elements.furiten.hidden = !this.showGameHints || !state.furiten;
+    const tenpaiSummary = confirmedTenpaiSummary(state, confirmedTenpai);
+    const showTenpaiStatus =
+      this.showGameHints && tenpaiSummary?.waits.length > 0;
+    const isTenpaiFuriten = showTenpaiStatus && tenpaiSummary.furiten;
+    elements.tenpaiCount.hidden = !showTenpaiStatus || isTenpaiFuriten;
+    elements.tenpaiCount.textContent = `${tenpaiSummary?.total ?? 0} 张`;
+    elements.tenpaiCount.setAttribute(
+      "aria-label",
+      `按住查看听牌：${tenpaiSummary?.total ?? 0} 张`,
+    );
+    elements.furiten.hidden = !this.showGameHints ||
+      (showTenpaiStatus ? !isTenpaiFuriten : !state.furiten);
+    elements.furiten.setAttribute(
+      "aria-label",
+      showTenpaiStatus
+        ? "按住查看振听听牌"
+        : "振听：不能荣和，但仍可自摸",
+    );
     elements.actionHint.textContent = canClaim
       ? "有人打出了你需要的牌"
       : legal.canDiscard
@@ -972,6 +1024,7 @@ function collectElements() {
     tenpaiPreview: document.querySelector("#tenpai-preview"),
     tenpaiWaits: document.querySelector("#tenpai-waits"),
     tenpaiFuritenBadge: document.querySelector("#tenpai-furiten-badge"),
+    tenpaiCount: document.querySelector("#tenpai-count-badge"),
     claims: document.querySelector("#claim-actions"),
     pass: document.querySelector("#pass-button"),
     abort: document.querySelector("#abort-button"),

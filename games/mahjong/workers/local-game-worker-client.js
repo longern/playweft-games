@@ -147,7 +147,14 @@ export async function createLocalLuaGame(options = {}) {
         return request("tenpaiReport", { state, tileId, viewerId });
       },
       currentTenpaiReport(state, viewerId = options.playerId) {
-        return request("currentTenpaiReport", { state, viewerId });
+        return request("currentTenpaiReport", { state, viewerId }).then(
+          normalizeTenpaiReport,
+        );
+      },
+      currentGameTenpaiReport(viewerId = options.playerId) {
+        return request("currentGameTenpaiReport", { viewerId }).then(
+          normalizeTenpaiReport,
+        );
       },
       close() {
         if (closed) return;
@@ -186,6 +193,11 @@ function normalizeLegalActions(legalActions) {
       }),
     ),
   };
+}
+
+function normalizeTenpaiReport(report) {
+  if (!report || typeof report !== "object") return report;
+  return { ...report, waits: localLuaList(report.waits) };
 }
 
 // The worker client is emitted to /assets/ in a production build, while the

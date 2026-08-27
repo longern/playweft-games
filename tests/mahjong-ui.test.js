@@ -31,6 +31,7 @@ import {
   matchResultRows,
   opponentHandLayout,
   orderedHand,
+  confirmedTenpaiSummary,
   partitionClaimActions,
   playerDisplayName,
   playerDisplayNames,
@@ -44,6 +45,7 @@ import {
   riverDisplayEntries,
   splitRevealedHand,
   tenpaiDiscardFuriten,
+  tenpaiWaitSummary,
   tenpaiWaitsForDiscard,
   visibleScoreSheetRows,
 } from "../games/mahjong/rules/game-format.js";
@@ -763,6 +765,47 @@ test("mahjong previews waits and visible-copy counts for the selected discard", 
   assert.equal(tenpaiDiscardFuriten(legalActions, 42), true);
   assert.equal(tenpaiDiscardFuriten(legalActions, 41), false);
 
+});
+
+test("mahjong refreshes a confirmed tenpai wait total from the visible table", () => {
+  const summary = tenpaiWaitSummary(
+    {
+      ownHand: [1, 2],
+      doraIndicatorTiles: [{ type: 11 }],
+      discards: {
+        self: [{ type: 1, claimed: false }],
+        right: [{ type: 1, claimed: true }],
+      },
+      melds: {
+        right: [{ tiles: [1, 11, 11] }],
+      },
+    },
+    [
+      { type: 1, noYaku: false },
+      { type: 11, noYaku: true },
+    ],
+  );
+
+  assert.deepEqual(summary, {
+    waits: [
+      { type: 1, remaining: 0, noYaku: false },
+      { type: 11, remaining: 1, noYaku: true },
+    ],
+    total: 1,
+  });
+  assert.deepEqual(
+    confirmedTenpaiSummary(
+      {
+        furiten: true,
+        ownHand: [1, 2],
+        doraIndicatorTiles: [{ type: 11 }],
+        discards: { self: [{ type: 1, claimed: false }] },
+        melds: { right: [{ tiles: [1, 11, 11] }] },
+      },
+      { waits: summary.waits, furiten: false },
+    ),
+    { ...summary, furiten: true },
+  );
 });
 
 test("mahjong keeps action buttons in a fixed player-facing order", () => {

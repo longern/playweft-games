@@ -305,21 +305,26 @@ function __playweft_local_current_tenpai_report(state, viewer_id)
   end
   local melds = state.melds[viewer_id] or {}
   local hand = copy_array(state.hands[viewer_id] or {})
-  if state.players[state.turnIndex] == viewer_id and (tonumber(state.drawnTile) or 0) > 0 then
+  local riichi_locked = state.riichi and state.riichi[viewer_id] == true
+  if state.players[state.turnIndex] == viewer_id
+    and (tonumber(state.drawnTile) or 0) > 0
+    and not riichi_locked then
     return nil
   end
   local waits = waiting_types(hand, melds)
   if #waits == 0 then
     return { key = tenpai_hand_key(hand, melds), tenpai = false }
   end
-  local witness = __playweft_local_tenpai_witness(hand, melds, waits)
-  if not witness then return nil end
   return {
     key = tenpai_hand_key(hand, melds),
     tenpai = true,
     waits = waits,
-    witness = witness,
+    furiten = is_furiten(state, viewer_id),
   }
+end
+
+function __playweft_local_current_game_tenpai_report(viewer_id)
+  return __playweft_local_current_tenpai_report(__local_state, viewer_id)
 end
 
 function __playweft_local_checkpoint()
@@ -407,6 +412,7 @@ export async function createLocalLuaGame({
     const readTenpaiReports = lua.global.get("__playweft_local_tenpai_reports");
     const readTenpaiReport = lua.global.get("__playweft_local_tenpai_report");
     const readCurrentTenpaiReport = lua.global.get("__playweft_local_current_tenpai_report");
+    const readCurrentGameTenpaiReport = lua.global.get("__playweft_local_current_game_tenpai_report");
     const createCheckpoint = lua.global.get("__playweft_local_checkpoint");
     const restoreCheckpoint = lua.global.get("__playweft_local_restore");
     const exportPaipu = lua.global.get("__playweft_local_paipu");
@@ -475,6 +481,10 @@ export async function createLocalLuaGame({
       currentTenpaiReport(state, viewerId = playerId) {
         ensureOpen(closed);
         return readCurrentTenpaiReport(state, viewerId);
+      },
+      currentGameTenpaiReport(viewerId = playerId) {
+        ensureOpen(closed);
+        return readCurrentGameTenpaiReport(viewerId);
       },
       checkpoint() {
         ensureOpen(closed);

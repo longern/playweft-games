@@ -100,6 +100,54 @@ export function tenpaiWaitsForDiscard(
     .filter((wait) => wait.type >= 1 && wait.type <= 34);
 }
 
+export function tenpaiWaitSummary(state, waits) {
+  const visible = Array(35).fill(0);
+  const addType = (value) => {
+    const type = Number(value) || 0;
+    if (type >= 1 && type <= 34) visible[type] += 1;
+  };
+  const addTileId = (value) => addType(tileType(Number(value) || 0));
+
+  for (const tileId of asArray(state?.ownHand)) addTileId(tileId);
+  if (Number(state?.drawnPlayerIndex) === 1) addTileId(state?.drawnTile);
+  for (const indicator of asArray(state?.doraIndicatorTiles)) {
+    addType(indicator?.type);
+  }
+  for (const river of Object.values(state?.discards ?? {})) {
+    for (const discard of asArray(river)) {
+      if (!discard?.claimed) addType(discard?.type);
+    }
+  }
+  for (const playerMelds of Object.values(state?.melds ?? {})) {
+    for (const meld of asArray(playerMelds)) {
+      for (const type of asArray(meld?.tiles)) addType(type);
+    }
+  }
+
+  const currentWaits = asArray(waits)
+    .map((wait) => {
+      const type = Number(wait?.type) || 0;
+      return {
+        type,
+        remaining: type >= 1 && type <= 34 ? Math.max(0, 4 - visible[type]) : 0,
+        noYaku: wait?.noYaku === true,
+      };
+    })
+    .filter((wait) => wait.type >= 1 && wait.type <= 34);
+  return {
+    waits: currentWaits,
+    total: currentWaits.reduce((total, wait) => total + wait.remaining, 0),
+  };
+}
+
+export function confirmedTenpaiSummary(state, confirmedTenpai) {
+  if (!confirmedTenpai?.waits) return null;
+  return {
+    ...tenpaiWaitSummary(state, confirmedTenpai.waits),
+    furiten: state?.furiten === true || confirmedTenpai.furiten === true,
+  };
+}
+
 export function canDiscardHandTile({
   canDiscard = false,
   riichiDeclared = false,

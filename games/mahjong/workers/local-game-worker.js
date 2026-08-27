@@ -74,6 +74,9 @@ async function handle(type, payload) {
   if (type === "currentTenpaiReport") {
     return game.currentTenpaiReport(payload.state, payload.viewerId);
   }
+  if (type === "currentGameTenpaiReport") {
+    return game.currentGameTenpaiReport(payload.viewerId);
+  }
   throw new TypeError(`Unknown Mahjong worker request: ${type}`);
 }
 

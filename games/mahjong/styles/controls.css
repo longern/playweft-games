@@ -54,21 +54,44 @@
   color: #f0b06a;
 }
 
-.action-bar > .furiten-badge {
+.action-bar > .tenpai-status-badge {
   position: fixed;
   right: 0;
   bottom: 128px;
-  min-width: 0;
-  padding: 7px 13px 7px 12px;
+  box-sizing: border-box;
+  width: 64px;
+  min-width: 64px;
+  min-height: 40px;
+  padding: 0;
   border-radius: 999px 0 0 999px;
+  border: 1px solid transparent;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 0.875em;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.action-bar > .furiten-badge {
+  border-color: var(--mahjong-warning-border);
   background: var(--mahjong-warning-fill);
   color: var(--mahjong-warning-text);
-  font-size: 0.875em;
-  font-weight: 850;
-  line-height: 1;
-  letter-spacing: 0.08em;
-  text-align: center;
-  pointer-events: none;
+}
+
+.action-bar > .tenpai-count-badge {
+  border-color: #c5e1a5;
+  background: #8bc34a;
+  color: #162300;
+  box-shadow: 0 0 14px rgba(139, 195, 74, 0.32);
+}
+
+.action-bar > .tenpai-status-badge:focus-visible {
+  outline: 2px solid #fff5cb;
+  outline-offset: -3px;
 }
 
 .claim-actions {

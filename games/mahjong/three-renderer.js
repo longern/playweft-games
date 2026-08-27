@@ -940,7 +940,8 @@ export class MahjongThreeRenderer {
         this.dealInTiles.push({ kind: "fade", materials });
       }
     }
-    if (reusesExistingTile && visualState.dora) this.tileFactory.trackDoraTile();
+    if (reusesExistingTile && visualState.dora)
+      this.tileFactory.trackDoraTile();
     const { tile } = record;
     this.highlightableTiles.add(tile);
     this.tileFactory.setMatchHighlight(tile, visualState.highlight === "match");
@@ -1169,11 +1170,13 @@ export class MahjongThreeRenderer {
       key: String(this.ui?.pendingDiscard?.key || ""),
       record,
       target,
-      start: target.clone().set(
-        target.x + outwardX * 1.8,
-        target.y + 0.72,
-        target.z + outwardZ * 1.8,
-      ),
+      start: target
+        .clone()
+        .set(
+          target.x + outwardX * 1.8,
+          target.y + 0.72,
+          target.z + outwardZ * 1.8,
+        ),
     };
     this.pendingDiscardAnimation = animation;
     record.node.position.copy(animation.start);
@@ -1185,7 +1188,11 @@ export class MahjongThreeRenderer {
       update: (progress) => {
         if (this.pendingDiscardAnimation !== animation) return;
         const eased = pendingDiscardProgress(progress);
-        record.node.position.lerpVectors(animation.start, animation.target, eased);
+        record.node.position.lerpVectors(
+          animation.start,
+          animation.target,
+          eased,
+        );
         record.node.scale.setScalar(0.94 + 0.06 * eased);
       },
       complete: () => this.finishPendingDiscard(animation),
@@ -1308,17 +1315,19 @@ export class MahjongThreeRenderer {
     // drag, so hover and the cursor should advertise selection independently
     // from whether this turn may discard.
     this.setHoveredTile(tile);
-    this.renderer.domElement.style.cursor = tile
-      ? "pointer"
-      : "default";
+    this.renderer.domElement.style.cursor = tile ? "pointer" : "default";
   }
 
   handlePointerUp(event) {
     const drag = this.dragState;
     if (drag && event.pointerId === drag.pointerId) {
       const { crossed, moved, tileId } = drag;
-      this.cancelDrag(false);
       const canDiscard = this.state?.legalActions?.canDiscard === true;
+      const committedDiscard = moved && crossed && canDiscard;
+      this.cancelDrag(false, {
+        restorePreview: !committedDiscard,
+        restoreTile: !committedDiscard,
+      });
       const hovered = canDiscard ? this.pickTile(event) : null;
       this.setHoveredTile(hovered, moved);
       this.renderer.domElement.style.cursor = hovered ? "pointer" : "default";
@@ -1391,9 +1400,12 @@ export class MahjongThreeRenderer {
     };
   }
 
-  cancelDrag(redraw = true) {
+  cancelDrag(
+    redraw = true,
+    { restorePreview = true, restoreTile = true } = {},
+  ) {
     const drag = this.dragState;
-    if (drag?.tile?.parent) {
+    if (restoreTile && drag?.tile?.parent) {
       drag.tile.position.x = drag.homeX;
       drag.tile.position.y = drag.homeY;
     }
@@ -1401,7 +1413,7 @@ export class MahjongThreeRenderer {
       this.renderer.domElement.releasePointerCapture(drag.pointerId);
     }
     this.dragState = null;
-    if (drag?.moved) this.callbacks.onEndDragPreview?.();
+    if (drag?.moved && restorePreview) this.callbacks.onEndDragPreview?.();
     if (drag && this.renderer?.domElement)
       this.renderer.domElement.style.cursor = "default";
     if (redraw) this.drawFrame();

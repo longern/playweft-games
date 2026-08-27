@@ -16,6 +16,8 @@ import {
   exhaustiveDrawPresentation,
   matchResultRows,
   resultDetailPageCount,
+  tenpaiDiscardFuriten,
+  tenpaiWaitsForDiscard,
 } from "../rules/game-format.js";
 import {
   applyMahjongPendingDiscard,
@@ -92,6 +94,13 @@ export function createMahjongTableController({
   let playedRiverTileSoundKey = "";
   let pendingDiscard = null;
   let pendingDiscardRecovery = null;
+  let postDiscardTenpai = null;
+  let postDiscardTenpaiHandKey = "";
+  let pendingPostDiscardTenpai = null;
+  let tenpaiPreviewIntent = { source: "none", pointerId: 0, tileId: 0 };
+  let lockedRiichiTenpai = null;
+  let riichiTenpaiRequest = 0;
+  let riichiTenpaiKey = "";
 
   function getState() {
     return state;
@@ -105,11 +114,19 @@ export function createMahjongTableController({
     riichiMode = false;
     selectionBeforeRiichi = 0;
     selectedTileId = 0;
+    clearTenpaiPreviewIntent();
   }
 
   function reset() {
     pendingDiscard = null;
     pendingDiscardRecovery = null;
+    postDiscardTenpai = null;
+    postDiscardTenpaiHandKey = "";
+    pendingPostDiscardTenpai = null;
+    clearTenpaiPreviewIntent();
+    lockedRiichiTenpai = null;
+    riichiTenpaiRequest += 1;
+    riichiTenpaiKey = "";
     state = undefined;
     serverTimeAtSync = 0;
     visibleEvents = [];
@@ -136,6 +153,19 @@ export function createMahjongTableController({
     const previousState = state;
     state = projection.state;
     reconcilePendingDiscard(state);
+    if (!hasLocalRiichi(state)) {
+      lockedRiichiTenpai = null;
+      riichiTenpaiRequest += 1;
+      riichiTenpaiKey = "";
+    } else if (!lockedRiichiTenpai && postDiscardTenpai?.waits?.length) {
+      lockedRiichiTenpai = postDiscardTenpai;
+    }
+    syncPostDiscardTenpaiLifecycle(state);
+    if (state?.phase !== "playing") {
+      riichiTenpaiRequest += 1;
+      riichiTenpaiKey = "";
+      clearTenpaiPreviewIntent();
+    }
     const projectionServerTime = Number(projection.serverTime);
     serverTimeAtSync = Number.isFinite(projectionServerTime)
       ? projectionServerTime
@@ -169,6 +199,7 @@ export function createMahjongTableController({
       ],
     ]);
     renderCurrentState({ animateDealIn });
+    syncSoloRiichiTenpai(currentGame);
     effectRunner.run("river tile sound", () => playRiverTileSound(events));
   }
 
@@ -244,6 +275,8 @@ export function createMahjongTableController({
           dealInKey: animateDealIn ? handDealInKey(state) : "",
           animateDealIn,
           riichiMode,
+          confirmedTenpai: visibleConfirmedTenpai(renderState),
+          tenpaiPreview: visibleTenpaiPreview(renderState),
           defaultNames: getThemeDefaultNames?.(),
           playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
           serverTime: serverTimeAtSync,
@@ -277,6 +310,7 @@ export function createMahjongTableController({
     visibleEvents = [];
     selectedTileId = 0;
     riichiMode = false;
+    clearPostDiscardTenpai();
     effectRunner.run("result exit DOM", () =>
       domView.render(
         { ...renderState, legalActions: {} },
@@ -851,8 +885,120 @@ export function createMahjongTableController({
   function reconcilePendingDiscard(nextState) {
     const status = pendingDiscardState(nextState, pendingDiscard);
     if (status !== "confirmed" && status !== "rejected") return;
+    if (status === "confirmed") {
+      postDiscardTenpai = pendingPostDiscardTenpai;
+      postDiscardTenpaiHandKey = postDiscardTenpai
+        ? localHandStateKey(nextState)
+        : "";
+    } else {
+      postDiscardTenpai = null;
+      postDiscardTenpaiHandKey = "";
+    }
     pendingDiscard = null;
     pendingDiscardRecovery = null;
+    pendingPostDiscardTenpai = null;
+  }
+
+  function clearPostDiscardTenpai() {
+    postDiscardTenpai = null;
+    postDiscardTenpaiHandKey = "";
+    pendingPostDiscardTenpai = null;
+  }
+
+  function localHandStateKey(current = state) {
+    const playerId = asArray(current?.players)[0];
+    return JSON.stringify([
+      asArray(current?.ownHand).map(Number),
+      Number(current?.drawnTile) || 0,
+      asArray(current?.melds?.[playerId]),
+    ]);
+  }
+
+  function syncPostDiscardTenpaiLifecycle(current = state) {
+    if (!postDiscardTenpai?.waits?.length) return;
+    if (![
+      "playing",
+      "claiming",
+    ].includes(current?.phase)) {
+      clearPostDiscardTenpai();
+      return;
+    }
+    const handKey = localHandStateKey(current);
+    if (!postDiscardTenpaiHandKey) {
+      postDiscardTenpaiHandKey = handKey;
+    } else if (postDiscardTenpaiHandKey !== handKey) {
+      clearPostDiscardTenpai();
+      return;
+    }
+    if (
+      !hasLocalRiichi(current) &&
+      current?.phase === "playing" &&
+      Number(current?.turnIndex) === 1
+    ) {
+      clearPostDiscardTenpai();
+    }
+  }
+
+  function hasLocalRiichi(current = state) {
+    const playerId = asArray(current?.players)[0];
+    return Boolean(playerId && current?.riichi?.[playerId] === true);
+  }
+
+  function riichiTenpai(current = state) {
+    return hasLocalRiichi(current) && lockedRiichiTenpai?.waits?.length
+      ? lockedRiichiTenpai
+      : null;
+  }
+
+  function visibleConfirmedTenpai(current = state) {
+    const lockedRiichiTenpai = riichiTenpai(current);
+    if (lockedRiichiTenpai) return lockedRiichiTenpai;
+    if (
+      !postDiscardTenpai?.waits?.length ||
+      !["playing", "claiming"].includes(current?.phase) ||
+      (current?.phase === "playing" && Number(current.turnIndex) === 1)
+    )
+      return null;
+    return postDiscardTenpai;
+  }
+
+  function tenpaiForDiscard(tileId, { declaringRiichi = false } = {}) {
+    const waits = tenpaiWaitsForDiscard(state?.legalActions, tileId, {
+      declaringRiichi,
+    });
+    if (waits.length === 0) return null;
+    return {
+      waits,
+      furiten: tenpaiDiscardFuriten(state?.legalActions, tileId),
+    };
+  }
+
+  function postDiscardTenpaiFor(action) {
+    return tenpaiForDiscard(action?.tileId, {
+      declaringRiichi: action?.type === "riichi",
+    });
+  }
+
+  function selectedTenpaiPreview() {
+    return tenpaiForDiscard(selectedTileId, { declaringRiichi: riichiMode });
+  }
+
+  function clearTenpaiPreviewIntent({ source } = {}) {
+    if (source && tenpaiPreviewIntent.source !== source) return false;
+    tenpaiPreviewIntent = { source: "none", pointerId: 0, tileId: 0 };
+    return true;
+  }
+
+  function visibleTenpaiPreview(current = state) {
+    if (current?.phase === "hand_ended") return null;
+    if (tenpaiPreviewIntent.source === "status-hold")
+      return visibleConfirmedTenpai(current);
+    if (tenpaiPreviewIntent.source === "drag") {
+      return tenpaiForDiscard(tenpaiPreviewIntent.tileId, {
+        declaringRiichi: riichiMode,
+      });
+    }
+    return selectedTenpaiPreview();
   }
 
   function queueKanDraw(events) {
@@ -1034,12 +1180,94 @@ export function createMahjongTableController({
     renderTileSelection(presentedState());
   }
 
-  function previewDraggedTile(tileId) {
-    domView.renderTenpaiPreview(presentedState(), Number(tileId) || 0);
+  function beginConfirmedTenpaiPreview(pointerId = 0) {
+    const renderState = presentedState();
+    if (!visibleConfirmedTenpai(renderState)) return false;
+    tenpaiPreviewIntent = {
+      source: "status-hold",
+      pointerId: Number(pointerId) || 0,
+      tileId: 0,
+    };
+    renderTileSelection(renderState);
+    return true;
   }
 
-  function restoreSelectedTilePreview() {
-    domView.renderTenpaiPreview(presentedState(), selectedTileId);
+  function endConfirmedTenpaiPreview(pointerId = 0) {
+    if (
+      tenpaiPreviewIntent.source !== "status-hold" ||
+      (pointerId && tenpaiPreviewIntent.pointerId &&
+        Number(pointerId) !== tenpaiPreviewIntent.pointerId)
+    ) {
+      return false;
+    }
+    clearTenpaiPreviewIntent();
+    renderTileSelection(presentedState());
+    return true;
+  }
+
+  function applyRiichiTenpai(report) {
+    const waits = asArray(report?.waits)
+      .map((wait) => ({
+        type: Number(typeof wait === "object" ? wait?.type : wait) || 0,
+        noYaku: false,
+      }))
+      .filter((wait) => wait.type >= 1 && wait.type <= 34);
+    const next = waits.length > 0
+      ? { waits, furiten: report?.furiten === true }
+      : null;
+    if (JSON.stringify(next) === JSON.stringify(lockedRiichiTenpai)) return;
+    lockedRiichiTenpai = next;
+    if (state) renderCurrentState();
+  }
+
+  function syncSoloRiichiTenpai(currentGame) {
+    if (
+      getMode?.() !== "solo" ||
+      state?.phase !== "playing" ||
+      !hasLocalRiichi(state) ||
+      typeof currentGame?.currentGameTenpaiReport !== "function"
+    )
+      return;
+    const key = JSON.stringify([
+      state.moveCount,
+      state.turnIndex,
+      state.drawnTile,
+      state.ownHand,
+      state.riichi,
+      state.furiten,
+    ]);
+    if (key === riichiTenpaiKey) return;
+    riichiTenpaiKey = key;
+    const request = ++riichiTenpaiRequest;
+    void currentGame.currentGameTenpaiReport(humanId).then(
+      (report) => {
+        if (
+          request !== riichiTenpaiRequest ||
+          currentGame !== getGame?.() ||
+          key !== riichiTenpaiKey ||
+          state?.phase !== "playing" ||
+          !hasLocalRiichi(state)
+        )
+          return;
+        applyRiichiTenpai(report?.tenpai ? report : null);
+      },
+      (error) => console.error("Mahjong riichi tenpai preview failed", error),
+    );
+  }
+
+  function beginDraggedTilePreview(tileId) {
+    tenpaiPreviewIntent = {
+      source: "drag",
+      pointerId: 0,
+      tileId: Number(tileId) || 0,
+    };
+    renderTileSelection(presentedState());
+  }
+
+  function endDraggedTilePreview() {
+    if (!clearTenpaiPreviewIntent({ source: "drag" })) return false;
+    renderTileSelection(presentedState());
+    return true;
   }
 
   function renderTileSelection(renderState) {
@@ -1047,7 +1275,11 @@ export function createMahjongTableController({
       renderState,
       selectedTileId,
       getPlayerName?.(),
-      { riichiMode, showGameHints: settingsDialog.gameHintsEnabled },
+      {
+        riichiMode,
+        showGameHints: settingsDialog.gameHintsEnabled,
+        tenpaiPreview: visibleTenpaiPreview(renderState),
+      },
     );
     visualRenderer.updateSelection({
       ...ui,
@@ -1097,11 +1329,14 @@ export function createMahjongTableController({
   }
 
   function submitDiscard(action) {
+    const nextPostDiscardTenpai = postDiscardTenpaiFor(action);
     const nextPending = getMode?.() === "room"
       ? createMahjongPendingDiscard(state, action)
       : null;
+    clearTenpaiPreviewIntent({ source: "drag" });
     if (nextPending) {
       pendingDiscard = nextPending;
+      pendingPostDiscardTenpai = nextPostDiscardTenpai;
       pendingDiscardRecovery = {
         selectedTileId,
         riichiMode,
@@ -1111,6 +1346,9 @@ export function createMahjongTableController({
       riichiMode = false;
       selectionBeforeRiichi = 0;
       renderCurrentState();
+    } else {
+      postDiscardTenpai = nextPostDiscardTenpai;
+      postDiscardTenpaiHandKey = "";
     }
     const dispatched = dispatch?.(action);
     if (!nextPending) return dispatched;
@@ -1130,6 +1368,10 @@ export function createMahjongTableController({
     const recovery = pendingDiscardRecovery;
     pendingDiscard = null;
     pendingDiscardRecovery = null;
+    pendingPostDiscardTenpai = null;
+    postDiscardTenpai = null;
+    postDiscardTenpaiHandKey = "";
+    clearTenpaiPreviewIntent({ source: "drag" });
     if (
       recovery &&
       state?.legalActions?.canDiscard === true &&
@@ -1208,8 +1450,11 @@ export function createMahjongTableController({
     dismissResultForReplay,
     selectTile,
     clearSelectedTile,
-    previewDraggedTile,
-    restoreSelectedTilePreview,
+    beginConfirmedTenpaiPreview,
+    endConfirmedTenpaiPreview,
+    applyRiichiTenpai,
+    beginDraggedTilePreview,
+    endDraggedTilePreview,
     discardOwnTile,
     rollbackPendingDiscard,
     enterRiichiMode,

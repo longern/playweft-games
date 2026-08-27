@@ -13,6 +13,9 @@ function createController({
   mode = "solo",
 } = {}) {
   const calls = [];
+  const domOptions = [];
+  const selectionOptions = [];
+  const tenpaiPreviewCalls = [];
   const game = activeGame ? {} : undefined;
   const music = matchMusicController ?? {
     gain: 1,
@@ -34,14 +37,18 @@ function createController({
       visualUi(_playerName, selectedTileId) {
         return selectedTileId ? { selectedTileId } : {};
       },
-      render(state) {
+      render(state, _events, _selectedTileId, _playerName, options) {
+        domOptions.push(options);
         calls.push(["dom", state.moveCount]);
       },
-      renderSelection(_state, tileId) {
+      renderSelection(_state, tileId, _playerName, options) {
         calls.push(["selection", tileId]);
+        selectionOptions.push(options);
         return {};
       },
-      renderTenpaiPreview() {},
+      renderTenpaiPreview(_state, tenpai) {
+        tenpaiPreviewCalls.push({ tenpai });
+      },
     },
     visualRenderer: {
       render(state, _events, ui) {
@@ -84,7 +91,14 @@ function createController({
     getThemeRiichiMusicUrl: () => riichiMusicUrl,
     dispatch: onDispatch,
   });
-  return { controller, calls, music };
+  return {
+    controller,
+    calls,
+    domOptions,
+    selectionOptions,
+    tenpaiPreviewCalls,
+    music,
+  };
 }
 
 test("mahjong table controller publishes a projection before rendering it", async () => {
@@ -193,6 +207,246 @@ test("mahjong table controller submits the selected riichi tile", async () => {
   controller.discardOwnTile(42);
 
   assert.deepEqual(dispatched, [{ type: "riichi", tileId: 42 }]);
+});
+
+test("mahjong keeps confirmed tenpai through remote draws and clears it on the next local turn", async () => {
+  const dispatched = [];
+  const { controller, domOptions, selectionOptions } = createController({
+    onDispatch: (action) => dispatched.push(action),
+  });
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 4,
+      turnIndex: 1,
+      ownHand: [41],
+      legalActions: {
+        canDiscard: true,
+        tenpaiDiscards: [
+          {
+            tileId: 41,
+            furiten: false,
+            waits: [{ type: 9, remaining: 3, noYaku: true }],
+          },
+        ],
+      },
+    },
+    events: [],
+  });
+
+  controller.discardOwnTile(41);
+  assert.deepEqual(dispatched, [{ type: "discard", tileId: 41 }]);
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 5,
+      turnIndex: 2,
+      ownHand: [],
+      legalActions: {},
+      discards: { self: [{ type: 11, claimed: false }] },
+      melds: {},
+      doraIndicatorTiles: [],
+    },
+    events: [],
+  });
+
+  assert.deepEqual(domOptions.at(-1).tenpaiPreview, null);
+  assert.deepEqual(domOptions.at(-1).confirmedTenpai, {
+    waits: [{ type: 9, remaining: 3, noYaku: true }],
+    furiten: false,
+  });
+  controller.beginConfirmedTenpaiPreview(7);
+  assert.deepEqual(selectionOptions.at(-1).tenpaiPreview, {
+    waits: [{ type: 9, remaining: 3, noYaku: true }],
+    furiten: false,
+  });
+  controller.endConfirmedTenpaiPreview(7);
+  assert.equal(selectionOptions.at(-1).tenpaiPreview, null);
+
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 6,
+      turnIndex: 2,
+      ownHand: [],
+      legalActions: {},
+      discards: { self: [{ type: 11, claimed: false }] },
+      melds: {},
+      doraIndicatorTiles: [],
+    },
+    events: [{ type: "drew", playerIndex: 2 }],
+  });
+  assert.deepEqual(domOptions.at(-1).confirmedTenpai, {
+    waits: [{ type: 9, remaining: 3, noYaku: true }],
+    furiten: false,
+  });
+
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 7,
+      turnIndex: 1,
+      ownHand: [],
+      drawnTile: 45,
+      legalActions: { canDiscard: true },
+    },
+    events: [],
+  });
+  assert.equal(domOptions.at(-1).confirmedTenpai, null);
+});
+
+test("mahjong keeps a held riichi status through an automatic discard refresh", async () => {
+  const { controller, domOptions, selectionOptions } = createController();
+  const riichiTenpai = {
+    waits: [{ type: 9, remaining: 3, noYaku: false }],
+    furiten: false,
+  };
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 5,
+      turnIndex: 1,
+      players: ["human"],
+      riichi: { human: true },
+      ownHand: [41],
+      legalActions: { canDiscard: true },
+    },
+    events: [],
+  });
+
+  controller.applyRiichiTenpai(riichiTenpai);
+  const expectedRiichiTenpai = {
+    waits: [{ type: 9, noYaku: false }],
+    furiten: false,
+  };
+  assert.deepEqual(domOptions.at(-1).confirmedTenpai, expectedRiichiTenpai);
+  controller.beginConfirmedTenpaiPreview(17);
+  assert.deepEqual(selectionOptions.at(-1).tenpaiPreview, expectedRiichiTenpai);
+
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 6,
+      turnIndex: 2,
+      players: ["human"],
+      riichi: { human: true },
+      ownHand: [41],
+      legalActions: {},
+    },
+    events: [],
+  });
+  assert.deepEqual(domOptions.at(-1).tenpaiPreview, expectedRiichiTenpai);
+  assert.equal(controller.endConfirmedTenpaiPreview(18), false);
+  assert.deepEqual(selectionOptions.at(-1).tenpaiPreview, expectedRiichiTenpai);
+  assert.equal(controller.endConfirmedTenpaiPreview(17), true);
+  assert.equal(selectionOptions.at(-1).tenpaiPreview, null);
+
+  controller.applyRiichiTenpai({ ...riichiTenpai, furiten: true });
+  assert.deepEqual(domOptions.at(-1).confirmedTenpai, {
+    ...expectedRiichiTenpai,
+    furiten: true,
+  });
+});
+
+test("mahjong keeps the selected discard's tenpai preview alongside the held status preview", async () => {
+  const { controller, selectionOptions, domOptions } = createController();
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 4,
+      turnIndex: 1,
+      ownHand: [41, 42],
+      legalActions: {
+        canDiscard: true,
+        tenpaiDiscards: [
+          {
+            tileId: 42,
+            furiten: true,
+            waits: [{ type: 9, remaining: 3, noYaku: true }],
+          },
+        ],
+      },
+    },
+    events: [],
+  });
+
+  controller.selectTile(42);
+  assert.deepEqual(selectionOptions.at(-1).tenpaiPreview, {
+    waits: [{ type: 9, remaining: 3, noYaku: true }],
+    furiten: true,
+  });
+  controller.clearSelectedTile();
+  assert.equal(selectionOptions.at(-1).tenpaiPreview, null);
+  assert.equal(domOptions.at(-1).tenpaiPreview, null);
+});
+
+test("mahjong restores the selected preview after dragging another discard", async () => {
+  const { controller, selectionOptions } = createController();
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 4,
+      turnIndex: 1,
+      ownHand: [41, 42],
+      legalActions: {
+        canDiscard: true,
+        tenpaiDiscards: [
+          {
+            tileId: 41,
+            furiten: false,
+            waits: [{ type: 9, remaining: 3, noYaku: true }],
+          },
+          {
+            tileId: 42,
+            furiten: true,
+            waits: [{ type: 28, remaining: 2, noYaku: false }],
+          },
+        ],
+      },
+    },
+    events: [],
+  });
+
+  controller.selectTile(42);
+  controller.beginDraggedTilePreview(41);
+  controller.endDraggedTilePreview();
+
+  assert.deepEqual(selectionOptions.at(-2).tenpaiPreview, {
+    waits: [{ type: 9, remaining: 3, noYaku: true }],
+    furiten: false,
+  });
+  assert.deepEqual(selectionOptions.at(-1).tenpaiPreview, {
+    waits: [{ type: 28, remaining: 2, noYaku: false }],
+    furiten: true,
+  });
+});
+
+test("mahjong clears a dragged discard preview while waiting for room confirmation", async () => {
+  const { controller, domOptions } = createController({ mode: "room" });
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 4,
+      turnIndex: 1,
+      ownHand: [41],
+      legalActions: {
+        canDiscard: true,
+        tenpaiDiscards: [
+          {
+            tileId: 41,
+            furiten: false,
+            waits: [{ type: 9, remaining: 3, noYaku: true }],
+          },
+        ],
+      },
+    },
+    events: [],
+  });
+
+  controller.beginDraggedTilePreview(41);
+  controller.discardOwnTile(41);
+
+  assert.equal(domOptions.at(-1).tenpaiPreview, null);
 });
 
 test("mahjong keeps the current match track unchanged when riichi music is not configured", async () => {

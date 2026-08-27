@@ -186,6 +186,10 @@ const domView = new MahjongDomView({
   onAction: dispatch,
   onSelectTile: (tileId) => tableController?.selectTile(tileId),
   onDiscardTile: (tileId) => tableController?.discardOwnTile(tileId),
+  onTenpaiPreviewStart: (pointerId) =>
+    tableController?.beginConfirmedTenpaiPreview(pointerId),
+  onTenpaiPreviewEnd: (pointerId) =>
+    tableController?.endConfirmedTenpaiPreview(pointerId),
 });
 const { elements } = domView;
 const transientNotice = createMahjongTransientNotice({
@@ -233,8 +237,9 @@ const presentation = new MahjongPresentationController({
 const visualRenderer = new MahjongThreeRenderer(elements.stage, {
   onSelectTile: (tileId) => tableController?.selectTile(tileId),
   onClearSelection: () => tableController?.clearSelectedTile(),
-  onPreviewDragTile: (tileId) => tableController?.previewDraggedTile(tileId),
-  onEndDragPreview: () => tableController?.restoreSelectedTilePreview(),
+  onPreviewDragTile: (tileId) =>
+    tableController?.beginDraggedTilePreview(tileId),
+  onEndDragPreview: () => tableController?.endDraggedTilePreview(),
   onHandRevealComplete: (key) => tableController?.handRevealSettled(key),
   onDiscardTile: (tileId) => tableController?.discardOwnTile(tileId),
   onDoubleClickBlank() {

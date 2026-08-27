@@ -209,7 +209,41 @@ test("local Mahjong runtime calculates the exact river-bottom discard declaratio
   checkpoint.state.hands[HUMAN_ID].pop();
   const currentReport = game.currentTenpaiReport(checkpoint.state, HUMAN_ID);
 
-  assert.deepEqual(currentReport, report);
+  assert.equal(currentReport.tenpai, true);
+  assert.deepEqual(luaTableValues(currentReport.waits), [28]);
+  assert.equal(currentReport.furiten, false);
+  assert.equal(currentReport.witness, undefined);
+
+  checkpoint.state.riichi[HUMAN_ID] = true;
+  checkpoint.state.drawnTile = 133;
+  game.restoreCheckpoint(checkpoint, HUMAN_ID);
+  const lockedRiichiReport = game.currentGameTenpaiReport(HUMAN_ID);
+
+  assert.equal(lockedRiichiReport.tenpai, true);
+  assert.deepEqual(luaTableValues(lockedRiichiReport.waits), [28]);
+  assert.equal(lockedRiichiReport.furiten, false);
+});
+
+test("local Mahjong runtime keeps a special-hand riichi wait without a verifier witness", async (t) => {
+  const game = await createGame(t, 67_890);
+  t.after(() => game.close());
+  const checkpoint = game.checkpoint();
+  checkpoint.state.phase = "playing";
+  checkpoint.state.turnIndex = 1;
+  checkpoint.state.drawnTile = 29;
+  checkpoint.state.melds[HUMAN_ID] = [];
+  checkpoint.state.riichi[HUMAN_ID] = true;
+  checkpoint.state.hands[HUMAN_ID] = [
+    1, 33, 37, 69, 73, 105, 109, 113, 117, 121, 125, 129, 133,
+  ];
+
+  const report = game.currentTenpaiReport(checkpoint.state, HUMAN_ID);
+
+  assert.equal(report.tenpai, true);
+  assert.deepEqual(luaTableValues(report.waits), [
+    1, 9, 10, 18, 19, 27, 28, 29, 30, 31, 32, 33, 34,
+  ]);
+  assert.equal(report.witness, undefined);
 });
 
 test("local Mahjong authority advances every AI turn without a page-selected actor", async (t) => {
