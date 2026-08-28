@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import { createMahjongEffectRunner } from "../games/mahjong/app/effect-runner.js";
 import { createMahjongTableController } from "../games/mahjong/app/table-controller.js";
+import { confirmedTenpaiSummary } from "../games/mahjong/rules/game-format.js";
 
 function createController({
   onDispatch = () => {},
@@ -349,6 +350,36 @@ test("mahjong keeps a held riichi status through an automatic discard refresh", 
     ...expectedRiichiTenpai,
     furiten: true,
   });
+});
+
+test("mahjong derives a riichi furiten badge from the private flag and public river", () => {
+  const confirmedTenpai = { waits: [{ type: 9, noYaku: false }] };
+  const baseState = {
+    players: ["human"],
+    ownHand: [],
+    discards: { human: [] },
+    melds: {},
+    doraIndicatorTiles: [],
+  };
+
+  assert.equal(
+    confirmedTenpaiSummary(
+      { ...baseState, selfRiichiFuriten: true },
+      confirmedTenpai,
+    ).furiten,
+    true,
+  );
+  assert.equal(
+    confirmedTenpaiSummary(
+      {
+        ...baseState,
+        discards: { human: [{ type: 9, claimed: true }] },
+      },
+      confirmedTenpai,
+    ).furiten,
+    true,
+  );
+  assert.equal(confirmedTenpaiSummary(baseState, confirmedTenpai).furiten, false);
 });
 
 test("mahjong keeps the selected discard's tenpai preview alongside the held status preview", async () => {

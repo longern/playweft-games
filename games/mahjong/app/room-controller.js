@@ -1,12 +1,12 @@
 import { createLocalLuaGame } from "../workers/local-game-worker-client.js";
 import { asArray } from "../rules/game-format.js";
 import { orientMahjongRoomProjection } from "../rules/room-state.js";
+import { buildRoomSelfActionState } from "../rules/room-self-analysis.js";
+import { createMahjongRoomSelfAnalysisController } from "./room-self-analysis-controller.js";
 import {
-  buildRoomLegalState,
   buildRoomTenpaiReportState,
   roomAutomaticKey,
   roomEarlyTenpaiStateKey,
-  roomLegalStateKey,
   roomPlayerHasFutureNormalDraw,
   roomTenpaiStateKey,
 } from "../rules/room-utils.js";
@@ -60,11 +60,6 @@ export function createMahjongRoomController({
   let roomAiGeneration = 0;
   let roomAiTurnKey = "";
   let roomAiState;
-  let roomLegalGame;
-  let roomLegalPlayerIds = "";
-  let roomLegalRequest = 0;
-  let roomLegalRequestedKey = "";
-  let roomLegalAppliedKey = "";
   let roomAutomaticStateKey = "";
   let roomTenpaiGame;
   let roomTenpaiGameReady;
@@ -76,9 +71,16 @@ export function createMahjongRoomController({
   let roomTenpaiSupplementRequest = 0;
   let roomTenpaiSupplementRequestedKey = "";
   let roomTenpaiReportedKey = "";
-  let roomRiichiTenpaiRequest = 0;
-  let roomRiichiTenpaiKey = "";
   let playerPresentationKey = "";
+  const roomSelfAnalysis = createMahjongRoomSelfAnalysisController({
+    getPlayerId,
+    getDestroyed,
+    isRoom,
+    applyLegalActions: (legalActions) => tableController.applyLegalActions(legalActions),
+    applyLockedWait: (report) => tableController.applyRiichiTenpai(report),
+    onLegalActionsReady: () => scheduleAutomaticAction(),
+    onLegalActionsInvalidated: () => getSession?.()?.cancelScheduledActions(),
+  });
 
   function isRoom() {
     return getPlayMode?.() === "room";
@@ -204,8 +206,7 @@ export function createMahjongRoomController({
       persistCompletedRoomPaipu(message?.state?.paipu, message.matchId);
       enableAutoWinAfterRiichi?.(projection.state, ownRiichiEvent);
       session?.confirmRoomState();
-      scheduleRoomLegalActions(projection.state);
-      scheduleRoomRiichiTenpai(projection.state);
+      roomSelfAnalysis.sync(projection.state);
       scheduleRoomTenpaiReports(projection.state);
       scheduleRoomEarlyTenpaiReport(projection.state, projection.events);
       if (!hadState) tableController.syncMatchMusic({ fadeIn: true });
@@ -235,11 +236,7 @@ export function createMahjongRoomController({
     const state = tableController.getState();
     const key = roomAutomaticKey(state);
     if (!key || key !== roomAutomaticStateKey) return;
-    if (
-      state?.phase === "playing" &&
-      roomLegalAppliedKey !== roomLegalStateKey(state)
-    )
-      return;
+    if (!roomSelfAnalysis.hasCurrentLegalActions(state)) return;
     getSession?.()?.scheduleRoomAutomaticAction({
       state,
       isCurrent: () =>
@@ -281,62 +278,6 @@ export function createMahjongRoomController({
     }
   }
 
-  function scheduleRoomRiichiTenpai(state) {
-    const playerId = getPlayerId?.();
-    if (
-      !isRoom() ||
-      state?.phase !== "playing" ||
-      state?.riichi?.[playerId] !== true
-    ) {
-      roomRiichiTenpaiRequest += 1;
-      roomRiichiTenpaiKey = "";
-      tableController.applyRiichiTenpai(null);
-      return;
-    }
-    const context = state.legalContext ?? {};
-    const key = JSON.stringify([
-      state.moveCount,
-      state.turnIndex,
-      state.drawnTile,
-      state.ownHand,
-      state.riichi?.[playerId],
-      context.melds,
-      context.discards,
-      context.tempFuriten,
-      context.riichiFuriten,
-    ]);
-    if (key === roomRiichiTenpaiKey) return;
-    roomRiichiTenpaiKey = key;
-    const request = ++roomRiichiTenpaiRequest;
-    void runRoomRiichiTenpai(
-      buildRoomLegalState(state, playerId),
-      key,
-      request,
-    );
-  }
-
-  async function runRoomRiichiTenpai(state, key, request) {
-    try {
-      const localGame = await ensureRoomTenpaiGame(state);
-      if (!localGame) return;
-      const report = await localGame.currentTenpaiReport(
-        state,
-        getPlayerId?.(),
-      );
-      if (
-        getDestroyed?.() ||
-        !isRoom() ||
-        request !== roomRiichiTenpaiRequest ||
-        key !== roomRiichiTenpaiKey
-      )
-        return;
-      tableController.applyRiichiTenpai(report?.tenpai ? report : null);
-    } catch (error) {
-      if (request === roomRiichiTenpaiRequest)
-        console.error("Mahjong riichi tenpai preview failed", error);
-    }
-  }
-
   function scheduleRoomTenpaiReports(state) {
     const wallCount = Math.max(0, Number(state?.wallCount) || 0);
     const playerId = getPlayerId?.();
@@ -373,7 +314,7 @@ export function createMahjongRoomController({
     roomTenpaiReports = undefined;
     const request = ++roomTenpaiRequest;
     roomTenpaiReportsPromise = runRoomTenpaiReports(
-      buildRoomLegalState(state, playerId),
+      buildRoomSelfActionState(state, playerId),
       key,
       request,
     );
@@ -489,7 +430,7 @@ export function createMahjongRoomController({
       const key = roomTenpaiStateKey(state);
       if (Number(state?.wallCount) === 0) {
         const report = await roomTenpaiReportForDiscard(
-          buildRoomLegalState(state, playerId),
+          buildRoomSelfActionState(state, playerId),
           Number(action.tileId),
         );
         if (report) {
@@ -512,62 +453,6 @@ export function createMahjongRoomController({
     } catch (error) {
       console.error("Mahjong room action failed", error);
       return undefined;
-    }
-  }
-
-  function scheduleRoomLegalActions(state) {
-    const playerId = getPlayerId?.();
-    const activeIndex =
-      state?.phase === "claiming" ? Number(state?.responseIndex) : Number(state?.turnIndex);
-    const activePlayer = asArray(state?.players)[activeIndex - 1];
-    if (state?.phase === "claiming" && activePlayer === playerId) {
-      roomLegalRequestedKey = "";
-      roomLegalAppliedKey = "";
-      roomLegalRequest += 1;
-      scheduleAutomaticAction();
-      return;
-    }
-    if (!state?.legalContext || state?.phase !== "playing" || activePlayer !== playerId) {
-      roomLegalRequestedKey = "";
-      roomLegalAppliedKey = "";
-      roomLegalRequest += 1;
-      getSession?.()?.cancelScheduledActions();
-      return;
-    }
-    const key = roomLegalStateKey(state);
-    if (key === roomLegalRequestedKey) return;
-    roomLegalRequestedKey = key;
-    roomLegalAppliedKey = "";
-    const request = ++roomLegalRequest;
-    void runRoomLegalActions(buildRoomLegalState(state, playerId), key, request);
-  }
-
-  async function runRoomLegalActions(state, key, request) {
-    try {
-      const players = asArray(state.players).map((id) => ({ id, name: id }));
-      const playerIds = JSON.stringify(state.players);
-      if (!roomLegalGame || roomLegalPlayerIds !== playerIds) {
-        roomLegalGame?.close();
-        roomLegalGame = await createLocalLuaGame({
-          sourceUrl: "./game.lua",
-          players,
-          playerId: getPlayerId?.(),
-        });
-        roomLegalPlayerIds = playerIds;
-      }
-      const legalActions = await roomLegalGame.legalActions(state, getPlayerId?.());
-      if (
-        getDestroyed?.() ||
-        !isRoom() ||
-        request !== roomLegalRequest ||
-        key !== roomLegalRequestedKey
-      ) return;
-      tableController.applyLegalActions(legalActions);
-      roomLegalAppliedKey = key;
-      scheduleAutomaticAction();
-    } catch (error) {
-      if (request === roomLegalRequest)
-        console.error("Mahjong room legal-action preview failed", error);
     }
   }
 
@@ -743,11 +628,7 @@ export function createMahjongRoomController({
     cancelRoomAiWait();
     roomAiGame?.close();
     roomAiGame = undefined;
-    roomLegalRequest += 1;
-    roomLegalRequestedKey = "";
-    roomLegalAppliedKey = "";
-    roomLegalGame?.close();
-    roomLegalGame = undefined;
+    roomSelfAnalysis.destroy();
     roomTenpaiRequest += 1;
     roomTenpaiRequestedKey = "";
     roomTenpaiReports = undefined;
@@ -755,8 +636,6 @@ export function createMahjongRoomController({
     roomTenpaiSupplementRequest += 1;
     roomTenpaiSupplementRequestedKey = "";
     roomTenpaiReportedKey = "";
-    roomRiichiTenpaiRequest += 1;
-    roomRiichiTenpaiKey = "";
     roomTenpaiGame?.close();
     roomTenpaiGame = undefined;
     roomTenpaiGameReady = undefined;

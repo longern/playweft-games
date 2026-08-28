@@ -279,6 +279,27 @@ test("Mahjong room requires and shares a built-in character fallback", async () 
   });
 });
 
+test("Mahjong room exposes permanent riichi furiten only to its owner", async () => {
+  const result = await runOnlineMock(`
+    local started = setup({
+      players = ${PLAYERS},
+      match = {
+        ownerId = "p1",
+        randomSeed = "0000000000000000000000000000002d",
+      },
+    })
+    started.state.riichiFuriten.p1 = true
+    local own = view(started.state, {}, { viewer = { id = "p1", isOwner = true } })
+    local other = view(started.state, {}, { viewer = { id = "p2", isOwner = false } })
+    result = {
+      own_flag = own.state.selfRiichiFuriten == true,
+      other_flag = other.state.selfRiichiFuriten == false,
+    }
+  `);
+
+  assert.deepEqual(result, { own_flag: true, other_flag: true });
+});
+
 test("Mahjong room pass-claims stays private, skips calls, and preserves ron", async () => {
   const result = await runOnlineMock(`
     local function ids(types)

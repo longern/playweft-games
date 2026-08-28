@@ -74,6 +74,9 @@ async function handle(type, payload) {
   if (type === "currentTenpaiReport") {
     return game.currentTenpaiReport(payload.state, payload.viewerId);
   }
+  if (type === "riichiWaitReport") {
+    return game.riichiWaitReport(payload.state, payload.viewerId);
+  }
   if (type === "currentGameTenpaiReport") {
     return game.currentGameTenpaiReport(payload.viewerId);
   }

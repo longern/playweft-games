@@ -214,6 +214,17 @@ test("local Mahjong runtime calculates the exact river-bottom discard declaratio
   assert.equal(currentReport.furiten, false);
   assert.equal(currentReport.witness, undefined);
 
+  const reconnectedRiichiReport = game.riichiWaitReport(
+    {
+      hands: { [HUMAN_ID]: checkpoint.state.hands[HUMAN_ID] },
+      melds: { [HUMAN_ID]: [] },
+    },
+    HUMAN_ID,
+  );
+  assert.equal(reconnectedRiichiReport.tenpai, true);
+  assert.deepEqual(luaTableValues(reconnectedRiichiReport.waits), [28]);
+  assert.equal(reconnectedRiichiReport.furiten, undefined);
+
   checkpoint.state.riichi[HUMAN_ID] = true;
   checkpoint.state.drawnTile = 133;
   game.restoreCheckpoint(checkpoint, HUMAN_ID);

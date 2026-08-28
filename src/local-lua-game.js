@@ -323,6 +323,27 @@ function __playweft_local_current_tenpai_report(state, viewer_id)
   }
 end
 
+-- Riichi waits are locked when the declaration succeeds.  Rebuilding this
+-- small report must work from a room projection on every later turn, where
+-- the normal legal-action context (including private furiten flags) is not
+-- intentionally available.
+function __playweft_local_riichi_wait_report(state, viewer_id)
+  if type(state) ~= "table" or type(viewer_id) ~= "string" then
+    error("Riichi wait report requires a state and viewer id")
+  end
+  local melds = state.melds[viewer_id] or {}
+  local hand = copy_array(state.hands[viewer_id] or {})
+  local waits = waiting_types(hand, melds)
+  if #waits == 0 then
+    return { key = tenpai_hand_key(hand, melds), tenpai = false }
+  end
+  return {
+    key = tenpai_hand_key(hand, melds),
+    tenpai = true,
+    waits = waits,
+  }
+end
+
 function __playweft_local_current_game_tenpai_report(viewer_id)
   return __playweft_local_current_tenpai_report(__local_state, viewer_id)
 end
@@ -412,6 +433,7 @@ export async function createLocalLuaGame({
     const readTenpaiReports = lua.global.get("__playweft_local_tenpai_reports");
     const readTenpaiReport = lua.global.get("__playweft_local_tenpai_report");
     const readCurrentTenpaiReport = lua.global.get("__playweft_local_current_tenpai_report");
+    const readRiichiWaitReport = lua.global.get("__playweft_local_riichi_wait_report");
     const readCurrentGameTenpaiReport = lua.global.get("__playweft_local_current_game_tenpai_report");
     const createCheckpoint = lua.global.get("__playweft_local_checkpoint");
     const restoreCheckpoint = lua.global.get("__playweft_local_restore");
@@ -481,6 +503,10 @@ export async function createLocalLuaGame({
       currentTenpaiReport(state, viewerId = playerId) {
         ensureOpen(closed);
         return readCurrentTenpaiReport(state, viewerId);
+      },
+      riichiWaitReport(state, viewerId = playerId) {
+        ensureOpen(closed);
+        return readRiichiWaitReport(state, viewerId);
       },
       currentGameTenpaiReport(viewerId = playerId) {
         ensureOpen(closed);

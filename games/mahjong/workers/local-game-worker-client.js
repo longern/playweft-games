@@ -151,6 +151,11 @@ export async function createLocalLuaGame(options = {}) {
           normalizeTenpaiReport,
         );
       },
+      riichiWaitReport(state, viewerId = options.playerId) {
+        return request("riichiWaitReport", { state, viewerId }).then(
+          normalizeTenpaiReport,
+        );
+      },
       currentGameTenpaiReport(viewerId = options.playerId) {
         return request("currentGameTenpaiReport", { viewerId }).then(
           normalizeTenpaiReport,

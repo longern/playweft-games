@@ -689,6 +689,12 @@ function view(state, events, context)
     projection.state.aiPresentations = state.aiPresentations or {}
     projection.state.playerPresentations = state.playerPresentations or {}
     projection.state.portraitSeed = state.seed or state.lobbySeed
+    -- This is viewer-private state. It lets a reconnecting riichi player keep
+    -- the correct furiten badge without exposing any other player's claim
+    -- history or concealed-hand information.
+    projection.state.selfRiichiFuriten = state.riichiFuriten
+      and state.riichiFuriten[viewer_id] == true
+      or false
     local ai_actor = context.viewer.isOwner and active_player or nil
     projection.state.aiTurn = ai_actor and state.aiPlayers and state.aiPlayers[ai_actor] and {
       player = ai_actor,

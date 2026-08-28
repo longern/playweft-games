@@ -142,9 +142,22 @@ export function tenpaiWaitSummary(state, waits) {
 
 export function confirmedTenpaiSummary(state, confirmedTenpai) {
   if (!confirmedTenpai?.waits) return null;
+  const waitTypes = new Set(
+    asArray(confirmedTenpai.waits)
+      .map((wait) => Number(wait?.type) || 0)
+      .filter((type) => type >= 1 && type <= 34),
+  );
+  const playerId = asArray(state?.players)[0];
+  const riverFuriten = asArray(state?.discards?.[playerId]).some(
+    (discard) => waitTypes.has(Number(discard?.type) || 0),
+  );
   return {
     ...tenpaiWaitSummary(state, confirmedTenpai.waits),
-    furiten: state?.furiten === true || confirmedTenpai.furiten === true,
+    furiten:
+      state?.furiten === true ||
+      state?.selfRiichiFuriten === true ||
+      confirmedTenpai.furiten === true ||
+      riverFuriten,
   };
 }
 
