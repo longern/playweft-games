@@ -147,6 +147,15 @@ export function createMahjongTableController({
     state = projection.state;
     reconcilePendingDiscard(state);
     if (!pendingDiscard) discardSubmissionPending = false;
+    const projectionEvents = asArray(projection.events);
+    if (
+      projectionEvents.some(
+        (event) => event?.type === "next_hand" || event?.type === "new_match",
+      ) ||
+      (previousState?.phase === "hand_ended" && state?.phase === "playing")
+    ) {
+      tenpaiState.clearHand?.();
+    }
     tenpaiState.sync(state);
     if (!hasLocalRiichi(state)) {
       riichiTenpaiRequest += 1;
@@ -173,7 +182,7 @@ export function createMahjongTableController({
       riichiMode = false;
       selectionBeforeRiichi = 0;
     }
-    const events = asArray(projection.events);
+    const events = projectionEvents;
     visibleEvents = events;
     effectRunner.runAll([
       ["match music", () => syncMatchMusicForHandState(previousState, state)],
@@ -882,7 +891,7 @@ export function createMahjongTableController({
   }
 
   function clearPostDiscardTenpai() {
-    tenpaiState.clearConfirmedWait();
+    tenpaiState.clearHand?.();
   }
 
   function hasLocalRiichi(current = state) {
@@ -1100,6 +1109,13 @@ export function createMahjongTableController({
   }
 
   function applyRiichiTenpai(report) {
+    // A transient worker miss must not erase an already confirmed riichi wait.
+    // The authoritative state remains riichi until the hand ends; keep the
+    // last valid wait available for both the badge and an active long-press.
+    if (
+      hasLocalRiichi(state) &&
+      (!Array.isArray(report?.waits) || report.waits.length === 0)
+    ) return;
     if (!tenpaiState.applyLockedWait(report)) return;
     if (state) renderCurrentState();
   }
@@ -1215,7 +1231,7 @@ export function createMahjongTableController({
     clearTenpaiPreviewIntent({ source: "drag" });
     discardSubmissionPending = true;
     if (nextPending) {
-      tenpaiState.setPendingDiscard(state?.legalActions, action);
+      tenpaiState.setPendingDiscard(state?.legalActions, action, state);
       pendingDiscard = nextPending;
       pendingDiscardRecovery = {
         selectedTileId,

@@ -183,7 +183,12 @@ export function createMahjongRoomController({
       session?.cancelScheduledActions();
     }
     if (projection.state.phase === "lobby") {
-      session?.confirmRoomState();
+      session?.confirmRoomState({
+        state: projection.state,
+        events: projection.events,
+        version: message?.version,
+        matchId: message?.matchId,
+      });
       setGameInitializing?.(false);
       elements.app.setAttribute("aria-busy", "false");
       if (projection.state.roomIsOwner) showRoomSetupCallback?.();
@@ -552,11 +557,18 @@ export function createMahjongRoomController({
 
   function handleActionResult() {}
 
-  function handleError(message, _code, requestId) {
+  function handleError(message, code, requestId) {
     roomAiBusy = false;
     roomAiAwaitingState = false;
     const session = getSession?.();
-    if (session?.rejectRoomAction(requestId)) {
+    const reconciliation = session?.reconcileRoomActionError({
+      requestId,
+      errorCode: code,
+      state: tableController.getState(),
+    });
+    if (["confirmed", "superseded", "stale"].includes(reconciliation?.outcome))
+      return;
+    if (reconciliation?.outcome === "rejected" || reconciliation?.outcome === "unknown") {
       tableController.rollbackPendingDiscard?.();
       tableController.clearResultPageReadyPending();
       if (tableController.getState()?.phase === "hand_ended")

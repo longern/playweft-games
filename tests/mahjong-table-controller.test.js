@@ -210,6 +210,141 @@ test("mahjong table controller submits the selected riichi tile", async () => {
   assert.deepEqual(dispatched, [{ type: "riichi", tileId: 42 }]);
 });
 
+test("mahjong keeps the riichi wait visible while the room action is pending", async () => {
+  const { controller, domOptions } = createController({ mode: "room" });
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 2,
+      turnIndex: 1,
+      players: ["human"],
+      ownHand: [41],
+      drawnTile: 42,
+      legalActions: {
+        canDiscard: true,
+        canRiichi: true,
+        riichiTiles: [42],
+        tenpaiDiscards: [
+          {
+            tileId: 42,
+            furiten: false,
+            waits: [{ type: 9, remaining: 4, noYaku: false }],
+          },
+        ],
+      },
+      discards: { human: [] },
+      melds: { human: [] },
+      doraIndicatorTiles: [],
+    },
+    events: [],
+  });
+
+  controller.enterRiichiMode();
+  controller.discardOwnTile(42);
+
+  assert.deepEqual(domOptions.at(-1).confirmedTenpai, {
+    waits: [{ type: 9, remaining: 4, noYaku: false }],
+    furiten: false,
+  });
+});
+
+test("mahjong keeps the optimistic riichi wait across a pre-confirmation state refresh", async () => {
+  const dispatched = [];
+  const { controller, domOptions, selectionOptions } = createController({
+    mode: "room",
+    onDispatch: (action) => dispatched.push(action),
+  });
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 2,
+      turnIndex: 1,
+      players: ["human"],
+      ownHand: [41],
+      drawnTile: 42,
+      riichi: { human: false },
+      legalActions: {
+        canDiscard: true,
+        canRiichi: true,
+        riichiTiles: [42],
+        tenpaiDiscards: [
+          {
+            tileId: 42,
+            furiten: false,
+            waits: [{ type: 9, remaining: 4, noYaku: false }],
+          },
+        ],
+      },
+      discards: { human: [] },
+      melds: { human: [] },
+      doraIndicatorTiles: [],
+    },
+    events: [],
+  });
+
+  controller.enterRiichiMode();
+  controller.discardOwnTile(42);
+  await controller.refresh({
+    state: {
+      phase: "claiming",
+      moveCount: 3,
+      turnIndex: 2,
+      players: ["human"],
+      ownHand: [41],
+      riichi: { human: false },
+      legalActions: {},
+      discards: { human: [{ type: 11, riichi: true }] },
+      melds: { human: [] },
+      doraIndicatorTiles: [],
+    },
+    events: [],
+  });
+  controller.beginConfirmedTenpaiPreview(3);
+
+  assert.deepEqual(dispatched, [{ type: "riichi", tileId: 42 }]);
+  assert.deepEqual(domOptions.at(-1).confirmedTenpai, {
+    waits: [{ type: 9, remaining: 4, noYaku: false }],
+    furiten: false,
+  });
+  assert.deepEqual(selectionOptions.at(-1).tenpaiPreview, {
+    waits: [{ type: 9, remaining: 4, noYaku: false }],
+    furiten: false,
+  });
+});
+
+test("mahjong removes the optimistic riichi wait when the room rejects the action", async () => {
+  const { controller, domOptions } = createController({ mode: "room" });
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 2,
+      turnIndex: 1,
+      players: ["human"],
+      ownHand: [41],
+      drawnTile: 42,
+      riichi: { human: false },
+      legalActions: {
+        canDiscard: true,
+        canRiichi: true,
+        riichiTiles: [42],
+        tenpaiDiscards: [
+          { tileId: 42, waits: [{ type: 9, remaining: 4, noYaku: false }] },
+        ],
+      },
+      discards: { human: [] },
+      melds: { human: [] },
+      doraIndicatorTiles: [],
+    },
+    events: [],
+  });
+
+  controller.enterRiichiMode();
+  controller.discardOwnTile(42);
+  controller.rollbackPendingDiscard();
+
+  assert.equal(domOptions.at(-1).confirmedTenpai, null);
+});
+
 test("mahjong keeps confirmed tenpai through remote draws and clears it on the next local turn", async () => {
   const dispatched = [];
   const { controller, domOptions, selectionOptions } = createController({
@@ -350,6 +485,82 @@ test("mahjong keeps a held riichi status through an automatic discard refresh", 
     ...expectedRiichiTenpai,
     furiten: true,
   });
+});
+
+test("mahjong keeps a locked riichi wait when a later worker report is temporarily empty", async () => {
+  const { controller, domOptions, selectionOptions } = createController();
+  const riichiTenpai = {
+    tenpai: true,
+    waits: [{ type: 9, noYaku: false }],
+    furiten: false,
+  };
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 5,
+      turnIndex: 2,
+      players: ["human"],
+      riichi: { human: true },
+      ownHand: [41],
+      legalActions: {},
+      discards: { human: [] },
+      melds: { human: [] },
+      doraIndicatorTiles: [],
+    },
+    events: [],
+  });
+
+  controller.applyRiichiTenpai(riichiTenpai);
+  controller.beginConfirmedTenpaiPreview(9);
+  controller.applyRiichiTenpai(null);
+
+  assert.deepEqual(domOptions.at(-1).confirmedTenpai, {
+    waits: [{ type: 9, noYaku: false }],
+    furiten: false,
+  });
+  assert.deepEqual(selectionOptions.at(-1).tenpaiPreview, {
+    waits: [{ type: 9, noYaku: false }],
+    furiten: false,
+  });
+});
+
+test("mahjong clears a locked riichi wait at the hand boundary", async () => {
+  const { controller, domOptions } = createController();
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 8,
+      turnIndex: 2,
+      players: ["human"],
+      roundWind: 1,
+      handNumber: 1,
+      riichi: { human: true },
+      ownHand: [41],
+      legalActions: {},
+    },
+    events: [],
+  });
+  controller.applyRiichiTenpai({
+    tenpai: true,
+    waits: [{ type: 9, noYaku: false }],
+  });
+
+  await controller.refresh({
+    state: {
+      phase: "hand_ended",
+      moveCount: 30,
+      turnIndex: 1,
+      players: ["human"],
+      roundWind: 1,
+      handNumber: 1,
+      riichi: { human: true },
+      ownHand: [],
+      legalActions: {},
+    },
+    events: [{ type: "draw_game" }],
+  });
+
+  assert.equal(domOptions.at(-1).confirmedTenpai, null);
 });
 
 test("mahjong derives a riichi furiten badge from the private flag and public river", () => {

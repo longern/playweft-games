@@ -7,6 +7,10 @@ import {
   shouldScheduleMahjongAiTurn,
 } from "../rules/auto-action-scheduler.js";
 import { automaticRiichiDiscard } from "../rules/game-format.js";
+import {
+  reconcileRoomAction,
+  roomActionStateKey,
+} from "../rules/room-action-reconciliation.js";
 
 /**
  * Owns the authoritative Mahjong action lifecycle. Page code supplies the
@@ -41,6 +45,8 @@ export function createMahjongSessionController({
 } = {}) {
   let actionInFlight = false;
   let roomActionRequestId = "";
+  let roomActionAttempt = null;
+  const settledRoomRequestIds = new Set();
   let scheduledTurnKey = "";
   let reconcilePending = false;
 
@@ -64,6 +70,31 @@ export function createMahjongSessionController({
     scheduledTurnKey = "";
   }
 
+  function settleRoomAction(outcome) {
+    if (roomActionAttempt?.requestId)
+      settledRoomRequestIds.add(roomActionAttempt.requestId);
+    if (settledRoomRequestIds.size > 32) {
+      const oldest = settledRoomRequestIds.values().next().value;
+      settledRoomRequestIds.delete(oldest);
+    }
+    roomActionAttempt = null;
+    roomActionRequestId = "";
+    actionInFlight = false;
+    return outcome;
+  }
+
+  function startRoomActionAttempt(requestId, action, source, baseState) {
+    if (typeof requestId !== "string" || !requestId) return;
+    roomActionRequestId = requestId;
+    roomActionAttempt = {
+      requestId,
+      action,
+      source,
+      baseStateKey: roomActionStateKey(baseState),
+      baseMoveCount: Number(baseState?.moveCount) || 0,
+    };
+  }
+
   function scheduleOwned(callback, delay, turnKey) {
     scheduledTurnKey = turnKey;
     return scheduler.schedule((generation) => {
@@ -82,12 +113,11 @@ export function createMahjongSessionController({
 
     if (getMode?.() === "room") {
       actionInFlight = true;
+      const baseState = getState?.();
       try {
         const requestId = await sendRoomAction?.(action, {
           onRequestStarted(startedRequestId) {
-            if (typeof startedRequestId === "string" && startedRequestId) {
-              roomActionRequestId = startedRequestId;
-            }
+            startRoomActionAttempt(startedRequestId, action, source, baseState);
           },
         });
         if (!requestId) {
@@ -95,7 +125,8 @@ export function createMahjongSessionController({
           onRoomUnavailable?.();
           return false;
         }
-        if (!roomActionRequestId) roomActionRequestId = requestId;
+        if (!roomActionAttempt)
+          startRoomActionAttempt(requestId, action, source, baseState);
         return true;
       } catch (error) {
         actionInFlight = false;
@@ -442,15 +473,34 @@ export function createMahjongSessionController({
     isActionInFlight() {
       return actionInFlight;
     },
-    confirmRoomState() {
-      actionInFlight = false;
-      roomActionRequestId = "";
+    confirmRoomState(snapshot) {
+      if (snapshot === undefined) return settleRoomAction({ outcome: "confirmed" });
+      const result = reconcileRoomAction({
+        attempt: roomActionAttempt,
+        state: snapshot?.state,
+      });
+      if (result.outcome !== "pending") settleRoomAction(result);
+      return result;
     },
     rejectRoomAction(requestId) {
       if (requestId && requestId !== roomActionRequestId) return false;
-      actionInFlight = false;
-      roomActionRequestId = "";
+      settleRoomAction({ outcome: "rejected", shouldNotify: true });
       return true;
+    },
+    reconcileRoomActionError({ requestId, errorCode, state } = {}) {
+      if (requestId && settledRoomRequestIds.has(requestId))
+        return { outcome: "stale", shouldNotify: false };
+      if (requestId && requestId !== roomActionRequestId)
+        return { outcome: "stale", shouldNotify: false };
+      if (!requestId && !roomActionAttempt)
+        return { outcome: "unknown", shouldNotify: true };
+      const result = reconcileRoomAction({
+        attempt: roomActionAttempt,
+        state,
+        errorCode,
+      });
+      if (result.outcome !== "pending") settleRoomAction(result);
+      return result;
     },
   };
 }
