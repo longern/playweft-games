@@ -11,6 +11,7 @@ import {
   roomTenpaiStateKey,
 } from "../rules/room-utils.js";
 import { AI_DELAY_MS } from "../rules/constants.js";
+import { buildCompletedRoomPaipuRecord } from "../replay/room-paipu.js";
 
 const LATE_WALL_REPORT_START = 4;
 const LATE_WALL_REPORT_BUDGET_MS = 500;
@@ -208,7 +209,11 @@ export function createMahjongRoomController({
       const presentationApplied = roomPlayerPresentations?.apply(projection.state);
       await tableController.refresh(projection, { animateDealIn });
       await presentationApplied;
-      persistCompletedRoomPaipu(message?.state?.paipu, message.matchId);
+      persistCompletedRoomPaipu(
+        message?.state?.paipu,
+        message?.matchId,
+        message?.state?.playerPresentations,
+      );
       enableAutoWinAfterRiichi?.(projection.state, ownRiichiEvent);
       session?.confirmRoomState();
       roomSelfAnalysis.sync(projection.state);
@@ -225,15 +230,14 @@ export function createMahjongRoomController({
     }
   }
 
-  function persistCompletedRoomPaipu(paipu, matchId) {
-    if (!paipu || typeof matchId !== "string" || !matchId) return;
-    const record = {
-      ...paipu,
-      id: `${matchId}:room`,
+  function persistCompletedRoomPaipu(paipu, matchId, playerPresentations) {
+    const record = buildCompletedRoomPaipuRecord({
+      paipu,
+      matchId,
       viewerPlayerId: getPlayerId?.(),
-      completedAtMs: Date.now(),
-      playerPresentations: message?.state?.playerPresentations || {},
-    };
+      playerPresentations,
+    });
+    if (!record) return;
     void persistCompletedPaipu(record).catch((error) => {
       console.warn("Mahjong room paipu save failed", error);
     });
