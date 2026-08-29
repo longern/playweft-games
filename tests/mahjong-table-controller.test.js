@@ -133,8 +133,33 @@ test("mahjong table controller publishes a projection before rendering it", asyn
       deferredHandInsertionIndex: 0,
       dealInKey: "",
       animateDealIn: false,
+      readOnly: false,
     }],
   ]);
+});
+
+test("mahjong replay mode keeps table actions read-only", async () => {
+  const dispatched = [];
+  const { controller, calls, domOptions } = createController({
+    mode: "replay",
+    onDispatch: (action) => dispatched.push(action),
+  });
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 4,
+      ownHand: [41],
+      drawnTile: 42,
+      legalActions: { canDiscard: true, canRiichi: true, riichiTiles: [42] },
+    },
+    events: [],
+  });
+
+  assert.equal(domOptions.at(-1).readOnly, true);
+  assert.equal(calls.at(-1)[2].readOnly, true);
+  assert.equal(controller.discardOwnTile(42), false);
+  assert.equal(controller.enterRiichiMode(), false);
+  assert.deepEqual(dispatched, []);
 });
 
 test("mahjong table controller allows hand inspection without dispatching a turn action", async () => {

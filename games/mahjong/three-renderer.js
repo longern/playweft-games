@@ -544,6 +544,7 @@ export class MahjongThreeRenderer {
       asArray(state.legalActions?.forbiddenDiscardTypes),
     );
     const riichiMode = this.ui?.riichiMode === true;
+    const readOnly = this.ui?.readOnly === true;
     const riichiTiles = new Set(
       asArray(this.ui?.riichiCandidateTiles).map(Number),
     );
@@ -578,7 +579,7 @@ export class MahjongThreeRenderer {
             tileId,
           }) &&
             !forbiddenTypes.has(tileType(tileId)) &&
-            (!riichiMode || riichiTiles.has(tileId)),
+            (!riichiMode || riichiTiles.has(tileId)) && !readOnly,
           riichiMode && !riichiTiles.has(tileId),
         );
       });
@@ -595,7 +596,7 @@ export class MahjongThreeRenderer {
             tileId: drawn,
           }) &&
             !forbiddenTypes.has(tileType(drawn)) &&
-            (!riichiMode || riichiTiles.has(drawn)),
+            (!riichiMode || riichiTiles.has(drawn)) && !readOnly,
           riichiMode && !riichiTiles.has(drawn),
           this.animateOwnDrawEntry,
         );

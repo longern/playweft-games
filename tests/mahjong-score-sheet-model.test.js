@@ -34,9 +34,22 @@ test("score sheet keeps every opening-wind column tied to one player across scor
       ["北", "north", "北家"],
     ],
   );
+  assert.equal(model.selfColumnIndex, 2);
   assert.deepEqual(model.rows[0].scores, [31000, 20000, 23000, 26000]);
 
-  presentations.set("south", { source: "south-platform-portrait" });
+  presentations.set("south", {
+    source: "south-platform-portrait",
+    fallbackSource: "south-theme-portrait",
+  });
+  const southColumn = scoreSheetPortraitSources(
+    model,
+    ({ playerId }) => presentations.get(playerId),
+  )[1];
+  assert.deepEqual(southColumn, {
+    source: "south-platform-portrait",
+    fallbackSource: "south-theme-portrait",
+    builtinCharacterId: "",
+  });
   assert.deepEqual(
     scoreSheetPortraitSources(model, ({ playerId }) => presentations.get(playerId))
       .map(({ source }) => source),

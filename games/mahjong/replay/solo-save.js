@@ -48,6 +48,8 @@ export function createMahjongSoloSave({
   actions = [],
   autoActions,
   opponentPortraits,
+  opponentNames,
+  playerPresentations,
 } = {}) {
   return normalizeSave({
     version: MAHJONG_SOLO_SAVE_VERSION,
@@ -59,6 +61,8 @@ export function createMahjongSoloSave({
     actions,
     autoActions,
     opponentPortraits,
+    opponentNames,
+    playerPresentations,
   });
 }
 
@@ -127,6 +131,8 @@ function normalizeSave(value) {
     })),
     autoActions: normalizeAutoActions(value.autoActions),
     opponentPortraits: normalizeOpponentPortraits(value.opponentPortraits),
+    opponentNames: normalizeOpponentNames(value.opponentNames),
+    playerPresentations: normalizePlayerPresentations(value.playerPresentations),
     checkpoint: normalizeCheckpoint(value.checkpoint, value.actions.length),
   };
 }
@@ -138,6 +144,54 @@ function normalizeOpponentPortraits(value) {
       position,
       typeof portraits[position] === "string" ? portraits[position] : "",
     ]),
+  );
+}
+
+function normalizeOpponentNames(value) {
+  const names = value && typeof value === "object" ? value : {};
+  return Object.fromEntries(
+    ["right", "opposite", "left"].map((position) => [
+      position,
+      typeof names[position] === "string" ? names[position] : "",
+    ]),
+  );
+}
+
+function normalizePlayerPresentations(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : {};
+  return Object.fromEntries(
+    Object.entries(source)
+      .map(([playerId, presentation]) => {
+        if (!playerId || !presentation || typeof presentation !== "object") {
+          return null;
+        }
+        const theme = presentation.themeCharacter;
+        const result = {
+          avatarPreference: presentation.avatarPreference === "theme"
+            ? "theme"
+            : "auto",
+        };
+        if (
+          theme &&
+          typeof theme === "object" &&
+          typeof theme.packId === "string" &&
+          typeof theme.characterId === "string" &&
+          theme.packId &&
+          theme.characterId
+        ) {
+          result.themeCharacter = {
+            packId: theme.packId,
+            characterId: theme.characterId,
+          };
+        }
+        if (typeof presentation.builtinCharacterId === "string" && presentation.builtinCharacterId) {
+          result.builtinCharacterId = presentation.builtinCharacterId;
+        }
+        return [playerId, result];
+      })
+      .filter(Boolean),
   );
 }
 

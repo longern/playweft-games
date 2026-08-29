@@ -32,7 +32,7 @@ async function handle(type, payload) {
     };
   }
   if (!game) throw new Error("Mahjong worker is not initialized");
-  if (type === "view") return game.view(payload.viewerId);
+  if (type === "view") return game.view(payload.viewerId, payload.viewOptions);
   if (type === "checkpoint") return game.checkpoint();
   if (type === "exportPaipu") return game.exportPaipu();
   if (type === "restoreCheckpoint") {

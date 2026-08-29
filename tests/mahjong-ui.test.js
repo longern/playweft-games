@@ -1094,6 +1094,21 @@ test("mahjong result pages separate winners before the score summary", () => {
 
 });
 
+test("mahjong final standings break equal scores by seat order", () => {
+  assert.deepEqual(
+    matchResultRows({
+      scores: [25_000, 30_000, 30_000, 25_000],
+      playerNames: ["东", "南", "西", "北"],
+    }, "你").map(({ seat, score, rank }) => ({ seat, score, rank })),
+    [
+      { seat: 2, score: 30_000, rank: 1 },
+      { seat: 3, score: 30_000, rank: 2 },
+      { seat: 1, score: 25_000, rank: 3 },
+      { seat: 4, score: 25_000, rank: 4 },
+    ],
+  );
+});
+
 test("mahjong score sheets retain the latest scored hands and show each change from the prior row", () => {
   const rows = resultScoreSheetRows({
     scoreHistory: [

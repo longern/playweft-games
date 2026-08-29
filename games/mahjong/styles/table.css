@@ -135,6 +135,12 @@ a {
   fill: currentColor;
 }
 
+.replay-hand-visibility-control svg {
+  width: 36px;
+  height: 36px;
+  stroke-width: 2.15;
+}
+
 .auto-action-control[aria-pressed="true"] {
   color: var(--gold-bright);
   opacity: 1;

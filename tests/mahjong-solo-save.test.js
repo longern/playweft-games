@@ -69,6 +69,48 @@ test("mahjong solo saves retain the three opponent portraits", () => {
   });
 });
 
+test("mahjong solo saves retain the three opponent display names", () => {
+  const save = createSave({
+    opponentNames: { right: "夜莺", opposite: "白狐", left: "青鹭" },
+  });
+  assert.deepEqual(save.opponentNames, {
+    right: "夜莺",
+    opposite: "白狐",
+    left: "青鹭",
+  });
+});
+
+test("mahjong solo saves retain the match presentation fallback snapshot", () => {
+  const save = createSave({
+    playerPresentations: {
+      human: {
+        avatarPreference: "auto",
+        themeCharacter: { packId: "moonlit", characterId: "fox" },
+        builtinCharacterId: "builtin-1",
+      },
+      "ai-1": {
+        avatarPreference: "theme",
+        themeCharacter: { packId: "moonlit", characterId: "wolf" },
+        builtinCharacterId: "builtin-2",
+      },
+    },
+  });
+  const storage = createStorage();
+  assert.equal(writeMahjongSoloSave(save, storage), true);
+  assert.deepEqual(readMahjongSoloSave(storage)?.playerPresentations, {
+    human: {
+      avatarPreference: "auto",
+      themeCharacter: { packId: "moonlit", characterId: "fox" },
+      builtinCharacterId: "builtin-1",
+    },
+    "ai-1": {
+      avatarPreference: "theme",
+      themeCharacter: { packId: "moonlit", characterId: "wolf" },
+      builtinCharacterId: "builtin-2",
+    },
+  });
+});
+
 test("mahjong solo saves update portraits after a new match reroll", () => {
   const save = createSave({
     opponentPortraits: { right: "fox", opposite: "wolf", left: "cat" },

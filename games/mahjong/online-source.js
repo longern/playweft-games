@@ -60,6 +60,8 @@ end
 local function __mahjong_sanitize_player_presentation(value)
   if type(value) ~= "table" then return nil end
   local result = {}
+  if value.avatarPreference == "theme" then result.avatarPreference = "theme"
+  else result.avatarPreference = "auto" end
   if value.portraitMode == "platform" then result.portraitMode = "platform"
   else result.portraitMode = "character" end
   local theme_character = __mahjong_sanitize_character_reference(value.themeCharacter)
@@ -69,6 +71,10 @@ local function __mahjong_sanitize_player_presentation(value)
     result.builtinCharacterId = value.builtinCharacterId
   else
     return nil
+  end
+  if type(value.displayName) == "string"
+    and #value.displayName > 0 and #value.displayName <= 120 then
+    result.displayName = value.displayName
   end
   return result
 end
@@ -499,6 +505,12 @@ function on_action(state, action, context)
       action.aiPresentations,
       state.aiPlayers
     )
+    for seat, player_id in ipairs(started.players or {}) do
+      local presentation = started.aiPresentations[player_id]
+      if presentation and presentation.displayName then
+        started.playerNames[seat] = presentation.displayName
+      end
+    end
     started.playerPresentations = state.playerPresentations or {}
     -- Match starts are the first hand of a fresh game.  Match-local
     -- automatic claim settings must not leak into it from the lobby.

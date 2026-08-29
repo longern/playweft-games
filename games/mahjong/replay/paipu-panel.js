@@ -90,11 +90,34 @@ export function createMahjongPaipuPanel({
     item.className = "paipu-entry";
     const info = document.createElement("div");
     info.className = "paipu-entry-info";
-    const title = document.createElement("strong");
-    title.textContent = `${summary.matchType === "hanchan" ? "南风场" : "东风场"} · ${summary.playerName || "你"}`;
-    const date = document.createElement("span");
-    date.textContent = `${formatDate(summary.endedAtMs)} · ${summary.handCount} 局 · ${summary.finalScores.join(" / ")}`;
-    info.append(title, date);
+    const players = document.createElement("div");
+    players.className = "paipu-entry-players";
+    for (const player of summaryPlayers(summary)) {
+      const playerEntry = document.createElement("div");
+      playerEntry.className = `paipu-entry-player${
+        player.isLocal ? " is-local" : ""
+      }`;
+      const name = document.createElement(player.isLocal ? "strong" : "span");
+      name.className = "paipu-entry-player-name";
+      name.textContent = player.name || (player.isLocal ? "你" : `玩家${player.seat}`);
+      name.title = name.textContent;
+      const score = document.createElement(player.isLocal ? "strong" : "span");
+      score.className = "paipu-entry-player-score";
+      score.textContent = String(player.score);
+      playerEntry.append(name, score);
+      players.append(playerEntry);
+    }
+    const meta = document.createElement("div");
+    meta.className = "paipu-entry-meta";
+    const matchType = document.createElement("span");
+    matchType.className = "paipu-entry-match-type";
+    matchType.textContent = summary.matchType === "hanchan" ? "南风场" : "东风场";
+    const date = document.createElement("time");
+    const endedAt = new Date(Number(summary.endedAtMs));
+    if (Number.isFinite(endedAt.getTime())) date.dateTime = endedAt.toISOString();
+    date.textContent = formatDate(summary.endedAtMs);
+    meta.append(matchType, date);
+    info.append(players, meta);
     const actions = document.createElement("div");
     actions.className = "paipu-entry-actions";
     const replay = document.createElement("button");
@@ -124,6 +147,24 @@ export function createMahjongPaipuPanel({
     actions.append(replay, pin);
     item.append(info, actions);
     return item;
+  }
+
+  function summaryPlayers(summary) {
+    if (Array.isArray(summary?.players) && summary.players.length === 4) {
+      return summary.players
+        .map((player, index) => ({
+          seat: Number(player?.seat) || index + 1,
+          id: String(player?.id || ""),
+          name: String(player?.name || ""),
+          score: Number(player?.score) || 0,
+          isLocal: String(player?.id || "") === String(summary?.viewerPlayerId || ""),
+        }))
+        .sort(
+          (left, right) =>
+            right.score - left.score || left.seat - right.seat,
+        );
+    }
+    return [];
   }
 
   function formatDate(value) {

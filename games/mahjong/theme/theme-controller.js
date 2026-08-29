@@ -26,7 +26,11 @@ import {
 } from "./asset-packs.js";
 import { Check, Download, Trash2, createIcons } from "lucide";
 import { getOrCreateMahjongDefaultCharacter } from "./default-character.js";
-import { getMahjongBuiltinCharacterForKey } from "./builtin-characters.js";
+import {
+  getMahjongBuiltinCharacterForKey,
+  getMahjongBuiltinCharacterName,
+} from "./builtin-characters.js";
+import { chooseMahjongPortraitSource } from "../app/player-presentation-resolver.js";
 
 const DEFAULT_VISUAL_PACK_ID = "__default__";
 
@@ -45,6 +49,7 @@ export function createMahjongThemeController({
   waitForRenderers,
   setRendererAppearance,
   setPlayerIdentityState,
+  getAvatarSourcePreference,
   initialMatchPortraitRequest,
   onAssetsChanged,
   isRoomActive,
@@ -241,6 +246,14 @@ export function createMahjongThemeController({
     return applyPackAvatars();
   }
 
+  function avatarSourcePreference() {
+    return getAvatarSourcePreference?.() === "theme" ? "theme" : "auto";
+  }
+
+  function platformAvatarAllowed() {
+    return avatarSourcePreference() === "auto" && Boolean(platformAvatarSource);
+  }
+
   function setRoomPlayerIdentity(identity) {
     roomPlayerIdentity = String(identity || "anonymous");
     return ensureDefaultCharacter();
@@ -260,7 +273,8 @@ export function createMahjongThemeController({
     const hasThemeCharacter =
       characterId && theme.catalog.some((entry) => entry.id === characterId);
     return {
-      portraitMode: platformAvatarSource ? "platform" : "character",
+      avatarPreference: avatarSourcePreference(),
+      portraitMode: platformAvatarAllowed() ? "platform" : "character",
       ...(hasThemeCharacter
         ? {
             themeCharacter: {
@@ -284,6 +298,12 @@ export function createMahjongThemeController({
     return Object.fromEntries(
       (Array.isArray(playerIds) ? playerIds : []).map((playerId) => {
         const portrait = portraits[playerId];
+        const builtinCharacterId = getMahjongBuiltinCharacterForKey(
+          `${randomSeed}:${playerId}`,
+        );
+        const themeCharacter = portrait?.portraitId
+          ? activePortraitCatalog.find((entry) => entry.id === portrait.portraitId)
+          : undefined;
         return [
           playerId,
           {
@@ -295,9 +315,11 @@ export function createMahjongThemeController({
                   },
                 }
               : {}),
-            builtinCharacterId: getMahjongBuiltinCharacterForKey(
-              `${randomSeed}:${playerId}`,
-            ),
+            builtinCharacterId,
+            displayName:
+              themeCharacter?.label ||
+              getMahjongBuiltinCharacterName(builtinCharacterId) ||
+              String(playerId),
           },
         ];
       }),
@@ -325,15 +347,26 @@ export function createMahjongThemeController({
     };
     const defaultNames = getMahjongDefaultNames();
     const portraits = {};
+    const fallbackPortraits = {};
     const names = {};
     for (const [position, portraitSlot] of Object.entries(portraitSlotByPosition)) {
-      portraits[position] =
-        position === "bottom" && platformAvatarSource
-          ? platformAvatarSource
-          : getMahjongAssetUrl(`portrait-${portraitSlot}`);
+      const selected = chooseMahjongPortraitSource({
+        themeSource: getMahjongAssetUrl(`portrait-${portraitSlot}`),
+        platformSource:
+          position === "bottom" && platformAvatarAllowed()
+            ? platformAvatarSource
+            : "",
+        avatarPreference: avatarSourcePreference(),
+      });
+      portraits[position] = selected.source;
+      fallbackPortraits[position] = selected.fallbackSource;
       if (position !== "bottom") names[position] = defaultNames[portraitSlot] || "";
     }
-    const applied = setPlayerIdentityState?.({ portraits, names });
+    const applied = setPlayerIdentityState?.({
+      portraits,
+      fallbackPortraits,
+      names,
+    });
     for (const listener of playerPresentationSubscribers) listener();
     return applied;
   }
@@ -347,12 +380,34 @@ export function createMahjongThemeController({
       left: "left",
     }[position];
     if (!portraitSlot) return undefined;
-    return {
-      source:
-        position === "bottom" && platformAvatarSource
+    return chooseMahjongPortraitSource({
+      themeSource: getMahjongAssetUrl(`portrait-${portraitSlot}`),
+      platformSource:
+        position === "bottom" && platformAvatarAllowed()
           ? platformAvatarSource
-          : getMahjongAssetUrl(`portrait-${portraitSlot}`),
-    };
+          : "",
+      avatarPreference: avatarSourcePreference(),
+    });
+  }
+
+  function getPaipuPlayerPresentations(players = []) {
+    const ids = Array.isArray(players) ? players : [];
+    const portraits = getMahjongActivePortraits();
+    const context = getMahjongOnlinePortraitContext();
+    const portraitSlots = ["self", "right", "opposite", "left"];
+    return Object.fromEntries(
+      ids.map((player, index) => {
+        const playerId = String(player?.id || "");
+        const characterId = String(portraits[portraitSlots[index]] || "");
+        return [playerId, {
+          ...(characterId
+            ? { themeCharacter: { packId: context.packId, characterId } }
+            : {}),
+          builtinCharacterId: getMahjongBuiltinCharacterForKey(playerId),
+          avatarPreference: avatarSourcePreference(),
+        }];
+      }).filter(([playerId]) => playerId),
+    );
   }
 
   function subscribePlayerPresentations(listener) {
@@ -600,6 +655,7 @@ export function createMahjongThemeController({
     applyMatchPortraits,
     clearMatchPortraits,
     setPlatformAvatar,
+    getPlatformAvatarSource: () => platformAvatarSource,
     setRoomPlayerIdentity,
     getOnlineAiCharacterAssignments,
     getOnlinePortraitContext: getMahjongOnlinePortraitContext,
@@ -610,6 +666,7 @@ export function createMahjongThemeController({
     getDefaultAssetUrl: getMahjongDefaultAssetUrl,
     getRoomPlayerPresentation,
     getPlayerPresentation,
+    getPaipuPlayerPresentations,
     subscribePlayerPresentations,
     getDefaultCharacter,
     getDefaultNames: getMahjongDefaultNames,

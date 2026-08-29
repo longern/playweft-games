@@ -462,6 +462,7 @@ export class MahjongResultHandRenderer {
     });
     const sheet = {
       playerNames: this.scoreSheetModel.columns.map((column) => column.name),
+      selfColumnIndex: this.scoreSheetModel.selfColumnIndex,
       rows: this.scoreSheetModel.rows,
     };
     this.scoreSheetRenderVersion = (this.scoreSheetRenderVersion ?? 0) + 1;
@@ -724,13 +725,19 @@ export class MahjongResultHandRenderer {
       const image = document.createElement("img");
       image.alt = "";
       image.decoding = "async";
-        image.addEventListener("error", () => {
-          crop.classList.add("is-default-portrait");
-          crop.style.backgroundImage = `url(${JSON.stringify(playerPortraitsUrl)})`;
-          crop.style.backgroundPosition =
-            getMahjongBuiltinCharacterPosition(crop.dataset.builtinCharacter) ||
-            DEFAULT_PORTRAIT_POSITIONS[index];
-          image.hidden = true;
+      image.addEventListener("error", () => {
+        const fallbackSource = image.dataset.fallbackSource || "";
+        if (fallbackSource && image.dataset.source !== fallbackSource) {
+          image.dataset.source = fallbackSource;
+          image.src = fallbackSource;
+          return;
+        }
+        crop.classList.add("is-default-portrait");
+        crop.style.backgroundImage = `url(${JSON.stringify(playerPortraitsUrl)})`;
+        crop.style.backgroundPosition =
+          getMahjongBuiltinCharacterPosition(crop.dataset.builtinCharacter) ||
+          DEFAULT_PORTRAIT_POSITIONS[index];
+        image.hidden = true;
         image.removeAttribute("src");
         delete image.dataset.source;
       });
@@ -750,6 +757,7 @@ export class MahjongResultHandRenderer {
         ? sources[index]
         : { source: typeof sources[index] === "string" ? sources[index] : "" };
       const source = presentation.source || "";
+      const fallbackSource = presentation.fallbackSource || "";
       const builtinPosition = getMahjongBuiltinCharacterPosition(
         presentation.builtinCharacterId,
       );
@@ -764,6 +772,11 @@ export class MahjongResultHandRenderer {
       crop.style.backgroundImage = useDefault
         ? `url(${JSON.stringify(playerPortraitsUrl)})`
         : "";
+      if (fallbackSource && fallbackSource !== source) {
+        image.dataset.fallbackSource = fallbackSource;
+      } else {
+        delete image.dataset.fallbackSource;
+      }
       if (useDefault) {
         image.hidden = true;
         image.removeAttribute("src");

@@ -40,19 +40,34 @@ export function createMahjongSoloMatchController({
     const setupExit = beginSetupExit();
     const randomSeed = crypto.randomUUID().replaceAll("-", "");
     const matchId = `solo-${crypto.randomUUID()}`;
-    const gamePreparation = createLocalLuaGame({
-      sourceUrl: "./game.lua",
-      players: PLAYERS.map((player, index) => ({
-        ...player,
-        name: index === 0 ? getPlayerName() : player.name,
-      })),
-      playerId: HUMAN_ID,
-      randomSeed,
-      matchId,
-      settings: { matchType, rules },
-    });
     try {
+      await themeController.ready;
       await themeController.rerollPortraits(randomSeed);
+      const defaultNames = themeController.getDefaultNames?.() || {};
+      const opponentNames = {
+        right: defaultNames.right || PLAYERS[1].name,
+        opposite: defaultNames.opposite || PLAYERS[2].name,
+        left: defaultNames.left || PLAYERS[3].name,
+      };
+      const playerNames = [
+        getPlayerName(),
+        opponentNames.right,
+        opponentNames.opposite,
+        opponentNames.left,
+      ];
+      const playerPresentations =
+        themeController.getPaipuPlayerPresentations?.(PLAYERS) || {};
+      const gamePreparation = createLocalLuaGame({
+        sourceUrl: "./game.lua",
+        players: PLAYERS.map((player, index) => ({
+          ...player,
+          name: playerNames[index],
+        })),
+        playerId: HUMAN_ID,
+        randomSeed,
+        matchId,
+        settings: { matchType, rules },
+      });
       const [createdGame] = await Promise.all([
         gamePreparation,
         setupExit,
@@ -68,6 +83,8 @@ export function createMahjongSoloMatchController({
         playerName: getPlayerName(),
         autoActions: getAutoActions(),
         opponentPortraits: themeController.getPortraits(),
+        opponentNames,
+        playerPresentations,
       });
       setSoloSave(save);
       writeMahjongSoloSave(save);
@@ -105,7 +122,11 @@ export function createMahjongSoloMatchController({
         sourceUrl: "./game.lua",
         players: PLAYERS.map((player, index) => ({
           ...player,
-          name: index === 0 ? save.playerName || getPlayerName() : player.name,
+          name:
+            index === 0
+              ? save.playerName || getPlayerName()
+              : save.opponentNames[["right", "opposite", "left"][index - 1]] ||
+                player.name,
         })),
         playerId: HUMAN_ID,
         randomSeed: save.randomSeed,
@@ -123,6 +144,12 @@ export function createMahjongSoloMatchController({
         save.opponentPortraits,
         save.randomSeed,
       );
+      if (!save.playerPresentations || !Object.keys(save.playerPresentations).length) {
+        const playerPresentations =
+          themeController.getPaipuPlayerPresentations?.(PLAYERS) || {};
+        setSoloSave?.({ ...save, playerPresentations });
+        writeMahjongSoloSave({ ...save, playerPresentations });
+      }
       if (save.playerName) setPlayerName(save.playerName);
       setAutoActions({ ...save.autoActions });
       syncAutoActionControls();

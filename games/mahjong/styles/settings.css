@@ -54,14 +54,16 @@
 .settings-dialog-header {
   display: flex;
   min-width: 0;
-  align-items: stretch;
-  justify-content: space-between;
-  padding: 0 16px 0 26px;
+  align-items: center;
+  justify-content: flex-start;
+  column-gap: 22px;
+  padding: 0 16px 0 20px;
   border-bottom: 1px solid rgba(231, 198, 116, 0.22);
 }
 
 .settings-tabs {
   display: flex;
+  align-self: stretch;
   align-items: stretch;
   gap: 30px;
 }
@@ -111,9 +113,9 @@
 
 .settings-dialog-close {
   display: flex;
+  flex: 0 0 42px;
   width: 42px;
   height: 42px;
-  align-self: center;
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -603,6 +605,11 @@
   gap: 6px;
   color: rgba(238, 240, 225, 0.7);
   font-size: 0.875em;
+}
+
+.settings-avatar-source-choice {
+  max-width: 260px;
+  margin-bottom: 22px;
 }
 
 .settings-appearance-choice select {

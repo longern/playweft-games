@@ -67,3 +67,17 @@ test("room player presentation keeps the synchronized built-in fallback and char
     "moonlit-fox-riichi",
   );
 });
+
+test("room player presentation honors a theme preference even when a platform portrait exists", async () => {
+  const harness = createPresentationHarness({
+    presentation: {
+      avatarPreference: "theme",
+      portraitMode: "character",
+      themeCharacter: { packId: "moonlit", characterId: "fox" },
+      builtinCharacterId: "builtin-3",
+    },
+    profile: { platformPortraitSource: "platform-avatar" },
+  });
+  await harness.presentations.apply();
+  assert.equal(harness.getRendered().portraits.bottom, "moonlit-fox-portrait");
+});

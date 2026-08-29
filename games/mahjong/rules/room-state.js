@@ -58,20 +58,27 @@ function rotateEvent(event, viewerSeat) {
   };
 }
 
-function rotatePaipu(record, viewerSeat) {
-  if (!record || typeof record !== "object") return record;
-  const players = asArray(record.players)
-    .map((player) => ({
-      ...player,
-      seat: rotateSeat(player?.seat, viewerSeat),
-    }))
-    .sort((left, right) => Number(left.seat) - Number(right.seat));
+/**
+ * Converts canonical paipu data into the local engine's presentation order.
+ * Persisted records stay canonical; this transformation is only for replay.
+ */
+export function orientMahjongPaipuRecord(record, viewerPlayerId) {
+  const players = asArray(record?.players);
+  const viewerSeat =
+    players.findIndex((player) => player?.id === viewerPlayerId) + 1;
+  if (players.length !== PLAYER_COUNT || viewerSeat < 1) return record;
+  const rotated = rotateSeatOrder(players, viewerSeat)
+    .map((player, index) => ({ ...player, seat: index + 1 }));
   return {
     ...record,
-    players,
+    players: rotated,
     hands: asArray(record.hands).map((hand) => ({
       ...hand,
       startScores: rotateSeatOrder(hand.startScores, viewerSeat),
+      scoreHistoryBefore: asArray(hand.scoreHistoryBefore).map((entry) => ({
+        ...entry,
+        scores: rotateSeatOrder(entry?.scores, viewerSeat),
+      })),
       round: hand.round
         ? { ...hand.round, dealerSeat: rotateSeat(hand.round.dealerSeat, viewerSeat) }
         : hand.round,
@@ -135,7 +142,9 @@ export function orientMahjongRoomProjection(projection, playerId) {
     results: asArray(source.results).map((result) =>
       rotateResult(result, viewerSeat),
     ),
-    paipu: rotatePaipu(source.paipu, viewerSeat),
+    // A paipu is canonical match data, not a view projection. Keep its seat
+    // order intact; the saved viewerPlayerId identifies the local player.
+    paipu: source.paipu,
   };
 
   return {

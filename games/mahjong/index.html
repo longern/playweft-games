@@ -93,6 +93,11 @@
       </nav>
 
       <nav id="auto-action-controls" class="auto-action-controls" aria-label="自动操作">
+        <button id="replay-hand-visibility-button" class="auto-action-control replay-hand-visibility-control" type="button"
+          aria-pressed="false" aria-label="显示其他玩家手牌" title="显示其他玩家手牌" hidden>
+          <i data-lucide="eye" aria-hidden="true"></i>
+          <i data-lucide="eye-off" aria-hidden="true" hidden></i>
+        </button>
         <button id="auto-win-button" class="auto-action-control" type="button" aria-pressed="false" aria-label="自动胡牌"
           title="自动胡牌">
           <svg class="auto-action-icon" data-icon="trophy-solid" viewBox="0 0 24 24" aria-hidden="true">
@@ -134,6 +139,9 @@
       <section id="settings-dialog" class="settings-dialog" role="dialog" aria-modal="true" aria-label="牌桌设置" hidden>
         <div class="settings-dialog-card" tabindex="-1">
           <header class="settings-dialog-header">
+            <button id="settings-close-button" class="settings-dialog-close" type="button" aria-label="关闭设置">
+              <i data-lucide="x" aria-hidden="true"></i>
+            </button>
             <div class="settings-tabs" role="tablist" aria-label="设置内容">
               <button id="settings-operation-tab" type="button" role="tab" aria-selected="true"
                 aria-controls="settings-operation-panel" data-settings-tab="operation">操作</button>
@@ -146,9 +154,6 @@
               <button id="settings-help-tab" type="button" role="tab" aria-selected="false"
                 aria-controls="settings-help-panel" data-settings-tab="help" tabindex="-1">帮助</button>
             </div>
-            <button id="settings-close-button" class="settings-dialog-close" type="button" aria-label="关闭设置">
-              <i data-lucide="x" aria-hidden="true"></i>
-            </button>
           </header>
           <div class="settings-dialog-body">
             <div id="settings-operation-panel" class="settings-tab-panel settings-operation-panel" role="tabpanel"
@@ -199,6 +204,13 @@
             </div>
             <div id="settings-appearance-panel" class="settings-tab-panel settings-appearance-panel" role="tabpanel"
               aria-labelledby="settings-appearance-tab" data-settings-panel="appearance" hidden>
+              <label class="settings-appearance-choice settings-avatar-source-choice" for="avatar-source-preference-setting">
+                <span>头像来源</span>
+                <select id="avatar-source-preference-setting">
+                  <option value="auto">自动</option>
+                  <option value="theme">主题</option>
+                </select>
+              </label>
               <div class="settings-appearance-heading">
                 <div>
                   <h2>装扮</h2>
@@ -382,13 +394,13 @@
       <section id="paipu-panel" class="paipu-panel" aria-label="牌谱" hidden>
         <div class="paipu-card" tabindex="-1">
           <header class="paipu-header">
+            <button id="paipu-close-button" class="paipu-close" type="button" aria-label="关闭牌谱">
+              <i data-lucide="x" aria-hidden="true"></i>
+            </button>
             <div>
               <h2>牌谱</h2>
               <p>本机保存的完整对局</p>
             </div>
-            <button id="paipu-close-button" class="paipu-close" type="button" aria-label="关闭牌谱">
-              <i data-lucide="x" aria-hidden="true"></i>
-            </button>
           </header>
           <div id="paipu-empty" class="paipu-empty" hidden>还没有完成的对局</div>
           <ul id="paipu-list" class="paipu-list" aria-label="牌谱列表"></ul>
@@ -397,27 +409,26 @@
 
       <section id="paipu-playback-controls" class="paipu-playback-controls" aria-label="牌谱回放控制" hidden>
         <div class="paipu-playback-card">
-          <div class="paipu-playback-hand">
+          <div class="paipu-playback-toolbar">
             <button id="paipu-replay-previous-hand" type="button" aria-label="上一局" title="上一局">
               <i data-lucide="skip-back" aria-hidden="true"></i>
             </button>
+            <span id="paipu-replay-status" class="paipu-playback-round" role="status" aria-live="polite"></span>
             <button id="paipu-replay-next-hand" type="button" aria-label="下一局" title="下一局">
               <i data-lucide="skip-forward" aria-hidden="true"></i>
-            </button>
-          </div>
-          <span id="paipu-replay-status" class="paipu-playback-status" role="status" aria-live="polite"></span>
-          <button id="paipu-replay-speed" class="paipu-playback-speed" type="button" aria-label="回放速度">1×</button>
-          <div class="paipu-playback-transport">
-            <button id="paipu-replay-step-back" type="button" aria-label="上一步" title="上一步">
-              <i data-lucide="chevron-left" aria-hidden="true"></i>
             </button>
             <button id="paipu-replay-toggle" class="paipu-playback-toggle" type="button" aria-label="播放" title="播放">
               <i data-lucide="play" aria-hidden="true"></i>
               <i data-lucide="pause" aria-hidden="true" hidden></i>
             </button>
-            <button id="paipu-replay-step-forward" type="button" aria-label="下一步" title="下一步">
+            <button id="paipu-replay-step-back" type="button" aria-label="上一手" title="上一手">
+              <i data-lucide="chevron-left" aria-hidden="true"></i>
+            </button>
+            <span id="paipu-replay-step-status" class="paipu-playback-step" role="status" aria-live="polite"></span>
+            <button id="paipu-replay-step-forward" type="button" aria-label="下一手" title="下一手">
               <i data-lucide="chevron-right" aria-hidden="true"></i>
             </button>
+            <button id="paipu-replay-speed" class="paipu-playback-speed" type="button" aria-label="回放速度">1×</button>
           </div>
           <input id="paipu-replay-progress" class="paipu-playback-progress" type="range" min="0" max="0" value="0"
             step="1" aria-label="回放进度" />

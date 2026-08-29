@@ -28,7 +28,7 @@ local function __local_context(actor_id, action_at)
   }
 end
 
-local function __local_viewer_context(viewer_id, server_time)
+local function __local_viewer_context(viewer_id, server_time, view_options)
   local seat = nil
   for index, id in ipairs(__local_state.players or {}) do
     if id == viewer_id then seat = index break end
@@ -43,6 +43,7 @@ local function __local_viewer_context(viewer_id, server_time)
       role = "player",
       seat = seat,
       isOwner = seat == 1,
+      revealAllHands = type(view_options) == "table" and view_options.revealAllHands == true or false,
     },
   }
 end
@@ -99,11 +100,11 @@ function __playweft_local_load_replay_hand(replay_hand, viewer_id, server_time)
   }, __local_match_id, server_time, viewer_id)
 end
 
-function __playweft_local_view(viewer_id, server_time)
+function __playweft_local_view(viewer_id, server_time, view_options)
   return view(
     __local_state,
     __local_events,
-    __local_viewer_context(viewer_id, server_time)
+    __local_viewer_context(viewer_id, server_time, view_options)
   )
 end
 
@@ -459,9 +460,9 @@ export async function createLocalLuaGame({
     return {
       matchId,
       playerId,
-      view(viewerId = playerId) {
+      view(viewerId = playerId, viewOptions = {}) {
         ensureOpen(closed);
-        return readView(viewerId, Date.now());
+        return readView(viewerId, Date.now(), viewOptions);
       },
       action(action, actorId = playerId) {
         ensureOpen(closed);

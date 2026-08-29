@@ -31,6 +31,7 @@ const PAPER_TEXTURE_SCALE = 2;
 const PAPER_TEXT_SIZE = 50;
 const PAPER_TEXT_COLOR = "#11100e";
 const PAPER_VALUE_COLOR = "#173f61";
+const PAPER_SELF_COLUMN_COLOR = "rgba(122, 178, 214, 0.24)";
 const PAPER_GRID_COLOR = "rgba(78, 96, 102, 0.3)";
 const PAPER_GRID_EDGE_COLOR = "rgba(78, 96, 102, 0.38)";
 const SCORE_SHEET_TOP = 72;
@@ -197,7 +198,7 @@ export class MahjongResultPaper {
     this.photoCards.visible = false;
   }
 
-  renderScoreSheet({ playerNames = [], rows = [] } = {}) {
+  renderScoreSheet({ playerNames = [], selfColumnIndex = -1, rows = [] } = {}) {
     const width = PAPER_TEXTURE_VIEWPORT.width * PAPER_TEXTURE_SCALE;
     const height = PAPER_TEXTURE_VIEWPORT.height * PAPER_TEXTURE_SCALE;
     const canvas = this.paperTextureCanvas;
@@ -211,7 +212,11 @@ export class MahjongResultPaper {
 
     paintPaperSurface(context, logicalWidth, logicalHeight);
     context.textBaseline = "middle";
-    drawScoreSheet(context, logicalWidth, { playerNames, rows });
+    drawScoreSheet(context, logicalWidth, {
+      playerNames,
+      selfColumnIndex,
+      rows,
+    });
     this.paperTexture.needsUpdate = true;
     this.paper.visible = true;
     this.photoCards.visible = true;
@@ -298,7 +303,7 @@ function drawResultScore(context, width, { fu, han, total, winType }) {
   context.textBaseline = "middle";
 }
 
-function drawScoreSheet(context, width, { playerNames, rows }) {
+function drawScoreSheet(context, width, { playerNames, selfColumnIndex, rows }) {
   const left = PAPER_MARGIN_X;
   const tableWidth = width - PAPER_MARGIN_X * 2;
   const tableHeight = SCORE_SHEET_BOTTOM - SCORE_SHEET_TOP;
@@ -315,6 +320,20 @@ function drawScoreSheet(context, width, { playerNames, rows }) {
       width: scoreWidth,
     })),
   ];
+
+  const selfColumn = Number.isInteger(selfColumnIndex)
+    ? selfColumnIndex
+    : -1;
+  if (selfColumn >= 0 && selfColumn < 4) {
+    const selfColumnLeft = left + roundWidth + honbaWidth + scoreWidth * selfColumn;
+    context.fillStyle = PAPER_SELF_COLUMN_COLOR;
+    context.fillRect(
+      selfColumnLeft,
+      SCORE_SHEET_TOP,
+      scoreWidth,
+      tableHeight,
+    );
+  }
 
   context.lineCap = "butt";
   context.strokeStyle = PAPER_GRID_EDGE_COLOR;

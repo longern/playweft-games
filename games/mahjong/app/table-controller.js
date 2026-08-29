@@ -76,6 +76,7 @@ export function createMahjongTableController({
   scheduleAi,
   onRerollPortraits,
   onReplayAdvance,
+  onReplayResultExitStart,
   onReturnToSetup,
 } = {}) {
   let state;
@@ -104,6 +105,10 @@ export function createMahjongTableController({
 
   function isRiichiMode() {
     return riichiMode;
+  }
+
+  function isReplayReadOnly() {
+    return getMode?.() === "replay";
   }
 
   function clearActionUi() {
@@ -221,12 +226,14 @@ export function createMahjongTableController({
     const renderState = presentedState();
     const revealedPlayerIndices = handRevealPlayerIndices(state);
     const coveredPlayerIndices = handCoveredPlayerIndices(state);
+    const handRevealKey = handEndPresentationKey(state);
     effectRunner.run("table overlays", () =>
       renderPresentationOverlays(renderState, { animateDealIn }),
     );
     effectRunner.run("table scene", () =>
       visualRenderer.render(renderState, visibleEvents, {
         ...domView.visualUi(getPlayerName?.(), selectedTileId),
+        readOnly: isReplayReadOnly(),
         dealInKey: animateDealIn ? handDealInKey(state) : "",
         animateDealIn,
         riichiMode,
@@ -234,8 +241,9 @@ export function createMahjongTableController({
         showGameHints: settingsDialog.gameHintsEnabled,
         revealPlayerIndices: revealedPlayerIndices,
         coveredPlayerIndices,
-        handRevealKey: handEndPresentationKey(state),
+        handRevealKey,
         animateHandReveal:
+          Boolean(handRevealKey) &&
           revealedPlayerIndices.length + coveredPlayerIndices.length > 0 &&
           !presentation.resultVisible,
         handRevealDelay: isExhaustiveDrawRevealState(state)
@@ -279,6 +287,7 @@ export function createMahjongTableController({
           defaultNames: getThemeDefaultNames?.(),
           playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
           serverTime: serverTimeAtSync,
+          readOnly: isReplayReadOnly(),
           hideCountdown: discardSubmissionPending,
           resultPageReady:
             state?.resultPageReady === true || resultPageReadyPending,
@@ -323,6 +332,7 @@ export function createMahjongTableController({
           serverTime: serverTimeAtSync,
           defaultNames: getThemeDefaultNames?.(),
           playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
+          readOnly: isReplayReadOnly(),
         },
       ),
     );
@@ -510,6 +520,7 @@ export function createMahjongTableController({
   async function dismissResultForReplay() {
     if (state?.phase !== "hand_ended" || elements.result.hidden) return;
     renderResultExitTable(state);
+    onReplayResultExitStart?.();
     elements.result.classList.add("is-exiting");
     try {
       await waitForAnimation(
@@ -1052,6 +1063,9 @@ export function createMahjongTableController({
   }
 
   function handRevealPlayerIndices(current) {
+    if (getMode?.() === "replay" && current?.revealAllHands === true) {
+      return [2, 3, 4];
+    }
     if (current?.winType === "nagashi") return [];
     const exhaustive = exhaustiveDrawPresentation(current);
     if (exhaustive.revealed.length + exhaustive.covered.length > 0)
@@ -1175,11 +1189,13 @@ export function createMahjongTableController({
         riichiMode,
         showGameHints: settingsDialog.gameHintsEnabled,
         tenpaiPreview: visibleTenpaiPreview(renderState),
+        readOnly: isReplayReadOnly(),
       },
     );
     visualRenderer.updateSelection({
       ...ui,
       riichiMode,
+      readOnly: isReplayReadOnly(),
       riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),
       showGameHints: settingsDialog.gameHintsEnabled,
       deferredHandInsertionSeat: Number(presentation.handInsertion?.seat) || 0,
@@ -1196,6 +1212,7 @@ export function createMahjongTableController({
   }
 
   function discardSelected() {
+    if (isReplayReadOnly()) return false;
     if (!selectedTileId || !state?.legalActions?.canDiscard) return;
     if (isActionInFlight?.()) return;
     let action;
@@ -1210,6 +1227,7 @@ export function createMahjongTableController({
   }
 
   function discardOwnTile(tileId) {
+    if (isReplayReadOnly()) return false;
     if (isActionInFlight?.()) return;
     if (
       !canDiscardHandTile({
@@ -1225,6 +1243,7 @@ export function createMahjongTableController({
   }
 
   function submitDiscard(action) {
+    if (isReplayReadOnly()) return false;
     const nextPending = getMode?.() === "room"
       ? createMahjongPendingDiscard(state, action)
       : null;
@@ -1292,6 +1311,7 @@ export function createMahjongTableController({
   }
 
   function enterRiichiMode() {
+    if (isReplayReadOnly()) return false;
     if (
       !state?.legalActions?.canRiichi ||
       !asArray(state.legalActions.riichiTiles).length

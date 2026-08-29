@@ -2,6 +2,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Cog,
+  Eye,
+  EyeOff,
   Pause,
   Play,
   SkipBack,
@@ -36,6 +38,8 @@ import { createMahjongTableController } from "./app/table-controller.js";
 import { createMahjongEffectRunner } from "./app/effect-runner.js";
 import { createMahjongTransientNotice } from "./app/transient-notice.js";
 import { createMahjongReplayController } from "./app/replay-controller.js";
+import { createMahjongPlayerPresentationStore } from "./app/player-presentation-store.js";
+import { resolveMahjongPlayerPresentation } from "./app/player-presentation-resolver.js";
 import { createMahjongPageLifecycle } from "./app/page-lifecycle.js";
 import { createMahjongSoloMatchController } from "./app/solo-match-controller.js";
 import { createMahjongSettingsDialog } from "./settings-dialog.js";
@@ -73,6 +77,7 @@ import {
 import { createMahjongCompletedPaipuSaver } from "./replay/completed-paipu.js";
 import { createMahjongPaipuPanel } from "./replay/paipu-panel.js";
 import { mahjongInitialEntry } from "./app/entry-flow.js";
+import { orientMahjongPaipuRecord } from "./rules/room-state.js";
 // The room controller owns createLocalLuaGame worker usage; keep that boundary
 // visible in the entry module for the room package contract.
 import "../../src/base.css";
@@ -82,6 +87,8 @@ const lucideIcons = {
   ChevronLeft,
   ChevronRight,
   Cog,
+  Eye,
+  EyeOff,
   Pause,
   Play,
   SkipBack,
@@ -134,6 +141,7 @@ let soloSave = readMahjongSoloSave();
 let replayState = null;
 let replayController;
 let soloController;
+const replayPlayerPresentationStore = createMahjongPlayerPresentationStore();
 
 const paipuElements = {
   entry: document.querySelector(".setup-paipu-entry"),
@@ -154,6 +162,8 @@ const replayElements = {
   toggle: document.querySelector("#paipu-replay-toggle"),
   stepForward: document.querySelector("#paipu-replay-step-forward"),
   progress: document.querySelector("#paipu-replay-progress"),
+  stepStatus: document.querySelector("#paipu-replay-step-status"),
+  handVisibility: document.querySelector("#replay-hand-visibility-button"),
 };
 
 const paipuPanel = createMahjongPaipuPanel({
@@ -213,8 +223,22 @@ const settingsDialog = createMahjongSettingsDialog({
   discardVolumeValue: elements.riverTileVolumeValue,
   musicVolume: elements.musicVolume,
   musicVolumeValue: elements.musicVolumeValue,
+  avatarSourcePreference: elements.avatarSourcePreference,
   onMusicVolumeChange: () => tableController?.applyMatchMusicVolume(),
   onGameHintsChange: () => tableController?.renderCurrentState(),
+  onAvatarSourcePreferenceChange: () => {
+    if (playMode === "replay") {
+      void applyMahjongReplayPlayerPresentations(replayState?.record);
+      return;
+    }
+    const currentState = tableController?.getState?.();
+    if (
+      (playMode === "solo" && game) ||
+      (playMode === "room" && currentState?.phase !== "lobby")
+    ) return;
+    themeController?.applyPackAvatars?.();
+    if (playMode === "room") roomController?.syncPlayerPresentation?.();
+  },
   onEndMatch: () => {
     if (playMode === "replay") void exitMahjongPaipuReplay();
     else void endSoloMatch();
@@ -231,7 +255,11 @@ const presentation = new MahjongPresentationController({
     tableController?.renderCurrentState();
     session?.scheduleAi();
   },
-  onResultReady: () => tableController?.renderPresentationOverlays(),
+  onResultReady: () => {
+    tableController?.renderPresentationOverlays();
+    replayController?.onResultReady();
+    replayController?.renderControls();
+  },
   onDrawRevealReady: () => tableController?.renderPresentationOverlays(),
 });
 const visualRenderer = new MahjongThreeRenderer(elements.stage, {
@@ -243,6 +271,7 @@ const visualRenderer = new MahjongThreeRenderer(elements.stage, {
   onHandRevealComplete: (key) => tableController?.handRevealSettled(key),
   onDiscardTile: (tileId) => tableController?.discardOwnTile(tileId),
   onDoubleClickBlank() {
+    if (playMode === "replay") return;
     const current = tableController?.getState();
     const action = blankDoubleClickAction({
       doubleClickPassEnabled: settingsDialog.doubleClickPassEnabled,
@@ -299,6 +328,7 @@ const themeController = createMahjongThemeController({
       resultHandRenderer.setAppearance({ tablecloth, tileBack }),
     ]),
   setPlayerIdentityState: (state) => domView.applyPlayerIdentityState(state),
+  getAvatarSourcePreference: () => settingsDialog.avatarSourcePreference,
   initialMatchPortraitRequest: soloSave
     ? {
         savedPortraits: soloSave.opponentPortraits,
@@ -309,6 +339,9 @@ const themeController = createMahjongThemeController({
   onAssetsChanged() {
     tableController?.syncMatchMusic();
     if (playMode === "room") roomController?.syncPlayerPresentation();
+    if (playMode === "replay" && replayState?.record) {
+      void applyMahjongReplayPlayerPresentations(replayState.record);
+    }
     if (tableController?.getState()) {
       tableController.renderCurrentState();
       if (playMode === "room") {
@@ -362,6 +395,7 @@ tableController = createMahjongTableController({
     writeMahjongSoloSave(soloSave);
   },
   onReplayAdvance: (action) => advanceMahjongPaipuReplayFromResult(action),
+  onReplayResultExitStart: () => replayController?.onResultExitStart(),
   onReturnToSetup: teardownCompletedSoloMatch,
 });
 
@@ -384,18 +418,25 @@ roomPlayerPresentations = createMahjongRoomPlayerPresentations({
   domView,
 });
 resultHandRenderer.setPlayerPresentationProvider({
-  get: (context) =>
-    playMode === "room"
-      ? roomPlayerPresentations?.getPlayerPresentation(context)
-      : themeController.getPlayerPresentation(context),
+  get: (context) => {
+    if (playMode === "room") {
+      return roomPlayerPresentations?.getPlayerPresentation(context);
+    }
+    if (playMode === "replay") {
+      return replayPlayerPresentationStore.get(context);
+    }
+    return themeController.getPlayerPresentation(context);
+  },
   subscribe: (listener) => {
     const unsubscribeRoom = roomPlayerPresentations.subscribePlayerPresentations(
       listener,
     );
     const unsubscribeTheme = themeController.subscribePlayerPresentations(listener);
+    const unsubscribeReplay = replayPlayerPresentationStore.subscribe(listener);
     return () => {
       unsubscribeRoom();
       unsubscribeTheme();
+      unsubscribeReplay();
     };
   },
 });
@@ -497,7 +538,11 @@ roomController = createMahjongRoomController({
   elements,
   getPlayMode: () => playMode,
   setPlayMode: (value) => {
+    if (playMode === "replay" && value !== "replay") {
+      replayPlayerPresentationStore.clear();
+    }
     playMode = value;
+    syncReplayHandVisibilityControl();
   },
   getPlayerId: () => roomPlayerId,
   setPlayerId: (value) => {
@@ -551,6 +596,7 @@ replayController = createMahjongReplayController({
   getPlayMode: () => playMode,
   setPlayMode: (value) => {
     playMode = value;
+    syncReplayHandVisibilityControl();
   },
   getReplayState: () => replayState,
   setReplayState: (value) => {
@@ -564,6 +610,7 @@ replayController = createMahjongReplayController({
   session,
   showMessage,
   showSetup,
+  applyPlayerPresentations: applyMahjongReplayPlayerPresentations,
 });
 
 soloController = createMahjongSoloMatchController({
@@ -612,11 +659,7 @@ function bindUiEvents() {
     if (event.target === paipuElements.panel) closePaipuPanel();
   });
   replayElements.previousHand?.addEventListener("click", () => {
-    const state = replayState;
-    if (!state) return;
-    void seekMahjongPaipuReplay(
-      paipuPreviousHandPosition(state.timeline, state.position),
-    );
+    void replayController?.previousHand(replayState);
   });
   replayElements.nextHand?.addEventListener("click", () => {
     const state = replayState;
@@ -639,6 +682,9 @@ function bindUiEvents() {
   replayElements.progress?.addEventListener("change", () => {
     if (!replayState) return;
     void seekMahjongPaipuReplay(replayElements.progress.value);
+  });
+  replayElements.handVisibility?.addEventListener("click", () => {
+    void replayController?.toggleOpponentHands();
   });
   elements.pass.addEventListener("click", () => dispatch({ type: "pass" }));
   elements.abort.addEventListener("click", () =>
@@ -786,12 +832,59 @@ async function persistAcceptedAction(
   writeMahjongSoloSave(soloSave);
   if (projection?.state?.matchEnded && currentGame?.exportPaipu) {
     try {
-      const paipu = await currentGame.exportPaipu();
+      const paipu = {
+        ...(await currentGame.exportPaipu()),
+        viewerPlayerId: currentGame.playerId || HUMAN_ID,
+      };
+      paipu.playerPresentations =
+        soloSave?.playerPresentations ||
+        themeController.getPaipuPlayerPresentations?.(paipu.players) || {};
       if (paipu?.status === "completed") await saveCompletedPaipu(paipu);
     } catch (error) {
       console.warn("Mahjong paipu save failed", error);
     }
   }
+}
+
+async function applyMahjongReplayPlayerPresentations(record) {
+  if (!record) return false;
+  const oriented = orientMahjongPaipuRecord(record, record?.viewerPlayerId);
+  const portraits = {};
+  const fallbackPortraits = {};
+  const builtinCharacters = {};
+  const resolvedPresentations = new Map();
+  const positions = ["bottom", "right", "top", "left"];
+  for (const [index, player] of (oriented?.players || []).entries()) {
+    const position = positions[index];
+    if (!position) continue;
+    const presentation = record?.playerPresentations?.[player?.id] || {};
+    const resolved = await resolveMahjongPlayerPresentation({
+      playerId: player?.id,
+      presentation,
+      platformSource:
+        player?.id === record?.viewerPlayerId
+          ? themeController.getPlatformAvatarSource?.() || ""
+          : "",
+      resolveThemePortrait: themeController.resolveCharacterPortrait,
+    });
+    portraits[position] = resolved.source;
+    const fallbackSource = resolved.fallbackSource;
+    resolvedPresentations.set(String(player?.id || ""), {
+      source: resolved.source,
+      ...(fallbackSource ? { fallbackSource } : {}),
+      ...(resolved.builtinCharacterId
+        ? { builtinCharacterId: resolved.builtinCharacterId }
+        : {}),
+    });
+    fallbackPortraits[position] = fallbackSource;
+    builtinCharacters[position] = resolved.builtinCharacterId;
+  }
+  replayPlayerPresentationStore.replace(resolvedPresentations);
+  return domView.applyPlayerIdentityState({
+    portraits,
+    fallbackPortraits,
+    builtinCharacters,
+  });
 }
 
 function defaultAutoActions() {
@@ -862,6 +955,25 @@ function syncAutoActionControls() {
   ]) {
     button.setAttribute("aria-pressed", String(enabled));
     button.title = `${label}（${enabled ? "开启" : "关闭"}）`;
+  }
+}
+
+function syncReplayHandVisibilityControl() {
+  const isReplay = playMode === "replay";
+  for (const button of [
+    elements.autoWin,
+    elements.passClaims,
+    elements.autoTsumogiri,
+  ]) {
+    button.hidden = isReplay;
+  }
+  const visibility = replayElements.handVisibility;
+  if (!visibility) return;
+  visibility.hidden = !isReplay;
+  if (!isReplay) {
+    visibility.setAttribute("aria-pressed", "false");
+    visibility.setAttribute("aria-label", "显示其他玩家手牌");
+    visibility.title = "显示其他玩家手牌";
   }
 }
 

@@ -230,7 +230,9 @@ export function createMahjongRoomController({
     const record = {
       ...paipu,
       id: `${matchId}:room`,
+      viewerPlayerId: getPlayerId?.(),
       completedAtMs: Date.now(),
+      playerPresentations: message?.state?.playerPresentations || {},
     };
     void persistCompletedPaipu(record).catch((error) => {
       console.warn("Mahjong room paipu save failed", error);

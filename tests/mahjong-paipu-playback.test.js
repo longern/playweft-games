@@ -6,6 +6,7 @@ import {
   clampPaipuPosition,
   paipuHandIndexAtPosition,
   paipuNextHandPosition,
+  paipuActionCountAtPosition,
   paipuPreviousHandPosition,
 } from "../games/mahjong/replay/paipu-playback.js";
 
@@ -39,9 +40,19 @@ test("paipu playback navigation lands on complete hand starts without leaving it
   assert.equal(paipuNextHandPosition(timeline, 0), 3);
   assert.equal(paipuNextHandPosition(timeline, 4), 5);
   assert.equal(paipuPreviousHandPosition(timeline, 5), 3);
+  assert.equal(paipuPreviousHandPosition(timeline, timeline.steps.length), 3);
   assert.equal(paipuPreviousHandPosition(timeline, 3), 0);
   assert.equal(clampPaipuPosition(timeline, -20), 0);
   assert.equal(clampPaipuPosition(timeline, 999), timeline.steps.length);
+});
+
+test("paipu playback hand count excludes synthetic next-hand steps", () => {
+  const timeline = buildMahjongPaipuTimeline(recordWithHands(2, 1));
+
+  assert.equal(paipuActionCountAtPosition(timeline, 0), 0);
+  assert.equal(paipuActionCountAtPosition(timeline, 2), 2);
+  assert.equal(paipuActionCountAtPosition(timeline, 3), 0);
+  assert.equal(paipuActionCountAtPosition(timeline, timeline.steps.length), 1);
 });
 
 test("paipu playback rejects a hand without a command log", () => {

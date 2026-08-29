@@ -94,8 +94,8 @@ export async function createLocalLuaGame(options = {}) {
       matchId: initialized.matchId,
       playerId: options.playerId,
       initialProjection: initialized.projection,
-      view(viewerId = options.playerId) {
-        return request("view", { viewerId });
+      view(viewerId = options.playerId, viewOptions = {}) {
+        return request("view", { viewerId, viewOptions });
       },
       checkpoint() {
         return request("checkpoint");

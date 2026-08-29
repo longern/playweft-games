@@ -15,17 +15,20 @@ export function createMahjongScoreSheetModel(
   state,
   { playerNames = [], getPlayerPresentation } = {},
 ) {
+  const localPlayerId = String(state?.players?.[0] || "");
   const columns = initialWindSeatOrder(state).map((seat, index) => {
     const playerId = String(state?.players?.[seat - 1] || "");
     const context = { playerId, seat, wind: INITIAL_WINDS[index] };
     return {
       ...context,
+      isLocal: Boolean(localPlayerId && playerId === localPlayerId),
       name: String(playerNames[seat - 1] || `玩家${seat}`),
       presentation: normalizePlayerPresentation(getPlayerPresentation?.(context)),
     };
   });
   return {
     columns,
+    selfColumnIndex: columns.findIndex((column) => column.isLocal),
     rows: resultScoreSheetRows(state),
   };
 }
@@ -50,6 +53,8 @@ export function scoreSheetPortraitSources(model, getPlayerPresentation) {
 function normalizePlayerPresentation(value) {
   return {
     source: typeof value?.source === "string" ? value.source : "",
+    fallbackSource:
+      typeof value?.fallbackSource === "string" ? value.fallbackSource : "",
     builtinCharacterId:
       typeof value?.builtinCharacterId === "string"
         ? value.builtinCharacterId

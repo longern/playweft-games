@@ -141,6 +141,7 @@ end
 local function copy_scores_for_record(scores)
 	return { scores[1], scores[2], scores[3], scores[4] }
 end
+
 local function is_honor(kind)
 	return kind >= 28
 end
@@ -1615,6 +1616,7 @@ local function start_paipu_hand(state, tiles)
 			riichiSticks = state.riichiSticks,
 		},
 		startScores = copy_scores_for_record(state.scores),
+		scoreHistoryBefore = copy_record_value(state.scoreHistory),
 		wall = paipu_wall(tiles),
 		commands = {},
 		events = {},
@@ -2187,7 +2189,11 @@ local function new_match(players, names, seed, settings, ai_players)
 		state.honba = honba
 		state.riichiSticks = riichi_sticks
 		state.scores = copy_scores_for_record(scores)
-		state.scoreHistory = {
+		local saved_score_history = replay_hand.scoreHistoryBefore
+		state.scoreHistory = type(saved_score_history) == "table"
+			and #saved_score_history > 0
+			and copy_record_value(saved_score_history)
+			or {
 			{
 				roundWind = state.roundWind,
 				handNumber = state.handNumber,
@@ -4662,8 +4668,8 @@ function export_paipu(state, mode)
 	local ranks = {}
 	for seat, score in ipairs(state.scores) do
 		local rank = 1
-		for _, other in ipairs(state.scores) do
-			if other > score then
+		for other_seat, other in ipairs(state.scores) do
+			if other > score or (other == score and other_seat < seat) then
 				rank = rank + 1
 			end
 		end
@@ -4697,15 +4703,22 @@ function view(state, events, context)
 	for _, tile in ipairs(state.hands[viewer_id] or {}) do
 		own_hand[#own_hand + 1] = tile
 	end
-	local hand_counts, revealed = {}, {}
+	local hand_counts, revealed, revealed_drawn = {}, {}, {}
+	local reveal_all_hands = context.viewer and context.viewer.revealAllHands == true
 	for _, player_id in ipairs(state.players) do
 		hand_counts[player_id] = #(state.hands[player_id] or {})
-		if state.phase == "hand_ended" then
+		if state.phase == "hand_ended" or reveal_all_hands then
 			revealed[player_id] = {}
 			for _, tile in ipairs(state.hands[player_id]) do
 				revealed[player_id][#revealed[player_id] + 1] = {
 					type = tile_type(tile),
 					red = RED_FIVES[tile] == true,
+				}
+			end
+			if reveal_all_hands and state.turnIndex and state.players[state.turnIndex] == player_id and state.drawnTile > 0 then
+				revealed_drawn[player_id] = {
+					type = tile_type(state.drawnTile),
+					red = RED_FIVES[state.drawnTile] == true,
 				}
 			end
 		end
@@ -4773,6 +4786,8 @@ function view(state, events, context)
 			endReason = state.endReason,
 			rules = state.rules,
 			revealedHands = revealed,
+			revealedDrawnTiles = revealed_drawn,
+			revealAllHands = reveal_all_hands,
 		},
 		events = visible_events(events, viewer_id),
 	}

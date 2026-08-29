@@ -2,7 +2,9 @@
   position: absolute;
   z-index: 100;
   left: 50%;
-  bottom: 128px;
+  /* The toolbar buttons are 10px taller than before; lower the bottom edge
+     by the same amount so the control's top edge stays fixed. */
+  bottom: 118px;
   display: block;
   padding: 0;
   transform: translateX(-50%);
@@ -14,61 +16,63 @@
 }
 
 .paipu-playback-card {
-  display: grid;
-  width: 520px;
-  grid-template-columns: auto minmax(86px, 1fr) auto auto;
-  grid-template-areas:
-    "hand status transport speed"
-    "progress progress progress progress";
+  display: flex;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  flex-direction: column;
   gap: 7px 9px;
   align-items: center;
   padding: 10px;
   border: 1px solid rgba(255, 232, 177, 0.34);
   border-radius: 13px;
-  background: #0a211c;
+  background: rgba(10, 33, 28, 0.88);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.34);
   color: #fff0c9;
   pointer-events: auto;
+  transition:
+    background-color 260ms ease,
+    border-color 260ms ease,
+    box-shadow 260ms ease;
 }
 
-.paipu-playback-hand,
-.paipu-playback-transport {
+.paipu-playback-controls.is-result-visible .paipu-playback-card {
+  border-color: rgba(255, 232, 177, 0.24);
+  background: rgba(10, 33, 28, 0.58);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.24);
+}
+
+.paipu-playback-toolbar {
   display: flex;
+  width: 100%;
   gap: 5px;
   align-items: center;
   justify-content: center;
-}
-
-.paipu-playback-hand {
-  grid-area: hand;
-}
-
-.paipu-playback-transport {
-  grid-area: transport;
+  white-space: nowrap;
 }
 
 .paipu-playback-card button {
   display: flex;
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid rgba(255, 236, 190, 0.24);
-  border-radius: 9px;
-  background: rgba(255, 244, 208, 0.08);
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
   color: #fff0c9;
+  cursor: pointer;
+  transition: color 140ms ease, opacity 140ms ease, filter 140ms ease;
 }
 
 .paipu-playback-card button svg {
-  width: 18px;
-  height: 18px;
-  stroke-width: 2.25;
+  width: 36px;
+  height: 36px;
+  stroke-width: 2.15;
 }
 
 .paipu-playback-card button.paipu-playback-toggle {
-  border-color: rgba(241, 205, 118, 0.74);
-  background: linear-gradient(180deg, rgba(156, 111, 37, 0.9), rgba(92, 61, 20, 0.92));
+  margin-inline: 24px;
   color: #fff5d8;
 }
 
@@ -80,37 +84,51 @@
   pointer-events: none;
 }
 
-.paipu-playback-card button:not(:disabled):hover {
-  border-color: rgba(255, 226, 155, 0.86);
-  background: rgba(255, 244, 208, 0.16);
-}
-
-.paipu-playback-card button.paipu-playback-toggle:not(:disabled):hover {
-  background: linear-gradient(180deg, rgba(185, 135, 48, 0.94), rgba(111, 72, 21, 0.96));
-}
-
-.paipu-playback-status {
-  grid-area: status;
-  min-width: 0;
-  overflow: hidden;
+.paipu-playback-round,
+.paipu-playback-step {
+  display: inline-block;
+  flex: 0 0 auto;
   color: rgba(255, 240, 208, 0.9);
-  font-size: 0.875em;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 0.8em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.paipu-playback-round {
+  min-width: 3.2em;
+  text-align: center;
+}
+
+.paipu-playback-step {
+  min-width: 3.8em;
+  text-align: center;
+}
+
+.paipu-playback-card button:not(:disabled):active {
+  color: #ffe29b;
+  filter: brightness(1.25);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .paipu-playback-card button:not(:disabled):hover {
+    color: #fff8df;
+    filter: brightness(1.15);
+  }
+
+  .paipu-playback-card button.paipu-playback-toggle:not(:disabled):hover {
+    color: #ffe8a8;
+  }
 }
 
 .paipu-playback-speed {
-  grid-area: speed;
-  justify-self: end;
-  width: 42px !important;
+  width: 44px !important;
   color: #ffe8a8 !important;
   font-size: 0.75em;
   font-variant-numeric: tabular-nums;
 }
 
 .paipu-playback-progress {
-  grid-area: progress;
   width: 100%;
+  min-width: 0;
   accent-color: #e3bc61;
 }

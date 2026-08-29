@@ -4,8 +4,10 @@ const GAME_HINTS_KEY = "playweft.mahjong.game-hints";
 const AUTO_WIN_AFTER_RIICHI_KEY = "playweft.mahjong.auto-win-after-riichi";
 const DISCARD_VOLUME_KEY = "playweft.mahjong.discard-volume";
 const MUSIC_VOLUME_KEY = "playweft.mahjong.music-volume";
+const AVATAR_SOURCE_PREFERENCE_KEY = "playweft.mahjong.avatar-source-preference";
 const DEFAULT_DISCARD_VOLUME = 100;
 const DEFAULT_MUSIC_VOLUME = 32;
+const DEFAULT_AVATAR_SOURCE_PREFERENCE = "auto";
 const DIALOG_TRANSITION_FALLBACK_MS = 240;
 
 export function createMahjongSettingsDialog({
@@ -25,8 +27,10 @@ export function createMahjongSettingsDialog({
   discardVolumeValue,
   musicVolume,
   musicVolumeValue,
+  avatarSourcePreference,
   onMusicVolumeChange,
   onGameHintsChange,
+  onAvatarSourcePreferenceChange,
   onEndMatch,
 }) {
   let returnFocus = null;
@@ -52,6 +56,7 @@ export function createMahjongSettingsDialog({
     readVolumeSetting(MUSIC_VOLUME_KEY, DEFAULT_MUSIC_VOLUME),
   );
   renderMusicVolume();
+  avatarSourcePreference.value = readAvatarSourcePreference();
 
   function renderDiscardVolume() {
     const value = normalizeDiscardVolume(discardVolume.value);
@@ -230,6 +235,13 @@ export function createMahjongSettingsDialog({
     onMusicVolumeChange?.();
   }
 
+  function onAvatarSourcePreferenceChangeInternal() {
+    const value = normalizeAvatarSourcePreference(avatarSourcePreference.value);
+    avatarSourcePreference.value = value;
+    writeAvatarSourcePreference(value);
+    onAvatarSourcePreferenceChange?.();
+  }
+
   function onTriggerClick() {
     setOpen(true);
   }
@@ -262,6 +274,10 @@ export function createMahjongSettingsDialog({
   doubleClickPass.addEventListener("change", onPassSettingChange);
   discardVolume.addEventListener("input", onDiscardVolumeInput);
   musicVolume.addEventListener("input", onMusicVolumeInput);
+  avatarSourcePreference.addEventListener(
+    "change",
+    onAvatarSourcePreferenceChangeInternal,
+  );
   for (const button of tabButtons) {
     button.addEventListener("click", () => setTab(button.dataset.settingsTab));
     button.addEventListener("keydown", onTabKeyDown);
@@ -285,6 +301,9 @@ export function createMahjongSettingsDialog({
     },
     get musicVolumeScale() {
       return normalizeMusicVolume(musicVolume.value) / 100;
+    },
+    get avatarSourcePreference() {
+      return normalizeAvatarSourcePreference(avatarSourcePreference.value);
     },
     setSoloMatchActive(active) {
       if (endMatchButton) endMatchButton.hidden = !active;
@@ -317,11 +336,37 @@ export function createMahjongSettingsDialog({
       doubleClickPass.removeEventListener("change", onPassSettingChange);
       discardVolume.removeEventListener("input", onDiscardVolumeInput);
       musicVolume.removeEventListener("input", onMusicVolumeInput);
+      avatarSourcePreference.removeEventListener(
+        "change",
+        onAvatarSourcePreferenceChangeInternal,
+      );
       for (const button of tabButtons) {
         button.removeEventListener("keydown", onTabKeyDown);
       }
     },
   };
+}
+
+export function normalizeAvatarSourcePreference(value) {
+  return value === "theme" ? "theme" : DEFAULT_AVATAR_SOURCE_PREFERENCE;
+}
+
+function readAvatarSourcePreference() {
+  try {
+    return normalizeAvatarSourcePreference(
+      window.localStorage.getItem(AVATAR_SOURCE_PREFERENCE_KEY),
+    );
+  } catch {
+    return DEFAULT_AVATAR_SOURCE_PREFERENCE;
+  }
+}
+
+function writeAvatarSourcePreference(value) {
+  try {
+    window.localStorage.setItem(AVATAR_SOURCE_PREFERENCE_KEY, value);
+  } catch {
+    // Storage can be unavailable; the current select value remains active.
+  }
 }
 
 export function normalizeDiscardVolume(

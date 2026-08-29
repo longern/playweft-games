@@ -1,4 +1,8 @@
 import { getMahjongBuiltinCharacterForKey } from "../theme/builtin-characters.js";
+import {
+  normalizeMahjongPlayerPresentation,
+  resolveMahjongPlayerPresentation,
+} from "./player-presentation-resolver.js";
 
 const POSITIONS = ["bottom", "right", "top", "left"];
 
@@ -25,12 +29,6 @@ export function createMahjongRoomPlayerPresentations({
       getMahjongBuiltinCharacterForKey(playerId);
   }
 
-  async function resolveThemePortrait(presentation) {
-    const character = presentation?.themeCharacter;
-    if (!character?.packId || !character?.characterId) return "";
-    return (await themeController.resolveCharacterPortrait?.(character)) || "";
-  }
-
   async function apply(state = getState?.()) {
     if (!isRoom?.() || !Array.isArray(state?.players)) return false;
     latestState = state;
@@ -46,29 +44,22 @@ export function createMahjongRoomPlayerPresentations({
       const presentation = state.aiPlayers?.[playerId]
         ? state.aiPresentations?.[playerId] || {}
         : presentationForPlayer(state, playerId);
-      const builtinCharacterId = builtinCharacterFor(playerId, presentation);
-      builtinCharacters[position] = builtinCharacterId;
-      fallbackPortraits[position] = "";
-      if (state.aiPlayers?.[playerId]) {
-        portraits[position] = await resolveThemePortrait(presentation);
-        nextPresentations.set(playerId, {
-          source: portraits[position],
-          builtinCharacterId,
-        });
-        continue;
-      }
       const profile = getProfile?.(playerId);
       const platformSource =
         profile?.platformPortraitSource ||
         (playerId === getRoomPlayerId?.() ? ownPlatformPortraitSource : "");
-      portraits[position] =
-        presentation.portraitMode === "platform" && platformSource
-          ? platformSource
-          : await resolveThemePortrait(presentation);
-      nextPresentations.set(playerId, {
-        source: portraits[position],
-        builtinCharacterId,
+      const resolved = await resolveMahjongPlayerPresentation({
+        playerId,
+        presentation,
+        platformSource,
+        isAi: Boolean(state.aiPlayers?.[playerId]),
+        resolveThemePortrait: themeController.resolveCharacterPortrait,
+        fallbackBuiltinCharacterId: builtinCharacterFor(playerId, presentation),
       });
+      portraits[position] = resolved.source;
+      fallbackPortraits[position] = resolved.fallbackSource;
+      builtinCharacters[position] = resolved.builtinCharacterId;
+      nextPresentations.set(playerId, resolved);
       if (profile?.name) names[position] = profile.name;
     }
     if (request !== applyRequest) return false;
@@ -96,7 +87,10 @@ export function createMahjongRoomPlayerPresentations({
     const presentation = latestState.aiPlayers?.[playerId]
       ? latestState.aiPresentations?.[playerId]
       : presentationForPlayer(latestState, playerId);
-    const character = presentation?.themeCharacter;
+    const character = normalizeMahjongPlayerPresentation(
+      presentation,
+      playerId,
+    ).themeCharacter;
     if (!character?.packId || !character?.characterId) return "";
     return (await themeController.resolveCharacterVoice?.(character, cue)) || "";
   }
@@ -135,6 +129,7 @@ function changedPresentationPlayerIds(previous, next) {
     const after = next.get(playerId) || {};
     return (
       before.source !== after.source ||
+      before.fallbackSource !== after.fallbackSource ||
       before.builtinCharacterId !== after.builtinCharacterId
     );
   });

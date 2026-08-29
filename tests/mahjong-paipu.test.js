@@ -72,6 +72,14 @@ test("mahjong paipu captures a fixed-width full wall and accepted actions", asyn
 
   const record = game.exportPaipu();
   const hand = record.hands[0];
+  assert.deepEqual(hand.scoreHistoryBefore, [
+    {
+      roundWind: 1,
+      handNumber: 1,
+      honba: 0,
+      scores: [25000, 25000, 25000, 25000],
+    },
+  ]);
   const tiles = hand.wall.match(/../g);
   const command = hand.commands.at(-1);
   const discarded = hand.events.find((event) => event.type === "discarded");
@@ -86,6 +94,26 @@ test("mahjong paipu captures a fixed-width full wall and accepted actions", asyn
   assert.ok(Number.isInteger(command.action.tile.ref));
   assert.equal(command.action.tile.id, undefined);
   assert.deepEqual(discarded.tile, command.action.tile);
+});
+
+test("mahjong replay view can reveal every opponent hand without changing the normal view", async (t) => {
+  const game = await createGame(t, 7);
+  t.after(() => game.close());
+
+  const concealed = game.view(HUMAN_ID);
+  const revealed = game.view(HUMAN_ID, { revealAllHands: true });
+  const activePlayerId = revealed.state.players[revealed.state.turnIndex - 1];
+
+  assert.deepEqual(concealed.state.revealedHands, {});
+  assert.equal(revealed.state.revealAllHands, true);
+  assert.deepEqual(
+    revealed.state.players.slice(1).map((playerId) => revealed.state.revealedHands[playerId].length),
+    revealed.state.players.slice(1).map((playerId) => revealed.state.handCounts[playerId]),
+  );
+  assert.equal(
+    Boolean(revealed.state.revealedDrawnTiles[activePlayerId]),
+    revealed.state.drawnPlayerIndex > 0,
+  );
 });
 
 test("mahjong paipu replay uses the saved wall instead of the random seed", async (t) => {
@@ -117,6 +145,7 @@ test("mahjong paipu replay uses the saved wall instead of the random seed", asyn
         wall,
         round: record.hands[0].round,
         startScores: record.hands[0].startScores,
+        scoreHistoryBefore: record.hands[0].scoreHistoryBefore,
       },
     },
   });
@@ -147,6 +176,20 @@ test("mahjong paipu loads a selected hand into the existing local game", async (
       riichiSticks: 1,
     },
     startScores: [31800, 24700, 22100, 21400],
+    scoreHistoryBefore: [
+      {
+        roundWind: 1,
+        handNumber: 1,
+        honba: 0,
+        scores: [25000, 25000, 25000, 25000],
+      },
+      {
+        roundWind: 1,
+        handNumber: 2,
+        honba: 0,
+        scores: [31800, 24700, 22100, 21400],
+      },
+    ],
   };
 
   const projection = game.loadReplayHand(targetHand, HUMAN_ID);
@@ -158,6 +201,7 @@ test("mahjong paipu loads a selected hand into the existing local game", async (
   assert.equal(projection.state.honba, targetHand.round.honba);
   assert.equal(projection.state.riichiSticks, targetHand.round.riichiSticks);
   assert.deepEqual(projection.state.scores, targetHand.startScores);
+  assert.deepEqual(projection.state.scoreHistory, targetHand.scoreHistoryBefore);
   assert.equal(projection.state.wallCount, 69);
 });
 
@@ -190,6 +234,7 @@ test("mahjong paipu storage accepts completed records and derives a history summ
     format: "longern.riichi.paipu",
     formatVersion: 1,
     id: "solo-example:1",
+    viewerPlayerId: "ai-2",
     status: "completed",
     completedAtMs: 1_780_000_000_000,
     game: { matchType: "east" },
@@ -199,20 +244,38 @@ test("mahjong paipu storage accepts completed records and derives a history summ
       name: player.name,
       kind: index === 0 ? "human" : "ai",
     })),
+    playerPresentations: {
+      human: {
+        portraitMode: "character",
+        themeCharacter: { packId: "moonlit", characterId: "fox" },
+        builtinCharacterId: "builtin-1",
+      },
+    },
     hands: [{ wall, commands: [], events: [], end: {} }],
     final: { scores: [32000, 26000, 23000, 19000], ranks: [1, 2, 3, 4] },
   };
 
   const valid = validateMahjongPaipu(record);
+  assert.deepEqual(valid.playerPresentations, record.playerPresentations);
   const summary = summarizeMahjongPaipu(valid);
 
   assert.deepEqual(summary.finalScores, record.final.scores);
-  assert.equal(summary.playerName, "你");
-  assert.equal(summary.rank, 1);
+  assert.equal(summary.playerName, "二号");
+  assert.deepEqual(summary.players, [
+    { seat: 1, id: "human", name: "你", score: 32000 },
+    { seat: 2, id: "ai-1", name: "一号", score: 26000 },
+    { seat: 3, id: "ai-2", name: "二号", score: 23000 },
+    { seat: 4, id: "ai-3", name: "三号", score: 19000 },
+  ]);
+  assert.equal(summary.rank, 3);
   assert.equal(summary.handCount, 1);
   assert.throws(
     () => validateMahjongPaipu({ ...record, status: "in_progress" }),
     /completed Mahjong paipu/,
+  );
+  assert.throws(
+    () => validateMahjongPaipu({ ...record, viewerPlayerId: "missing" }),
+    /viewer player id is not in the player list/,
   );
 });
 

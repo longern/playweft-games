@@ -12,12 +12,23 @@ const POSITION_BY_ID = Object.freeze({
   "builtin-4": "100% 100%",
 });
 
+const NAME_BY_ID = Object.freeze({
+  "builtin-1": "内置角色一",
+  "builtin-2": "内置角色二",
+  "builtin-3": "内置角色三",
+  "builtin-4": "内置角色四",
+});
+
 export function isMahjongBuiltinCharacterId(value) {
   return MAHJONG_BUILTIN_CHARACTER_IDS.includes(String(value || ""));
 }
 
 export function getMahjongBuiltinCharacterPosition(characterId) {
   return POSITION_BY_ID[String(characterId || "")] || "";
+}
+
+export function getMahjongBuiltinCharacterName(characterId) {
+  return NAME_BY_ID[String(characterId || "")] || "";
 }
 
 export function getMahjongBuiltinCharacterForKey(key) {

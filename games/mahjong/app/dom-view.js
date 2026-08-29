@@ -103,6 +103,7 @@ export class MahjongDomView {
       riichiMode = false,
       showGameHints = true,
       hideCountdown = false,
+      readOnly = false,
       confirmedTenpai = null,
       tenpaiPreview = null,
       defaultNames = {},
@@ -112,6 +113,7 @@ export class MahjongDomView {
   ) {
     const { elements } = this;
     this.showGameHints = showGameHints;
+    this.readOnly = readOnly;
     this.doraCounts = doraTypeCounts(state);
     elements.message.classList.remove("is-error");
     const currentRound = roundLabel(state.roundWind, state.handNumber);
@@ -178,9 +180,11 @@ export class MahjongDomView {
     riichiMode = false,
     showGameHints = true,
     tenpaiPreview = null,
+    readOnly = this.readOnly,
   } = {}) {
     this.riichiMode = riichiMode;
     this.showGameHints = showGameHints;
+    this.readOnly = readOnly;
     this.updateHandSelection(selectedTileId);
     this.renderTypeHighlights(selectedTileId);
     this.renderTenpaiPreview(state, tenpaiPreview);
@@ -426,11 +430,11 @@ export class MahjongDomView {
         tile.classList.toggle("is-drawn", tileId === Number(state.drawnTile));
         tile.classList.toggle(
           "is-riichi-choice",
-          riichiMode && riichiTiles.has(tileId),
+          !this.readOnly && riichiMode && riichiTiles.has(tileId),
         );
         tile.classList.toggle(
           "is-riichi-blocked",
-          riichiMode && !riichiTiles.has(tileId),
+          !this.readOnly && riichiMode && !riichiTiles.has(tileId),
         );
         const discardable =
           canDiscardHandTile({
@@ -441,9 +445,12 @@ export class MahjongDomView {
           }) &&
           !forbiddenTypes.has(tileType(tileId)) &&
           (!riichiMode || riichiTiles.has(tileId));
-        tile.setAttribute("aria-disabled", String(!discardable));
+        tile.setAttribute(
+          "aria-disabled",
+          String(!this.readOnly && !discardable),
+        );
         tile.addEventListener("click", () => this.onSelectTile(tileId));
-        if (discardable) {
+        if (discardable && !this.readOnly) {
           tile.addEventListener("dblclick", () => this.onDiscardTile(tileId));
         }
         return tile;
@@ -502,6 +509,19 @@ export class MahjongDomView {
     const legal = state.legalActions ?? {};
     const { elements } = this;
     elements.claims.replaceChildren();
+    if (this.readOnly) {
+      elements.cancelRiichi.hidden = true;
+      elements.claims.hidden = true;
+      elements.pass.hidden = true;
+      elements.abort.hidden = true;
+      elements.tsumo.hidden = true;
+      elements.riichi.hidden = true;
+      elements.tenpaiCount.hidden = true;
+      elements.furiten.hidden = true;
+      elements.actionHint.textContent = "";
+      return;
+    }
+    elements.claims.hidden = false;
     elements.cancelRiichi.hidden = !riichiMode;
     if (riichiMode) {
       elements.pass.hidden = true;
@@ -1004,6 +1024,9 @@ function collectElements() {
     riverTileVolumeValue: document.querySelector("#discard-volume-value"),
     musicVolume: document.querySelector("#music-volume-setting"),
     musicVolumeValue: document.querySelector("#music-volume-value"),
+    avatarSourcePreference: document.querySelector(
+      "#avatar-source-preference-setting",
+    ),
     loading: document.querySelector("#loading-panel"),
     loadingSpinner: document.querySelector(".loading-spinner"),
     loadingMessage: document.querySelector("#loading-message"),

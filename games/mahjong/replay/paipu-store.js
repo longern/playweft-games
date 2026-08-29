@@ -91,14 +91,25 @@ export async function setMahjongPaipuPinned(id, pinned, options = {}) {
 }
 
 export function summarizeMahjongPaipu(record, byteSize = encodedByteSize(record)) {
-  const localPlayer = record.players.find((player) => player.seat === 1);
+  const players = record.players
+    .map((player) => ({
+      seat: Number(player.seat),
+      id: player.id,
+      name: player.name || "",
+      score: Number(record.final.scores[Number(player.seat) - 1]) || 0,
+    }))
+    .sort((left, right) => left.seat - right.seat);
+  const localPlayer = players.find((player) => player.id === record.viewerPlayerId);
+  const localSeatIndex = Math.max(0, Number(localPlayer?.seat) - 1);
   return {
     id: record.id,
     endedAtMs: record.completedAtMs,
     matchType: record.game.matchType,
+    viewerPlayerId: record.viewerPlayerId,
     playerName: localPlayer?.name || "",
+    players,
     finalScores: [...record.final.scores],
-    rank: Number(record.final.ranks[0]) || 0,
+    rank: Number(record.final.ranks[localSeatIndex]) || 0,
     handCount: record.hands.length,
     byteSize,
     pinned: Boolean(record.pinned),
@@ -116,13 +127,23 @@ export function validateMahjongPaipu(record) {
   if (record.status !== "completed" || !Number.isSafeInteger(record.completedAtMs)) {
     throw new TypeError("Only completed Mahjong paipu records can be saved");
   }
+  if (typeof record.viewerPlayerId !== "string" || !record.viewerPlayerId) {
+    throw new TypeError("Mahjong paipu requires a viewer player id");
+  }
   if (!isPlainObject(record.game) || !Array.isArray(record.players) || record.players.length !== 4) {
     throw new TypeError("Mahjong paipu requires four players");
+  }
+  if (!record.players.some((player) => player?.id === record.viewerPlayerId)) {
+    throw new TypeError("Mahjong paipu viewer player id is not in the player list");
   }
   if (!Array.isArray(record.hands) || record.hands.length === 0) {
     throw new TypeError("Mahjong paipu requires at least one hand");
   }
   for (const hand of record.hands) validateHand(hand);
+  if (record.playerPresentations !== undefined &&
+      (!record.playerPresentations || typeof record.playerPresentations !== "object" || Array.isArray(record.playerPresentations))) {
+    throw new TypeError("Mahjong paipu has invalid player presentations");
+  }
   if (
     !isPlainObject(record.final) ||
     !isScoreArray(record.final.scores) ||
@@ -140,6 +161,9 @@ function validateHand(hand) {
   if (!Array.isArray(hand.commands) || !Array.isArray(hand.events) || !isPlainObject(hand.end)) {
     throw new TypeError("Mahjong paipu contains an incomplete hand");
   }
+  if (hand.scoreHistoryBefore !== undefined && !isScoreHistoryArray(hand.scoreHistoryBefore)) {
+    throw new TypeError("Mahjong paipu contains an invalid score history snapshot");
+  }
 }
 
 function isWallEncoding(value) {
@@ -153,6 +177,16 @@ function isWallEncoding(value) {
 
 function isScoreArray(value) {
   return Array.isArray(value) && value.length === 4 && value.every(Number.isFinite);
+}
+
+function isScoreHistoryArray(value) {
+  return Array.isArray(value) && value.length > 0 && value.every((entry) =>
+    isPlainObject(entry) &&
+    Number.isInteger(entry.roundWind) &&
+    Number.isInteger(entry.handNumber) &&
+    Number.isInteger(entry.honba) &&
+    isScoreArray(entry.scores)
+  );
 }
 
 function isRankArray(value) {

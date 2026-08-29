@@ -59,3 +59,16 @@ export function paipuPreviousHandPosition(timeline, position) {
   return timeline.handStarts[handIndex - 1];
 }
 
+/**
+ * Counts only recorded actions already applied in the current hand. Synthetic
+ * navigation steps (such as next-hand) are deliberately excluded.
+ */
+export function paipuActionCountAtPosition(timeline, position) {
+  const safePosition = clampPaipuPosition(timeline, position);
+  const handIndex = paipuHandIndexAtPosition(timeline, safePosition);
+  const handStart = timeline.handStarts[handIndex] ?? 0;
+  return timeline.steps
+    .slice(handStart, safePosition)
+    .filter((step) => step.kind === "action" && step.handIndex === handIndex)
+    .length;
+}

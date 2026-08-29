@@ -259,11 +259,12 @@ export function splitRevealedHand(state, playerId, seat) {
       : { type: Number(tile), red: false });
   const abortiveReveal = state.abortiveReason === "九种九牌"
     && Number(state.abortivePlayerIndex) === Number(seat);
+  const extraDrawn = state.revealedDrawnTiles?.[playerId];
   const drawnType = abortiveReveal
     ? Number(state.abortiveTile)
     : state.winType === "tsumo"
       ? Number(state.winningTile)
-      : 0;
+      : Number(extraDrawn?.type) || 0;
   if (!drawnType) return { rack, drawn: null };
   return {
     rack,
@@ -271,7 +272,9 @@ export function splitRevealedHand(state, playerId, seat) {
       type: drawnType,
       red: abortiveReveal
         ? state.abortiveTileRed === true
-        : state.winningTileRed === true,
+        : state.winType === "tsumo"
+          ? state.winningTileRed === true
+          : extraDrawn?.red === true,
     },
   };
 }

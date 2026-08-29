@@ -214,9 +214,11 @@ test("Mahjong room player presentations are player-owned and survive the match s
     local guest_presentation = on_action(lobby.state, {
       type = "set_player_presentation",
       playerPresentation = {
+        avatarPreference = "auto",
         portraitMode = "platform",
         themeCharacter = { packId = "moonlit", characterId = "fox" },
         builtinCharacterId = "builtin-2",
+        displayName = "Guest Fox",
       },
     }, { actor = { id = "guest" }, serverTime = 1001 })
     local outsider_presentation = on_action(lobby.state, {
@@ -230,14 +232,28 @@ test("Mahjong room player presentations are player-owned and survive the match s
     local guest_view = view(guest_presentation.state, {}, { viewer = { id = "guest", isOwner = false } })
     local started = on_action(guest_presentation.state, {
       type = "start_match", matchType = "east", rules = {},
+      aiPresentations = {
+        ["mahjong-ai-3"] = {
+          portraitMode = "character",
+          themeCharacter = { packId = "moonlit", characterId = "fox" },
+          builtinCharacterId = "builtin-2",
+          displayName = "AI Fox",
+        },
+      },
     }, { actor = { id = "host", isOwner = true }, serverTime = 1002 })
+    local ai_seat
+    for seat, player_id in ipairs(started.state.players) do
+      if player_id == "mahjong-ai-3" then ai_seat = seat end
+    end
     result = {
       accepted = guest_presentation.accepted == true,
       outsider_rejected = outsider_presentation.accepted == false,
       host_sees_theme_character = host_view.state.playerPresentations.guest.themeCharacter.characterId == "fox",
       host_sees_builtin_fallback = host_view.state.playerPresentations.guest.builtinCharacterId == "builtin-2",
       guest_sees_platform_mode = guest_view.state.playerPresentations.guest.portraitMode == "platform",
+      guest_sees_avatar_preference = guest_view.state.playerPresentations.guest.avatarPreference == "auto",
       survives_start = started.state.playerPresentations.guest.builtinCharacterId == "builtin-2",
+      snapshots_role_name = ai_seat and started.state.playerNames[ai_seat] == "AI Fox",
     }
   `);
 
@@ -247,7 +263,9 @@ test("Mahjong room player presentations are player-owned and survive the match s
     host_sees_theme_character: true,
     host_sees_builtin_fallback: true,
     guest_sees_platform_mode: true,
+    guest_sees_avatar_preference: true,
     survives_start: true,
+    snapshots_role_name: true,
   });
 });
 
