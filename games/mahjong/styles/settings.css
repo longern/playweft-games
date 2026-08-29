@@ -277,6 +277,107 @@
   padding: 32px 34px;
 }
 
+.settings-offline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.settings-offline-actions button {
+  min-width: 7em;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid rgba(231, 198, 116, 0.36);
+  border-radius: 8px;
+  background: rgba(1, 18, 18, 0.48);
+  color: #fff2cc;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.settings-offline-actions button:hover {
+  border-color: rgba(255, 226, 155, 0.72);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.settings-offline-actions button:focus-visible {
+  outline: 2px solid rgba(255, 226, 155, 0.82);
+  outline-offset: 3px;
+}
+
+.settings-offline-actions button:active {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.settings-general-choice {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 14px;
+  color: #fff2cc;
+  font-size: 0.875em;
+}
+
+.settings-general-select {
+  position: relative;
+  flex: 0 1 15em;
+  min-width: 0;
+}
+
+.settings-general-select::before,
+.settings-general-select::after {
+  position: absolute;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid rgba(238, 240, 225, 0.52);
+  border-bottom: 2px solid rgba(238, 240, 225, 0.52);
+  content: "";
+  pointer-events: none;
+}
+
+.settings-general-select::before {
+  top: 11px;
+  transform: rotate(225deg);
+}
+
+.settings-general-select::after {
+  bottom: 11px;
+  transform: rotate(45deg);
+}
+
+.settings-general-select select {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 24px 8px 8px;
+  border: 0;
+  appearance: none;
+  background: transparent;
+  color: rgba(238, 240, 225, 0.64);
+  font: inherit;
+  text-align: right;
+  text-align-last: right;
+  cursor: pointer;
+}
+
+.settings-general-select select:focus-visible {
+  outline: 2px solid rgba(255, 226, 155, 0.82);
+  outline-offset: 3px;
+}
+
+.settings-general-select select option {
+  color: #17211f;
+  text-align: left;
+}
+
 .settings-option {
   display: flex;
   align-items: center;

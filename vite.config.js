@@ -71,18 +71,19 @@ function mahjongDefaultAssets() {
       try {
         response = await fetch(sourceUrl);
       } catch (error) {
-        throw new Error(`无法读取麻将默认素材配置：${error.message}`);
+        console.warn(`无法读取麻将默认素材配置，使用内置配置：${error.message}`);
+        return undefined;
       }
       if (!response.ok) {
-        throw new Error(
-          `无法读取麻将默认素材配置：HTTP ${response.status}`,
-        );
+        console.warn(`无法读取麻将默认素材配置，使用内置配置：HTTP ${response.status}`);
+        return undefined;
       }
       let value;
       try {
         value = await response.json();
       } catch {
-        throw new Error("麻将默认素材配置必须是 JSON");
+        console.warn("麻将默认素材配置不是有效 JSON，使用内置配置");
+        return undefined;
       }
       const config = normalizeMahjongDefaultAssetConfig(value);
       const assetCount = Object.values(config.catalog).reduce(
@@ -90,7 +91,8 @@ function mahjongDefaultAssets() {
         0,
       );
       if (!assetCount && !config.assetPacks.length) {
-        throw new Error("麻将默认素材配置没有可用素材或可下载素材包");
+        console.warn("麻将默认素材配置没有可用素材，使用内置配置");
+        return undefined;
       }
       return {
         define: {

@@ -28,9 +28,17 @@ export function createMahjongSettingsDialog({
   musicVolume,
   musicVolumeValue,
   avatarSourcePreference,
+  offlineDownload,
+  offlinePolicy,
+  offlineUpdate,
+  offlineClear,
   onMusicVolumeChange,
   onGameHintsChange,
   onAvatarSourcePreferenceChange,
+  onOfflineDownloadChange,
+  onOfflinePolicyChange,
+  onOfflineUpdate,
+  onOfflineClear,
   onEndMatch,
 }) {
   let returnFocus = null;
@@ -57,6 +65,8 @@ export function createMahjongSettingsDialog({
   );
   renderMusicVolume();
   avatarSourcePreference.value = readAvatarSourcePreference();
+  if (offlineDownload) offlineDownload.checked = readBooleanSetting("playweft.mahjong.offline-cache-mode", false);
+  if (offlinePolicy) offlinePolicy.value = readOfflinePolicy();
 
   function renderDiscardVolume() {
     const value = normalizeDiscardVolume(discardVolume.value);
@@ -242,6 +252,18 @@ export function createMahjongSettingsDialog({
     onAvatarSourcePreferenceChange?.();
   }
 
+  function onOfflineDownloadChangeInternal() {
+    writeBooleanSetting("playweft.mahjong.offline-cache-mode", offlineDownload.checked);
+    onOfflineDownloadChange?.(offlineDownload.checked);
+  }
+
+  function onOfflinePolicyChangeInternal() {
+    const value = offlinePolicy.value === "local-first" ? "local-first" : "network-first";
+    offlinePolicy.value = value;
+    try { window.localStorage.setItem("playweft.mahjong.offline-cache-policy", value); } catch {}
+    onOfflinePolicyChange?.(value);
+  }
+
   function onTriggerClick() {
     setOpen(true);
   }
@@ -278,6 +300,10 @@ export function createMahjongSettingsDialog({
     "change",
     onAvatarSourcePreferenceChangeInternal,
   );
+  offlineDownload?.addEventListener("change", onOfflineDownloadChangeInternal);
+  offlinePolicy?.addEventListener("change", onOfflinePolicyChangeInternal);
+  offlineUpdate?.addEventListener("click", () => onOfflineUpdate?.());
+  offlineClear?.addEventListener("click", () => onOfflineClear?.());
   for (const button of tabButtons) {
     button.addEventListener("click", () => setTab(button.dataset.settingsTab));
     button.addEventListener("keydown", onTabKeyDown);
@@ -340,6 +366,8 @@ export function createMahjongSettingsDialog({
         "change",
         onAvatarSourcePreferenceChangeInternal,
       );
+      offlineDownload?.removeEventListener("change", onOfflineDownloadChangeInternal);
+      offlinePolicy?.removeEventListener("change", onOfflinePolicyChangeInternal);
       for (const button of tabButtons) {
         button.removeEventListener("keydown", onTabKeyDown);
       }
@@ -358,6 +386,16 @@ function readAvatarSourcePreference() {
     );
   } catch {
     return DEFAULT_AVATAR_SOURCE_PREFERENCE;
+  }
+}
+
+function readOfflinePolicy() {
+  try {
+    return window.localStorage.getItem("playweft.mahjong.offline-cache-policy") === "local-first"
+      ? "local-first"
+      : "network-first";
+  } catch {
+    return "network-first";
   }
 }
 

@@ -145,6 +145,8 @@
             <div class="settings-tabs" role="tablist" aria-label="设置内容">
               <button id="settings-operation-tab" type="button" role="tab" aria-selected="true"
                 aria-controls="settings-operation-panel" data-settings-tab="operation">操作</button>
+              <button id="settings-offline-tab" type="button" role="tab" aria-selected="false"
+                aria-controls="settings-offline-panel" data-settings-tab="offline" tabindex="-1">通用</button>
               <button id="settings-theme-tab" type="button" role="tab" aria-selected="false"
                 aria-controls="settings-theme-panel" data-settings-tab="theme" tabindex="-1">主题</button>
               <button id="settings-appearance-tab" type="button" role="tab" aria-selected="false"
@@ -192,6 +194,27 @@
                 </div>
                 <input id="discard-volume-setting" type="range" min="0" max="100" step="1" value="100" />
               </div>
+            </div>
+            <div id="settings-offline-panel" class="settings-tab-panel settings-operation-panel" role="tabpanel"
+              aria-labelledby="settings-offline-tab" data-settings-panel="offline" hidden>
+              <label class="settings-option" for="mahjong-offline-download-setting">
+                <input id="mahjong-offline-download-setting" type="checkbox" />
+                <span>下载麻将离线资源（HTML、脚本、规则和牌面）</span>
+              </label>
+              <label class="settings-general-choice" for="mahjong-offline-policy-setting">
+                <span>资源更新策略</span>
+                <span class="settings-general-select">
+                  <select id="mahjong-offline-policy-setting">
+                    <option value="network-first">网络优先</option>
+                    <option value="local-first">本地优先（手动更新）</option>
+                  </select>
+                </span>
+              </label>
+              <div class="settings-offline-actions">
+                <button id="mahjong-offline-update-button" type="button">手动更新</button>
+                <button id="mahjong-offline-clear-button" type="button">删除麻将缓存</button>
+              </div>
+              <p id="mahjong-offline-feedback" class="settings-appearance-feedback" role="status" aria-live="polite"></p>
             </div>
             <div id="settings-theme-panel" class="settings-tab-panel settings-theme-panel" role="tabpanel"
               aria-labelledby="settings-theme-tab" data-settings-panel="theme" hidden>

@@ -1,3 +1,5 @@
+import { readMahjongOfflineSettings } from "../../../src/game-offline-cache.js";
+
 /**
  * Async facade for the local rules runtime.  The worker owns the Lua/WASM
  * state so an expensive AI decision never blocks the table renderer.
@@ -80,10 +82,14 @@ export async function createLocalLuaGame(options = {}) {
 
   try {
     const sourceUrl = resolveLocalLuaSourceUrl(options.sourceUrl);
+    const resourcePolicy = options.resourcePolicy ?? readMahjongOfflineSettings().policy;
+    const resourceMode = options.resourceMode ?? readMahjongOfflineSettings().mode;
     const initialized = await request("init", {
       options: {
         ...options,
         sourceUrl,
+        resourcePolicy,
+        resourceMode,
         extraSourceUrls: (options.extraSourceUrls ?? []).map((url) =>
           resolveLocalLuaSourceUrl(url),
         ),

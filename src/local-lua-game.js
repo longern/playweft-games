@@ -1,4 +1,5 @@
 import { LuaFactory } from "wasmoon";
+import { fetchGameResource } from "./game-offline-cache.js";
 
 const LOCAL_BRIDGE = String.raw`
 local __local_state = nil
@@ -397,6 +398,8 @@ export async function createLocalLuaGame({
   randomSeed = crypto.randomUUID().replaceAll("-", ""),
   matchId = `solo-${crypto.randomUUID()}`,
   settings = {},
+  resourcePolicy,
+  resourceMode,
 } = {}) {
   if (!sourceUrl || !Array.isArray(players) || players.length === 0) {
     throw new TypeError("sourceUrl and at least one player are required");
@@ -405,7 +408,11 @@ export async function createLocalLuaGame({
   const sourceUrls = [sourceUrl, ...extraSourceUrls];
   const sources = await Promise.all(
     sourceUrls.map(async (url) => {
-      const response = await fetch(url);
+      const response = await fetchGameResource(url, {
+        gameId: "mahjong",
+        mode: resourceMode,
+        policy: resourcePolicy,
+      });
       if (!response.ok) {
         throw new Error(`Unable to load Lua rules (${response.status})`);
       }

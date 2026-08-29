@@ -58,6 +58,14 @@ import defaultPaipuNotebookUrl from "./assets/paipu-notebook-v1.jpg?url";
 import defaultTileFacesUrl from "./assets/tiles/riichi-faces.webp?url";
 import { DEFAULT_MATCH_MUSIC_VOLUME } from "./theme/media-config.js";
 import {
+  cacheGameOfflineResources,
+  clearGameOfflineCache,
+  gameOfflineResourceUrls,
+  notifyGameOfflineSettings,
+  readGameOfflineSettings,
+  registerMahjongOfflineServiceWorker,
+} from "../../src/game-offline-cache.js";
+import {
   appendMahjongSoloAction,
   clearMahjongSoloSave,
   MAHJONG_SOLO_CHECKPOINT_VERSION,
@@ -224,6 +232,10 @@ const settingsDialog = createMahjongSettingsDialog({
   musicVolume: elements.musicVolume,
   musicVolumeValue: elements.musicVolumeValue,
   avatarSourcePreference: elements.avatarSourcePreference,
+  offlineDownload: document.querySelector("#mahjong-offline-download-setting"),
+  offlinePolicy: document.querySelector("#mahjong-offline-policy-setting"),
+  offlineUpdate: document.querySelector("#mahjong-offline-update-button"),
+  offlineClear: document.querySelector("#mahjong-offline-clear-button"),
   onMusicVolumeChange: () => tableController?.applyMatchMusicVolume(),
   onGameHintsChange: () => tableController?.renderCurrentState(),
   onAvatarSourcePreferenceChange: () => {
@@ -243,6 +255,41 @@ const settingsDialog = createMahjongSettingsDialog({
     if (playMode === "replay") void exitMahjongPaipuReplay();
     else void endSoloMatch();
   },
+  onOfflineDownloadChange: (enabled) => {
+    notifyGameOfflineSettings("mahjong", {
+      ...readGameOfflineSettings("mahjong"),
+      mode: enabled ? "download" : "none",
+    });
+    if (enabled) void updateMahjongOfflineCache();
+  },
+  onOfflinePolicyChange: (policy) => notifyGameOfflineSettings("mahjong", {
+    ...readGameOfflineSettings("mahjong"),
+    policy,
+  }),
+  onOfflineUpdate: () => void updateMahjongOfflineCache(),
+  onOfflineClear: () => void clearMahjongOfflineResources(),
+});
+
+const offlineFeedback = document.querySelector("#mahjong-offline-feedback");
+async function updateMahjongOfflineCache() {
+  if (offlineFeedback) offlineFeedback.textContent = "正在下载麻将离线资源…";
+  const results = await cacheGameOfflineResources("mahjong", gameOfflineResourceUrls("mahjong", [
+    defaultTileFacesUrl,
+    defaultPortraitsUrl,
+    defaultTableBackgroundUrl,
+  ]));
+  const failed = results.filter((result) => !result.ok).length;
+  if (offlineFeedback) offlineFeedback.textContent = failed
+    ? `已缓存 ${results.length - failed} 项，${failed} 项暂时无法下载。`
+    : `已缓存 ${results.length} 项麻将离线资源。`;
+}
+async function clearMahjongOfflineResources() {
+  await clearGameOfflineCache("mahjong");
+  if (offlineFeedback) offlineFeedback.textContent = "已删除麻将离线缓存。";
+}
+
+void registerMahjongOfflineServiceWorker().then(() => {
+  notifyGameOfflineSettings("mahjong");
 });
 const matchMusicController = new MahjongMatchMusic({
   audio: matchMusic,
