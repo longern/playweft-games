@@ -30,14 +30,15 @@ local function __mahjong_timer_delay(delay)
 end
 
 local function __mahjong_clear_private_state(state)
-  -- The paipu and its tile-reference map are authoritative match history and
-  -- must survive every room action. Only transient replay/runtime fields are
-  -- cleared here.
+  -- The tile-reference map is needed only while recording the active hand.
+  -- Once a hand is closed, every replay reference is already embedded in its
+  -- authoritative paipu log, so release the map before serializing the state.
+  if state.phase == "hand_ended" then state.paipuTilePositions = nil end
   state.replayWall = nil
   state.autoPassClaimsApplying = nil
 end
 
-local function __mahjong_record_action(result, action, actor_id)
+function __mahjong_record_action(result, action, actor_id)
   if not result or not result.accepted or not result.state then return result end
   if type(record_paipu_action) == "function" and type(action) == "table" then
     record_paipu_action(result.state, action, actor_id, result.events)
