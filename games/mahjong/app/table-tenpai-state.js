@@ -202,8 +202,10 @@ export function createMahjongTableTenpaiState() {
 
   function preview({ state, legalActions, selectedTileId, riichiMode }) {
     if (state?.phase === 'hand_ended') return null;
-    if (previewIntent.source === 'status-hold')
-      return heldPreviewWait || confirmed(state);
+    if (previewIntent.source === 'status-hold') {
+      const current = confirmed(state);
+      return current ? (heldPreviewWait || current) : null;
+    }
     if (previewIntent.source === 'drag') {
       return waitForDiscard(legalActions, {
         type: riichiMode ? 'riichi' : 'discard',
