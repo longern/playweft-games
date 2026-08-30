@@ -1,5 +1,9 @@
 import { createLocalLuaGame } from "../workers/local-game-worker-client.js";
 import { HUMAN_ID, PLAYERS } from "../rules/constants.js";
+import {
+  mahjongOpeningDealerSeat,
+  mahjongPlayersByOpeningWind,
+} from "../rules/seat-order.js";
 import { createMahjongSoloSave, readMahjongSoloSave, writeMahjongSoloSave } from "../replay/solo-save.js";
 import { replayMahjongSoloSave } from "../replay/solo-replay.js";
 
@@ -28,6 +32,34 @@ export function createMahjongSoloMatchController({
   showSetup,
   showSetupRecoveryError,
 }) {
+  function canonicalSoloPlayers(randomSeed, playerNames) {
+    const viewerOrder = PLAYERS.map((player, index) => ({
+      ...player,
+      name: playerNames[index] ?? player.name,
+    }));
+    return mahjongPlayersByOpeningWind(
+      viewerOrder,
+      mahjongOpeningDealerSeat(randomSeed),
+    );
+  }
+
+  function soloGameOptions({ randomSeed, matchId, matchType, rules, playerNames }) {
+    return {
+      sourceUrl: "./game.lua",
+      players: canonicalSoloPlayers(randomSeed, playerNames),
+      playerId: HUMAN_ID,
+      randomSeed,
+      matchId,
+      viewerRelativeProjection: true,
+      settings: {
+        matchType,
+        rules,
+        // players[] is already opening East/South/West/North.
+        initialDealerSeat: 1,
+      },
+    };
+  }
+
   async function initialize(matchType = "east") {
     if (getGame() || getGameInitializing()) return;
     setGameInitializing(true);
@@ -57,17 +89,15 @@ export function createMahjongSoloMatchController({
       ];
       const playerPresentations =
         themeController.getPaipuPlayerPresentations?.(PLAYERS) || {};
-      const gamePreparation = createLocalLuaGame({
-        sourceUrl: "./game.lua",
-        players: PLAYERS.map((player, index) => ({
-          ...player,
-          name: playerNames[index],
-        })),
-        playerId: HUMAN_ID,
-        randomSeed,
-        matchId,
-        settings: { matchType, rules },
-      });
+      const gamePreparation = createLocalLuaGame(
+        soloGameOptions({
+          randomSeed,
+          matchId,
+          matchType,
+          rules,
+          playerNames,
+        }),
+      );
       const [createdGame] = await Promise.all([
         gamePreparation,
         setupExit,
@@ -118,21 +148,21 @@ export function createMahjongSoloMatchController({
     elements.setup.hidden = true;
     let restored;
     try {
-      restored = await createLocalLuaGame({
-        sourceUrl: "./game.lua",
-        players: PLAYERS.map((player, index) => ({
-          ...player,
-          name:
-            index === 0
-              ? save.playerName || getPlayerName()
-              : save.opponentNames[["right", "opposite", "left"][index - 1]] ||
-                player.name,
-        })),
-        playerId: HUMAN_ID,
-        randomSeed: save.randomSeed,
-        matchId: save.matchId,
-        settings: { matchType: save.matchType, rules: save.rules },
-      });
+      const playerNames = PLAYERS.map((player, index) =>
+        index === 0
+          ? save.playerName || getPlayerName()
+          : save.opponentNames[["right", "opposite", "left"][index - 1]] ||
+            player.name,
+      );
+      restored = await createLocalLuaGame(
+        soloGameOptions({
+          randomSeed: save.randomSeed,
+          matchId: save.matchId,
+          matchType: save.matchType,
+          rules: save.rules,
+          playerNames,
+        }),
+      );
       const projection = await replayMahjongSoloSave({
         game: restored,
         save,
