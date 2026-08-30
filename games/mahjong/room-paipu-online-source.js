@@ -15,6 +15,7 @@ const ROOM_PAIPU_ROLLING_GUARD = String.raw`
 __mahjong_room_paipu_action = on_action
 __mahjong_room_paipu_timer = on_timer
 __mahjong_room_paipu_view = view
+__mahjong_room_paipu_record_action = __mahjong_record_action
 
 function __mahjong_room_paipu_current_hand(state)
   local hands = state and state.paipu and state.paipu.hands
@@ -42,14 +43,12 @@ function __mahjong_room_paipu_keep_current_hand(state)
   paipu.hands = { current }
 end
 
--- A claim option number is only an ephemeral index into the current engine
--- state. Persist the exact concealed wall references consumed by chi/pon/kan
--- so replay can resolve the equivalent option even when identical physical
--- tile IDs were reconstructed differently.
+-- Claim option numbers are ephemeral engine indexes. Add the exact concealed
+-- wall references consumed by chi/pon/daiminkan before the ordinary recorder
+-- serializes the action. This wrapper is the common recording boundary for
+-- human, AI, automatic-pass and server-timer paths.
 function __mahjong_room_paipu_capture_claim(state, action, actor_id)
-  if not state or state.phase ~= "claiming" or type(action) ~= "table" or action.type ~= "claim" then
-    return
-  end
+  if not state or type(action) ~= "table" or action.type ~= "claim" then return end
   local selected_index = tonumber(action.option)
   if not selected_index then return end
   for _, claimant in ipairs(state.claimants or {}) do
@@ -67,6 +66,13 @@ function __mahjong_room_paipu_capture_claim(state, action, actor_id)
   end
 end
 
+function __mahjong_record_action(result, action, actor_id)
+  if result and result.state then
+    __mahjong_room_paipu_capture_claim(result.state, action, actor_id)
+  end
+  return __mahjong_room_paipu_record_action(result, action, actor_id)
+end
+
 function __mahjong_room_paipu_normalize_result(result)
   if not result or result.accepted ~= true or type(result.state) ~= "table" then return result end
   __mahjong_room_paipu_strip_private_reports(result.state)
@@ -76,7 +82,6 @@ function __mahjong_room_paipu_normalize_result(result)
 end
 
 function on_action(state, action, context)
-  __mahjong_room_paipu_capture_claim(state, action, context and context.actor and context.actor.id)
   return __mahjong_room_paipu_normalize_result(__mahjong_room_paipu_action(state, action, context))
 end
 
