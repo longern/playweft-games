@@ -38,7 +38,7 @@ test("generic action UI cleanup preserves an active held tenpai preview", () => 
 
   // This mirrors tableController.clearActionUi() after a solo action is
   // accepted. It may clear transient drag UI, but must not end a pointer-owned
-  // status hold.
+  // status hold while the confirmed tenpai status itself remains valid.
   assert.equal(tenpai.clearPreviewIntent(), false);
 
   const afterCleanup = tenpai.preview({
@@ -53,6 +53,56 @@ test("generic action UI cleanup preserves an active held tenpai preview", () => 
   assert.equal(
     tenpai.preview({
       state,
+      legalActions: {},
+      selectedTileId: 0,
+      riichiMode: false,
+    }),
+    null,
+  );
+});
+
+test("held tenpai preview disappears when the confirmed status is no longer valid", () => {
+  const tenpai = createMahjongTableTenpaiState();
+  const awayTurn = {
+    phase: "playing",
+    players: ["self", "p2", "p3", "p4"],
+    roundWind: 1,
+    handNumber: 1,
+    turnIndex: 2,
+    ownHand: [1, 5, 9],
+    drawnTile: 0,
+    melds: { self: [] },
+    riichi: { self: false },
+  };
+  const legalActions = {
+    tenpaiDiscards: [
+      {
+        tileId: 13,
+        furiten: false,
+        waits: [{ type: 5, remaining: 3 }],
+      },
+    ],
+  };
+
+  tenpai.confirmImmediateDiscard(legalActions, { type: "discard", tileId: 13 });
+  tenpai.sync(awayTurn);
+  assert.equal(tenpai.beginConfirmedPreview(awayTurn, 23), true);
+  assert.deepEqual(
+    tenpai.preview({
+      state: awayTurn,
+      legalActions: {},
+      selectedTileId: 0,
+      riichiMode: false,
+    })?.waits?.map((wait) => wait.type),
+    [5],
+  );
+
+  const ownTurn = { ...awayTurn, turnIndex: 1, drawnTile: 17 };
+  tenpai.sync(ownTurn);
+  assert.equal(tenpai.confirmed(ownTurn), null);
+  assert.equal(
+    tenpai.preview({
+      state: ownTurn,
       legalActions: {},
       selectedTileId: 0,
       riichiMode: false,
