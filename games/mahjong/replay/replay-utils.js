@@ -7,35 +7,33 @@ export function replayAction(action, replayTileIds) {
   }
   delete replay.tile;
 
-  if (replay.paipuClaim) {
-    const tileIds = (replay.paipuClaim.tiles || []).map((reference) => {
+  if (replay.type === "claim" && Array.isArray(replay.tiles)) {
+    replay.replayClaimTileIds = replay.tiles.map((reference) => {
       const tileId = tileIdForReference(reference, replayTileIds);
       if (!tileId) throw new Error("Paipu claim has an invalid tile reference");
       return tileId;
     });
-    replay.paipuClaim = {
-      kind: replay.paipuClaim.kind,
-      tileIds,
-    };
+    delete replay.tiles;
   }
   return replay;
 }
 
 /**
- * Converts the stable claim description stored in a paipu back to the current
- * engine's ephemeral claim-option index. Runtime option numbers are deliberately
- * not treated as durable data because identical physical tiles may receive
- * different internal IDs when a recorded wall is reconstructed.
+ * Converts a stable paipu claim (`kind` + consumed wall refs) back to the
+ * current engine's ephemeral option index. Runtime option numbers are retained
+ * only as a legacy fallback for old records.
  */
 export function resolveReplayClaimAction(action, checkpointState, actorId) {
-  if (action?.type !== "claim" || !action.paipuClaim) return action;
+  if (action?.type !== "claim" || !Array.isArray(action.replayClaimTileIds)) {
+    return action;
+  }
   const claimant = (checkpointState?.claimants || []).find(
     (entry) => entry?.playerId === actorId,
   );
   if (!claimant) throw new Error("Paipu claim actor is not an active claimant");
 
-  const expectedKind = action.paipuClaim.kind;
-  const expectedTiles = sortedTileIds(action.paipuClaim.tileIds);
+  const expectedKind = action.kind;
+  const expectedTiles = sortedTileIds(action.replayClaimTileIds);
   const optionIndex = (claimant.options || []).findIndex(
     (option) =>
       option?.kind === expectedKind &&
@@ -46,7 +44,8 @@ export function resolveReplayClaimAction(action, checkpointState, actorId) {
   }
 
   const resolved = { ...action, option: optionIndex + 1 };
-  delete resolved.paipuClaim;
+  delete resolved.kind;
+  delete resolved.replayClaimTileIds;
   return resolved;
 }
 
