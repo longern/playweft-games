@@ -202,8 +202,10 @@ export function createMahjongTableTenpaiState() {
 
   function preview({ state, legalActions, selectedTileId, riichiMode }) {
     if (state?.phase === 'hand_ended') return null;
-    if (previewIntent.source === 'status-hold')
-      return heldPreviewWait || confirmed(state);
+    if (previewIntent.source === 'status-hold') {
+      const current = confirmed(state);
+      return current ? (heldPreviewWait || current) : null;
+    }
     if (previewIntent.source === 'drag') {
       return waitForDiscard(legalActions, {
         type: riichiMode ? 'riichi' : 'discard',
@@ -256,6 +258,9 @@ export function createMahjongTableTenpaiState() {
     sync,
     clearPreviewIntent: ({ source } = {}) => {
       if (source && previewIntent.source !== source) return false;
+      // A status-hold is owned by the active pointer gesture. Generic action
+      // UI cleanup must not end it; only pointer end/cancel or a hand reset may.
+      if (!source && previewIntent.source === 'status-hold') return false;
       clearHeldPreview();
       return true;
     },
