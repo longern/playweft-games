@@ -1,3 +1,8 @@
+import {
+  hasCompleteRoomPaipuHandSequence,
+  mergeRoomPaipuFragmentRecord,
+} from "./room-paipu.js";
+
 export const MAHJONG_PAIPU_DB_NAME = "playweft-mahjong";
 export const MAHJONG_PAIPU_DB_VERSION = 1;
 export const MAHJONG_PAIPU_MAX_RECORDS = 500;
@@ -5,45 +10,83 @@ export const MAHJONG_PAIPU_MAX_BYTES = 50 * 1024 * 1024;
 export const MAHJONG_PAIPU_MAX_RECORD_BYTES = 2 * 1024 * 1024;
 
 export async function saveMahjongPaipu(record, options = {}) {
-  const normalized = validateMahjongPaipu(record);
-  const byteSize = encodedByteSize(normalized);
   const maxRecords = options.maxRecords ?? MAHJONG_PAIPU_MAX_RECORDS;
   const maxBytes = options.maxBytes ?? MAHJONG_PAIPU_MAX_BYTES;
   const maxRecordBytes = options.maxRecordBytes ?? MAHJONG_PAIPU_MAX_RECORD_BYTES;
-  if (byteSize > maxRecordBytes) return { saved: false, reason: "record_too_large" };
-
   const db = await openMahjongPaipuDatabase(options.indexedDB);
   try {
-    const summaries = await readAll(db, "matches");
-    const retained = summaries.filter((entry) => entry.id !== normalized.id);
-    let totalBytes = retained.reduce(
-      (total, entry) => total + Math.max(0, Number(entry.byteSize) || 0),
-      0,
-    );
-    const evictedIds = [];
-    const candidates = retained
-      .filter((entry) => entry.pinned !== true)
-      .sort((left, right) => Number(left.endedAtMs) - Number(right.endedAtMs));
-    while (
-      retained.length - evictedIds.length >= maxRecords ||
-      totalBytes + byteSize > maxBytes
-    ) {
-      const oldest = candidates.shift();
-      if (!oldest) return { saved: false, reason: "storage_limit" };
-      evictedIds.push(oldest.id);
-      totalBytes -= Math.max(0, Number(oldest.byteSize) || 0);
+    if (record?.roomFragment === true) {
+      const previous = await readOne(db, "records", record.id);
+      if (previous?.status === "completed") {
+        return { saved: false, reason: "duplicate" };
+      }
+      const merged = mergeRoomPaipuFragmentRecord(previous, record);
+      if (!merged) return { saved: false, reason: "invalid_fragment" };
+      const byteSize = encodedByteSize(merged);
+      if (byteSize > maxRecordBytes) {
+        return { saved: false, reason: "record_too_large" };
+      }
+      if (record.status !== "completed") {
+        await writeProgressRecord(db, merged);
+        return { saved: true, completed: false };
+      }
+      if (!hasCompleteRoomPaipuHandSequence(merged)) {
+        return { saved: false, reason: "missing_hands" };
+      }
+      const normalized = validateMahjongPaipu(merged);
+      return await saveCompletedRecord(db, normalized, {
+        maxRecords,
+        maxBytes,
+        maxRecordBytes,
+      });
     }
 
-    const previous = summaries.find((entry) => entry.id === normalized.id);
-    const summary = {
-      ...summarizeMahjongPaipu(normalized, byteSize),
-      pinned: previous?.pinned === true || normalized.pinned === true,
-    };
-    await writeRecords(db, normalized, summary, evictedIds);
-    return { saved: true, evictedIds };
+    const normalized = validateMahjongPaipu(record);
+    return await saveCompletedRecord(db, normalized, {
+      maxRecords,
+      maxBytes,
+      maxRecordBytes,
+    });
   } finally {
     db.close();
   }
+}
+
+async function saveCompletedRecord(
+  db,
+  normalized,
+  { maxRecords, maxBytes, maxRecordBytes },
+) {
+  const byteSize = encodedByteSize(normalized);
+  if (byteSize > maxRecordBytes) return { saved: false, reason: "record_too_large" };
+
+  const summaries = await readAll(db, "matches");
+  const retained = summaries.filter((entry) => entry.id !== normalized.id);
+  let totalBytes = retained.reduce(
+    (total, entry) => total + Math.max(0, Number(entry.byteSize) || 0),
+    0,
+  );
+  const evictedIds = [];
+  const candidates = retained
+    .filter((entry) => entry.pinned !== true)
+    .sort((left, right) => Number(left.endedAtMs) - Number(right.endedAtMs));
+  while (
+    retained.length - evictedIds.length >= maxRecords ||
+    totalBytes + byteSize > maxBytes
+  ) {
+    const oldest = candidates.shift();
+    if (!oldest) return { saved: false, reason: "storage_limit" };
+    evictedIds.push(oldest.id);
+    totalBytes -= Math.max(0, Number(oldest.byteSize) || 0);
+  }
+
+  const previous = summaries.find((entry) => entry.id === normalized.id);
+  const summary = {
+    ...summarizeMahjongPaipu(normalized, byteSize),
+    pinned: previous?.pinned === true || normalized.pinned === true,
+  };
+  await writeRecords(db, normalized, summary, evictedIds);
+  return { saved: true, completed: true, evictedIds };
 }
 
 export async function listMahjongPaipuSummaries(options = {}) {
@@ -118,7 +161,7 @@ export function summarizeMahjongPaipu(record, byteSize = encodedByteSize(record)
 
 export function validateMahjongPaipu(record) {
   if (!isPlainObject(record)) throw new TypeError("Invalid Mahjong paipu");
-  if (record.format !== "longern.riichi.paipu" || record.formatVersion !== 1) {
+  if (record.format !== "longern.riichi.paipu" || record.formatVersion !== 2) {
     throw new TypeError("Unsupported Mahjong paipu format");
   }
   if (typeof record.id !== "string" || !record.id) {
@@ -139,6 +182,7 @@ export function validateMahjongPaipu(record) {
   if (!Array.isArray(record.hands) || record.hands.length === 0) {
     throw new TypeError("Mahjong paipu requires at least one hand");
   }
+  validateCanonicalPlayers(record.players);
   for (const hand of record.hands) validateHand(hand);
   if (record.playerPresentations !== undefined &&
       (!record.playerPresentations || typeof record.playerPresentations !== "object" || Array.isArray(record.playerPresentations))) {
@@ -161,9 +205,53 @@ function validateHand(hand) {
   if (!Array.isArray(hand.commands) || !Array.isArray(hand.events) || !isPlainObject(hand.end)) {
     throw new TypeError("Mahjong paipu contains an incomplete hand");
   }
+  for (const command of hand.commands) validateSemanticCommand(command);
   if (hand.scoreHistoryBefore !== undefined && !isScoreHistoryArray(hand.scoreHistoryBefore)) {
     throw new TypeError("Mahjong paipu contains an invalid score history snapshot");
   }
+}
+
+function validateCanonicalPlayers(players) {
+  const ids = new Set();
+  players.forEach((player, index) => {
+    if (!isPlainObject(player) || player.seat !== index + 1 || typeof player.id !== "string" || !player.id) {
+      throw new TypeError("Mahjong paipu players must use canonical opening seats");
+    }
+    if (ids.has(player.id)) throw new TypeError("Mahjong paipu player ids must be unique");
+    ids.add(player.id);
+  });
+}
+
+function validateSemanticCommand(command) {
+  if (!isPlainObject(command) || !Number.isInteger(command.seat) || command.seat < 1 || command.seat > 4 || !isPlainObject(command.action)) {
+    throw new TypeError("Mahjong paipu contains an invalid command");
+  }
+  const action = command.action;
+  const simple = new Set(["pass", "tsumo", "abort_nine"]);
+  if (simple.has(action.type)) return;
+  if (action.type === "discard" || action.type === "riichi") {
+    if (!isTileCode(action.tile) || typeof action.tsumogiri !== "boolean") throw new TypeError("Mahjong paipu contains an invalid semantic discard");
+    if ("tileId" in action || "ref" in action || "option" in action) throw new TypeError("Mahjong paipu contains runtime action identity");
+    return;
+  }
+  if (["chi", "pon", "daiminkan"].includes(action.type)) {
+    const expected = action.type === "daiminkan" ? 3 : 2;
+    if (!Array.isArray(action.tiles) || action.tiles.length !== expected || !action.tiles.every(isTileCode)) {
+      throw new TypeError("Mahjong paipu contains an invalid semantic claim");
+    }
+    if ("option" in action) throw new TypeError("Mahjong paipu contains a runtime claim option");
+    return;
+  }
+  if (action.type === "ron") return;
+  if (action.type === "ankan" || action.type === "kakan") {
+    if (!isTileCode(action.tile)) throw new TypeError("Mahjong paipu contains an invalid semantic kan");
+    return;
+  }
+  throw new TypeError("Mahjong paipu contains an unsupported semantic action");
+}
+
+function isTileCode(value) {
+  return typeof value === "string" && /^(?:[1-9][mps]|0[mps]|[1-7]z)$/.test(value);
 }
 
 function isWallEncoding(value) {
@@ -225,6 +313,16 @@ function readAll(db, storeName) {
 
 function readOne(db, storeName, id) {
   return requestResult(db.transaction(storeName, "readonly").objectStore(storeName).get(id));
+}
+
+function writeProgressRecord(db, record) {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction("records", "readwrite");
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error || new Error("Unable to save Mahjong room paipu progress"));
+    transaction.onabort = () => reject(transaction.error || new Error("Mahjong room paipu progress save was aborted"));
+    transaction.objectStore("records").put(record);
+  });
 }
 
 function writeRecords(db, record, summary, evictedIds) {

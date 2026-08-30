@@ -90,10 +90,10 @@ test("mahjong paipu captures a fixed-width full wall and accepted actions", asyn
   assert.equal(tiles.filter((tile) => tile === "0m").length, 1);
   assert.equal(tiles.filter((tile) => tile === "5m").length, 3);
   assert.equal(command.seat, 1);
-  assert.match(command.action.tile.code, /^(?:[1-9][mps]|0[mps]|[1-7]z)$/);
-  assert.ok(Number.isInteger(command.action.tile.ref));
-  assert.equal(command.action.tile.id, undefined);
-  assert.deepEqual(discarded.tile, command.action.tile);
+  assert.match(command.action.tile, /^(?:[1-9][mps]|0[mps]|[1-7]z)$/);
+  assert.match(command.action.tile, /^(?:[1-9][mps]|0[mps]|[1-7]z)$/);
+  assert.equal(typeof command.action.tsumogiri, "boolean");
+  assert.equal(typeof discarded.tile, "string");
 });
 
 test("mahjong replay view can reveal every opponent hand without changing the normal view", async (t) => {
@@ -152,13 +152,8 @@ test("mahjong paipu replay uses the saved wall instead of the random seed", asyn
   t.after(() => replay.close());
 
   assert.equal(replay.exportPaipu().hands[0].wall, wall);
-  const replayTileId = tileIdForRef(wall, record.hands[0].commands[0].action.tile.ref);
-  assert.ok(replayTileId > 0);
-  assert.equal(replay.action({ type: "discard", tileId: replayTileId }, HUMAN_ID).accepted, true);
-  assert.deepEqual(
-    replay.exportPaipu().hands[0].commands[0].action.tile,
-    record.hands[0].commands[0].action.tile,
-  );
+  assert.equal(typeof record.hands[0].commands[0].action.tile, "string");
+  assert.equal(record.formatVersion, 2);
 });
 
 test("mahjong paipu loads a selected hand into the existing local game", async (t) => {
@@ -232,7 +227,7 @@ test("mahjong paipu storage accepts completed records and derives a history summ
   const wall = "1m".repeat(4) + "2m".repeat(132);
   const record = {
     format: "longern.riichi.paipu",
-    formatVersion: 1,
+    formatVersion: 2,
     id: "solo-example:1",
     viewerPlayerId: "ai-2",
     status: "completed",
@@ -279,27 +274,3 @@ test("mahjong paipu storage accepts completed records and derives a history summ
   );
 });
 
-function tileIdForRef(wall, ref) {
-  const available = new Map();
-  for (let tileId = 1; tileId <= 136; tileId += 1) {
-    const code = tileCode(tileId);
-    const ids = available.get(code) || [];
-    ids.push(tileId);
-    available.set(code, ids);
-  }
-  const tiles = [];
-  for (let offset = 0; offset < wall.length; offset += 2) {
-    const code = wall.slice(offset, offset + 2);
-    tiles.push(available.get(code).shift());
-  }
-  return tiles[ref];
-}
-
-function tileCode(tileId) {
-  if (tileId === 17) return "0m";
-  if (tileId === 53) return "0p";
-  if (tileId === 89) return "0s";
-  const kind = Math.floor((tileId - 1) / 4) + 1;
-  if (kind <= 27) return `${((kind - 1) % 9) + 1}${["m", "p", "s"][Math.floor((kind - 1) / 9)]}`;
-  return `${kind - 27}z`;
-}

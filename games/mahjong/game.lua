@@ -1600,11 +1600,6 @@ local function start_paipu_hand(state, tiles)
 	if type(state.paipu) ~= "table" then
 		return
 	end
-	local positions = {}
-	for index, tile in ipairs(tiles) do
-		positions[tile] = index - 1
-	end
-	state.paipuTilePositions = positions
 	local hands = state.paipu.hands
 	hands[#hands + 1] = {
 		index = #hands,
@@ -1628,30 +1623,54 @@ local function current_paipu_hand(state)
 	return hands and hands[#hands] or nil
 end
 
-local function paipu_tile_reference(state, tile)
-	if type(tile) ~= "number" or tile < 1 or tile > 136 then
+local function paipu_command(state, action, actor_id, events)
+	if action.type == "discard" or action.type == "riichi" then
+		local tsumogiri = false
+		for _, event in ipairs(events or {}) do
+			if (event.type == "discarded" or event.type == "riichi") and event.player == actor_id then
+				tsumogiri = event.fromDrawn == true
+				break
+			end
+		end
+		return { type = action.type, tile = tile_code(action.tileId), tsumogiri = tsumogiri }
+	end
+	if action.type == "claim" then
+		local selected_index = math.floor(tonumber(action.option) or 0)
+		for _, claimant in ipairs(state.claimants or {}) do
+			if claimant.playerId == actor_id then
+				local option = claimant.options and claimant.options[selected_index]
+				if option then
+					local command = { type = option.kind == "kan" and "daiminkan" or option.kind }
+					if option.kind ~= "ron" then
+						command.tiles = {}
+						for _, tile in ipairs(option.tileIds or {}) do
+							command.tiles[#command.tiles + 1] = tile_code(tile)
+						end
+					end
+					return command
+				end
+				break
+			end
+		end
 		return nil
 	end
-	return {
-		code = tile_code(tile),
-		ref = state.paipuTilePositions and state.paipuTilePositions[tile] or nil,
-	}
-end
-
-local function paipu_command(state, action)
-	local command = copy_record_value(action)
-	if type(command.tileId) == "number" then
-		command.tile = paipu_tile_reference(state, command.tileId)
-		command.tileId = nil
+	if action.type == "kan" and (action.kind == "ankan" or action.kind == "kakan") then
+		local kind = math.floor(tonumber(action.tileType) or 0)
+		return kind >= 1 and kind <= 34
+			and { type = action.kind, tile = tile_code((kind - 1) * 4 + 1) }
+			or nil
 	end
-	return command
+	if action.type == "pass" or action.type == "tsumo" or action.type == "abort_nine" then
+		return { type = action.type }
+	end
+	return nil
 end
 
 local function paipu_event(state, event, sequence)
 	local recorded = copy_record_value(event)
 	recorded.seq = sequence
-	if type(event.tile) == "number" then
-		recorded.tile = paipu_tile_reference(state, event.tile)
+	if type(event.tile) == "number" and event.tile >= 1 and event.tile <= 136 then
+		recorded.tile = tile_code(event.tile)
 	end
 	return recorded
 end
@@ -1672,7 +1691,7 @@ local function finish_paipu_hand(state, hand)
 		draw = state.draw == true,
 		abortiveReason = state.abortiveReason,
 		winners = winners,
-		winningTile = paipu_tile_reference(state, state.winningTile),
+		winningTile = type(state.winningTile) == "number" and state.winningTile > 0 and tile_code(state.winningTile) or nil,
 		result = copy_record_value(state.result),
 		results = copy_record_value(state.results),
 		scores = copy_scores_for_record(state.scores),
@@ -1689,11 +1708,11 @@ function record_paipu_action(state, action, actor_id, events)
 	if not hand then
 		return
 	end
-	local seat = player_index(state, actor_id)
-	hand.commands[#hand.commands + 1] = {
-		seat = seat,
-		action = paipu_command(state, action),
-	}
+	local command = paipu_command(state, action, actor_id, events)
+	if command then
+		local seat = player_index(state, actor_id)
+		hand.commands[#hand.commands + 1] = { seat = seat, action = command }
+	end
 	for _, event in ipairs(events or {}) do
 		state.paipu.eventCount = state.paipu.eventCount + 1
 		hand.events[#hand.events + 1] = paipu_event(state, event, state.paipu.eventCount)
@@ -2153,6 +2172,7 @@ local function new_match(players, names, seed, settings, ai_players)
 		},
 		matchEnded = false,
 		aiPlayers = ai_players or {},
+		canonicalMatchSeats = settings and settings.canonicalMatchSeats == true,
 		rules = rule_settings(settings),
 	}
 	-- A paipu viewer can start directly at any recorded hand.  The wall plus
@@ -2204,7 +2224,7 @@ local function new_match(players, names, seed, settings, ai_players)
 	end
 	state.paipu = {
 		format = "longern.riichi.paipu",
-		formatVersion = 1,
+		formatVersion = 2,
 		initialScores = copy_scores_for_record(state.scores),
 		hands = {},
 		eventCount = 0,
@@ -4814,12 +4834,28 @@ function on_action(state, action, context)
 		if state.phase ~= "hand_ended" then
 			return rejected("game_not_over")
 		end
+		local next_seed = next_match_seed(state.seed)
+		local players, names = copy_array(state.players), copy_array(state.playerNames)
+		local next_settings = {
+			matchType = state.matchType,
+			rules = state.rules,
+			canonicalMatchSeats = state.canonicalMatchSeats == true,
+		}
+		if state.canonicalMatchSeats then
+			local seat_draw = (next_seed * RANDOM_MULTIPLIER) % RANDOM_MODULUS
+			local east = (seat_draw % PLAYER_COUNT) + 1
+			players, names = {}, {}
+			for offset = 0, PLAYER_COUNT - 1 do
+				local source = ((east - 1 + offset) % PLAYER_COUNT) + 1
+				players[#players + 1] = state.players[source]
+				names[#names + 1] = state.playerNames[source]
+			end
+			next_settings.initialDealerSeat = 1
+		end
+		local next_state = new_match(players, names, next_seed, next_settings, state.aiPlayers)
 		return accepted(
-			new_match(state.players, state.playerNames, next_match_seed(state.seed), {
-				matchType = state.matchType,
-				rules = state.rules,
-			}, state.aiPlayers),
-			{ { type = "new_match", player = actor_id, playerIndex = seat } }
+			next_state,
+			{ { type = "new_match", player = actor_id, playerIndex = player_index(next_state, actor_id) } }
 		)
 	end
 	if state.phase == "hand_ended" then

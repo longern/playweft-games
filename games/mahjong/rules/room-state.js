@@ -1,37 +1,26 @@
-const PLAYER_COUNT = 4;
+import {
+  mahjongPlayersForViewer,
+  mahjongRotateSeat,
+  mahjongRotateSeatOrder,
+} from "./seat-order.js";
+
+export { mahjongPlayersForViewer } from "./seat-order.js";
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
-}
-
-function rotateSeat(seat, viewerSeat) {
-  const value = Number(seat);
-  if (!Number.isInteger(value) || value < 1 || value > PLAYER_COUNT) {
-    return seat;
-  }
-  return ((value - viewerSeat + PLAYER_COUNT) % PLAYER_COUNT) + 1;
-}
-
-function rotateSeatOrder(values, viewerSeat) {
-  const source = asArray(values);
-  if (source.length !== PLAYER_COUNT) return source;
-  return Array.from(
-    { length: PLAYER_COUNT },
-    (_, index) => source[(viewerSeat - 1 + index) % PLAYER_COUNT],
-  );
 }
 
 function rotateResult(result, viewerSeat) {
   if (!result || typeof result !== "object") return result;
   return {
     ...result,
-    deltas: rotateSeatOrder(result.deltas, viewerSeat),
-    tenpai: rotateSeatOrder(result.tenpai, viewerSeat),
-    tenpaiWaits: rotateSeatOrder(result.tenpaiWaits, viewerSeat),
-    winnerIndex: rotateSeat(result.winnerIndex, viewerSeat),
-    paoSeat: rotateSeat(result.paoSeat, viewerSeat),
+    deltas: mahjongRotateSeatOrder(result.deltas, viewerSeat),
+    tenpai: mahjongRotateSeatOrder(result.tenpai, viewerSeat),
+    tenpaiWaits: mahjongRotateSeatOrder(result.tenpaiWaits, viewerSeat),
+    winnerIndex: mahjongRotateSeat(result.winnerIndex, viewerSeat),
+    paoSeat: mahjongRotateSeat(result.paoSeat, viewerSeat),
     paoSeats: asArray(result.paoSeats).map((seat) =>
-      rotateSeat(seat, viewerSeat),
+      mahjongRotateSeat(seat, viewerSeat),
     ),
   };
 }
@@ -43,7 +32,7 @@ function rotateMelds(melds, viewerSeat) {
       playerId,
       asArray(groups).map((group) => ({
         ...group,
-        fromIndex: rotateSeat(group?.fromIndex, viewerSeat),
+        fromIndex: mahjongRotateSeat(group?.fromIndex, viewerSeat),
       })),
     ]),
   );
@@ -53,97 +42,53 @@ function rotateEvent(event, viewerSeat) {
   if (!event || typeof event !== "object") return event;
   return {
     ...event,
-    playerIndex: rotateSeat(event.playerIndex, viewerSeat),
-    fromIndex: rotateSeat(event.fromIndex, viewerSeat),
+    playerIndex: mahjongRotateSeat(event.playerIndex, viewerSeat),
+    fromIndex: mahjongRotateSeat(event.fromIndex, viewerSeat),
   };
 }
 
 /**
- * Converts canonical paipu data into the local engine's presentation order.
- * Persisted records stay canonical; this transformation is only for replay.
+ * Paipu is canonical match data. Replay, storage and the Lua engine all consume
+ * the same seat order; viewer-relative orientation is a projection/UI concern.
+ * Keep this compatibility entry point as an identity transform so older callers
+ * cannot accidentally create a second seat coordinate system.
  */
-export function orientMahjongPaipuRecord(record, viewerPlayerId) {
-  const players = asArray(record?.players);
-  const viewerSeat =
-    players.findIndex((player) => player?.id === viewerPlayerId) + 1;
-  if (players.length !== PLAYER_COUNT || viewerSeat < 1) return record;
-  const rotated = rotateSeatOrder(players, viewerSeat)
-    .map((player, index) => ({ ...player, seat: index + 1 }));
-  return {
-    ...record,
-    players: rotated,
-    hands: asArray(record.hands).map((hand) => ({
-      ...hand,
-      startScores: rotateSeatOrder(hand.startScores, viewerSeat),
-      scoreHistoryBefore: asArray(hand.scoreHistoryBefore).map((entry) => ({
-        ...entry,
-        scores: rotateSeatOrder(entry?.scores, viewerSeat),
-      })),
-      round: hand.round
-        ? { ...hand.round, dealerSeat: rotateSeat(hand.round.dealerSeat, viewerSeat) }
-        : hand.round,
-      commands: asArray(hand.commands).map((command) => ({
-        ...command,
-        seat: rotateSeat(command?.seat, viewerSeat),
-      })),
-      events: asArray(hand.events).map((event) => rotateEvent(event, viewerSeat)),
-      end: hand.end
-        ? {
-            ...hand.end,
-            winners: asArray(hand.end.winners).map((seat) =>
-              rotateSeat(seat, viewerSeat),
-            ),
-            result: rotateResult(hand.end.result, viewerSeat),
-            results: asArray(hand.end.results).map((result) =>
-              rotateResult(result, viewerSeat),
-            ),
-            scores: rotateSeatOrder(hand.end.scores, viewerSeat),
-          }
-        : hand.end,
-    })),
-    final: record.final
-      ? {
-          ...record.final,
-          scores: rotateSeatOrder(record.final.scores, viewerSeat),
-          ranks: rotateSeatOrder(record.final.ranks, viewerSeat),
-        }
-      : record.final,
-  };
+export function orientMahjongPaipuRecord(record) {
+  return record;
 }
 
 /**
- * Reorients a room projection so its viewer is always presentation seat one.
- * Tile maps remain keyed by stable player IDs; only seat-indexed fields move.
+ * Reorients a room/solo/replay projection so its viewer is presentation seat
+ * one. Tile maps remain keyed by stable player IDs; only seat-indexed UI fields
+ * move. Canonical paipu embedded in the projection is deliberately untouched.
  */
 export function orientMahjongRoomProjection(projection, playerId) {
   const source = projection?.state;
   const players = asArray(source?.players);
   const viewerSeat = players.indexOf(playerId) + 1;
-  if (players.length !== PLAYER_COUNT || viewerSeat < 1) return projection;
+  if (players.length !== 4 || viewerSeat < 1) return projection;
 
   const state = {
     ...source,
-    players: rotateSeatOrder(players, viewerSeat),
-    playerNames: rotateSeatOrder(source.playerNames, viewerSeat),
-    scores: rotateSeatOrder(source.scores, viewerSeat),
+    players: mahjongRotateSeatOrder(players, viewerSeat),
+    playerNames: mahjongRotateSeatOrder(source.playerNames, viewerSeat),
+    scores: mahjongRotateSeatOrder(source.scores, viewerSeat),
     scoreHistory: asArray(source.scoreHistory).map((entry) => ({
       ...entry,
-      scores: rotateSeatOrder(entry?.scores, viewerSeat),
+      scores: mahjongRotateSeatOrder(entry?.scores, viewerSeat),
     })),
-    initialDealerIndex: rotateSeat(source.initialDealerIndex, viewerSeat),
-    dealerIndex: rotateSeat(source.dealerIndex, viewerSeat),
-    turnIndex: rotateSeat(source.turnIndex, viewerSeat),
-    responseIndex: rotateSeat(source.responseIndex, viewerSeat),
-    drawnPlayerIndex: rotateSeat(source.drawnPlayerIndex, viewerSeat),
-    winnerIndex: rotateSeat(source.winnerIndex, viewerSeat),
-    abortivePlayerIndex: rotateSeat(source.abortivePlayerIndex, viewerSeat),
+    initialDealerIndex: mahjongRotateSeat(source.initialDealerIndex, viewerSeat),
+    dealerIndex: mahjongRotateSeat(source.dealerIndex, viewerSeat),
+    turnIndex: mahjongRotateSeat(source.turnIndex, viewerSeat),
+    responseIndex: mahjongRotateSeat(source.responseIndex, viewerSeat),
+    drawnPlayerIndex: mahjongRotateSeat(source.drawnPlayerIndex, viewerSeat),
+    winnerIndex: mahjongRotateSeat(source.winnerIndex, viewerSeat),
+    abortivePlayerIndex: mahjongRotateSeat(source.abortivePlayerIndex, viewerSeat),
     melds: rotateMelds(source.melds, viewerSeat),
     result: rotateResult(source.result, viewerSeat),
     results: asArray(source.results).map((result) =>
       rotateResult(result, viewerSeat),
     ),
-    // A paipu is canonical match data, not a view projection. Keep its seat
-    // order intact; the saved viewerPlayerId identifies the local player.
     paipu: source.paipu,
   };
 
