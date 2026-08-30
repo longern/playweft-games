@@ -26,11 +26,7 @@ function __mahjong_room_paipu_strip_private_reports(state)
   if not hand then return end
   for _, command in ipairs(hand.commands or {}) do
     local action = command and command.action
-    if type(action) == "table" then
-      -- tenpaiReport is an authoritative validation witness. It can be large
-      -- and is not needed for replay once the action has been accepted.
-      action.tenpaiReport = nil
-    end
+    if type(action) == "table" then action.tenpaiReport = nil end
   end
 end
 
@@ -46,37 +42,51 @@ function __mahjong_room_paipu_keep_current_hand(state)
   paipu.hands = { current }
 end
 
-function __mahjong_room_paipu_normalize_result(result)
-  if not result or result.accepted ~= true or type(result.state) ~= "table" then
-    return result
+-- A claim option number is only an ephemeral index into the current engine
+-- state. Persist the exact concealed wall references consumed by chi/pon/kan
+-- so replay can resolve the equivalent option even when identical physical
+-- tile IDs were reconstructed differently.
+function __mahjong_room_paipu_capture_claim(state, action, actor_id)
+  if not state or state.phase ~= "claiming" or type(action) ~= "table" or action.type ~= "claim" then
+    return
   end
+  local selected_index = tonumber(action.option)
+  if not selected_index then return end
+  for _, claimant in ipairs(state.claimants or {}) do
+    if claimant.playerId == actor_id then
+      local option = claimant.options and claimant.options[selected_index]
+      if not option then return end
+      local tiles = {}
+      for _, tile_id in ipairs(option.tileIds or {}) do
+        local ref = state.paipuTilePositions and state.paipuTilePositions[tile_id]
+        if ref ~= nil then tiles[#tiles + 1] = { ref = ref } end
+      end
+      action.paipuClaim = { kind = option.kind, tiles = tiles }
+      return
+    end
+  end
+end
+
+function __mahjong_room_paipu_normalize_result(result)
+  if not result or result.accepted ~= true or type(result.state) ~= "table" then return result end
   __mahjong_room_paipu_strip_private_reports(result.state)
   __mahjong_room_paipu_keep_current_hand(result.state)
-  -- The tile-reference map is needed only while recording the active hand.
-  -- Once that hand is closed, every reference is already embedded in its log.
-  if result.state.phase == "hand_ended" then
-    result.state.paipuTilePositions = nil
-  end
+  if result.state.phase == "hand_ended" then result.state.paipuTilePositions = nil end
   return result
 end
 
 function on_action(state, action, context)
-  return __mahjong_room_paipu_normalize_result(
-    __mahjong_room_paipu_action(state, action, context)
-  )
+  __mahjong_room_paipu_capture_claim(state, action, context and context.actor and context.actor.id)
+  return __mahjong_room_paipu_normalize_result(__mahjong_room_paipu_action(state, action, context))
 end
 
 function on_timer(state, timer, context)
-  return __mahjong_room_paipu_normalize_result(
-    __mahjong_room_paipu_timer(state, timer, context)
-  )
+  return __mahjong_room_paipu_normalize_result(__mahjong_room_paipu_timer(state, timer, context))
 end
 
 function view(state, events, context)
   local projection = __mahjong_room_paipu_view(state, events, context)
   if projection and projection.state then
-    -- A completed hand is immutable, so every result-page snapshot can safely
-    -- carry it. Reconnects during the result pages receive the same fragment.
     if state.phase == "hand_ended" then
       projection.state.paipu = export_paipu(state, "room")
     else
