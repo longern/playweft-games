@@ -37,7 +37,7 @@ regression = r'''test("Mahjong final summary view stays within the runtime quota
     state.results = { state.result }
     state.resultPage = 2
 
-    -- Inflate only the authoritative hand log.  Final summary rendering must
+    -- Inflate only the authoritative hand log. Final summary rendering must
     -- be independent of its size because clients have already persisted this
     -- hand fragment before reaching the summary page.
     local hand = state.paipu and state.paipu.hands and state.paipu.hands[1]
@@ -72,4 +72,18 @@ regression = r'''test("Mahjong final summary view stays within the runtime quota
 
 '''
 assert 'Mahjong final summary view stays within the runtime quota' not in test_text
-test_path.write_text(test_text.replace(marker, regression + marker, 1))
+test_text = test_text.replace(marker, regression + marker, 1)
+old_expectation = '''      finalRankingHasPaipu = final_projection.state.paipu ~= nil
+        and final_projection.state.paipu.status == "completed"
+        and final_projection.state.paipu.game.mode == "room",
+'''
+new_expectation = '''      finalRankingOmitsPaipu = final_projection.state.paipu == nil,
+'''
+assert old_expectation in test_text
+test_text = test_text.replace(old_expectation, new_expectation, 1)
+test_text = test_text.replace(
+    '  assert.equal(result.finalRankingHasPaipu, true);',
+    '  assert.equal(result.finalRankingOmitsPaipu, true);',
+    1,
+)
+test_path.write_text(test_text)
