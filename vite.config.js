@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { defineConfig } from "vite";
 import { normalizeMahjongDefaultAssetConfig } from "./games/mahjong/theme/default-assets.js";
-import { buildMahjongOnlineSource } from "./games/mahjong/online-source.js";
+import { buildMahjongOnlineSource } from "./games/mahjong/room-paipu-online-source.js";
 
 const games = [
   "pig-dice",

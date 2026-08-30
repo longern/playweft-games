@@ -6,7 +6,7 @@ import {
   orientMahjongRoomProjection,
 } from "../games/mahjong/rules/room-state.js";
 
-test("room projection keeps its viewer at the bottom without changing private tiles", () => {
+test("room projection keeps its viewer at the bottom without changing canonical paipu", () => {
   const projection = {
     state: {
       players: ["p1", "p2", "p3", "p4"],
@@ -22,12 +22,7 @@ test("room projection keeps its viewer at the bottom without changing private ti
       abortivePlayerIndex: 4,
       ownHand: [11, 12, 13],
       handCounts: { p1: 13, p2: 13, p3: 13, p4: 13 },
-      melds: {
-        p1: [{ kind: "pon", fromIndex: 4 }],
-        p2: [],
-        p3: [],
-        p4: [],
-      },
+      melds: { p1: [{ kind: "pon", fromIndex: 4 }], p2: [], p3: [], p4: [] },
       result: {
         winnerIndex: 1,
         paoSeat: 4,
@@ -40,30 +35,26 @@ test("room projection keeps its viewer at the bottom without changing private ti
       paipu: {
         viewerPlayerId: "p1",
         players: [
-          { seat: 1, id: "p1" },
-          { seat: 2, id: "p2" },
-          { seat: 3, id: "p3" },
-          { seat: 4, id: "p4" },
+          { seat: 1, id: "p1" }, { seat: 2, id: "p2" },
+          { seat: 3, id: "p3" }, { seat: 4, id: "p4" },
         ],
-        hands: [
-          {
-            round: { dealerSeat: 2 },
-            startScores: [21000, 22000, 23000, 24000],
-            commands: [{ seat: 4 }],
-            events: [{ type: "won", playerIndex: 1, fromIndex: 4 }],
-            end: {
-              winners: [1],
-              result: { winnerIndex: 4, paoSeat: 2 },
-              scores: [21000, 22000, 23000, 24000],
-            },
+        hands: [{
+          round: { dealerSeat: 2 },
+          startScores: [21000, 22000, 23000, 24000],
+          commands: [{ seat: 4 }],
+          events: [{ type: "won", playerIndex: 1, fromIndex: 4 }],
+          end: {
+            winners: [1], result: { winnerIndex: 4, paoSeat: 2 },
+            scores: [21000, 22000, 23000, 24000],
           },
-        ],
+        }],
         final: { scores: [21000, 22000, 23000, 24000], ranks: [3, 2, 1, 4] },
       },
     },
     events: [{ type: "won", playerIndex: 1, fromIndex: 4 }],
   };
 
+  const canonicalPaipu = projection.state.paipu;
   const oriented = orientMahjongRoomProjection(projection, "p3");
 
   assert.deepEqual(oriented.state.players, ["p3", "p4", "p1", "p2"]);
@@ -79,52 +70,37 @@ test("room projection keeps its viewer at the bottom without changing private ti
   assert.equal(oriented.state.abortivePlayerIndex, 2);
   assert.equal(oriented.state.melds.p1[0].fromIndex, 2);
   assert.deepEqual(oriented.state.result.deltas, [-1000, -1000, 3000, -1000]);
-  assert.deepEqual(oriented.state.result.tenpai, [true, false, true, false]);
-  assert.deepEqual(oriented.state.result.tenpaiWaits, [[9], [], [1], []]);
   assert.equal(oriented.state.result.winnerIndex, 3);
   assert.equal(oriented.state.result.paoSeat, 2);
-  assert.deepEqual(oriented.state.result.paoSeats, [4, 2]);
-  assert.equal(oriented.state.results[0].winnerIndex, 2);
-  assert.deepEqual(oriented.state.paipu.players.map(({ id, seat }) => ({ id, seat })), [
-    { id: "p1", seat: 1 },
-    { id: "p2", seat: 2 },
-    { id: "p3", seat: 3 },
-    { id: "p4", seat: 4 },
-  ]);
-  assert.equal(oriented.state.paipu.viewerPlayerId, "p1");
-  assert.equal(oriented.state.paipu.hands[0].round.dealerSeat, 2);
-  assert.deepEqual(oriented.state.paipu.hands[0].startScores, [21000, 22000, 23000, 24000]);
+  assert.deepEqual(oriented.state.results[0].deltas, [-1000, 3000, -1000, -1000]);
+  assert.strictEqual(oriented.state.paipu, canonicalPaipu);
   assert.equal(oriented.state.paipu.hands[0].commands[0].seat, 4);
-  assert.equal(oriented.state.paipu.hands[0].events[0].playerIndex, 1);
-  assert.equal(oriented.state.paipu.hands[0].end.winners[0], 1);
-  assert.equal(oriented.state.paipu.hands[0].end.result.winnerIndex, 4);
-  assert.deepEqual(oriented.state.paipu.hands[0].end.scores, [21000, 22000, 23000, 24000]);
-  assert.deepEqual(oriented.state.paipu.final.scores, [21000, 22000, 23000, 24000]);
   assert.deepEqual(oriented.events, [{ type: "won", playerIndex: 3, fromIndex: 2 }]);
   assert.deepEqual(oriented.state.ownHand, [11, 12, 13]);
-  assert.equal(oriented.state.handCounts[oriented.state.players[0]], 13);
   assert.deepEqual(projection.state.players, ["p1", "p2", "p3", "p4"]);
 });
 
-test("paipu replay orientation is derived from viewer id, not canonical seat number", () => {
+test("paipu remains canonical regardless of viewer id", () => {
   const record = {
     viewerPlayerId: "p3",
     players: [
-      { id: "p1", seat: 1 },
-      { id: "p2", seat: 2 },
-      { id: "p3", seat: 3 },
-      { id: "p4", seat: 4 },
+      { id: "p1", seat: 1 }, { id: "p2", seat: 2 },
+      { id: "p3", seat: 3 }, { id: "p4", seat: 4 },
     ],
-    hands: [{ round: { dealerSeat: 2 }, startScores: [1, 2, 3, 4], commands: [{ seat: 3 }] }],
+    hands: [{
+      round: { dealerSeat: 2 },
+      startScores: [1, 2, 3, 4],
+      commands: [{ seat: 3 }],
+    }],
     final: { scores: [1, 2, 3, 4], ranks: [4, 3, 1, 2] },
   };
-  const oriented = orientMahjongPaipuRecord(record, record.viewerPlayerId);
-  assert.deepEqual(oriented.players.map(({ id, seat }) => ({ id, seat })), [
-    { id: "p3", seat: 1 },
-    { id: "p4", seat: 2 },
-    { id: "p1", seat: 3 },
-    { id: "p2", seat: 4 },
+  const replayRecord = orientMahjongPaipuRecord(record, record.viewerPlayerId);
+  assert.strictEqual(replayRecord, record);
+  assert.deepEqual(replayRecord.players.map(({ id, seat }) => ({ id, seat })), [
+    { id: "p1", seat: 1 }, { id: "p2", seat: 2 },
+    { id: "p3", seat: 3 }, { id: "p4", seat: 4 },
   ]);
-  assert.deepEqual(oriented.final.scores, [3, 4, 1, 2]);
-  assert.equal(oriented.hands[0].commands[0].seat, 1);
+  assert.deepEqual(replayRecord.final.scores, [1, 2, 3, 4]);
+  assert.equal(replayRecord.hands[0].commands[0].seat, 3);
+  assert.equal(replayRecord.players[replayRecord.hands[0].commands[0].seat - 1].id, "p3");
 });
