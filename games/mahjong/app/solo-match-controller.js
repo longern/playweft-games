@@ -56,6 +56,7 @@ export function createMahjongSoloMatchController({
         rules,
         // players[] is already opening East/South/West/North.
         initialDealerSeat: 1,
+        canonicalMatchSeats: true,
       },
     };
   }

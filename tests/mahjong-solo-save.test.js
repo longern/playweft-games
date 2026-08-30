@@ -3,6 +3,8 @@ import { test } from "node:test";
 
 import {
   MAHJONG_SOLO_SAVE_KEY,
+  MAHJONG_SOLO_ENGINE_CHECKPOINT_VERSION,
+  MAHJONG_SOLO_SAVE_VERSION,
   appendMahjongSoloAction,
   clearMahjongSoloSave,
   createMahjongSoloSave,
@@ -187,7 +189,7 @@ test("mahjong solo saves restore from a validated hand-end checkpoint", () => {
     actionIndex: 1,
     state: { phase: "hand_ended", scores: [25000, 25000, 25000, 25000] },
     events: [{ type: "win" }],
-    engineVersion: 1,
+    engineVersion: MAHJONG_SOLO_ENGINE_CHECKPOINT_VERSION,
     stateVersion: 17,
   });
   assert.ok(saved?.checkpoint);
@@ -228,7 +230,7 @@ test("mahjong solo saves ignore malformed checkpoints and retain full replay", (
   assert.equal(restored.actions.length, 1);
 });
 
-test("mahjong solo saves upgrade older action logs without a checkpoint or portraits", () => {
+test("mahjong solo saves reject pre-canonical seat models", () => {
   const storage = createStorage();
   storage.setItem(
     MAHJONG_SOLO_SAVE_KEY,
@@ -236,17 +238,9 @@ test("mahjong solo saves upgrade older action logs without a checkpoint or portr
       ...createSave({
         actions: [{ action: { type: "discard", tileId: 41 }, actorId: "human" }],
       }),
-      version: 1,
+      version: MAHJONG_SOLO_SAVE_VERSION - 1,
+      seatModel: undefined,
     }),
   );
-  const restored = readMahjongSoloSave(storage);
-  assert.ok(restored);
-  assert.equal(restored.version, 3);
-  assert.equal(restored.checkpoint, null);
-  assert.equal(restored.actions.length, 1);
-  assert.deepEqual(restored.opponentPortraits, {
-    right: "",
-    opposite: "",
-    left: "",
-  });
+  assert.equal(readMahjongSoloSave(storage), null);
 });

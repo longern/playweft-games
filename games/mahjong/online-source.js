@@ -502,6 +502,7 @@ function on_action(state, action, context)
       -- The shuffled seat at index 1 is East. Dealer selection remains
       -- deterministic and independent from wall shuffling.
       initialDealerSeat = 1,
+      canonicalMatchSeats = true,
     }
     local seated_players, seated_names = mahjong_shuffle_match_players(
       state.players,
