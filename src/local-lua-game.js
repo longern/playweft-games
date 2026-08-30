@@ -49,32 +49,6 @@ local function __local_viewer_context(viewer_id, server_time, view_options)
   }
 end
 
-local function __local_capture_paipu_claim(action, actor_id)
-  if
-    type(__local_state) ~= "table"
-    or __local_state.phase ~= "claiming"
-    or type(action) ~= "table"
-    or action.type ~= "claim"
-  then
-    return
-  end
-  local selected_index = tonumber(action.option)
-  if not selected_index then return end
-  for _, claimant in ipairs(__local_state.claimants or {}) do
-    if claimant.playerId == actor_id then
-      local option = claimant.options and claimant.options[selected_index]
-      if not option then return end
-      local tiles = {}
-      for _, tile_id in ipairs(option.tileIds or {}) do
-        local ref = __local_state.paipuTilePositions and __local_state.paipuTilePositions[tile_id]
-        if ref ~= nil then tiles[#tiles + 1] = { ref = ref } end
-      end
-      action.paipuClaim = { kind = option.kind, tiles = tiles }
-      return
-    end
-  end
-end
-
 local function __local_start(context, match_id, server_time, viewer_id)
   __local_match_id = match_id
   __local_version = 0
@@ -136,7 +110,6 @@ function __playweft_local_view(viewer_id, server_time, view_options)
 end
 
 function __playweft_local_action(action, actor_id, action_at)
-  __local_capture_paipu_claim(action, actor_id)
   local result = on_action(
     __local_state,
     action,
@@ -242,6 +215,8 @@ local function __playweft_local_tenpai_witness(hand, melds, waits)
   if not winning_kind then return nil end
   local candidate = copy_array(hand)
   candidate[#candidate + 1] = (winning_kind - 1) * 4 + 1
+  -- The room verifier intentionally accepts only standard-hand witnesses.
+  -- Special-hand waits simply omit a report and use the server fallback.
   for _, decomposition in ipairs(standard_decompositions(candidate, melds)) do
     local groups = {}
     for _, group in ipairs(decomposition.groups) do
@@ -266,7 +241,9 @@ function __playweft_local_tenpai_reports(state, viewer_id)
   end
   local melds = state.melds[viewer_id] or {}
   local hand = copy_array(state.hands[viewer_id] or {})
-  if (tonumber(state.drawnTile) or 0) > 0 then hand[#hand + 1] = state.drawnTile end
+  if (tonumber(state.drawnTile) or 0) > 0 then
+    hand[#hand + 1] = state.drawnTile
+  end
   local reports = {}
   for index, tile in ipairs(hand) do
     local after = copy_array(hand)
@@ -277,7 +254,12 @@ function __playweft_local_tenpai_reports(state, viewer_id)
     else
       local witness = __playweft_local_tenpai_witness(after, melds, waits)
       if witness then
-        reports[tile] = { key = tenpai_hand_key(after, melds), tenpai = true, waits = waits, witness = witness }
+        reports[tile] = {
+          key = tenpai_hand_key(after, melds),
+          tenpai = true,
+          waits = waits,
+          witness = witness,
+        }
       end
     end
   end
@@ -285,41 +267,83 @@ function __playweft_local_tenpai_reports(state, viewer_id)
 end
 
 function __playweft_local_tenpai_report(state, viewer_id, discarded_tile)
-  if type(state) ~= "table" or type(viewer_id) ~= "string" then error("Tenpai report requires a state and viewer id") end
-  if state.phase ~= "playing" or state.players[state.turnIndex] ~= viewer_id then return nil end
+  if type(state) ~= "table" or type(viewer_id) ~= "string" then
+    error("Tenpai report requires a state and viewer id")
+  end
+  if state.phase ~= "playing" or state.players[state.turnIndex] ~= viewer_id then
+    return nil
+  end
   local melds = state.melds[viewer_id] or {}
   local hand = copy_array(state.hands[viewer_id] or {})
-  if (tonumber(state.drawnTile) or 0) > 0 then hand[#hand + 1] = state.drawnTile end
+  if (tonumber(state.drawnTile) or 0) > 0 then
+    hand[#hand + 1] = state.drawnTile
+  end
   local removed = false
   for index, tile in ipairs(hand) do
-    if tile == discarded_tile then table.remove(hand, index) removed = true break end
+    if tile == discarded_tile then
+      table.remove(hand, index)
+      removed = true
+      break
+    end
   end
   if not removed then return nil end
   local waits = waiting_types(hand, melds)
-  if #waits == 0 then return { key = tenpai_hand_key(hand, melds), tenpai = false } end
+  if #waits == 0 then
+    return { key = tenpai_hand_key(hand, melds), tenpai = false }
+  end
   local witness = __playweft_local_tenpai_witness(hand, melds, waits)
   if not witness then return nil end
-  return { key = tenpai_hand_key(hand, melds), tenpai = true, waits = waits, witness = witness }
+  return {
+    key = tenpai_hand_key(hand, melds),
+    tenpai = true,
+    waits = waits,
+    witness = witness,
+  }
 end
 
 function __playweft_local_current_tenpai_report(state, viewer_id)
-  if type(state) ~= "table" or type(viewer_id) ~= "string" then error("Current tenpai report requires a state and viewer id") end
+  if type(state) ~= "table" or type(viewer_id) ~= "string" then
+    error("Current tenpai report requires a state and viewer id")
+  end
   local melds = state.melds[viewer_id] or {}
   local hand = copy_array(state.hands[viewer_id] or {})
   local riichi_locked = state.riichi and state.riichi[viewer_id] == true
-  if state.players[state.turnIndex] == viewer_id and (tonumber(state.drawnTile) or 0) > 0 and not riichi_locked then return nil end
+  if state.players[state.turnIndex] == viewer_id
+    and (tonumber(state.drawnTile) or 0) > 0
+    and not riichi_locked then
+    return nil
+  end
   local waits = waiting_types(hand, melds)
-  if #waits == 0 then return { key = tenpai_hand_key(hand, melds), tenpai = false } end
-  return { key = tenpai_hand_key(hand, melds), tenpai = true, waits = waits, furiten = is_furiten(state, viewer_id) }
+  if #waits == 0 then
+    return { key = tenpai_hand_key(hand, melds), tenpai = false }
+  end
+  return {
+    key = tenpai_hand_key(hand, melds),
+    tenpai = true,
+    waits = waits,
+    furiten = is_furiten(state, viewer_id),
+  }
 end
 
+-- Riichi waits are locked when the declaration succeeds.  Rebuilding this
+-- small report must work from a room projection on every later turn, where
+-- the normal legal-action context (including private furiten flags) is not
+-- intentionally available.
 function __playweft_local_riichi_wait_report(state, viewer_id)
-  if type(state) ~= "table" or type(viewer_id) ~= "string" then error("Riichi wait report requires a state and viewer id") end
+  if type(state) ~= "table" or type(viewer_id) ~= "string" then
+    error("Riichi wait report requires a state and viewer id")
+  end
   local melds = state.melds[viewer_id] or {}
   local hand = copy_array(state.hands[viewer_id] or {})
   local waits = waiting_types(hand, melds)
-  if #waits == 0 then return { key = tenpai_hand_key(hand, melds), tenpai = false } end
-  return { key = tenpai_hand_key(hand, melds), tenpai = true, waits = waits }
+  if #waits == 0 then
+    return { key = tenpai_hand_key(hand, melds), tenpai = false }
+  end
+  return {
+    key = tenpai_hand_key(hand, melds),
+    tenpai = true,
+    waits = waits,
+  }
 end
 
 function __playweft_local_current_game_tenpai_report(viewer_id)
@@ -327,21 +351,33 @@ function __playweft_local_current_game_tenpai_report(viewer_id)
 end
 
 function __playweft_local_checkpoint()
-  return { state = __local_state, events = __local_events, version = __local_version }
+  return {
+    state = __local_state,
+    events = __local_events,
+    version = __local_version,
+  }
 end
 
 function __playweft_local_paipu(server_time)
-	if type(export_paipu) ~= "function" then error("Local game does not provide a paipu exporter") end
+	if type(export_paipu) ~= "function" then
+		error("Local game does not provide a paipu exporter")
+	end
 	local record = export_paipu(__local_state)
-	if type(record) ~= "table" then return nil end
+	if type(record) ~= "table" then
+		return nil
+	end
 	record.id = __local_match_id .. ":" .. tostring(__local_paipu_index)
 	record.createdAtMs = __local_state.paipu and __local_state.paipu.createdAtMs or nil
-	if record.status == "completed" then record.completedAtMs = server_time end
+	if record.status == "completed" then
+		record.completedAtMs = server_time
+	end
 	return record
 end
 
 function __playweft_local_restore(checkpoint, viewer_id, server_time)
-  if type(checkpoint) ~= "table" or type(checkpoint.state) ~= "table" then error("Invalid local game checkpoint") end
+  if type(checkpoint) ~= "table" or type(checkpoint.state) ~= "table" then
+    error("Invalid local game checkpoint")
+  end
   __local_state = checkpoint.state
   __local_events = type(checkpoint.events) == "table" and checkpoint.events or {}
   __local_version = math.max(0, math.floor(tonumber(checkpoint.version) or 0))
@@ -350,6 +386,10 @@ function __playweft_local_restore(checkpoint, viewer_id, server_time)
 end
 `;
 
+/**
+ * Runs a Playweft Lua game entirely in the browser while retaining the same
+ * setup/on_action/view contract used by the room runtime.
+ */
 export async function createLocalLuaGame({
   sourceUrl,
   extraSourceUrls = [],
@@ -368,12 +408,23 @@ export async function createLocalLuaGame({
   const sourceUrls = [sourceUrl, ...extraSourceUrls];
   const sources = await Promise.all(
     sourceUrls.map(async (url) => {
-      const response = await fetchGameResource(url, { gameId: "mahjong", mode: resourceMode, policy: resourcePolicy });
-      if (!response.ok) throw new Error(`Unable to load Lua rules (${response.status})`);
+      const response = await fetchGameResource(url, {
+        gameId: "mahjong",
+        mode: resourceMode,
+        policy: resourcePolicy,
+      });
+      if (!response.ok) {
+        throw new Error(`Unable to load Lua rules (${response.status})`);
+      }
       return response.text();
     }),
   );
+  // Keep the sources in one Lua chunk. The shared rules deliberately use
+  // local helpers, so executing the files separately would hide them from
+  // an appended solo AI or replay extension.
   const source = sources.join("\n");
+  // Materialize JS objects as Lua tables. Wasmoon's proxy mode exposes them as
+  // userdata, which would not match the room runtime's ordinary action tables.
   const lua = await new LuaFactory().createEngine({ enableProxy: false });
   let closed = false;
 
@@ -397,7 +448,11 @@ export async function createLocalLuaGame({
     const exportPaipu = lua.global.get("__playweft_local_paipu");
     const context = {
       protocolVersion: 1,
-      players: players.map((player, index) => ({ id: player.id, name: player.name ?? "", seat: index + 1 })),
+      players: players.map((player, index) => ({
+        id: player.id,
+        name: player.name ?? "",
+        seat: index + 1,
+      })),
       match: {
         id: matchId,
         ownerId: players[0].id,
@@ -476,7 +531,11 @@ export async function createLocalLuaGame({
       restoreCheckpoint(checkpoint, viewerId = playerId) {
         ensureOpen(closed);
         return restoreCheckpoint(
-          { state: checkpoint?.state, events: checkpoint?.events, version: checkpoint?.stateVersion },
+          {
+            state: checkpoint?.state,
+            events: checkpoint?.events,
+            version: checkpoint?.stateVersion,
+          },
           viewerId,
           Date.now(),
         );

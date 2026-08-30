@@ -37,10 +37,8 @@ test("recorded claim wall refs resolve the current engine option instead of trus
     {
       type: "claim",
       option: 1,
-      paipuClaim: {
-        kind: "pon",
-        tiles: [{ ref: 12 }, { ref: 44 }],
-      },
+      kind: "pon",
+      tiles: [{ ref: 12 }, { ref: 44 }],
     },
     replayTileIds,
   );
@@ -60,7 +58,7 @@ test("recorded claim wall refs resolve the current engine option instead of trus
 
   const resolved = resolveReplayClaimAction(recorded, checkpointState, actorId);
   assert.equal(resolved.option, 2);
-  assert.equal(resolved.paipuClaim, undefined);
+  assert.equal(resolved.replayClaimTileIds, undefined);
 });
 
 test("legacy claim commands without stable refs remain replayable by their recorded option", () => {

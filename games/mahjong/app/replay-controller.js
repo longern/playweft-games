@@ -154,7 +154,7 @@ export function createMahjongReplayController({
 
   async function resolvedActionForStep(current, step, game = getGame()) {
     const entry = actionForStep(current, step);
-    if (entry.action?.type !== "claim" || !entry.action.paipuClaim) return entry;
+    if (entry.action?.type !== "claim" || !Array.isArray(entry.action.replayClaimTileIds)) return entry;
     const checkpoint = await game?.checkpoint?.();
     if (!checkpoint?.state) throw new Error("Replay claim state is unavailable");
     return {
