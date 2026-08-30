@@ -1,0 +1,41 @@
+name: Temporary Mahjong canonical solo seats
+on:
+  push:
+    branches: [refactor/mahjong-canonical-solo-seats]
+permissions:
+  contents: write
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Invalidate pre-canonical solo checkpoints
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('games/mahjong/replay/solo-save.js')
+          text = path.read_text()
+          old = 'export const MAHJONG_SOLO_ENGINE_CHECKPOINT_VERSION = 1;'
+          new = 'export const MAHJONG_SOLO_ENGINE_CHECKPOINT_VERSION = 2;'
+          if old in text:
+              path.write_text(text.replace(old, new, 1))
+          PY
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Persist checked checkpoint version
+        shell: bash
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "Siyu Long"
+          git config user.email "i@longern.com"
+          git add games/mahjong/replay/solo-save.js
+          git commit -m "Invalidate legacy solo seat checkpoints"
+          git push origin HEAD:refactor/mahjong-canonical-solo-seats
