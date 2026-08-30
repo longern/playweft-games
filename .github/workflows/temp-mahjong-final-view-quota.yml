@@ -1,0 +1,29 @@
+name: Temporary Mahjong final view quota
+on:
+  push:
+    branches: [fix/mahjong-final-view-quota]
+permissions:
+  contents: write
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: python .github/scripts/patch-mahjong-final-view-quota.py
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Persist checked fix
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "Siyu Long"
+          git config user.email "i@longern.com"
+          git add games/mahjong/online-source.js tests/mahjong-online-source.test.js
+          git commit -m "Avoid final Mahjong paipu re-export"
+          git push origin HEAD:fix/mahjong-final-view-quota
