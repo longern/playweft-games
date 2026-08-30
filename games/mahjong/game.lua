@@ -1638,8 +1638,24 @@ local function paipu_tile_reference(state, tile)
 	}
 end
 
-local function paipu_command(state, action)
+local function paipu_command(state, action, actor_id)
 	local command = copy_record_value(action)
+	if command.type == "claim" then
+		local selected_index = math.floor(tonumber(command.option) or 0)
+		for _, claimant in ipairs(state.claimants or {}) do
+			if claimant.playerId == actor_id then
+				local option = claimant.options and claimant.options[selected_index]
+				if option then
+					command.kind = option.kind
+					command.tiles = {}
+					for _, tile in ipairs(option.tileIds or {}) do
+						command.tiles[#command.tiles + 1] = paipu_tile_reference(state, tile)
+					end
+				end
+				break
+			end
+		end
+	end
 	if type(command.tileId) == "number" then
 		command.tile = paipu_tile_reference(state, command.tileId)
 		command.tileId = nil
@@ -1692,7 +1708,7 @@ function record_paipu_action(state, action, actor_id, events)
 	local seat = player_index(state, actor_id)
 	hand.commands[#hand.commands + 1] = {
 		seat = seat,
-		action = paipu_command(state, action),
+		action = paipu_command(state, action, actor_id),
 	}
 	for _, event in ipairs(events or {}) do
 		state.paipu.eventCount = state.paipu.eventCount + 1
@@ -2153,6 +2169,7 @@ local function new_match(players, names, seed, settings, ai_players)
 		},
 		matchEnded = false,
 		aiPlayers = ai_players or {},
+		canonicalMatchSeats = settings and settings.canonicalMatchSeats == true,
 		rules = rule_settings(settings),
 	}
 	-- A paipu viewer can start directly at any recorded hand.  The wall plus
@@ -4814,12 +4831,28 @@ function on_action(state, action, context)
 		if state.phase ~= "hand_ended" then
 			return rejected("game_not_over")
 		end
+		local next_seed = next_match_seed(state.seed)
+		local players, names = copy_array(state.players), copy_array(state.playerNames)
+		local next_settings = {
+			matchType = state.matchType,
+			rules = state.rules,
+			canonicalMatchSeats = state.canonicalMatchSeats == true,
+		}
+		if state.canonicalMatchSeats then
+			local seat_draw = (next_seed * RANDOM_MULTIPLIER) % RANDOM_MODULUS
+			local east = (seat_draw % PLAYER_COUNT) + 1
+			players, names = {}, {}
+			for offset = 0, PLAYER_COUNT - 1 do
+				local source = ((east - 1 + offset) % PLAYER_COUNT) + 1
+				players[#players + 1] = state.players[source]
+				names[#names + 1] = state.playerNames[source]
+			end
+			next_settings.initialDealerSeat = 1
+		end
+		local next_state = new_match(players, names, next_seed, next_settings, state.aiPlayers)
 		return accepted(
-			new_match(state.players, state.playerNames, next_match_seed(state.seed), {
-				matchType = state.matchType,
-				rules = state.rules,
-			}, state.aiPlayers),
-			{ { type = "new_match", player = actor_id, playerIndex = seat } }
+			next_state,
+			{ { type = "new_match", player = actor_id, playerIndex = player_index(next_state, actor_id) } }
 		)
 	end
 	if state.phase == "hand_ended" then

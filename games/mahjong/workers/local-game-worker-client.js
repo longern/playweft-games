@@ -1,4 +1,5 @@
 import { readMahjongOfflineSettings } from "../../../src/game-offline-cache.js";
+import { orientMahjongRoomProjection } from "../rules/room-state.js";
 
 /**
  * Async facade for the local rules runtime.  The worker owns the Lua/WASM
@@ -13,6 +14,30 @@ export async function createLocalLuaGame(options = {}) {
   let closed = false;
   let requestId = 0;
   let queue = Promise.resolve();
+  // Canonical-seat games keep the rules runtime in opening East/South/West/
+  // North order. Only projections crossing into the UI are rotated so the
+  // active viewer occupies presentation seat 1 (bottom).
+  const viewerRelativeProjection =
+    options.viewerRelativeProjection === true ||
+    Boolean(options.settings?.replayHand);
+  const projectForViewer = (projection, viewerId = options.playerId) =>
+    viewerRelativeProjection
+      ? orientMahjongRoomProjection(projection, viewerId)
+      : projection;
+  const projectResponse = (response, viewerId = options.playerId) => {
+    if (
+      !viewerRelativeProjection ||
+      !response ||
+      typeof response !== "object"
+    ) {
+      return response;
+    }
+    if (!response.projection) return response;
+    return {
+      ...response,
+      projection: projectForViewer(response.projection, viewerId),
+    };
+  };
 
   const rejectPending = (error) => {
     for (const { reject, timer } of pending.values()) {
@@ -99,9 +124,11 @@ export async function createLocalLuaGame(options = {}) {
     return {
       matchId: initialized.matchId,
       playerId: options.playerId,
-      initialProjection: initialized.projection,
+      initialProjection: projectForViewer(initialized.projection),
       view(viewerId = options.playerId, viewOptions = {}) {
-        return request("view", { viewerId, viewOptions });
+        return request("view", { viewerId, viewOptions }).then((projection) =>
+          projectForViewer(projection, viewerId),
+        );
       },
       checkpoint() {
         return request("checkpoint");
@@ -110,26 +137,35 @@ export async function createLocalLuaGame(options = {}) {
         return request("exportPaipu");
       },
       restoreCheckpoint(checkpoint, viewerId = options.playerId) {
-        return request("restoreCheckpoint", { checkpoint, viewerId });
+        return request("restoreCheckpoint", { checkpoint, viewerId }).then((response) =>
+          projectResponse(response, viewerId),
+        );
       },
       loadReplayHand(hand, viewerId = options.playerId) {
-        return request("loadReplayHand", { hand, viewerId });
+        return request("loadReplayHand", { hand, viewerId }).then((response) =>
+          projectResponse(response, viewerId),
+        );
       },
       replayActions(actions, replayOptions = {}) {
+        const viewerId = replayOptions.viewerId ?? options.playerId;
         return request("replayActions", {
           actions,
           checkpoint: replayOptions.checkpoint,
           checkpointActionIndex: replayOptions.checkpointActionIndex,
           replayHand: replayOptions.replayHand,
           restart: replayOptions.restart === true,
-          viewerId: replayOptions.viewerId ?? options.playerId,
-        });
+          viewerId,
+        }).then((response) => projectResponse(response, viewerId));
       },
       action(action, actorId = options.playerId, viewerId = options.playerId) {
-        return request("action", { action, actorId, viewerId });
+        return request("action", { action, actorId, viewerId }).then((response) =>
+          projectResponse(response, viewerId),
+        );
       },
       aiTurn(viewerId = options.playerId) {
-        return request("aiTurn", { viewerId });
+        return request("aiTurn", { viewerId }).then((response) =>
+          projectResponse(response, viewerId),
+        );
       },
       aiDecision(viewerId = options.playerId) {
         return request(

@@ -1,8 +1,9 @@
 export const MAHJONG_SOLO_SAVE_KEY = "playweft.mahjong.solo-save.v1";
-export const MAHJONG_SOLO_SAVE_VERSION = 3;
+export const MAHJONG_SOLO_SAVE_VERSION = 4;
+export const MAHJONG_SOLO_SEAT_MODEL = "opening-winds";
 export const MAHJONG_SOLO_CHECKPOINT_VERSION = 1;
 // Increment only when a game.lua state change cannot read an older raw state.
-export const MAHJONG_SOLO_ENGINE_CHECKPOINT_VERSION = 1;
+export const MAHJONG_SOLO_ENGINE_CHECKPOINT_VERSION = 2;
 
 export function readMahjongSoloSave(storage = safeLocalStorage()) {
   if (!storage) return null;
@@ -53,6 +54,7 @@ export function createMahjongSoloSave({
 } = {}) {
   return normalizeSave({
     version: MAHJONG_SOLO_SAVE_VERSION,
+    seatModel: MAHJONG_SOLO_SEAT_MODEL,
     randomSeed,
     matchId,
     matchType,
@@ -109,7 +111,8 @@ export function setMahjongSoloOpponentPortraits(save, opponentPortraits) {
 function normalizeSave(value) {
   if (
     !isPlainObject(value) ||
-    (value.version !== 1 && value.version !== 2 && value.version !== MAHJONG_SOLO_SAVE_VERSION)
+    value.version !== MAHJONG_SOLO_SAVE_VERSION ||
+    value.seatModel !== MAHJONG_SOLO_SEAT_MODEL
   ) {
     return null;
   }
@@ -120,6 +123,7 @@ function normalizeSave(value) {
   if (!value.actions.every(isSavedAction)) return null;
   return {
     version: MAHJONG_SOLO_SAVE_VERSION,
+    seatModel: MAHJONG_SOLO_SEAT_MODEL,
     randomSeed: value.randomSeed,
     matchId: value.matchId,
     matchType: value.matchType,
