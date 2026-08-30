@@ -1638,8 +1638,24 @@ local function paipu_tile_reference(state, tile)
 	}
 end
 
-local function paipu_command(state, action)
+local function paipu_command(state, action, actor_id)
 	local command = copy_record_value(action)
+	if command.type == "claim" then
+		local selected_index = math.floor(tonumber(command.option) or 0)
+		for _, claimant in ipairs(state.claimants or {}) do
+			if claimant.playerId == actor_id then
+				local option = claimant.options and claimant.options[selected_index]
+				if option then
+					command.kind = option.kind
+					command.tiles = {}
+					for _, tile in ipairs(option.tileIds or {}) do
+						command.tiles[#command.tiles + 1] = paipu_tile_reference(state, tile)
+					end
+				end
+				break
+			end
+		end
+	end
 	if type(command.tileId) == "number" then
 		command.tile = paipu_tile_reference(state, command.tileId)
 		command.tileId = nil
@@ -1692,7 +1708,7 @@ function record_paipu_action(state, action, actor_id, events)
 	local seat = player_index(state, actor_id)
 	hand.commands[#hand.commands + 1] = {
 		seat = seat,
-		action = paipu_command(state, action),
+		action = paipu_command(state, action, actor_id),
 	}
 	for _, event in ipairs(events or {}) do
 		state.paipu.eventCount = state.paipu.eventCount + 1

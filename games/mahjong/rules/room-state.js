@@ -21,6 +21,21 @@ function rotateSeatOrder(values, viewerSeat) {
   );
 }
 
+/**
+ * Returns match players in presentation order (viewer, shimocha, toimen,
+ * kamicha) without changing their canonical match-seat identity. Paipu itself
+ * always keeps players in the opening East/South/West/North order.
+ */
+export function mahjongPlayersForViewer(players, playerId) {
+  const source = asArray(players);
+  const viewerSeat = source.findIndex((player) =>
+    (typeof player === "object" ? player?.id : player) === playerId,
+  ) + 1;
+  return source.length === PLAYER_COUNT && viewerSeat > 0
+    ? rotateSeatOrder(source, viewerSeat)
+    : source;
+}
+
 function rotateResult(result, viewerSeat) {
   if (!result || typeof result !== "object") return result;
   return {
@@ -30,9 +45,7 @@ function rotateResult(result, viewerSeat) {
     tenpaiWaits: rotateSeatOrder(result.tenpaiWaits, viewerSeat),
     winnerIndex: rotateSeat(result.winnerIndex, viewerSeat),
     paoSeat: rotateSeat(result.paoSeat, viewerSeat),
-    paoSeats: asArray(result.paoSeats).map((seat) =>
-      rotateSeat(seat, viewerSeat),
-    ),
+    paoSeats: asArray(result.paoSeats).map((seat) => rotateSeat(seat, viewerSeat)),
   };
 }
 
@@ -59,61 +72,19 @@ function rotateEvent(event, viewerSeat) {
 }
 
 /**
- * Converts canonical paipu data into the local engine's presentation order.
- * Persisted records stay canonical; this transformation is only for replay.
+ * Paipu is canonical match data. Replay, storage and the Lua engine all consume
+ * the same seat order; viewer-relative orientation is a projection/UI concern.
+ * Keep this compatibility entry point as an identity transform so older callers
+ * cannot accidentally create a second seat coordinate system.
  */
-export function orientMahjongPaipuRecord(record, viewerPlayerId) {
-  const players = asArray(record?.players);
-  const viewerSeat =
-    players.findIndex((player) => player?.id === viewerPlayerId) + 1;
-  if (players.length !== PLAYER_COUNT || viewerSeat < 1) return record;
-  const rotated = rotateSeatOrder(players, viewerSeat)
-    .map((player, index) => ({ ...player, seat: index + 1 }));
-  return {
-    ...record,
-    players: rotated,
-    hands: asArray(record.hands).map((hand) => ({
-      ...hand,
-      startScores: rotateSeatOrder(hand.startScores, viewerSeat),
-      scoreHistoryBefore: asArray(hand.scoreHistoryBefore).map((entry) => ({
-        ...entry,
-        scores: rotateSeatOrder(entry?.scores, viewerSeat),
-      })),
-      round: hand.round
-        ? { ...hand.round, dealerSeat: rotateSeat(hand.round.dealerSeat, viewerSeat) }
-        : hand.round,
-      commands: asArray(hand.commands).map((command) => ({
-        ...command,
-        seat: rotateSeat(command?.seat, viewerSeat),
-      })),
-      events: asArray(hand.events).map((event) => rotateEvent(event, viewerSeat)),
-      end: hand.end
-        ? {
-            ...hand.end,
-            winners: asArray(hand.end.winners).map((seat) =>
-              rotateSeat(seat, viewerSeat),
-            ),
-            result: rotateResult(hand.end.result, viewerSeat),
-            results: asArray(hand.end.results).map((result) =>
-              rotateResult(result, viewerSeat),
-            ),
-            scores: rotateSeatOrder(hand.end.scores, viewerSeat),
-          }
-        : hand.end,
-    })),
-    final: record.final
-      ? {
-          ...record.final,
-          scores: rotateSeatOrder(record.final.scores, viewerSeat),
-          ranks: rotateSeatOrder(record.final.ranks, viewerSeat),
-        }
-      : record.final,
-  };
+export function orientMahjongPaipuRecord(record) {
+  return record;
 }
 
 /**
- * Reorients a room projection so its viewer is always presentation seat one.
- * Tile maps remain keyed by stable player IDs; only seat-indexed fields move.
+ * Reorients a room/replay projection so its viewer is presentation seat one.
+ * Tile maps remain keyed by stable player IDs; only seat-indexed UI fields move.
+ * Canonical paipu embedded in the projection is deliberately left untouched.
  */
 export function orientMahjongRoomProjection(projection, playerId) {
   const source = projection?.state;
@@ -139,19 +110,13 @@ export function orientMahjongRoomProjection(projection, playerId) {
     abortivePlayerIndex: rotateSeat(source.abortivePlayerIndex, viewerSeat),
     melds: rotateMelds(source.melds, viewerSeat),
     result: rotateResult(source.result, viewerSeat),
-    results: asArray(source.results).map((result) =>
-      rotateResult(result, viewerSeat),
-    ),
-    // A paipu is canonical match data, not a view projection. Keep its seat
-    // order intact; the saved viewerPlayerId identifies the local player.
+    results: asArray(source.results).map((result) => rotateResult(result, viewerSeat)),
     paipu: source.paipu,
   };
 
   return {
     ...projection,
     state,
-    events: asArray(projection.events).map((event) =>
-      rotateEvent(event, viewerSeat),
-    ),
+    events: asArray(projection.events).map((event) => rotateEvent(event, viewerSeat)),
   };
 }
