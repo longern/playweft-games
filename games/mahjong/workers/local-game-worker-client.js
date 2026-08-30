@@ -14,17 +14,24 @@ export async function createLocalLuaGame(options = {}) {
   let closed = false;
   let requestId = 0;
   let queue = Promise.resolve();
-  // Replay hands are persisted in canonical match-seat order: seat 1..4 are
-  // the match's initial East/South/West/North seats. The Lua engine consumes
-  // that order unchanged. Only projections crossing into the UI are rotated
-  // so the recorded viewer occupies presentation seat 1 (bottom).
-  const canonicalReplay = Boolean(options.settings?.replayHand);
+  // Canonical-seat games keep the rules runtime in opening East/South/West/
+  // North order. Only projections crossing into the UI are rotated so the
+  // active viewer occupies presentation seat 1 (bottom).
+  const viewerRelativeProjection =
+    options.viewerRelativeProjection === true ||
+    Boolean(options.settings?.replayHand);
   const projectForViewer = (projection, viewerId = options.playerId) =>
-    canonicalReplay
+    viewerRelativeProjection
       ? orientMahjongRoomProjection(projection, viewerId)
       : projection;
   const projectResponse = (response, viewerId = options.playerId) => {
-    if (!canonicalReplay || !response || typeof response !== "object") return response;
+    if (
+      !viewerRelativeProjection ||
+      !response ||
+      typeof response !== "object"
+    ) {
+      return response;
+    }
     if (!response.projection) return response;
     return {
       ...response,
