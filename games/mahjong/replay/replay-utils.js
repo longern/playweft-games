@@ -6,7 +6,57 @@ export function replayAction(action, replayTileIds) {
     replay.tileId = tileId;
   }
   delete replay.tile;
+
+  if (replay.type === "claim" && Array.isArray(replay.tiles)) {
+    replay.replayClaimTileIds = replay.tiles.map((reference) => {
+      const tileId = tileIdForReference(reference, replayTileIds);
+      if (!tileId) throw new Error("Paipu claim has an invalid tile reference");
+      return tileId;
+    });
+    delete replay.tiles;
+  }
   return replay;
+}
+
+/**
+ * Converts a stable paipu claim (`kind` + consumed wall refs) back to the
+ * current engine's ephemeral option index. Runtime option numbers are retained
+ * only as a legacy fallback for old records.
+ */
+export function resolveReplayClaimAction(action, checkpointState, actorId) {
+  if (action?.type !== "claim" || !Array.isArray(action.replayClaimTileIds)) {
+    return action;
+  }
+  const claimant = (checkpointState?.claimants || []).find(
+    (entry) => entry?.playerId === actorId,
+  );
+  if (!claimant) throw new Error("Paipu claim actor is not an active claimant");
+
+  const expectedKind = action.kind;
+  const expectedTiles = sortedTileIds(action.replayClaimTileIds);
+  const optionIndex = (claimant.options || []).findIndex(
+    (option) =>
+      option?.kind === expectedKind &&
+      sameTileIds(sortedTileIds(option?.tileIds), expectedTiles),
+  );
+  if (optionIndex < 0) {
+    throw new Error("Paipu claim does not match any current claim option");
+  }
+
+  const resolved = { ...action, option: optionIndex + 1 };
+  delete resolved.kind;
+  delete resolved.replayClaimTileIds;
+  return resolved;
+}
+
+function sortedTileIds(values) {
+  return Array.isArray(values)
+    ? values.map(Number).filter(Number.isInteger).sort((left, right) => left - right)
+    : [];
+}
+
+function sameTileIds(left, right) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 export function tileIdForReference(reference, replayTileIds) {
