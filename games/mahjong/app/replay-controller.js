@@ -10,11 +10,12 @@ import {
 import {
   replayAction,
   replayTileIdsForWall,
+  resolveReplayClaimAction,
   waitForReplayDelay,
   waitForReplayStep,
 } from "../replay/replay-utils.js";
 import { createLocalLuaGame } from "../workers/local-game-worker-client.js";
-import { orientMahjongPaipuRecord } from "../rules/room-state.js";
+import { mahjongPlayersForViewer } from "../rules/room-state.js";
 
 const REPLAY_STEP_DELAY_MS = 780;
 const REPLAY_RESULT_PAGE_DELAY_MS = 2400;
@@ -79,9 +80,7 @@ export function createMahjongReplayController({
       setReplayState({
         record,
         timeline,
-        tileIdsByHand: record.hands.map((hand) =>
-          replayTileIdsForWall(hand.wall),
-        ),
+        tileIdsByHand: record.hands.map((hand) => replayTileIdsForWall(hand.wall)),
         position: 0,
         speed: 1,
         playing: false,
@@ -90,12 +89,10 @@ export function createMahjongReplayController({
         showOpponentHands: false,
         resultTransitioning: false,
       });
-      await applyPlayerPresentations?.(record);
+      await applyPlayerPresentations?.(presentationRecord(record));
       presentation.suspend();
       tableController.reset();
-      await tableController.refresh(replayGame.initialProjection, {
-        animateDealIn: true,
-      });
+      await tableController.refresh(replayGame.initialProjection, { animateDealIn: true });
       elements.loading.hidden = true;
       elements.app.setAttribute("aria-busy", "false");
       settingsDialog.setSoloMatchActive(true);
@@ -113,32 +110,24 @@ export function createMahjongReplayController({
   }
 
   async function createReplayGame(record, handIndex = 0) {
-    const replayRecord = orientMahjongPaipuRecord(record, record.viewerPlayerId);
-    const hand = replayRecord.hands[handIndex];
+    const hand = record.hands[handIndex];
     if (!hand) throw new Error("Paipu hand is missing");
     return createLocalLuaGame({
       sourceUrl: "./game.lua",
-      players: replayRecord.players.map(({ id, name }) => ({ id, name })),
+      players: record.players.map(({ id, name }) => ({ id, name })),
       playerId: record.viewerPlayerId,
       randomSeed: crypto.randomUUID().replaceAll("-", ""),
       matchId: `replay-${record.id}-${crypto.randomUUID()}`,
       settings: {
         matchType: record.game.matchType,
         rules: record.game.rules,
-        replayHand: {
-          wall: hand.wall,
-          round: hand.round,
-          startScores: hand.startScores,
-          scoreHistoryBefore: hand.scoreHistoryBefore,
-        },
+        replayHand: handSetup(record, handIndex),
       },
     });
   }
 
   function handSetup(record, handIndex) {
-    const hand = orientMahjongPaipuRecord(record, record.viewerPlayerId)?.hands[
-      handIndex
-    ];
+    const hand = record.hands[handIndex];
     if (!hand) throw new Error("Paipu hand is missing");
     return {
       wall: hand.wall,
@@ -148,22 +137,35 @@ export function createMahjongReplayController({
     };
   }
 
-  function actionForStep(current, step) {
-    const action = replayAction(
-      step.command.action,
-      current.tileIdsByHand[step.handIndex],
-    );
+  function presentationRecord(record) {
     return {
-      action,
+      ...record,
+      players: mahjongPlayersForViewer(record.players, record.viewerPlayerId),
+    };
+  }
+
+  function actionForStep(current, step) {
+    return {
+      action: replayAction(step.command.action, current.tileIdsByHand[step.handIndex]),
       actorId: current.record.players[step.command.seat - 1]?.id,
       animateDealIn: false,
     };
   }
 
+  async function resolvedActionForStep(current, step, game = getGame()) {
+    const entry = actionForStep(current, step);
+    if (entry.action?.type !== "claim" || !entry.action.paipuClaim) return entry;
+    const checkpoint = await game?.checkpoint?.();
+    if (!checkpoint?.state) throw new Error("Replay claim state is unavailable");
+    return {
+      ...entry,
+      action: resolveReplayClaimAction(entry.action, checkpoint.state, entry.actorId),
+    };
+  }
+
   async function advance() {
     const current = state();
-    if (!current || current.busy || current.position >= current.timeline.steps.length)
-      return false;
+    if (!current || current.busy || current.position >= current.timeline.steps.length) return false;
     current.busy = true;
     renderControls();
     try {
@@ -176,15 +178,17 @@ export function createMahjongReplayController({
         if (!loaded?.projection) throw new Error("Replay hand could not be loaded");
         if (current !== state()) return false;
         current.position += 1;
-        await tableController.refresh(
-          await replayView(current, loaded.projection),
-          { animateDealIn: true },
-        );
+        await tableController.refresh(await replayView(current, loaded.projection), {
+          animateDealIn: true,
+        });
         return true;
       }
-      const { action, actorId, animateDealIn } = actionForStep(current, step);
+      const { action, actorId, animateDealIn } = await resolvedActionForStep(current, step);
       const outcome = await getGame()?.action(action, actorId);
-      if (!outcome?.result?.accepted) throw new Error("Replay action was rejected");
+      if (!outcome?.result?.accepted) {
+        const code = outcome?.result?.error?.code || "unknown";
+        throw new Error(`Replay action was rejected: ${code}`);
+      }
       if (current !== state()) return false;
       current.position += 1;
       const projection = await replayView(current, outcome.projection);
@@ -195,9 +199,7 @@ export function createMahjongReplayController({
             ? Number(action.tileId) || 0
             : 0,
       });
-      return projection?.state?.phase === "hand_ended"
-        ? "hand-ended"
-        : true;
+      return projection?.state?.phase === "hand_ended" ? "hand-ended" : true;
     } catch (error) {
       console.error("Mahjong paipu playback step failed", error);
       pause();
@@ -226,20 +228,31 @@ export function createMahjongReplayController({
     try {
       const handIndex = paipuHandIndexAtPosition(current.timeline, target);
       const handStart = current.timeline.handStarts[handIndex];
-      const actions = [];
+      const game = getGame();
+      const loaded = await game?.loadReplayHand(
+        handSetup(current.record, handIndex),
+        current.record.viewerPlayerId,
+      );
+      if (!loaded?.projection) throw new Error("Replay hand could not be loaded");
+      let projection = loaded.projection;
+
+      // Replay sequentially while seeking. A deterministic claim is resolved
+      // against the engine state immediately before that claim; pre-building a
+      // batch would reintroduce a dependency on ephemeral future option arrays.
       for (let index = handStart; index < target; index += 1) {
         if (current !== state() || seekRunId !== replayRunId) return;
-        const { action, actorId } = actionForStep(
-          current,
-          current.timeline.steps[index],
-        );
-        actions.push({ action, actorId });
+        const step = current.timeline.steps[index];
+        if (step.kind === "next-hand") continue;
+        const { action, actorId } = await resolvedActionForStep(current, step, game);
+        const outcome = await game?.action(action, actorId);
+        if (!outcome?.result?.accepted) {
+          const code = outcome?.result?.error?.code || "unknown";
+          throw new Error(`Replay seek action ${index} was rejected: ${code}`);
+        }
+        projection = outcome.projection;
       }
-      const replayed = await getGame()?.replayActions(actions, {
-        replayHand: handSetup(current.record, handIndex),
-        viewerId: current.record.viewerPlayerId,
-      });
-      const projection = await replayView(current, replayed?.projection);
+
+      projection = await replayView(current, projection);
       if (!projection) throw new Error("Replay hand could not be loaded");
       if (current !== state() || seekRunId !== replayRunId) return;
       presentation.suspend();
@@ -247,7 +260,7 @@ export function createMahjongReplayController({
       elements.result.hidden = true;
       current.position = target;
       await tableController.refresh(projection, { animateDealIn: target === 0 });
-      await applyPlayerPresentations?.(current.record);
+      await applyPlayerPresentations?.(presentationRecord(current.record));
     } catch (error) {
       console.error("Mahjong paipu seek failed", error);
       showMessage("无法跳转到该位置");
@@ -271,14 +284,9 @@ export function createMahjongReplayController({
     current.playing = true;
     const runId = ++current.playbackRunId;
     renderControls();
-    while (
-      current === state() &&
-      current.playing &&
-      runId === current.playbackRunId
-    ) {
+    while (current === state() && current.playing && runId === current.playbackRunId) {
       const advanced = await advance();
-      if (!advanced || !current.playing || current.position >= current.timeline.steps.length)
-        break;
+      if (!advanced || !current.playing || current.position >= current.timeline.steps.length) break;
       if (advanced === "hand-ended") {
         const continued = await autoAdvanceResult(current, runId);
         if (!continued) break;
@@ -296,10 +304,6 @@ export function createMahjongReplayController({
     if (!current) return;
     current.playing = false;
     current.playbackRunId += 1;
-    // Keep the visual control in sync with the state immediately. The
-    // playback loop may still be unwinding asynchronously, so waiting for
-    // its finally block leaves the button showing pause for a noticeable
-    // moment after the user has already paused.
     renderControls();
   }
 
@@ -363,19 +367,9 @@ export function createMahjongReplayController({
 
   async function previousHand(current) {
     if (!current || current !== state() || current.busy) return false;
-    const previousPosition = paipuPreviousHandPosition(
-      current.timeline,
-      current.position,
-    );
+    const previousPosition = paipuPreviousHandPosition(current.timeline, current.position);
     if (previousPosition === current.position) return false;
-
-    // A completed hand can still be covered by the result panel. Clear that
-    // presentation state before rebuilding the previous hand so navigation
-    // follows the same cross-hand lifecycle as the forward button.
-    if (
-      tableController.getState()?.phase === "hand_ended" &&
-      !elements.result.hidden
-    ) {
+    if (tableController.getState()?.phase === "hand_ended" && !elements.result.hidden) {
       await tableController.dismissResultForReplay();
       if (current !== state()) return false;
     }
@@ -440,17 +434,12 @@ export function createMahjongReplayController({
       result.getAttribute("aria-hidden") === "false" &&
       presentation?.resultVisible === true &&
       current.resultTransitioning !== true;
-    replayElements.controls.classList.toggle(
-      "is-result-visible",
-      Boolean(resultVisible),
-    );
+    replayElements.controls.classList.toggle("is-result-visible", Boolean(resultVisible));
     const roundWind = ["东", "南", "西", "北"][Math.max(0, Number(hand?.round?.wind) - 1)] || "牌谱";
     const roundNumber = Number(hand?.round?.number) || handIndex + 1;
     const completed = position >= timeline.steps.length;
     replayElements.status.textContent = `${roundWind}${roundNumber}-${Number(hand?.round?.honba) || 0}`;
-    if (replayElements.stepStatus) {
-      replayElements.stepStatus.textContent = `${actionCount}手`;
-    }
+    if (replayElements.stepStatus) replayElements.stepStatus.textContent = `${actionCount}手`;
     replayElements.progress.max = String(timeline.steps.length);
     replayElements.progress.value = String(position);
     replayElements.progress.setAttribute("aria-valuetext", `${position} / ${timeline.steps.length}`);
@@ -471,19 +460,10 @@ export function createMahjongReplayController({
     const visibility = replayElements.handVisibility;
     if (visibility) {
       visibility.setAttribute("aria-pressed", String(current.showOpponentHands));
-      visibility.setAttribute(
-        "aria-label",
-        current.showOpponentHands ? "隐藏其他玩家手牌" : "显示其他玩家手牌",
-      );
-      visibility.title = current.showOpponentHands
-        ? "隐藏其他玩家手牌"
-        : "显示其他玩家手牌";
-      visibility
-        .querySelector('[data-lucide="eye"]')
-        ?.toggleAttribute("hidden", current.showOpponentHands);
-      visibility
-        .querySelector('[data-lucide="eye-off"]')
-        ?.toggleAttribute("hidden", !current.showOpponentHands);
+      visibility.setAttribute("aria-label", current.showOpponentHands ? "隐藏其他玩家手牌" : "显示其他玩家手牌");
+      visibility.title = current.showOpponentHands ? "隐藏其他玩家手牌" : "显示其他玩家手牌";
+      visibility.querySelector('[data-lucide="eye"]')?.toggleAttribute("hidden", current.showOpponentHands);
+      visibility.querySelector('[data-lucide="eye-off"]')?.toggleAttribute("hidden", !current.showOpponentHands);
       setControlState(visibility, current.busy, false);
     }
   }
