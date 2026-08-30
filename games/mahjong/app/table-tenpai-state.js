@@ -256,6 +256,9 @@ export function createMahjongTableTenpaiState() {
     sync,
     clearPreviewIntent: ({ source } = {}) => {
       if (source && previewIntent.source !== source) return false;
+      // A status-hold is owned by the active pointer gesture. Generic action
+      // UI cleanup must not end it; only pointer end/cancel or a hand reset may.
+      if (!source && previewIntent.source === 'status-hold') return false;
       clearHeldPreview();
       return true;
     },
