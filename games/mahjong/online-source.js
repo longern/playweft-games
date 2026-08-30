@@ -30,12 +30,20 @@ local function __mahjong_timer_delay(delay)
 end
 
 local function __mahjong_clear_private_state(state)
-  -- The paipu is authoritative match history and must survive every action so
-  -- the final room projection can export it. Only transient replay fields are
-  -- cleared here.
-  state.paipuTilePositions = nil
+  -- The tile-reference map is needed only while recording the active hand.
+  -- Once a hand is closed, every replay reference is already embedded in its
+  -- authoritative paipu log, so release the map before serializing the state.
+  if state.phase == "hand_ended" then state.paipuTilePositions = nil end
   state.replayWall = nil
   state.autoPassClaimsApplying = nil
+end
+
+function __mahjong_record_action(result, action, actor_id)
+  if not result or not result.accepted or not result.state then return result end
+  if type(record_paipu_action) == "function" and type(action) == "table" then
+    record_paipu_action(result.state, action, actor_id, result.events)
+  end
+  return result
 end
 
 local function __mahjong_is_room_player(state, player_id)
@@ -322,18 +330,22 @@ local function __mahjong_timeout_ms(state)
 end
 
 local function __mahjong_timeout_playing_action(state, player_id, player_index)
+  local tsumo_action = { type = "tsumo" }
   local won = apply_tsumo(state, player_id, player_index)
-  if won and won.accepted then return won end
-  return perform_discard(state, state.drawnTile, player_id, player_index, false)
+  if won and won.accepted then return won, tsumo_action end
+  local discard_action = { type = "discard", tileId = state.drawnTile }
+  return perform_discard(state, discard_action.tileId, player_id, player_index, false), discard_action
 end
 
 local function __mahjong_timeout_claim_action(state, claimant)
   for option_index, option in ipairs(claimant.options or {}) do
     if option.kind == "ron" then
-      return apply_claim_response(state, { type = "claim", option = option_index }, claimant.playerId)
+      local action = { type = "claim", option = option_index }
+      return apply_claim_response(state, action, claimant.playerId), action
     end
   end
-  return apply_claim_response(state, { type = "pass" }, claimant.playerId)
+  local action = { type = "pass" }
+  return apply_claim_response(state, action, claimant.playerId), action
 end
 
 local function __mahjong_timer_ops(state, context)
@@ -384,10 +396,11 @@ local function __mahjong_timer_matches(state, payload)
     and tonumber(payload.drawnTile) == tonumber(state.drawnTile)
 end
 
-local function __mahjong_with_timeout_event(result, state, context, player_id, player_index)
+local function __mahjong_with_timeout_event(result, state, context, player_id, player_index, action)
   if not result or not result.accepted or not result.state then
     return result
   end
+  __mahjong_record_action(result, action, player_id)
   local events = result.events or {}
   events[#events + 1] = {
     type = "timer_timeout",
@@ -456,9 +469,11 @@ function on_action(state, action, context)
       local claimant = state.claimants and state.claimants[state.claimIndex]
       if claimant and claimant.playerId == actor_id and not __mahjong_has_ron_option(claimant) then
         state.autoPassClaimsApplying = actor_id
-        local passed = __mahjong_online_action(state, { type = "pass" }, context)
+        local pass_action = { type = "pass" }
+        local passed = __mahjong_online_action(state, pass_action, context)
         state.autoPassClaimsApplying = nil
         if passed and passed.accepted and passed.state then
+          __mahjong_record_action(passed, pass_action, actor_id)
           __mahjong_clear_private_state(passed.state)
           passed.timerOps = __mahjong_timer_ops(passed.state, context)
         end
@@ -541,6 +556,7 @@ function on_action(state, action, context)
       state.pendingTenpaiReport = nil
       return result
     end
+    __mahjong_record_action(result, action.action, player_id)
     __mahjong_commit_tenpai_report(result.state)
     local events = result.events or {}
     events[#events + 1] = {
@@ -634,6 +650,7 @@ function on_action(state, action, context)
     state.pendingTenpaiReport = nil
     return result
   end
+  __mahjong_record_action(result, action, context and context.actor and context.actor.id)
   if action and (action.type == "next_hand" or action.type == "new_match") then
     -- Keep the private setting aligned with the solo client: every newly
     -- dealt hand (and every fresh match) starts with automatic calls disabled.
@@ -750,10 +767,11 @@ function on_timer(state, timer, context)
       result.timerOps = __mahjong_timer_ops(result.state, context)
       return result
     end
-    local result = __mahjong_online_action(state, { type = "next_hand" }, {
+    local next_hand_action = { type = "next_hand" }
+    local result = __mahjong_online_action(state, next_hand_action, {
       actor = { id = state.players[1] },
     })
-    return __mahjong_with_timeout_event(result, state, context, nil, 0)
+    return __mahjong_with_timeout_event(result, state, context, nil, 0, next_hand_action)
   end
   if not __mahjong_timer_matches(state, payload) then
     return {
@@ -773,8 +791,8 @@ function on_timer(state, timer, context)
         timerOps = __mahjong_timer_ops(state, context),
       }
     end
-    local result = __mahjong_timeout_playing_action(state, player_id, player_index)
-    return __mahjong_with_timeout_event(result, state, context, player_id, player_index)
+    local result, action = __mahjong_timeout_playing_action(state, player_id, player_index)
+    return __mahjong_with_timeout_event(result, state, context, player_id, player_index, action)
   end
   if state.phase == "claiming" then
     local claimant = state.claimants and state.claimants[state.claimIndex]
@@ -786,8 +804,8 @@ function on_timer(state, timer, context)
       }
     end
     player_id, player_index = claimant.playerId, claimant.playerIndex
-    local result = __mahjong_timeout_claim_action(state, claimant)
-    return __mahjong_with_timeout_event(result, state, context, player_id, player_index)
+    local result, action = __mahjong_timeout_claim_action(state, claimant)
+    return __mahjong_with_timeout_event(result, state, context, player_id, player_index, action)
   end
   return {
     state = state,
