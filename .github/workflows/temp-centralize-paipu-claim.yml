@@ -1,0 +1,98 @@
+name: Temporary centralize paipu claim recording
+on:
+  push:
+    branches:
+      - refactor/mahjong-deterministic-paipu-replay
+permissions:
+  contents: write
+jobs:
+  patch-and-check:
+    if: github.event.head_commit.message != 'Centralize deterministic paipu claim recording'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Centralize claim recording
+        shell: bash
+        run: |
+          git checkout origin/main -- src/local-lua-game.js games/mahjong/room-paipu-online-source.js
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('games/mahjong/game.lua')
+          text = path.read_text()
+          old = '''local function paipu_command(state, action)
+\tlocal command = copy_record_value(action)
+\tif type(command.tileId) == "number" then
+\t\tcommand.tile = paipu_tile_reference(state, command.tileId)
+\t\tcommand.tileId = nil
+\tend
+\treturn command
+end'''
+          new = '''local function paipu_command(state, action, actor_id)
+\tlocal command = copy_record_value(action)
+\tif command.type == "claim" then
+\t\tlocal selected_index = math.floor(tonumber(command.option) or 0)
+\t\tfor _, claimant in ipairs(state.claimants or {}) do
+\t\t\tif claimant.playerId == actor_id then
+\t\t\t\tlocal option = claimant.options and claimant.options[selected_index]
+\t\t\t\tif option then
+\t\t\t\t\tcommand.kind = option.kind
+\t\t\t\t\tcommand.tiles = {}
+\t\t\t\t\tfor _, tile in ipairs(option.tileIds or {}) do
+\t\t\t\t\t\tcommand.tiles[#command.tiles + 1] = paipu_tile_reference(state, tile)
+\t\t\t\t\tend
+\t\t\t\tend
+\t\t\t\tbreak
+\t\t\tend
+\t\tend
+\tend
+\tif type(command.tileId) == "number" then
+\t\tcommand.tile = paipu_tile_reference(state, command.tileId)
+\t\tcommand.tileId = nil
+\tend
+\treturn command
+end'''
+          assert old in text, 'paipu_command source changed unexpectedly'
+          text = text.replace(old, new, 1)
+          old_call = '\t\taction = paipu_command(state, action),'
+          assert old_call in text, 'paipu_command call changed unexpectedly'
+          text = text.replace(old_call, '\t\taction = paipu_command(state, action, actor_id),', 1)
+          path.write_text(text)
+
+          path = Path('games/mahjong/app/replay-controller.js')
+          text = path.read_text()
+          old = 'if (entry.action?.type !== "claim" || !entry.action.paipuClaim) return entry;'
+          assert old in text, 'replay claim guard changed unexpectedly'
+          path.write_text(text.replace(
+              old,
+              'if (entry.action?.type !== "claim" || !Array.isArray(entry.action.replayClaimTileIds)) return entry;',
+              1,
+          ))
+
+          path = Path('tests/mahjong-paipu-replay-coordinates.test.js')
+          text = path.read_text()
+          text = text.replace(
+              '''      paipuClaim: {\n        kind: "pon",\n        tiles: [{ ref: 12 }, { ref: 44 }],\n      },''',
+              '''      kind: "pon",\n      tiles: [{ ref: 12 }, { ref: 44 }],''',
+              1,
+          )
+          text = text.replace('assert.equal(resolved.paipuClaim, undefined);', 'assert.equal(resolved.replayClaimTileIds, undefined);', 1)
+          path.write_text(text)
+          PY
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Push checked patch
+        shell: bash
+        run: |
+          git config user.name "Siyu Long"
+          git config user.email "i@longern.com"
+          git add games/mahjong/game.lua games/mahjong/app/replay-controller.js games/mahjong/room-paipu-online-source.js src/local-lua-game.js tests/mahjong-paipu-replay-coordinates.test.js
+          git commit -m "Centralize deterministic paipu claim recording"
+          git push origin HEAD:refactor/mahjong-deterministic-paipu-replay
