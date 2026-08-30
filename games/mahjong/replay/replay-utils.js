@@ -1,88 +1,92 @@
-export function replayAction(action, replayTileIds) {
-  const replay = structuredClone(action);
-  if (replay.tile) {
-    const tileId = tileIdForReference(replay.tile, replayTileIds);
-    if (!tileId) throw new Error("Paipu action has an invalid tile reference");
-    replay.tileId = tileId;
-  }
-  delete replay.tile;
-
-  if (replay.type === "claim" && Array.isArray(replay.tiles)) {
-    replay.replayClaimTileIds = replay.tiles.map((reference) => {
-      const tileId = tileIdForReference(reference, replayTileIds);
-      if (!tileId) throw new Error("Paipu claim has an invalid tile reference");
-      return tileId;
-    });
-    delete replay.tiles;
-  }
-  return replay;
+export function replayActionNeedsState(action) {
+  return [
+    "discard",
+    "riichi",
+    "chi",
+    "pon",
+    "daiminkan",
+    "ron",
+    "ankan",
+    "kakan",
+  ].includes(action?.type);
 }
 
-/**
- * Converts a stable paipu claim (`kind` + consumed wall refs) back to the
- * current engine's ephemeral option index. Runtime option numbers are retained
- * only as a legacy fallback for old records.
- */
-export function resolveReplayClaimAction(action, checkpointState, actorId) {
-  if (action?.type !== "claim" || !Array.isArray(action.replayClaimTileIds)) {
-    return action;
+/** Resolve a durable semantic paipu action against the current canonical Lua state. */
+export function resolveReplayAction(action, checkpointState, actorId) {
+  if (!action || typeof action !== "object") throw new Error("Paipu action is invalid");
+  if (!replayActionNeedsState(action)) return structuredClone(action);
+  if (!checkpointState || typeof checkpointState !== "object") {
+    throw new Error("Replay state is unavailable");
   }
-  const claimant = (checkpointState?.claimants || []).find(
-    (entry) => entry?.playerId === actorId,
-  );
+
+  if (action.type === "discard" || action.type === "riichi") {
+    const tileId = resolveDiscardTile(action, checkpointState, actorId);
+    return { type: action.type, tileId };
+  }
+
+  if (["chi", "pon", "daiminkan", "ron"].includes(action.type)) {
+    return resolveClaim(action, checkpointState, actorId);
+  }
+
+  if (action.type === "ankan" || action.type === "kakan") {
+    const tileType = tileTypeForCode(action.tile);
+    if (!tileType) throw new Error("Paipu kan has an invalid tile code");
+    return { type: "kan", kind: action.type, tileType };
+  }
+
+  throw new Error(`Unsupported paipu action: ${action.type}`);
+}
+
+function resolveDiscardTile(action, state, actorId) {
+  const expected = action.tile;
+  if (!isTileCode(expected)) throw new Error("Paipu discard has an invalid tile code");
+  const drawn = Number(state.drawnTile) || 0;
+  if (action.tsumogiri === true) {
+    if (!drawn || tileCode(drawn) !== expected) {
+      throw new Error("Paipu tsumogiri does not match the current drawn tile");
+    }
+    return drawn;
+  }
+
+  const hand = state.hands?.[actorId] || [];
+  const concealed = hand.find((tileId) => tileCode(Number(tileId)) === expected);
+  if (concealed) return Number(concealed);
+  if (drawn && tileCode(drawn) === expected) return drawn;
+  throw new Error("Paipu discard tile is not in the current hand");
+}
+
+function resolveClaim(action, state, actorId) {
+  const claimant = (state.claimants || []).find((entry) => entry?.playerId === actorId);
   if (!claimant) throw new Error("Paipu claim actor is not an active claimant");
-
-  const expectedKind = action.kind;
-  const expectedTiles = sortedTileIds(action.replayClaimTileIds);
-  const optionIndex = (claimant.options || []).findIndex(
-    (option) =>
-      option?.kind === expectedKind &&
-      sameTileIds(sortedTileIds(option?.tileIds), expectedTiles),
-  );
-  if (optionIndex < 0) {
-    throw new Error("Paipu claim does not match any current claim option");
-  }
-
-  const resolved = { ...action, option: optionIndex + 1 };
-  delete resolved.kind;
-  delete resolved.replayClaimTileIds;
-  return resolved;
+  const runtimeKind = action.type === "daiminkan" ? "kan" : action.type;
+  const expectedTiles = sortedCodes(action.tiles || []);
+  const optionIndex = (claimant.options || []).findIndex((option) => {
+    if (option?.kind !== runtimeKind) return false;
+    if (runtimeKind === "ron") return expectedTiles.length === 0;
+    return sameCodes(sortedCodes((option.tileIds || []).map((id) => tileCode(Number(id)))), expectedTiles);
+  });
+  if (optionIndex < 0) throw new Error("Paipu claim does not match any current claim option");
+  return { type: "claim", option: optionIndex + 1 };
 }
 
-function sortedTileIds(values) {
-  return Array.isArray(values)
-    ? values.map(Number).filter(Number.isInteger).sort((left, right) => left - right)
-    : [];
+function sortedCodes(values) {
+  return Array.isArray(values) ? values.map(String).sort() : [];
 }
 
-function sameTileIds(left, right) {
+function sameCodes(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-export function tileIdForReference(reference, replayTileIds) {
-  if (!Number.isInteger(reference?.ref)) return 0;
-  return replayTileIds?.[reference.ref] || 0;
+export function tileTypeForCode(code) {
+  if (!isTileCode(code)) return 0;
+  if (code[1] === "z") return 27 + Number(code[0]);
+  const suit = { m: 0, p: 1, s: 2 }[code[1]];
+  const rank = code[0] === "0" ? 5 : Number(code[0]);
+  return suit * 9 + rank;
 }
 
-export function replayTileIdsForWall(wall) {
-  if (typeof wall !== "string" || wall.length !== 272) {
-    throw new Error("Paipu hand has an invalid wall");
-  }
-  const available = new Map();
-  for (let tileId = 1; tileId <= 136; tileId += 1) {
-    const code = tileCode(tileId);
-    const ids = available.get(code) || [];
-    ids.push(tileId);
-    available.set(code, ids);
-  }
-  const tileIds = [];
-  for (let offset = 0; offset < wall.length; offset += 2) {
-    const code = wall.slice(offset, offset + 2);
-    const ids = available.get(code);
-    if (!ids?.length) throw new Error("Paipu hand has an invalid tile code");
-    tileIds.push(ids.shift());
-  }
-  return tileIds;
+export function isTileCode(value) {
+  return typeof value === "string" && /^(?:[1-9][mps]|0[mps]|[1-7]z)$/.test(value);
 }
 
 export function tileCode(tileId) {

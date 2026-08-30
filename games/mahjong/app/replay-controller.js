@@ -8,9 +8,8 @@ import {
   paipuPreviousHandPosition,
 } from "../replay/paipu-playback.js";
 import {
-  replayAction,
-  replayTileIdsForWall,
-  resolveReplayClaimAction,
+  replayActionNeedsState,
+  resolveReplayAction,
   waitForReplayDelay,
   waitForReplayStep,
 } from "../replay/replay-utils.js";
@@ -80,7 +79,6 @@ export function createMahjongReplayController({
       setReplayState({
         record,
         timeline,
-        tileIdsByHand: record.hands.map((hand) => replayTileIdsForWall(hand.wall)),
         position: 0,
         speed: 1,
         playing: false,
@@ -146,7 +144,7 @@ export function createMahjongReplayController({
 
   function actionForStep(current, step) {
     return {
-      action: replayAction(step.command.action, current.tileIdsByHand[step.handIndex]),
+      action: structuredClone(step.command.action),
       actorId: current.record.players[step.command.seat - 1]?.id,
       animateDealIn: false,
     };
@@ -154,12 +152,12 @@ export function createMahjongReplayController({
 
   async function resolvedActionForStep(current, step, game = getGame()) {
     const entry = actionForStep(current, step);
-    if (entry.action?.type !== "claim" || !Array.isArray(entry.action.replayClaimTileIds)) return entry;
+    if (!replayActionNeedsState(entry.action)) return entry;
     const checkpoint = await game?.checkpoint?.();
-    if (!checkpoint?.state) throw new Error("Replay claim state is unavailable");
+    if (!checkpoint?.state) throw new Error("Replay state is unavailable");
     return {
       ...entry,
-      action: resolveReplayClaimAction(entry.action, checkpoint.state, entry.actorId),
+      action: resolveReplayAction(entry.action, checkpoint.state, entry.actorId),
     };
   }
 

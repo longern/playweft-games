@@ -6,10 +6,6 @@ import { LuaFactory } from "wasmoon";
 import { buildMahjongOnlineSource } from "../games/mahjong/room-paipu-online-source.js";
 import { buildCompletedRoomPaipuRecord } from "../games/mahjong/replay/room-paipu.js";
 import { validateMahjongPaipu } from "../games/mahjong/replay/paipu-store.js";
-import {
-  replayAction,
-  replayTileIdsForWall,
-} from "../games/mahjong/replay/replay-utils.js";
 
 async function runOnlineScenario(scenario) {
   const fullSource = await readFile("games/mahjong/game.lua", "utf8");
@@ -126,11 +122,8 @@ test("Mahjong room exports a saveable and replayable authoritative final hand", 
     (command) => command?.action?.type === "discard",
   );
   assert.ok(discard, "room paipu should contain the authoritative discard");
-  assert.ok(Number.isInteger(discard.action.tile?.ref));
-
-  const replayTiles = replayTileIdsForWall(validated.hands[0].wall);
-  const replayed = replayAction(discard.action, replayTiles);
-  assert.ok(Number.isInteger(replayed.tileId) && replayed.tileId > 0);
+  assert.match(discard.action.tile, /^(?:[1-9][mps]|0[mps]|[1-7]z)$/);
+  assert.equal(typeof discard.action.tsumogiri, "boolean");
 });
 
 test("Mahjong room streams a completed hand, then keeps only the new current hand", async () => {
@@ -327,10 +320,10 @@ test("Mahjong room records AI and server-timer gameplay actions", async () => {
     result = {
       aiRecorded = after_ai >= 1
         and ai_command.action.type == "discard"
-        and type(ai_command.action.tile.ref) == "number",
+        and type(ai_command.action.tile) == "string",
       timerRecorded = after_timer == after_ai + 1
         and timer_command.action.type == "discard"
-        and type(timer_command.action.tile.ref) == "number",
+        and type(timer_command.action.tile) == "string",
     }
   `);
 
