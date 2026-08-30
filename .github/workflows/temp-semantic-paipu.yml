@@ -16,6 +16,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: python .github/scripts/patch-semantic-paipu.py
+      - run: python .github/scripts/patch-semantic-paipu-fixes.py
       - run: npm ci
       - run: npm test
       - run: npm run build
@@ -24,6 +25,6 @@ jobs:
           if git diff --quiet; then exit 0; fi
           git config user.name "Siyu Long"
           git config user.email "i@longern.com"
-          git add games/mahjong tests/mahjong-paipu.test.js tests/mahjong-room-paipu-integration.test.js tests/mahjong-semantic-paipu.test.js
+          git add games/mahjong tests/mahjong-paipu.test.js tests/mahjong-paipu-replay-coordinates.test.js tests/mahjong-room-paipu-integration.test.js tests/mahjong-semantic-paipu.test.js
           git commit -m "Refactor Mahjong paipu to semantic actions"
           git push origin HEAD:refactor/mahjong-semantic-paipu
