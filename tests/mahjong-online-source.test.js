@@ -82,6 +82,57 @@ async function runOnlineWithinRuntimeQuota(scenario, runtimeQuota = 50_000) {
   }
 }
 
+test("Mahjong final summary view stays within the runtime quota without re-exporting paipu", async () => {
+  const result = await runOnlineWithinRuntimeQuota(`
+    local started = setup({
+      players = ${PLAYERS},
+      serverTime = 1000,
+      match = {
+        id = "final-view-quota",
+        ownerId = "p1",
+        randomSeed = "0000000000000000000000000000002a",
+      },
+    })
+    local state = started.state
+    state.phase = "hand_ended"
+    state.matchEnded = true
+    state.result = { winnerIndex = 1, deltas = { 1000, -1000, 0, 0 } }
+    state.results = { state.result }
+    state.resultPage = 2
+
+    -- Inflate only the authoritative hand log. Final summary rendering must
+    -- be independent of its size because clients have already persisted this
+    -- hand fragment before reaching the summary page.
+    local hand = state.paipu and state.paipu.hands and state.paipu.hands[1]
+    hand.commands = {}
+    hand.events = {}
+    for index = 1, 1200 do
+      hand.commands[index] = {
+        seat = ((index - 1) % 4) + 1,
+        action = { type = "discard", tile = { code = "1m", ref = ((index - 1) % 136) + 1 } },
+      }
+      hand.events[index] = {
+        type = "discarded",
+        playerIndex = ((index - 1) % 4) + 1,
+        tile = { code = "1m", ref = ((index - 1) % 136) + 1 },
+      }
+    end
+
+    local projection = __within_quota(function()
+      return view(state, {}, { viewer = { id = state.players[1], isOwner = true } })
+    end)
+    result = {
+      summary = projection.state.resultSummaryVisible == true,
+      paipu_omitted = projection.state.paipu == nil,
+    }
+  `);
+
+  assert.deepEqual(result, {
+    summary: true,
+    paipu_omitted: true,
+  });
+});
+
 test("Mahjong room entry stays below the Lua source limit", async () => {
   const fullSource = await readFile("games/mahjong/game.lua", "utf8");
   const onlineSource = buildMahjongOnlineSource(fullSource);
@@ -1447,9 +1498,7 @@ test("authoritative Mahjong result pages wait for every player, time out safely,
       nextHandAfterAllReady = next_hand_after_all_ready,
       resultTimeoutAdvanced = result_timeout_advanced,
       finalRankingVisible = final_projection.state.resultSummaryVisible == true,
-      finalRankingHasPaipu = final_projection.state.paipu ~= nil
-        and final_projection.state.paipu.status == "completed"
-        and final_projection.state.paipu.game.mode == "room",
+      finalRankingOmitsPaipu = final_projection.state.paipu == nil,
       finalRankingHasNoDeadline = final_projection.state.resultDeadlineAt == nil,
       finalRankingHasNoTimer = scheduled(final_timeout.timerOps, "mahjong-result") == nil,
     }
@@ -1462,7 +1511,7 @@ test("authoritative Mahjong result pages wait for every player, time out safely,
   assert.equal(result.nextHandAfterAllReady, true);
   assert.equal(result.resultTimeoutAdvanced, true);
   assert.equal(result.finalRankingVisible, true);
-  assert.equal(result.finalRankingHasPaipu, true);
+  assert.equal(result.finalRankingOmitsPaipu, true);
   assert.equal(result.finalRankingHasNoDeadline, true);
   assert.equal(result.finalRankingHasNoTimer, true);
 });

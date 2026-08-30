@@ -712,9 +712,11 @@ function view(state, events, context)
       or false
     projection.state.resultSummaryVisible = state.matchEnded == true
       and tonumber(state.resultPage) == __mahjong_result_summary_page(state)
-    if projection.state.resultSummaryVisible then
-      projection.state.paipu = export_paipu(state, "room")
-    end
+    -- Completed hand fragments are already streamed to every client at
+    -- hand_ended.  Re-exporting the hand paipu here would deep-copy the full
+    -- command/event log inside a single view() call and can exceed the host's
+    -- 50k Lua instruction quota on long hands.  The final summary carries only
+    -- match metadata; clients assemble the durable paipu from saved fragments.
     projection.state.aiPlayers = state.aiPlayers
     projection.state.aiPresentations = state.aiPresentations or {}
     projection.state.playerPresentations = state.playerPresentations or {}
