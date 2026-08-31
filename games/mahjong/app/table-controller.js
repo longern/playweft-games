@@ -770,6 +770,10 @@ export function createMahjongTableController({
     matchMusicController.applyVolume();
   }
 
+  function applyAudioVolumes() {
+    matchMusicController.applyVolume();
+  }
+
   function syncMatchMusicForHandState(previousState, currentState) {
     const handWasEnded = previousState?.phase === "hand_ended";
     const handIsEnded = currentState?.phase === "hand_ended";
@@ -789,7 +793,8 @@ export function createMahjongTableController({
     const cue = riverTileSoundCue(state, events);
     if (!cue || cue.key === playedRiverTileSoundKey) return;
     playedRiverTileSoundKey = cue.key;
-    const volume = cue.volume * settingsDialog.discardVolumeScale;
+    const volume =
+      cue.volume * settingsDialog.masterVolumeScale * settingsDialog.discardVolumeScale;
     if (volume <= 0) return;
     riverTileSound.pause();
     riverTileSound.currentTime = 0;
@@ -857,6 +862,7 @@ export function createMahjongTableController({
       browserWindow.setTimeout(() => {
         const audio = new Audio(source);
         audio.preload = "auto";
+        audio.volume = settingsDialog.masterVolumeScale * settingsDialog.voiceVolumeScale;
         audio.addEventListener("ended", () => audio.remove(), { once: true });
         audio.addEventListener("error", () => audio.remove(), { once: true });
         void audio.play().catch(() => audio.remove());
@@ -894,6 +900,7 @@ export function createMahjongTableController({
         resolve();
       };
       audio.preload = "auto";
+      audio.volume = settingsDialog.masterVolumeScale * settingsDialog.voiceVolumeScale;
       audio.addEventListener("ended", finish, { once: true });
       audio.addEventListener("error", finish, { once: true });
       void audio.play().catch(finish);
@@ -1408,6 +1415,7 @@ export function createMahjongTableController({
     renderCurrentState,
     renderPresentationOverlays,
     applyMatchMusicVolume,
+    applyAudioVolumes,
     syncMatchMusic,
     dismissResultForReplay,
     selectTile,

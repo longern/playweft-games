@@ -4,9 +4,14 @@ const GAME_HINTS_KEY = "playweft.mahjong.game-hints";
 const AUTO_WIN_AFTER_RIICHI_KEY = "playweft.mahjong.auto-win-after-riichi";
 const DISCARD_VOLUME_KEY = "playweft.mahjong.discard-volume";
 const MUSIC_VOLUME_KEY = "playweft.mahjong.music-volume";
-const AVATAR_SOURCE_PREFERENCE_KEY = "playweft.mahjong.avatar-source-preference";
+const MASTER_VOLUME_KEY = "playweft.mahjong.master-volume";
+const VOICE_VOLUME_KEY = "playweft.mahjong.voice-volume";
+const AVATAR_SOURCE_PREFERENCE_KEY =
+  "playweft.mahjong.avatar-source-preference";
 const DEFAULT_DISCARD_VOLUME = 100;
 const DEFAULT_MUSIC_VOLUME = 32;
+const DEFAULT_MASTER_VOLUME = 100;
+const DEFAULT_VOICE_VOLUME = 100;
 const DEFAULT_AVATAR_SOURCE_PREFERENCE = "auto";
 const DIALOG_TRANSITION_FALLBACK_MS = 240;
 
@@ -25,20 +30,22 @@ export function createMahjongSettingsDialog({
   doubleClickPass,
   discardVolume,
   discardVolumeValue,
+  masterVolume,
+  masterVolumeValue,
   musicVolume,
   musicVolumeValue,
+  voiceVolume,
+  voiceVolumeValue,
   avatarSourcePreference,
-  offlineDownload,
   offlinePolicy,
-  offlineUpdate,
-  offlineClear,
+  offlineAction,
   onMusicVolumeChange,
+  onMasterVolumeChange,
+  onVoiceVolumeChange,
   onGameHintsChange,
   onAvatarSourcePreferenceChange,
-  onOfflineDownloadChange,
   onOfflinePolicyChange,
-  onOfflineUpdate,
-  onOfflineClear,
+  onOfflineAction,
   onEndMatch,
 }) {
   let returnFocus = null;
@@ -46,6 +53,7 @@ export function createMahjongSettingsDialog({
   let openingFrame = 0;
   let closingTimer = 0;
   let restoreFocusAfterClose = true;
+  if (returnButton) returnButton.textContent = "返回大厅";
   gameHints.checked = readBooleanSetting(GAME_HINTS_KEY, true);
   autoWinAfterRiichi.checked = readBooleanSetting(
     AUTO_WIN_AFTER_RIICHI_KEY,
@@ -64,8 +72,15 @@ export function createMahjongSettingsDialog({
     readVolumeSetting(MUSIC_VOLUME_KEY, DEFAULT_MUSIC_VOLUME),
   );
   renderMusicVolume();
+  masterVolume.value = String(
+    readVolumeSetting(MASTER_VOLUME_KEY, DEFAULT_MASTER_VOLUME),
+  );
+  renderMasterVolume();
+  voiceVolume.value = String(
+    readVolumeSetting(VOICE_VOLUME_KEY, DEFAULT_VOICE_VOLUME),
+  );
+  renderVoiceVolume();
   avatarSourcePreference.value = readAvatarSourcePreference();
-  if (offlineDownload) offlineDownload.checked = readBooleanSetting("playweft.mahjong.offline-cache-mode", false);
   if (offlinePolicy) offlinePolicy.value = readOfflinePolicy();
 
   function renderDiscardVolume() {
@@ -83,6 +98,24 @@ export function createMahjongSettingsDialog({
     musicVolume.value = String(value);
     musicVolume.setAttribute("aria-valuetext", label);
     musicVolumeValue.textContent = label;
+    return value;
+  }
+
+  function renderMasterVolume() {
+    const value = normalizeVolume(masterVolume.value, DEFAULT_MASTER_VOLUME);
+    const label = value === 0 ? "静音" : `${value}%`;
+    masterVolume.value = String(value);
+    masterVolume.setAttribute("aria-valuetext", label);
+    masterVolumeValue.textContent = label;
+    return value;
+  }
+
+  function renderVoiceVolume() {
+    const value = normalizeVolume(voiceVolume.value, DEFAULT_VOICE_VOLUME);
+    const label = value === 0 ? "静音" : `${value}%`;
+    voiceVolume.value = String(value);
+    voiceVolume.setAttribute("aria-valuetext", label);
+    voiceVolumeValue.textContent = label;
     return value;
   }
 
@@ -225,10 +258,7 @@ export function createMahjongSettingsDialog({
   }
 
   function onAutoWinAfterRiichiSettingChange() {
-    writeBooleanSetting(
-      AUTO_WIN_AFTER_RIICHI_KEY,
-      autoWinAfterRiichi.checked,
-    );
+    writeBooleanSetting(AUTO_WIN_AFTER_RIICHI_KEY, autoWinAfterRiichi.checked);
   }
 
   function onPassSettingChange() {
@@ -245,6 +275,16 @@ export function createMahjongSettingsDialog({
     onMusicVolumeChange?.();
   }
 
+  function onMasterVolumeInput() {
+    writeVolumeSetting(MASTER_VOLUME_KEY, renderMasterVolume());
+    onMasterVolumeChange?.();
+  }
+
+  function onVoiceVolumeInput() {
+    writeVolumeSetting(VOICE_VOLUME_KEY, renderVoiceVolume());
+    onVoiceVolumeChange?.();
+  }
+
   function onAvatarSourcePreferenceChangeInternal() {
     const value = normalizeAvatarSourcePreference(avatarSourcePreference.value);
     avatarSourcePreference.value = value;
@@ -252,16 +292,31 @@ export function createMahjongSettingsDialog({
     onAvatarSourcePreferenceChange?.();
   }
 
-  function onOfflineDownloadChangeInternal() {
-    writeBooleanSetting("playweft.mahjong.offline-cache-mode", offlineDownload.checked);
-    onOfflineDownloadChange?.(offlineDownload.checked);
+  function onOfflinePolicyChangeInternal() {
+    const value =
+      offlinePolicy.value === "local-first" ? "local-first" : "network-first";
+    offlinePolicy.value = value;
+    try {
+      window.localStorage.setItem(
+        "playweft.mahjong.offline-cache-policy",
+        value,
+      );
+    } catch {}
+    onOfflinePolicyChange?.(value);
   }
 
-  function onOfflinePolicyChangeInternal() {
-    const value = offlinePolicy.value === "local-first" ? "local-first" : "network-first";
-    offlinePolicy.value = value;
-    try { window.localStorage.setItem("playweft.mahjong.offline-cache-policy", value); } catch {}
-    onOfflinePolicyChange?.(value);
+  function onOfflineActionClick() {
+    onOfflineAction?.();
+  }
+
+  function onOfflinePolicyRowClick(event) {
+    if (!offlinePolicy || event.target === offlinePolicy) return;
+    offlinePolicy.focus({ preventScroll: true });
+    try {
+      offlinePolicy.showPicker?.();
+    } catch {
+      // Some embedded browsers allow focus but block programmatic picker opening.
+    }
   }
 
   function onTriggerClick() {
@@ -296,14 +351,17 @@ export function createMahjongSettingsDialog({
   doubleClickPass.addEventListener("change", onPassSettingChange);
   discardVolume.addEventListener("input", onDiscardVolumeInput);
   musicVolume.addEventListener("input", onMusicVolumeInput);
+  masterVolume.addEventListener("input", onMasterVolumeInput);
+  voiceVolume.addEventListener("input", onVoiceVolumeInput);
   avatarSourcePreference.addEventListener(
     "change",
     onAvatarSourcePreferenceChangeInternal,
   );
-  offlineDownload?.addEventListener("change", onOfflineDownloadChangeInternal);
   offlinePolicy?.addEventListener("change", onOfflinePolicyChangeInternal);
-  offlineUpdate?.addEventListener("click", () => onOfflineUpdate?.());
-  offlineClear?.addEventListener("click", () => onOfflineClear?.());
+  offlineAction?.addEventListener("click", onOfflineActionClick);
+  offlinePolicy
+    ?.closest(".settings-list-item-button")
+    ?.addEventListener("click", onOfflinePolicyRowClick);
   for (const button of tabButtons) {
     button.addEventListener("click", () => setTab(button.dataset.settingsTab));
     button.addEventListener("keydown", onTabKeyDown);
@@ -328,11 +386,19 @@ export function createMahjongSettingsDialog({
     get musicVolumeScale() {
       return normalizeMusicVolume(musicVolume.value) / 100;
     },
+    get masterVolumeScale() {
+      return normalizeVolume(masterVolume.value, DEFAULT_MASTER_VOLUME) / 100;
+    },
+    get voiceVolumeScale() {
+      return normalizeVolume(voiceVolume.value, DEFAULT_VOICE_VOLUME) / 100;
+    },
     get avatarSourcePreference() {
       return normalizeAvatarSourcePreference(avatarSourcePreference.value);
     },
     setSoloMatchActive(active) {
       if (endMatchButton) endMatchButton.hidden = !active;
+      if (returnButton)
+        returnButton.textContent = active ? "返回对局" : "返回大厅";
     },
     setEndMatchLabel(label) {
       if (endMatchButton) endMatchButton.textContent = label;
@@ -362,12 +428,20 @@ export function createMahjongSettingsDialog({
       doubleClickPass.removeEventListener("change", onPassSettingChange);
       discardVolume.removeEventListener("input", onDiscardVolumeInput);
       musicVolume.removeEventListener("input", onMusicVolumeInput);
+      masterVolume.removeEventListener("input", onMasterVolumeInput);
+      voiceVolume.removeEventListener("input", onVoiceVolumeInput);
       avatarSourcePreference.removeEventListener(
         "change",
         onAvatarSourcePreferenceChangeInternal,
       );
-      offlineDownload?.removeEventListener("change", onOfflineDownloadChangeInternal);
-      offlinePolicy?.removeEventListener("change", onOfflinePolicyChangeInternal);
+      offlineAction?.removeEventListener("click", onOfflineActionClick);
+      offlinePolicy?.removeEventListener(
+        "change",
+        onOfflinePolicyChangeInternal,
+      );
+      offlinePolicy
+        ?.closest(".settings-list-item-button")
+        ?.removeEventListener("click", onOfflinePolicyRowClick);
       for (const button of tabButtons) {
         button.removeEventListener("keydown", onTabKeyDown);
       }
@@ -391,7 +465,9 @@ function readAvatarSourcePreference() {
 
 function readOfflinePolicy() {
   try {
-    return window.localStorage.getItem("playweft.mahjong.offline-cache-policy") === "local-first"
+    return window.localStorage.getItem(
+      "playweft.mahjong.offline-cache-policy",
+    ) === "local-first"
       ? "local-first"
       : "network-first";
   } catch {

@@ -277,92 +277,153 @@
   padding: 32px 34px;
 }
 
-.settings-offline-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 20px;
-}
-
-.settings-offline-actions button {
-  min-width: 7em;
-  min-height: 40px;
-  padding: 0 16px;
-  border: 1px solid rgba(231, 198, 116, 0.36);
-  border-radius: 8px;
-  background: rgba(1, 18, 18, 0.48);
+.settings-general-heading {
+  margin: 0 0 8px;
   color: #fff2cc;
-  font: inherit;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
+  font-size: 0.875em;
+  font-weight: 500;
 }
 
-.settings-offline-actions button:hover {
-  border-color: rgba(255, 226, 155, 0.72);
+.settings-list-card {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(231, 198, 116, 0.24);
+  border-radius: 12px;
+  background: rgba(1, 15, 16, 0.5);
+  list-style: none;
+}
+
+.settings-list-card > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 24px;
+  border-bottom: 1px solid rgba(231, 198, 116, 0.16);
+}
+
+.settings-list-card > li:last-child {
+  border-bottom: 0;
+}
+
+.settings-general-list > li {
+  padding: 0;
+}
+
+.settings-general-list {
+  font-size: 0.875em;
+}
+
+.settings-list-item-button {
+  display: flex;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 80px;
+  align-self: stretch;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 24px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-list-item-button:focus-visible {
+  outline: 2px solid rgba(255, 226, 155, 0.82);
+  outline-offset: -3px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings-list-item-button:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+}
+
+.settings-list-item-button:active {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.settings-offline-actions button:focus-visible {
-  outline: 2px solid rgba(255, 226, 155, 0.82);
-  outline-offset: 3px;
-}
-
-.settings-offline-actions button:active {
-  background: rgba(0, 0, 0, 0.2);
-}
-
-.settings-general-choice {
-  display: flex;
-  min-height: 44px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  margin-top: 14px;
+.settings-general-list-label {
+  min-width: 0;
   color: #fff2cc;
-  font-size: 0.875em;
+  font-size: inherit;
+  line-height: 1.35;
+}
+
+.settings-list-item-button svg {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  stroke-width: 2;
+}
+
+.settings-offline-action {
+  font-size: inherit;
+  line-height: 1.35;
+}
+
+.settings-list-trailing {
+  display: inline-flex;
+  flex: 0 0 7.5em;
+  box-sizing: border-box;
+  width: 7.5em;
+  height: 40px;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.settings-offline-action-content {
+  gap: 8px;
+  font-size: inherit;
+  line-height: 1.35;
+  color: rgba(238, 240, 225, 0.72);
+}
+
+.settings-offline-action.is-downloading svg {
+  animation: settings-offline-spin 900ms linear infinite;
+}
+
+@keyframes settings-offline-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .settings-general-select {
   position: relative;
-  flex: 0 1 15em;
-  min-width: 0;
 }
 
-.settings-general-select::before,
-.settings-general-select::after {
+.settings-general-select-icon {
   position: absolute;
-  right: 3px;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid rgba(238, 240, 225, 0.52);
-  border-bottom: 2px solid rgba(238, 240, 225, 0.52);
-  content: "";
+  top: 50%;
+  right: 0;
+  width: 24px;
+  height: 24px;
+  line-height: 1;
+  color: rgba(238, 240, 225, 0.72);
   pointer-events: none;
-}
-
-.settings-general-select::before {
-  top: 11px;
-  transform: rotate(225deg);
-}
-
-.settings-general-select::after {
-  bottom: 11px;
-  transform: rotate(45deg);
+  transform: translateY(-50%);
 }
 
 .settings-general-select select {
   width: 100%;
-  min-height: 44px;
-  padding: 8px 24px 8px 8px;
+  height: 40px;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 0 32px 0 8px;
   border: 0;
   appearance: none;
   background: transparent;
-  color: rgba(238, 240, 225, 0.64);
-  font: inherit;
+  color: rgba(238, 240, 225, 0.72);
+  font-size: inherit;
+  line-height: 1.35;
   text-align: right;
   text-align-last: right;
   cursor: pointer;
@@ -394,61 +455,63 @@
 }
 
 .settings-sound-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
   padding: 32px 34px;
 }
 
-.settings-volume-card {
-  max-width: 610px;
-  padding: 24px 26px 22px;
-  border: 1px solid rgba(231, 198, 116, 0.25);
-  border-radius: 12px;
-  background: rgba(1, 18, 18, 0.48);
+.settings-sound-list {
+  font-size: 0.875em;
 }
 
-.settings-volume-heading {
+.settings-sound-list > li {
   display: flex;
-  align-items: baseline;
+  min-height: 80px;
+  align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 24px;
+  padding: 12px 24px;
 }
 
-.settings-volume-heading label {
+.settings-sound-list label {
+  min-width: 0;
   color: #fff2cc;
-  font-weight: 800;
+  line-height: 1.35;
+  cursor: pointer;
 }
 
-.settings-volume-heading output {
-  min-width: 3.5em;
-  color: #ffe4a0;
-  font-size: 0.75em;
-  font-weight: 800;
-  text-align: right;
+.settings-sound-control {
+  display: inline-flex;
+  min-width: min(22em, 58%);
+  align-items: center;
+  gap: 14px;
 }
 
-.settings-volume-card input[type="range"] {
+.settings-sound-control input[type="range"] {
   width: 100%;
-  margin: 22px 0 14px;
+  min-width: 0;
+  margin: 0;
   accent-color: #d5a443;
   cursor: pointer;
 }
 
-.settings-volume-card input[type="range"]:focus-visible {
+.settings-sound-control output {
+  min-width: 3.5em;
+  color: #ffe4a0;
+  font-size: 0.75em;
+  text-align: right;
+}
+
+.settings-sound-control input[type="range"]:focus-visible {
   outline: 2px solid rgba(255, 226, 155, 0.82);
   outline-offset: 5px;
 }
 
-.settings-volume-card p {
+.settings-sound-panel > .settings-bgm-copyright {
   margin: 0;
+  padding-top: 12px;
   color: rgba(238, 240, 225, 0.64);
   font-size: 0.75em;
   line-height: 1.5;
-}
-
-.settings-volume-card .settings-bgm-copyright {
-  margin-top: 12px;
+  white-space: pre-line;
 }
 
 .settings-theme-panel,
@@ -526,30 +589,6 @@
   margin-top: 12px;
   color: #b9d9cb;
   font-size: 0.75em;
-}
-
-.settings-theme-list {
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid rgba(231, 198, 116, 0.24);
-  border-radius: 12px;
-  background: rgba(1, 15, 16, 0.5);
-  list-style: none;
-}
-
-.settings-theme-list li {
-  display: flex;
-  min-height: 64px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(231, 198, 116, 0.16);
-}
-
-.settings-theme-list li:last-child {
-  border-bottom: 0;
 }
 
 .settings-theme-list li.is-remote {

@@ -178,41 +178,65 @@
             </div>
             <div id="settings-sound-panel" class="settings-tab-panel settings-sound-panel" role="tabpanel"
               aria-labelledby="settings-sound-tab" data-settings-panel="sound" hidden>
-              <div class="settings-volume-card">
-                <div class="settings-volume-heading">
-                  <label for="music-volume-setting">音乐音量</label>
-                  <output id="music-volume-value" for="music-volume-setting">32%</output>
-                </div>
-                <input id="music-volume-setting" type="range" min="0" max="100" step="1" value="32" />
-                <p id="default-bgm-copyright" class="settings-bgm-copyright" hidden></p>
-              </div>
-              <div class="settings-volume-card">
-                <div class="settings-volume-heading">
-                  <label for="discard-volume-setting">落牌音量</label>
-                  <output id="discard-volume-value" for="discard-volume-setting">100%</output>
-                </div>
-                <input id="discard-volume-setting" type="range" min="0" max="100" step="1" value="100" />
-              </div>
+              <ul class="settings-list-card settings-sound-list" aria-label="声音设置">
+                <li>
+                  <label for="master-volume-setting">主音量</label>
+                  <span class="settings-sound-control">
+                    <input id="master-volume-setting" type="range" min="0" max="100" step="1" value="100" />
+                    <output id="master-volume-value" for="master-volume-setting">100%</output>
+                  </span>
+                </li>
+                <li>
+                  <label for="music-volume-setting">音乐</label>
+                  <span class="settings-sound-control">
+                    <input id="music-volume-setting" type="range" min="0" max="100" step="1" value="32" />
+                    <output id="music-volume-value" for="music-volume-setting">32%</output>
+                  </span>
+                </li>
+                <li>
+                  <label for="voice-volume-setting">语音</label>
+                  <span class="settings-sound-control">
+                    <input id="voice-volume-setting" type="range" min="0" max="100" step="1" value="100" />
+                    <output id="voice-volume-value" for="voice-volume-setting">100%</output>
+                  </span>
+                </li>
+                <li>
+                  <label for="discard-volume-setting">音效</label>
+                  <span class="settings-sound-control">
+                    <input id="discard-volume-setting" type="range" min="0" max="100" step="1" value="100" />
+                    <output id="discard-volume-value" for="discard-volume-setting">100%</output>
+                  </span>
+                </li>
+              </ul>
+              <p id="default-bgm-copyright" class="settings-bgm-copyright" hidden></p>
             </div>
             <div id="settings-offline-panel" class="settings-tab-panel settings-operation-panel" role="tabpanel"
               aria-labelledby="settings-offline-tab" data-settings-panel="offline" hidden>
-              <label class="settings-option" for="mahjong-offline-download-setting">
-                <input id="mahjong-offline-download-setting" type="checkbox" />
-                <span>下载麻将离线资源（HTML、脚本、规则和牌面）</span>
-              </label>
-              <label class="settings-general-choice" for="mahjong-offline-policy-setting">
-                <span>资源更新策略</span>
-                <span class="settings-general-select">
-                  <select id="mahjong-offline-policy-setting">
-                    <option value="network-first">网络优先</option>
-                    <option value="local-first">本地优先（手动更新）</option>
-                  </select>
-                </span>
-              </label>
-              <div class="settings-offline-actions">
-                <button id="mahjong-offline-update-button" type="button">手动更新</button>
-                <button id="mahjong-offline-clear-button" type="button">删除麻将缓存</button>
-              </div>
+              <h2 class="settings-general-heading">资源管理</h2>
+              <ul class="settings-list-card settings-general-list" aria-label="离线资源设置">
+                <li class="settings-general-list-item">
+                  <button id="mahjong-offline-action-button" class="settings-list-item-button settings-offline-action"
+                    type="button" aria-label="下载离线资源" title="下载离线资源">
+                    <span class="settings-general-list-label">离线资源包</span>
+                    <span class="settings-list-trailing settings-offline-action-content">
+                      <span>下载</span>
+                      <i data-lucide="download" aria-hidden="true"></i>
+                    </span>
+                  </button>
+                </li>
+                <li class="settings-general-list-item">
+                  <label class="settings-list-item-button" for="mahjong-offline-policy-setting">
+                    <span class="settings-general-list-label">资源策略</span>
+                    <span class="settings-list-trailing settings-general-select">
+                      <select id="mahjong-offline-policy-setting" aria-label="资源策略">
+                        <option value="network-first">网络优先</option>
+                        <option value="local-first">本地优先（手动更新）</option>
+                      </select>
+                      <i class="settings-general-select-icon" data-lucide="chevrons-up-down" aria-hidden="true"></i>
+                    </span>
+                  </label>
+                </li>
+              </ul>
               <p id="mahjong-offline-feedback" class="settings-appearance-feedback" role="status" aria-live="polite">
               </p>
             </div>
@@ -223,7 +247,7 @@
                 <input id="settings-theme-upload" type="file"
                   accept=".zip,application/zip,application/x-zip-compressed" />
               </label>
-              <ul id="settings-theme-list" class="settings-theme-list" aria-label="主题包列表"></ul>
+            <ul id="settings-theme-list" class="settings-list-card settings-theme-list" aria-label="主题包列表"></ul>
             </div>
             <div id="settings-appearance-panel" class="settings-tab-panel settings-appearance-panel" role="tabpanel"
               aria-labelledby="settings-appearance-tab" data-settings-panel="appearance" hidden>

@@ -1059,8 +1059,12 @@ function collectElements() {
     doubleClickPass: document.querySelector("#double-click-pass-setting"),
     riverTileVolume: document.querySelector("#discard-volume-setting"),
     riverTileVolumeValue: document.querySelector("#discard-volume-value"),
+    masterVolume: document.querySelector("#master-volume-setting"),
+    masterVolumeValue: document.querySelector("#master-volume-value"),
     musicVolume: document.querySelector("#music-volume-setting"),
     musicVolumeValue: document.querySelector("#music-volume-value"),
+    voiceVolume: document.querySelector("#voice-volume-setting"),
+    voiceVolumeValue: document.querySelector("#voice-volume-value"),
     avatarSourcePreference: document.querySelector(
       "#avatar-source-preference-setting",
     ),

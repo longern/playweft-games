@@ -426,7 +426,7 @@ export function getMahjongMatchMusicCopyright() {
   return [
     matchCopyright && `对局音乐：${matchCopyright}`,
     riichiCopyright && `立直音乐：${riichiCopyright}`,
-  ].filter(Boolean).join("；");
+  ].filter(Boolean).join("\n");
 }
 
 export async function listMahjongAssetPacks() {

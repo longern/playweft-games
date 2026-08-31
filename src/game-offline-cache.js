@@ -96,17 +96,23 @@ export async function fetchGameResource(
 export async function cacheGameOfflineResources(
   gameId,
   urls,
-  { fetchImpl = globalThis.fetch } = {},
+  { fetchImpl = globalThis.fetch, signal } = {},
 ) {
   const cache = await caches.open(gameOfflineCacheName(gameId));
   const results = [];
   for (const url of [...new Set((urls || []).filter(Boolean))]) {
+    if (signal?.aborted) {
+      const error = new Error("The operation was aborted.");
+      error.name = "AbortError";
+      throw error;
+    }
     try {
-      const response = await fetchImpl(new Request(url, { cache: "no-store" }));
+      const response = await fetchImpl(new Request(url, { cache: "no-store", signal }));
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       await cache.put(url, response.clone());
       results.push({ url, ok: true });
     } catch (error) {
+      if (signal?.aborted || error?.name === "AbortError") throw error;
       results.push({
         url,
         ok: false,
