@@ -19,3 +19,9 @@ textarea,
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* Keep the app-level settings entry above lobby and result surfaces, while the
+ * settings dialog itself still owns the topmost interaction layer. */
+.table-controls {
+  z-index: 115;
+}
