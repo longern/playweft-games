@@ -26,6 +26,14 @@ textarea,
   z-index: 115;
 }
 
+.settings-dialog-card {
+  width: 900px;
+}
+
+.paipu-card {
+  width: min(900px, 100%);
+}
+
 .paipu-entry-player {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
