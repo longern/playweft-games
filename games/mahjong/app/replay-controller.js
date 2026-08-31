@@ -48,6 +48,31 @@ export function createMahjongReplayController({
     return getReplayState();
   }
 
+  function handleSummaryReplay(event) {
+    if (!state()) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void seek(0);
+  }
+
+  function handleSummaryExit(event) {
+    if (!state()) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void exit({ returnToSetup: true });
+  }
+
+  elements.matchSummaryRematch?.addEventListener(
+    "click",
+    handleSummaryReplay,
+    true,
+  );
+  elements.matchSummarySetup?.addEventListener(
+    "click",
+    handleSummaryExit,
+    true,
+  );
+
   async function replay(id) {
     if (getGame() || getGameInitializing()) return;
     let record;
@@ -87,6 +112,8 @@ export function createMahjongReplayController({
         showOpponentHands: false,
         resultTransitioning: false,
       });
+      if (elements.matchSummaryRematch)
+        elements.matchSummaryRematch.textContent = "再次播放";
       await applyPlayerPresentations?.(presentationRecord(record));
       presentation.suspend();
       tableController.reset();
@@ -492,6 +519,8 @@ export function createMahjongReplayController({
     pause();
     setReplayState(null);
     replayElements.controls.hidden = true;
+    if (elements.matchSummaryRematch)
+      elements.matchSummaryRematch.textContent = "再来一局";
     const replayGame = getGame();
     setGame(undefined);
     try {
