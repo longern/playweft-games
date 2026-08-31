@@ -25,3 +25,18 @@ textarea,
 .table-controls {
   z-index: 115;
 }
+
+.paipu-entry-player {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.paipu-entry-player-name {
+  width: auto;
+  min-width: 0;
+}
+
+.paipu-entry-player-score {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
