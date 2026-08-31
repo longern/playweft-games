@@ -7,3 +7,8 @@
 @import "./styles/replay.css";
 @import "./styles/setup.css";
 @import "./styles/transient-notice.css";
+
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}
