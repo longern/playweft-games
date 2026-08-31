@@ -100,7 +100,7 @@
 }
 
 .paipu-playback-step {
-  min-width: 3.8em;
+  width: calc(3ch + 1em);
   text-align: center;
 }
 
