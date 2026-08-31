@@ -3,6 +3,7 @@ import {
   normalizeMahjongPlayerPresentation,
   resolveMahjongPlayerPresentation,
 } from "./player-presentation-resolver.js";
+import { mahjongPresentationSeat } from "../rules/seat-order.js";
 
 const POSITIONS = ["bottom", "right", "top", "left"];
 
@@ -29,7 +30,7 @@ export function createMahjongRoomPlayerPresentations({
       getMahjongBuiltinCharacterForKey(playerId);
   }
 
-  async function apply(state = getState?.()) {
+  async function apply(state = getState?.(), { viewerSeat = 1 } = {}) {
     if (!isRoom?.() || !Array.isArray(state?.players)) return false;
     latestState = state;
     const request = ++applyRequest;
@@ -39,7 +40,9 @@ export function createMahjongRoomPlayerPresentations({
     const names = {};
     const nextPresentations = new Map();
     for (const [index, playerId] of state.players.entries()) {
-      const position = POSITIONS[index];
+      const position = POSITIONS[
+        mahjongPresentationSeat(index + 1, viewerSeat) - 1
+      ];
       if (!position || !playerId) continue;
       const presentation = state.aiPlayers?.[playerId]
         ? state.aiPresentations?.[playerId] || {}

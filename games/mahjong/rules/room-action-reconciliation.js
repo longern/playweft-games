@@ -15,6 +15,7 @@ function isTransportError(errorCode) {
 }
 
 export function roomActionStateKey(state) {
+  const playerId = resolveViewerPlayerId(state);
   return JSON.stringify([
     state?.phase,
     state?.roundWind,
@@ -26,13 +27,13 @@ export function roomActionStateKey(state) {
     state?.claimIndex,
     state?.resultPage,
     state?.resultPageReady,
-    asArray(state?.players)[0],
-    asArray(state?.discards?.[asArray(state?.players)[0]]).length,
+    playerId,
+    asArray(state?.discards?.[playerId]).length,
   ]);
 }
 
 function latestOwnDiscard(state) {
-  const playerId = asArray(state?.players)[0];
+  const playerId = resolveViewerPlayerId(state);
   return asArray(state?.discards?.[playerId]).at(-1);
 }
 
@@ -50,16 +51,26 @@ function actionWasConfirmed(attempt, state) {
       return false;
     return Number(discard.type) === tileType(action.tileId) &&
       Boolean(discard.red) === isRedFive(action.tileId) &&
-      (action.type !== "riichi" || state?.riichi?.[asArray(state.players)[0]] === true);
+      (action.type !== "riichi" || state?.riichi?.[resolveViewerPlayerId(state)] === true);
   }
 
   if (action.type === "set_player_presentation") {
-    const playerId = asArray(state?.players)[0];
+    const playerId = resolveViewerPlayerId(state);
     return JSON.stringify(state?.playerPresentations?.[playerId]) ===
       JSON.stringify(action.playerPresentation);
   }
 
   return false;
+}
+
+function resolveViewerPlayerId(state) {
+  if (typeof state?.viewerPlayerId === "string" && state.viewerPlayerId)
+    return state.viewerPlayerId;
+  const viewerSeat = Number(state?.viewerSeat);
+  if (Number.isInteger(viewerSeat) && viewerSeat >= 1 && viewerSeat <= 4)
+    return asArray(state?.players)[viewerSeat - 1] || "";
+  const players = asArray(state?.players);
+  return players.length === 1 ? players[0] : "";
 }
 
 export function reconcileRoomAction({

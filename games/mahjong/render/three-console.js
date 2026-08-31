@@ -106,7 +106,7 @@ export class ThreeTableConsole {
     prepareTableConsoleContext(context, this.canvas);
     drawPanel(context);
     drawCore(context, state, ui);
-    drawScores(context, state);
+    drawScores(context, state, ui);
     this.texture.needsUpdate = true;
   }
 
@@ -191,8 +191,9 @@ function drawCore(context, state, ui) {
   });
 }
 
-function drawScores(context, state) {
-  const active = activeSeat(state) - 1;
+function drawScores(context, state, ui = {}) {
+  const viewerSeat = Number(ui.viewerSeat) || 1;
+  const active = ((activeSeat(state) - viewerSeat + 4) % 4);
   const centreY = LOGICAL_HEIGHT / 2;
   const { edgeInset, scoreFontSize, stickEdgeInset } =
     TABLE_CONSOLE_SCORE_LAYOUT;
@@ -227,7 +228,8 @@ function drawScores(context, state) {
     },
   ];
   placements.forEach((placement, index) => {
-    const playerId = state.players?.[index];
+    const canonicalSeat = ((viewerSeat + index - 1) % 4) + 1;
+    const playerId = state.players?.[canonicalSeat - 1];
     if (playerId && state.riichi?.[playerId] === true) {
       drawRiichiStick(
         context,
@@ -238,7 +240,7 @@ function drawScores(context, state) {
     }
     drawText(
       context,
-      String(Number(state.scores?.[index] ?? 0)),
+      String(Number(state.scores?.[canonicalSeat - 1] ?? 0)),
       placement.x,
       placement.y,
       {

@@ -51,5 +51,6 @@ export function createMahjongAutoActionScheduler(timerHost = globalThis) {
  */
 export function shouldScheduleMahjongAiTurn(state) {
   if (state?.phase === "claiming") return true;
-  return Number(state?.turnIndex) > 1;
+  const viewerSeat = Number(state?.viewerSeat) || 1;
+  return Number(state?.turnIndex) !== viewerSeat;
 }

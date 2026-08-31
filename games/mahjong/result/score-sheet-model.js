@@ -1,7 +1,4 @@
-import {
-  initialWindSeatOrder,
-  resultScoreSheetRows,
-} from "../rules/game-format.js";
+import { resultScoreSheetRows } from "../rules/game-format.js";
 
 const INITIAL_WINDS = ["東", "南", "西", "北"];
 
@@ -13,10 +10,10 @@ const INITIAL_WINDS = ["東", "南", "西", "北"];
  */
 export function createMahjongScoreSheetModel(
   state,
-  { playerNames = [], getPlayerPresentation } = {},
+  { playerNames = [], getPlayerPresentation, viewerPlayerId = state?.viewerPlayerId } = {},
 ) {
-  const localPlayerId = String(state?.players?.[0] || "");
-  const columns = initialWindSeatOrder(state).map((seat, index) => {
+  const localPlayerId = String(viewerPlayerId || "");
+  const columns = [1, 2, 3, 4].map((seat, index) => {
     const playerId = String(state?.players?.[seat - 1] || "");
     const context = { playerId, seat, wind: INITIAL_WINDS[index] };
     return {

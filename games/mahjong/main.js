@@ -86,6 +86,7 @@ import { createMahjongCompletedPaipuSaver } from "./replay/completed-paipu.js";
 import { createMahjongPaipuPanel } from "./replay/paipu-panel.js";
 import { mahjongInitialEntry } from "./app/entry-flow.js";
 import { orientMahjongPaipuRecord } from "./rules/room-state.js";
+import { mahjongPresentationSeat } from "./rules/seat-order.js";
 // The room controller owns createLocalLuaGame worker usage; keep that boundary
 // visible in the entry module for the room package contract.
 import "../../src/base.css";
@@ -536,7 +537,10 @@ session = createMahjongSessionController({
     if (action.type === "riichi") {
       const event = asArray(projection?.events).find(
         (candidate) =>
-          candidate?.type === "riichi" && Number(candidate.playerIndex) === 1,
+          candidate?.type === "riichi" &&
+          Number(candidate.playerIndex) ===
+            (Number(projection?.state?.viewerSeat) ||
+              (projection?.state?.players?.indexOf(HUMAN_ID) ?? 0) + 1),
       );
       enableAutoWinAfterRiichi(projection?.state, event);
     }
@@ -901,8 +905,13 @@ async function applyMahjongReplayPlayerPresentations(record) {
   const builtinCharacters = {};
   const resolvedPresentations = new Map();
   const positions = ["bottom", "right", "top", "left"];
+  const viewerSeat =
+    (oriented?.players || []).findIndex(
+      (player) => player?.id === record?.viewerPlayerId,
+    ) + 1;
   for (const [index, player] of (oriented?.players || []).entries()) {
-    const position = positions[index];
+    const displaySeat = mahjongPresentationSeat(index + 1, viewerSeat || 1);
+    const position = positions[displaySeat - 1];
     if (!position) continue;
     const presentation = record?.playerPresentations?.[player?.id] || {};
     const resolved = await resolveMahjongPlayerPresentation({

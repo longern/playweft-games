@@ -91,4 +91,12 @@ test("mahjong lets the worker advance an earlier AI claim before a local claim o
     shouldScheduleMahjongAiTurn({ phase: "playing", turnIndex: 1 }),
     false,
   );
+  assert.equal(
+    shouldScheduleMahjongAiTurn({ phase: "playing", turnIndex: 1, viewerSeat: 3 }),
+    true,
+  );
+  assert.equal(
+    shouldScheduleMahjongAiTurn({ phase: "playing", turnIndex: 3, viewerSeat: 3 }),
+    false,
+  );
 });

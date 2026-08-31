@@ -48,6 +48,7 @@ import {
   riverTransform,
   TILE_SIZE,
 } from "./render/three-layout.js";
+import { mahjongPresentationSeat } from "./rules/seat-order.js";
 import { planarTileJitter } from "./render/three-tile-jitter.js";
 import {
   ACTION_CALLOUT_DURATION_MS,
@@ -424,7 +425,17 @@ export class MahjongThreeRenderer {
     this.drawMelds(state);
     this.syncDoraBreathing();
     this.actionCallout.showLatest(
-      events,
+      asArray(events).map((event) => ({
+        ...event,
+        playerIndex: mahjongPresentationSeat(
+          event?.playerIndex,
+          Number(ui.viewerSeat) || 1,
+        ),
+        fromIndex: mahjongPresentationSeat(
+          event?.fromIndex,
+          Number(ui.viewerSeat) || 1,
+        ),
+      })),
       `${state.roundWind}:${state.handNumber}:${state.honba}:${state.moveCount}`,
     );
     this.renderer.shadowMap.needsUpdate = true;
@@ -524,6 +535,7 @@ export class MahjongThreeRenderer {
   }
 
   drawHands(state, selectedTileId) {
+    const viewerSeat = Number(this.ui?.viewerSeat) || 1;
     const rack = asArray(state.ownHand);
     const drawn = Number(state.drawnTile) || null;
     const revealSeats = new Set(
@@ -534,8 +546,8 @@ export class MahjongThreeRenderer {
     );
     const animateReveal = this.animateHandReveal === true;
     const crossfadeOwnHand = shouldCrossfadeOwnHand({
-      revealed: revealSeats.has(1),
-      covered: coveredSeats.has(1),
+      revealed: revealSeats.has(viewerSeat),
+      covered: coveredSeats.has(viewerSeat),
       animated: animateReveal,
       hasOverlay: this.ownTileRecords.size > 0,
     });
@@ -548,16 +560,16 @@ export class MahjongThreeRenderer {
     const riichiTiles = new Set(
       asArray(this.ui?.riichiCandidateTiles).map(Number),
     );
-    const riichiDeclared = state.riichi?.[state.players?.[0]] === true;
+    const riichiDeclared = state.riichi?.[state.players?.[viewerSeat - 1]] === true;
     const ownInsertionDeferred =
-      Number(this.ui?.deferredHandInsertionSeat) === 1;
+      Number(this.ui?.deferredHandInsertionSeat) === viewerSeat;
     const deferredOwnRackIndex = Math.max(
       0,
       Math.min(rack.length, Number(this.ui?.deferredHandInsertionIndex) || 0),
     );
-    if (revealSeats.has(1) || coveredSeats.has(1)) {
-      this.addPresentedHand(state, "bottom", state.players[0], 1, {
-        covered: coveredSeats.has(1),
+    if (revealSeats.has(viewerSeat) || coveredSeats.has(viewerSeat)) {
+      this.addPresentedHand(state, "bottom", state.players[viewerSeat - 1], viewerSeat, {
+        covered: coveredSeats.has(viewerSeat),
         animate: animateReveal,
         crossfade: crossfadeOwnHand,
       });
@@ -603,8 +615,9 @@ export class MahjongThreeRenderer {
       }
     }
 
-    for (let seat = 2; seat <= 4; seat += 1) {
-      const position = POSITIONS[seat - 1];
+    for (let seat = 1; seat <= 4; seat += 1) {
+      if (seat === viewerSeat) continue;
+      const position = POSITIONS[mahjongPresentationSeat(seat, viewerSeat) - 1];
       const playerId = state.players[seat - 1];
       const revealWinner =
         state.phase === "hand_ended" &&
@@ -765,7 +778,7 @@ export class MahjongThreeRenderer {
     // for that motion so the player sees their own tiles turn over; its final
     // orientation still leaves the face against the table. Other seats never
     // receive their concealed faces.
-    const concealFace = covered && seat !== 1;
+    const concealFace = covered && seat !== (Number(this.ui?.viewerSeat) || 1);
     const slot = new Group();
     slot.position.set(transform.x, 0, transform.z);
     slot.rotation.y = transform.yaw;
@@ -1052,9 +1065,10 @@ export class MahjongThreeRenderer {
   }
 
   drawRivers(state) {
+    const viewerSeat = Number(this.ui?.viewerSeat) || 1;
     const riverEntries = [];
     for (let seat = 1; seat <= 4; seat += 1) {
-      const position = POSITIONS[seat - 1];
+      const position = POSITIONS[mahjongPresentationSeat(seat, viewerSeat) - 1];
       const river = asArray(state.discards?.[state.players[seat - 1]]);
       const entries = riverDisplayEntries(river);
       const riichiColumns = new Map();
@@ -1142,13 +1156,19 @@ export class MahjongThreeRenderer {
   }
 
   drawMelds(state) {
+    const viewerSeat = Number(this.ui?.viewerSeat) || 1;
     for (let seat = 1; seat <= 4; seat += 1) {
-      const position = POSITIONS[seat - 1];
+      const position = POSITIONS[mahjongPresentationSeat(seat, viewerSeat) - 1];
       const melds = asArray(state.melds?.[state.players[seat - 1]]);
-      const rightExtension = meldRightExtension(melds, seat);
+      const displaySeat = mahjongPresentationSeat(seat, viewerSeat);
+      const displayMelds = melds.map((meld) => ({
+        ...meld,
+        fromIndex: mahjongPresentationSeat(meld?.fromIndex, viewerSeat),
+      }));
+      const rightExtension = meldRightExtension(displayMelds, displaySeat);
       let alongOffset = 0;
-      for (const meld of melds) {
-        const display = meldDisplayLayout(meld, seat);
+      for (const meld of displayMelds) {
+        const display = meldDisplayLayout(meld, displaySeat);
         display.entries.forEach((entry) => {
           const transform = meldTransform(
             position,

@@ -109,7 +109,8 @@ export function tenpaiWaitSummary(state, waits) {
   const addTileId = (value) => addType(tileType(Number(value) || 0));
 
   for (const tileId of asArray(state?.ownHand)) addTileId(tileId);
-  if (Number(state?.drawnPlayerIndex) === 1) addTileId(state?.drawnTile);
+  const viewerSeat = Number(state?.viewerSeat) || 1;
+  if (Number(state?.drawnPlayerIndex) === viewerSeat) addTileId(state?.drawnTile);
   for (const indicator of asArray(state?.doraIndicatorTiles)) {
     addType(indicator?.type);
   }
@@ -147,7 +148,10 @@ export function confirmedTenpaiSummary(state, confirmedTenpai) {
       .map((wait) => Number(wait?.type) || 0)
       .filter((type) => type >= 1 && type <= 34),
   );
-  const playerId = asArray(state?.players)[0];
+  const playerId =
+    state?.viewerPlayerId ||
+    asArray(state?.players)[(Number(state?.viewerSeat) || 1) - 1] ||
+    asArray(state?.players)[0];
   const riverFuriten = asArray(state?.discards?.[playerId]).some(
     (discard) => waitTypes.has(Number(discard?.type) || 0),
   );
@@ -213,6 +217,7 @@ export function orderedHand(hand, drawnTile) {
 
 export function deferredHandInsertion(previousState, events, {
   ownDiscardedTile = 0,
+  viewerSeat = 1,
   random = Math.random,
 } = {}) {
   const discard = asArray(events).find((event) =>
@@ -220,7 +225,7 @@ export function deferredHandInsertion(previousState, events, {
       && event.fromDrawn === false);
   const seat = Number(discard?.playerIndex) || 0;
   if (!seat || Number(previousState?.drawnPlayerIndex) !== seat) return null;
-  if (seat !== 1) {
+  if (seat !== Number(viewerSeat)) {
     const playerId = asArray(previousState?.players)[seat - 1];
     const rackCount = Math.max(0, Number(previousState?.handCounts?.[playerId]) || 0);
     if (!rackCount) return null;
@@ -410,29 +415,33 @@ export function playerDisplayName(
     playerName = "你",
     defaultNames = {},
     playerNameIsAuthoritative = true,
+    viewerSeat = 1,
   } = {},
 ) {
   const index = Number(seat) - 1;
   if (index < 0 || index >= PLAYERS.length) return `玩家${seat}`;
-  if (index === 0 && playerNameIsAuthoritative && playerName) {
+  if (index + 1 === Number(viewerSeat) && playerNameIsAuthoritative && playerName) {
     return playerName;
   }
   const stateName = state?.playerNames?.[index];
   const builtInName = PLAYERS[index]?.name;
-  const packName = defaultNames?.[DEFAULT_NAME_SLOTS[index]];
+  const displayIndex =
+    ((index - (Number(viewerSeat) - 1) + PLAYERS.length) % PLAYERS.length);
+  const packName = defaultNames?.[DEFAULT_NAME_SLOTS[displayIndex]];
   if (stateName && stateName !== builtInName) return stateName;
   return packName || stateName || builtInName || `玩家${seat}`;
 }
 
 export function playerDisplayNames(
   state,
-  { playerName = "你", defaultNames = {}, playerNameIsAuthoritative = true } = {},
+  { playerName = "你", defaultNames = {}, playerNameIsAuthoritative = true, viewerSeat = 1 } = {},
 ) {
   return PLAYERS.map((_, index) =>
     playerDisplayName(state, index + 1, {
       playerName,
       defaultNames,
       playerNameIsAuthoritative,
+      viewerSeat,
     }),
   );
 }
@@ -441,16 +450,17 @@ export function eventMessage(
   state,
   event,
   playerName,
-  { defaultNames = {}, playerNameIsAuthoritative = true } = {},
+  { defaultNames = {}, playerNameIsAuthoritative = true, viewerSeat = 1 } = {},
 ) {
   const name = playerDisplayName(state, event.playerIndex, {
     playerName,
     defaultNames,
     playerNameIsAuthoritative,
+    viewerSeat,
   });
   if (event.type === "discarded") return `${name} 打出 ${tileFace(event.tile).label}`;
   if (event.type === "claimed") return `${name} ${CLAIM_LABELS[event.kind] ?? "鸣牌"}`;
-  if (event.type === "drew") return event.playerIndex === 1 ? "你摸了一张牌" : `${name} 摸牌`;
+  if (event.type === "drew") return event.playerIndex === Number(viewerSeat) ? "你摸了一张牌" : `${name} 摸牌`;
   if (event.type === "won") return `${name} ${event.method === "tsumo" ? "自摸" : "荣和"}`;
   if (event.type === "riichi") return `${name} 宣言立直`;
   if (event.type === "draw_game") return "牌山摸尽，本局流局";
@@ -484,7 +494,7 @@ export function resultDetailPageCount(state) {
 export function resultScoreRows(
   state,
   playerName,
-  { defaultNames = {}, playerNameIsAuthoritative = true } = {},
+  { defaultNames = {}, playerNameIsAuthoritative = true, viewerSeat = 1 } = {},
 ) {
   const scores = asArray(state?.scores);
   const deltas = asArray(state?.result?.deltas);
@@ -495,6 +505,7 @@ export function resultScoreRows(
       playerName,
       defaultNames,
       playerNameIsAuthoritative,
+      viewerSeat,
     });
     return { name, before: after - delta, delta, after };
   });
@@ -503,7 +514,7 @@ export function resultScoreRows(
 export function matchResultRows(
   state,
   playerName,
-  { defaultNames = {}, playerNameIsAuthoritative = true } = {},
+  { defaultNames = {}, playerNameIsAuthoritative = true, viewerSeat = 1 } = {},
 ) {
   return asArray(state?.scores)
     .slice(0, 4)
@@ -513,6 +524,7 @@ export function matchResultRows(
         playerName,
         defaultNames,
         playerNameIsAuthoritative,
+        viewerSeat,
       }),
       score: Number(score) || 0,
     }))
@@ -521,7 +533,7 @@ export function matchResultRows(
 }
 
 export function resultScoreSheetRows(state) {
-  const seatOrder = initialWindSeatOrder(state);
+  const seatOrder = [1, 2, 3, 4];
   const history = asArray(state?.scoreHistory)
     .map((entry) => ({
       roundWind: Number(entry?.roundWind) || 1,
@@ -549,11 +561,9 @@ export function resultScoreSheetRows(state) {
 }
 
 export function initialWindSeatOrder(state) {
-  const eastSeat = Math.max(
-    1,
-    Math.min(4, Number(state?.initialDealerIndex) || Number(state?.dealerIndex) || 1),
-  );
-  return Array.from({ length: 4 }, (_, offset) => ((eastSeat - 1 + offset) % 4) + 1);
+  // State arrays are canonical opening East/South/West/North order. The
+  // current dealer changes per hand, but never changes this storage order.
+  return [1, 2, 3, 4];
 }
 
 export function visibleScoreSheetRows(rows, maxRows) {

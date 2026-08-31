@@ -2243,7 +2243,10 @@ local function new_match(players, names, seed, settings, ai_players)
 		local seat_draw = (state.seed * RANDOM_MULTIPLIER) % RANDOM_MODULUS
 		state.dealerIndex = (seat_draw % PLAYER_COUNT) + 1
 	end
-	state.initialDealerIndex = state.dealerIndex
+	-- Canonical matches keep the player array in the opening East/South/West/North
+	-- order for the whole match. A replay hand's `dealerSeat` is only this hand's
+	-- dealer, never the score-sheet column origin.
+	state.initialDealerIndex = state.canonicalMatchSeats and 1 or state.dealerIndex
 	deal(state)
 	return state
 end

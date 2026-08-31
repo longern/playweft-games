@@ -5,10 +5,19 @@ import { HUMAN_ID, PLAYERS } from "../games/mahjong/rules/constants.js";
 import { seatWind } from "../games/mahjong/rules/game-format.js";
 import { orientMahjongRoomProjection } from "../games/mahjong/rules/room-state.js";
 import {
+  mahjongCanonicalSeatForPresentation,
   mahjongOpeningDealerSeat,
   mahjongPlayersByOpeningWind,
   mahjongPlayersForViewer,
+  mahjongPresentationSeat,
 } from "../games/mahjong/rules/seat-order.js";
+
+test("seat mapping converts canonical seats only at the presentation boundary", () => {
+  assert.equal(mahjongPresentationSeat(1, 3), 3);
+  assert.equal(mahjongPresentationSeat(2, 3), 4);
+  assert.equal(mahjongCanonicalSeatForPresentation(1, 3), 3);
+  assert.equal(mahjongCanonicalSeatForPresentation(4, 3), 2);
+});
 
 test("solo opening dealer draw matches the historical deterministic seed rule", () => {
   assert.equal(mahjongOpeningDealerSeat("0123456789abcdef0123456789abcdef"), 1);
@@ -31,7 +40,7 @@ test("solo players are stored as opening East South West North while viewer orde
   );
 });
 
-test("canonical solo projection rotates only at the UI boundary", () => {
+test("canonical solo projection preserves seats and annotates the viewer", () => {
   const canonicalPlayers = [
     "mahjong-ai-2",
     "mahjong-ai-3",
@@ -57,14 +66,10 @@ test("canonical solo projection rotates only at the UI boundary", () => {
   };
 
   const ui = orientMahjongRoomProjection(projection, HUMAN_ID);
-  assert.deepEqual(ui.state.players, [
-    HUMAN_ID,
-    "mahjong-ai-1",
-    "mahjong-ai-2",
-    "mahjong-ai-3",
-  ]);
-  assert.equal(ui.state.dealerIndex, 3);
-  assert.equal(seatWind(ui.state, 1), "西");
+  assert.deepEqual(ui.state.players, canonicalPlayers);
+  assert.equal(ui.state.dealerIndex, 1);
+  assert.equal(ui.viewer.seat, 3);
+  assert.equal(seatWind(ui.state, 1), "東");
   assert.deepEqual(ui.state.ownHand, [1, 2, 3]);
   assert.deepEqual(projection.state.players, canonicalPlayers);
 });

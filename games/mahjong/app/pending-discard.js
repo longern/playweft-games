@@ -18,7 +18,7 @@ export function createMahjongPendingDiscard(state, action) {
   const drawnTile = Number(state.drawnTile) || 0;
   const fromDrawn = tileId === drawnTile;
   if (!tileId || (!fromDrawn && !ownHand.includes(tileId))) return null;
-  const playerId = String(state.players?.[0] || "");
+  const playerId = String(resolveViewerPlayerId(state));
   if (!playerId) return null;
   const riverSourceIndex = asArray(state.discards?.[playerId]).length;
   const moveCount = Number(state.moveCount) || 0;
@@ -40,6 +40,17 @@ export function createMahjongPendingDiscard(state, action) {
     riverSourceIndex,
     moveCount,
   };
+}
+
+function resolveViewerPlayerId(state) {
+  if (typeof state?.viewerPlayerId === "string" && state.viewerPlayerId)
+    return state.viewerPlayerId;
+  const viewerSeat = Number(state?.viewerSeat);
+  if (Number.isInteger(viewerSeat) && viewerSeat >= 1 && viewerSeat <= 4)
+    return state?.players?.[viewerSeat - 1] || "";
+  return Array.isArray(state?.players) && state.players.length === 1
+    ? state.players[0]
+    : "";
 }
 
 export function applyMahjongPendingDiscard(state, pendingDiscard) {

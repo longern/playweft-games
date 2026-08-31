@@ -6,6 +6,29 @@ function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+export function mahjongSeatForPlayer(players, playerId) {
+  const index = asArray(players).findIndex((player) =>
+    (typeof player === "object" ? player?.id : player) === playerId,
+  );
+  return index >= 0 ? index + 1 : 0;
+}
+
+export function mahjongPresentationSeat(canonicalSeat, viewerSeat) {
+  const seat = Number(canonicalSeat);
+  const viewer = Number(viewerSeat);
+  if (![seat, viewer].every(Number.isInteger) || seat < 1 || seat > 4 || viewer < 1 || viewer > 4)
+    return seat;
+  return ((seat - viewer + PLAYER_COUNT) % PLAYER_COUNT) + 1;
+}
+
+export function mahjongCanonicalSeatForPresentation(presentationSeat, viewerSeat) {
+  const seat = Number(presentationSeat);
+  const viewer = Number(viewerSeat);
+  if (![seat, viewer].every(Number.isInteger) || seat < 1 || seat > 4 || viewer < 1 || viewer > 4)
+    return seat;
+  return ((viewer + seat - 2) % PLAYER_COUNT) + 1;
+}
+
 export function mahjongRotateSeat(seat, viewerSeat) {
   const value = Number(seat);
   if (!Number.isInteger(value) || value < 1 || value > PLAYER_COUNT) {
@@ -29,9 +52,7 @@ export function mahjongRotateSeatOrder(values, viewerSeat) {
  */
 export function mahjongPlayersForViewer(players, playerId) {
   const source = asArray(players);
-  const viewerSeat = source.findIndex((player) =>
-    (typeof player === "object" ? player?.id : player) === playerId,
-  ) + 1;
+  const viewerSeat = mahjongSeatForPlayer(source, playerId);
   return source.length === PLAYER_COUNT && viewerSeat > 0
     ? mahjongRotateSeatOrder(source, viewerSeat)
     : source;

@@ -14,7 +14,9 @@ function normalizeWaits(report) {
 }
 
 function localHandKey(state) {
-  const playerId = asArray(state?.players)[0];
+  const viewerSeat = Number(state?.viewerSeat) || 1;
+  const playerId =
+    state?.viewerPlayerId || asArray(state?.players)[viewerSeat - 1];
   return JSON.stringify([
     asArray(state?.ownHand).map(Number),
     Number(state?.drawnTile) || 0,
@@ -24,14 +26,17 @@ function localHandKey(state) {
 
 function localHandIdentity(state) {
   return JSON.stringify([
-    asArray(state?.players)[0],
+    state?.viewerPlayerId ||
+      asArray(state?.players)[(Number(state?.viewerSeat) || 1) - 1],
     Number(state?.roundWind) || 0,
     Number(state?.handNumber) || 0,
   ]);
 }
 
 function hasLocalRiichi(state) {
-  const playerId = asArray(state?.players)[0];
+  const viewerSeat = Number(state?.viewerSeat) || 1;
+  const playerId =
+    state?.viewerPlayerId || asArray(state?.players)[viewerSeat - 1];
   return Boolean(playerId && state?.riichi?.[playerId] === true);
 }
 
@@ -118,7 +123,7 @@ export function createMahjongTableTenpaiState() {
     if (
       !hasLocalRiichi(state) &&
       state?.phase === 'playing' &&
-      Number(state.turnIndex) === 1
+      Number(state.turnIndex) === (Number(state?.viewerSeat) || 1)
     ) clearOrdinaryWait();
   }
 
@@ -195,7 +200,8 @@ export function createMahjongTableTenpaiState() {
     if (
       !ordinaryWait?.waits?.length ||
       !['playing', 'claiming'].includes(state?.phase) ||
-      (state?.phase === 'playing' && Number(state.turnIndex) === 1)
+      (state?.phase === 'playing' &&
+        Number(state.turnIndex) === (Number(state?.viewerSeat) || 1))
     ) return null;
     return ordinaryWait;
   }

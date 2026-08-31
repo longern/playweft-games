@@ -166,8 +166,9 @@ export function createMahjongRoomController({
     if (!projection?.state) return;
     roomLobbyAiPlayerIds = Object.keys(projection.state.aiPlayers || {});
     roomPlayerProfiles?.request(projection.state);
+    const viewerSeat = Number(projection.viewer?.seat) || 0;
     const ownRiichiEvent = asArray(projection.events).find(
-      (event) => event?.type === "riichi" && Number(event.playerIndex) === 1,
+      (event) => event?.type === "riichi" && Number(event.playerIndex) === viewerSeat,
     );
     const startsFreshAutoActionScope = asArray(projection.events).some(
       (event) =>
@@ -206,7 +207,9 @@ export function createMahjongRoomController({
     try {
       await visualRendererReady;
       if (getDestroyed?.() || !isRoom()) return;
-      const presentationApplied = roomPlayerPresentations?.apply(projection.state);
+      const presentationApplied = roomPlayerPresentations?.apply(projection.state, {
+        viewerSeat: Number(projection.viewer?.seat) || 1,
+      });
       await tableController.refresh(projection, { animateDealIn });
       await presentationApplied;
       persistCompletedRoomPaipu(

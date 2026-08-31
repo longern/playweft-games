@@ -14,7 +14,6 @@ import {
   waitForReplayStep,
 } from "../replay/replay-utils.js";
 import { createLocalLuaGame } from "../workers/local-game-worker-client.js";
-import { mahjongPlayersForViewer } from "../rules/room-state.js";
 
 const REPLAY_STEP_DELAY_MS = 780;
 const REPLAY_RESULT_PAGE_DELAY_MS = 2400;
@@ -146,6 +145,8 @@ export function createMahjongReplayController({
       settings: {
         matchType: record.game.matchType,
         rules: record.game.rules,
+        canonicalMatchSeats: true,
+        initialDealerSeat: 1,
         replayHand: handSetup(record, handIndex),
       },
     });
@@ -163,10 +164,7 @@ export function createMahjongReplayController({
   }
 
   function presentationRecord(record) {
-    return {
-      ...record,
-      players: mahjongPlayersForViewer(record.players, record.viewerPlayerId),
-    };
+    return record;
   }
 
   function actionForStep(current, step) {

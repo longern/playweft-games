@@ -370,9 +370,15 @@ export class MahjongResultHandRenderer {
       defaultNames = {},
       playerNameIsAuthoritative = false,
       resultPageReady = false,
+      viewerSeat = 1,
     } = {},
   ) {
-    const options = { defaultNames, playerNameIsAuthoritative, resultPageReady };
+    const options = {
+      defaultNames,
+      playerNameIsAuthoritative,
+      resultPageReady,
+      viewerSeat,
+    };
     this.lastRender = [state, pageIndex, playerName, options];
     if (!this.ready) {
       this.pendingRender = [state, pageIndex, playerName, options];
@@ -437,7 +443,7 @@ export class MahjongResultHandRenderer {
   renderScoreSheet(
     state,
     playerName,
-    { defaultNames = {}, playerNameIsAuthoritative = false } = {},
+    { defaultNames = {}, playerNameIsAuthoritative = false, viewerSeat = 1 } = {},
   ) {
     if (!this.scoreHost) {
       this.hide();
@@ -454,9 +460,12 @@ export class MahjongResultHandRenderer {
         playerName,
         defaultNames,
         playerNameIsAuthoritative,
+        viewerSeat,
       });
     this.scoreSheetModel = createMahjongScoreSheetModel(state, {
       playerNames,
+      viewerPlayerId:
+        state?.viewerPlayerId || state?.players?.[Number(viewerSeat) - 1],
       getPlayerPresentation: (context) =>
         this.playerPresentationProvider?.get?.(context),
     });

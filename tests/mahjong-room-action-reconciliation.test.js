@@ -100,3 +100,29 @@ test("room action reconciliation keeps a real rule rejection visible", () => {
     { outcome: "rejected", shouldNotify: true },
   );
 });
+
+test("room action reconciliation resolves the viewer discard by viewer seat", () => {
+  const before = {
+    phase: "playing",
+    moveCount: 8,
+    turnIndex: 2,
+    viewerSeat: 2,
+    players: ["east", "self", "west", "north"],
+    viewerPlayerId: "self",
+    discards: { self: [] },
+    riichi: { self: false },
+  };
+  const after = {
+    ...before,
+    moveCount: 9,
+    discards: { self: [{ type: 1, red: false }] },
+    riichi: { self: true },
+  };
+  assert.equal(
+    reconcileRoomAction({
+      attempt: attempt({ type: "riichi", tileId: 1 }, before),
+      state: after,
+    }).outcome,
+    "confirmed",
+  );
+});

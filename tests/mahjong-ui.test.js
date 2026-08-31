@@ -498,6 +498,31 @@ test("mahjong pauses before integrating a hand-discarded drawn tile", () => {
     { seat: 3, rackIndex: 4 },
   );
 
+  assert.deepEqual(
+    deferredHandInsertion(
+      {
+        drawnPlayerIndex: 2,
+        ownHand: [5, 9, 13, 17],
+        drawnTile: 53,
+      },
+      [
+        {
+          type: "discarded",
+          playerIndex: 2,
+          tile: 4,
+          fromDrawn: false,
+        },
+      ],
+      { ownDiscardedTile: 13, viewerSeat: 2 },
+    ),
+    {
+      seat: 2,
+      ownHand: [5, 9, 17],
+      drawnTile: 53,
+      rackIndex: 2,
+    },
+  );
+
 });
 
 test("mahjong presentation scheduling cancels insertion before terminal reveal", () => {
@@ -1109,6 +1134,31 @@ test("mahjong final standings break equal scores by seat order", () => {
   );
 });
 
+test("mahjong result names use the actual viewer seat", () => {
+  const state = {
+    phase: "hand_ended",
+    players: ["east", "south", "west", "north"],
+    playerNames: ["东家", "南家", "西家", "北家"],
+    scores: [25_000, 30_000, 25_000, 20_000],
+    result: { winnerIndex: 2, deltas: [0, 8_000, 0, -8_000] },
+  };
+  assert.equal(
+    playerDisplayName(state, 2, {
+      playerName: "我的昵称",
+      playerNameIsAuthoritative: true,
+      viewerSeat: 2,
+    }),
+    "我的昵称",
+  );
+  assert.deepEqual(
+    resultScoreRows(state, "我的昵称", {
+      playerNameIsAuthoritative: true,
+      viewerSeat: 2,
+    }).map((row) => row.name),
+    ["东家", "我的昵称", "西家", "北家"],
+  );
+});
+
 test("mahjong score sheets retain the latest scored hands and show each change from the prior row", () => {
   const rows = resultScoreSheetRows({
     scoreHistory: [
@@ -1143,7 +1193,7 @@ test("mahjong score sheets retain the latest scored hands and show each change f
   );
 });
 
-test("mahjong score sheets keep columns in the opening East South West North order", () => {
+test("mahjong score sheets keep canonical opening-seat columns", () => {
   const rows = resultScoreSheetRows({
     initialDealerIndex: 3,
     scoreHistory: [
@@ -1151,8 +1201,8 @@ test("mahjong score sheets keep columns in the opening East South West North ord
       { scores: [24_000, 25_000, 25_000, 26_000] },
     ],
   });
-  assert.deepEqual(rows[0].scores, [25_000, 26_000, 24_000, 25_000]);
-  assert.deepEqual(rows[0].deltas, [0, 1_000, -1_000, 0]);
+  assert.deepEqual(rows[0].scores, [24_000, 25_000, 25_000, 26_000]);
+  assert.deepEqual(rows[0].deltas, [-1_000, 0, 0, 1_000]);
 });
 
 test("mahjong result melds use the same physical tile scale as the hand", () => {

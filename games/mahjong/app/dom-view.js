@@ -31,6 +31,10 @@ import {
   traditionalYakuName,
 } from "../rules/yaku-display.js";
 import { getMahjongBuiltinCharacterPosition } from "../theme/builtin-characters.js";
+import {
+  mahjongCanonicalSeatForPresentation,
+  mahjongPresentationSeat,
+} from "../rules/seat-order.js";
 
 const RESULT_TILE_WIDTH_PX = 33;
 const RESULT_TILE_HEIGHT_PX = 47;
@@ -48,6 +52,7 @@ export class MahjongDomView {
     this.onDiscardTile = onDiscardTile;
     this.onTenpaiPreviewStart = onTenpaiPreviewStart;
     this.onTenpaiPreviewEnd = onTenpaiPreviewEnd;
+    this.viewerSeat = 1;
     this.tenpaiStatusPointerId = 0;
     this.lastEventKey = "";
     this.countdownDeadlineAt = 0;
@@ -89,6 +94,16 @@ export class MahjongDomView {
     }
   }
 
+  localStateContext(state) {
+    if (!state) return state;
+    return {
+      ...state,
+      viewerSeat: this.viewerSeat,
+      viewerPlayerId:
+        state.viewerPlayerId || state.players?.[this.viewerSeat - 1] || "",
+    };
+  }
+
   render(
     state,
     events,
@@ -109,11 +124,13 @@ export class MahjongDomView {
       defaultNames = {},
       playerNameIsAuthoritative = false,
       serverTime = 0,
+      viewerSeat = 1,
     } = {},
   ) {
     const { elements } = this;
     this.showGameHints = showGameHints;
     this.readOnly = readOnly;
+    this.viewerSeat = Number(viewerSeat) || 1;
     this.doraCounts = doraTypeCounts(state);
     elements.message.classList.remove("is-error");
     const currentRound = roundLabel(state.roundWind, state.handNumber);
@@ -165,6 +182,7 @@ export class MahjongDomView {
     this.renderStatus(state, events, playerName, {
       defaultNames,
       playerNameIsAuthoritative,
+      viewerSeat: this.viewerSeat,
     });
     this.renderDrawReveal(state, showDrawReveal);
     if (!preserveResult) {
@@ -172,6 +190,7 @@ export class MahjongDomView {
         defaultNames,
         playerNameIsAuthoritative,
         resultPageReady,
+        viewerSeat: this.viewerSeat,
       });
     }
   }
@@ -197,7 +216,7 @@ export class MahjongDomView {
       this.elements.tenpaiFuritenBadge.hidden = true;
       return;
     }
-    const summary = confirmedTenpaiSummary(state, tenpaiPreview);
+    const summary = confirmedTenpaiSummary(this.localStateContext(state), tenpaiPreview);
     const waits = summary.waits;
     const {
       tenpaiPreview: tenpaiPreviewElement,
@@ -370,8 +389,8 @@ export class MahjongDomView {
     defaultNames = {},
     playerNameIsAuthoritative = false,
   ) {
-    POSITIONS.forEach((position, index) => {
-      const seat = index + 1;
+    for (let seat = 1; seat <= 4; seat += 1) {
+      const position = POSITIONS[mahjongPresentationSeat(seat, this.viewerSeat) - 1];
       const station = this.elements.stations[position];
       const playerId = state.players[seat - 1];
       const stateName = state.playerNames?.[seat - 1];
@@ -381,13 +400,15 @@ export class MahjongDomView {
           ? stateName
           : fallbackName || stateName || PLAYERS[seat - 1].name || "玩家";
       station.querySelector("[data-name]").textContent =
-        seat === 1 && playerNameIsAuthoritative ? playerName : name;
+        seat === this.viewerSeat && playerNameIsAuthoritative ? playerName : name;
       const wind = seatWind(state, seat);
       const windBadge = station.querySelector("[data-wind]");
       windBadge.textContent = wind;
       windBadge.classList.add("is-resolved");
       windBadge.classList.toggle("is-east", wind === "東");
-      const consoleScore = this.elements.consoleScores[seat - 1];
+      const consoleScore = this.elements.consoleScores[
+        mahjongPresentationSeat(seat, this.viewerSeat) - 1
+      ];
       consoleScore.textContent = String(Number(state.scores?.[seat - 1] ?? 0));
       consoleScore.classList.toggle(
         "is-active",
@@ -401,7 +422,7 @@ export class MahjongDomView {
         "is-winner",
         asArray(state.winners).includes(playerId),
       );
-    });
+    }
   }
 
   renderHands(state, selectedTileId, riichiMode = false) {
@@ -412,7 +433,8 @@ export class MahjongDomView {
     const riichiTiles = new Set(
       asArray(state.legalActions?.riichiTiles).map(Number),
     );
-    const riichiDeclared = state.riichi?.[state.players?.[0]] === true;
+    const riichiDeclared =
+      state.riichi?.[state.players?.[this.viewerSeat - 1]] === true;
     this.elements.hand.replaceChildren(
       ...hand.map((tileId) => {
         const tile = createTile(tileType(tileId), "hand", isRedFive(tileId));
@@ -457,8 +479,9 @@ export class MahjongDomView {
       }),
     );
 
-    for (let seat = 2; seat <= 4; seat += 1) {
-      const position = POSITIONS[seat - 1];
+    for (let seat = 1; seat <= 4; seat += 1) {
+      if (seat === this.viewerSeat) continue;
+      const position = POSITIONS[mahjongPresentationSeat(seat, this.viewerSeat) - 1];
       const count = Number(state.handCounts[state.players[seat - 1]] || 0);
       this.elements.opponentHands[position].replaceChildren(
         ...Array.from({ length: count }, () => createTileBack()),
@@ -471,7 +494,7 @@ export class MahjongDomView {
       .reverse()
       .find((event) => event.type === "discarded");
     for (let seat = 1; seat <= 4; seat += 1) {
-      const position = POSITIONS[seat - 1];
+      const position = POSITIONS[mahjongPresentationSeat(seat, this.viewerSeat) - 1];
       const river = asArray(state.discards?.[state.players[seat - 1]]);
       this.elements.rivers[position].replaceChildren(
         ...riverDisplayEntries(river).map(({ discard, sourceIndex }) => {
@@ -489,7 +512,7 @@ export class MahjongDomView {
 
   renderMelds(state) {
     for (let seat = 1; seat <= 4; seat += 1) {
-      const position = POSITIONS[seat - 1];
+      const position = POSITIONS[mahjongPresentationSeat(seat, this.viewerSeat) - 1];
       const groups = asArray(state.melds?.[state.players[seat - 1]]);
       this.elements.melds[position].replaceChildren(
         ...groups.map((meld) => {
@@ -575,7 +598,10 @@ export class MahjongDomView {
     elements.tsumo.hidden = !legal.canTsumo;
     elements.riichi.hidden = !legal.canRiichi;
     elements.riichi.disabled = false;
-    const tenpaiSummary = confirmedTenpaiSummary(state, confirmedTenpai);
+    const tenpaiSummary = confirmedTenpaiSummary(
+      this.localStateContext(state),
+      confirmedTenpai,
+    );
     const showTenpaiStatus =
       this.showGameHints && tenpaiSummary?.waits.length > 0;
     const isTenpaiFuriten = showTenpaiStatus && tenpaiSummary.furiten;
@@ -747,7 +773,11 @@ export class MahjongDomView {
     state,
     events,
     playerName,
-    { defaultNames = {}, playerNameIsAuthoritative = false } = {},
+    {
+      defaultNames = {},
+      playerNameIsAuthoritative = false,
+      viewerSeat = this.viewerSeat,
+    } = {},
   ) {
     if (state.phase === "hand_ended") return;
     const seat = activeSeat(state);
@@ -755,15 +785,16 @@ export class MahjongDomView {
       playerName,
       defaultNames,
       playerNameIsAuthoritative,
+      viewerSeat,
     });
     this.elements.heading.textContent =
       state.phase === "claiming"
-        ? seat === 1
+        ? seat === viewerSeat
           ? "可以鸣牌"
           : seat > 0
             ? `${name} 正在考虑`
             : "等待其他玩家确认"
-        : seat === 1
+        : seat === viewerSeat
           ? "轮到你出牌"
           : `${name} 的回合`;
 
@@ -777,7 +808,7 @@ export class MahjongDomView {
         state,
         event,
         playerName,
-        { defaultNames, playerNameIsAuthoritative },
+        { defaultNames, playerNameIsAuthoritative, viewerSeat },
       );
       this.elements.message.classList.remove("is-pulsing");
       void this.elements.message.offsetWidth;
@@ -799,6 +830,7 @@ export class MahjongDomView {
       defaultNames = {},
       playerNameIsAuthoritative = false,
       resultPageReady = false,
+      viewerSeat = 1,
     } = {},
   ) {
     const { elements } = this;
@@ -838,6 +870,7 @@ export class MahjongDomView {
       playerName,
       defaultNames,
       playerNameIsAuthoritative,
+      viewerSeat,
     });
     elements.resultDetailHands.hidden = false;
     elements.resultDetailHands.replaceChildren(
@@ -878,8 +911,12 @@ export class MahjongDomView {
     );
     const waitsBySeat = exhaustive ? asArray(state.result?.tenpaiWaits) : [];
     elements.drawRevealTenpai.forEach((label) => {
-      const seat = Number(label.dataset.drawTenpaiSeat);
-      const waits = asArray(waitsBySeat[seat - 1]).map(Number);
+      const presentationSeat = Number(label.dataset.drawTenpaiSeat);
+      const canonicalSeat = mahjongCanonicalSeatForPresentation(
+        presentationSeat,
+        this.viewerSeat,
+      );
+      const waits = asArray(waitsBySeat[canonicalSeat - 1]).map(Number);
       label.hidden = waits.length === 0;
       label.replaceChildren(
         ...waits.map((type) => {

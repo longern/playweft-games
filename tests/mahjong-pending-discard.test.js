@@ -65,3 +65,19 @@ test("pending discard stays until the authoritative discard arrives and rolls ba
     "rejected",
   );
 });
+
+test("pending discard resolves the viewer by seat instead of assuming East", () => {
+  const state = {
+    players: ["east", "self", "west", "north"],
+    viewerSeat: 2,
+    ownHand: [1],
+    drawnTile: 0,
+    legalActions: { canDiscard: true },
+    discards: { self: [] },
+  };
+  const pending = createMahjongPendingDiscard(state, {
+    type: "discard",
+    tileId: 1,
+  });
+  assert.equal(pending?.playerId, "self");
+});
