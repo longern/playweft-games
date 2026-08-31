@@ -272,12 +272,20 @@ export class MahjongThreeRenderer {
     this.drawFrame();
   }
 
-  async setAppearance({ tablecloth = "", tileBack = "" } = {}) {
+  async setAppearance({
+    tablecloth = "",
+    tableclothFallbackColor = "",
+    tileBack = "",
+  } = {}) {
     if (!this.ready) return;
     const version = ++this.appearanceVersion;
     const loader = new TextureLoader();
+    if (tablecloth) this.table.setFeltFallbackColor(tableclothFallbackColor);
+    else this.table.setFeltTexture(null);
+    this.renderer.shadowMap.needsUpdate = true;
+    this.drawFrame();
     const [felt, back] = await Promise.all([
-      tablecloth ? loader.loadAsync(tablecloth) : null,
+      tablecloth ? loader.loadAsync(tablecloth).catch(() => null) : null,
       tileBack ? loader.loadAsync(tileBack) : null,
     ]);
     if (version !== this.appearanceVersion || this.destroyed) {
@@ -285,7 +293,9 @@ export class MahjongThreeRenderer {
       back?.dispose();
       return;
     }
-    this.table.setFeltTexture(felt);
+    // A failed custom tablecloth deliberately leaves its pre-load fallback in
+    // place. Without a custom request, restore the built-in felt texture.
+    if (felt || !tablecloth) this.table.setFeltTexture(felt);
     this.tileFactory.setBackTexture(back);
     this.renderer.shadowMap.needsUpdate = true;
     this.drawFrame();

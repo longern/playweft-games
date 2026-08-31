@@ -352,6 +352,11 @@ export function getMahjongAssetUrl(slot) {
   return activeAssets.get(slot)?.url ?? "";
 }
 
+/** Return an asset's pre-load colour, when the asset declares one. */
+export function getMahjongAssetFallbackColor(slot) {
+  return activeAssets.get(slot)?.fallbackColor ?? "";
+}
+
 export function getMahjongDefaultAssetUrl(slot) {
   return getMahjongDefaultAssetPack().assets.get(slot)?.url ?? "";
 }
@@ -962,7 +967,9 @@ function catalogFromManifest(assets) {
   }
   const catalog = emptyCatalog();
   addCatalogEntries(catalog.portraits, assets.portraits);
-  addCatalogEntries(catalog.tablecloths, assets.tablecloths);
+  addCatalogEntries(catalog.tablecloths, assets.tablecloths, {
+    supportsFallbackColor: true,
+  });
   addCatalogEntries(catalog.tableBackgrounds, assets.tableBackgrounds);
   addCatalogEntries(catalog.lobbyBackgrounds, assets.lobbyBackgrounds);
   addCatalogEntries(catalog.tileBacks, assets.tileBacks);
@@ -1025,20 +1032,23 @@ function addVoiceSets(target, voiceSets, portraits) {
   }
 }
 
-function addCatalogEntries(target, entries) {
+function addCatalogEntries(target, entries, { supportsFallbackColor = false } = {}) {
   if (entries === undefined) return;
   if (!Array.isArray(entries)) throw new Error("素材目录必须是数组");
   for (const entry of entries) {
     const id = String(entry?.id || "").trim();
     const fileName = entry?.file;
     const label = entry?.label;
+    const fallbackColor = normaliseFallbackColor(entry?.fallbackColor);
     if (
       !/^[a-z][a-z0-9-]{0,31}$/.test(id) ||
       typeof fileName !== "string" ||
       !fileName.trim() ||
       typeof label !== "string" ||
       !label.trim() ||
-      label.trim().length > 24
+      label.trim().length > 24 ||
+      (entry?.fallbackColor !== undefined &&
+        (!supportsFallbackColor || !fallbackColor))
     ) {
       throw new Error("素材目录条目无效");
     }
@@ -1049,8 +1059,14 @@ function addCatalogEntries(target, entries) {
       id,
       label: label.trim(),
       fileName: fileName.trim(),
+      fallbackColor,
     });
   }
+}
+
+function normaliseFallbackColor(value) {
+  const color = String(value || "").trim();
+  return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : "";
 }
 
 function catalogAssets(catalog) {
@@ -1164,7 +1180,13 @@ function resolveAppearanceAssets(stored, appearance, catalog) {
   ];
   for (const [slot, group, id] of staticSelections) {
     const record = stored.get(assetStorageSlot(group, id));
-    if (record) resolved.set(slot, record);
+    const entry = catalog[group].find((candidate) => candidate.id === id);
+    if (record) {
+      resolved.set(slot, {
+        ...record,
+        fallbackColor: entry?.fallbackColor ?? "",
+      });
+    }
   }
   const lobbyId = appearance.lobbyBackground;
   const lobbyRecord = stored.get(assetStorageSlot("lobbyBackgrounds", lobbyId));

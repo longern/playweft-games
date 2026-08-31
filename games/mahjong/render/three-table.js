@@ -229,6 +229,16 @@ export class ThreeMahjongTable {
     this.applyFeltTexture(texture ?? this.defaultFeltTexture);
   }
 
+  /**
+   * Display a pack-provided average felt colour while its image is decoding.
+   * This intentionally removes the prior map so switching packs never flashes
+   * the previous pack's artwork.
+   */
+  setFeltFallbackColor(color) {
+    this.feltColor.set(normaliseFeltColor(color));
+    this.applyFeltTexture(null);
+  }
+
   setDefaultFeltTexture(texture) {
     if (this.defaultFeltTexture && this.defaultFeltTexture !== texture) {
       this.defaultFeltTexture.dispose();
@@ -268,6 +278,13 @@ export class ThreeMahjongTable {
     this.textures.forEach((texture) => texture.dispose());
     this.customFeltTexture?.dispose();
   }
+}
+
+function normaliseFeltColor(value) {
+  const color = String(value || "").trim();
+  return /^#[0-9a-f]{6}$/i.test(color)
+    ? color
+    : DEFAULT_FELT_AVERAGE_COLOR;
 }
 
 function createWoodTexture(theme) {

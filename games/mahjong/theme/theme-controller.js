@@ -6,6 +6,7 @@ import {
   createMahjongAssetPack,
   deactivateMahjongAssetPacks,
   deleteMahjongAssetPack,
+  getMahjongAssetFallbackColor,
   getMahjongAssetUrl,
   getMahjongDefaultAssetUrl,
   getMahjongActivePortraits,
@@ -225,6 +226,7 @@ export function createMahjongThemeController({
     await waitForRenderers?.();
     await setRendererAppearance?.({
       tablecloth: getMahjongAssetUrl("tablecloth"),
+      tableclothFallbackColor: getMahjongAssetFallbackColor("tablecloth"),
       tileBack: getMahjongAssetUrl("tile-back"),
     });
   }

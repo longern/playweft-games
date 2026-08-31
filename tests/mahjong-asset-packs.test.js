@@ -78,7 +78,12 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
             { id: "fox", file: "portraits/fox.png", label: "赤狐" },
             { id: "wolf", file: "portraits/wolf.png", label: "灰狼" },
           ],
-          tablecloths: [{ id: "felt", file: "felt.png", label: "绒面" }],
+          tablecloths: [{
+            id: "felt",
+            file: "felt.png",
+            label: "绒面",
+            fallbackColor: "#168856",
+          }],
           tableBackgrounds: [],
           lobbyBackgrounds: [{ id: "evening", file: "lobby/evening.webp", label: "暮色" }],
           tileBacks: [],
@@ -122,6 +127,7 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
     "moonlit/portraits/fox.png",
   );
   assert.equal(manifest.catalog.tablecloths[0].fileName, "moonlit/felt.png");
+  assert.equal(manifest.catalog.tablecloths[0].fallbackColor, "#168856");
   assert.equal(manifest.catalog.matchBgm[0].fileName, "moonlit/music/night.ogg");
   assert.equal(
     manifest.catalog.riichiBgm[0].fileName,
@@ -151,6 +157,53 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
   });
   assert.equal(manifest.appearance.matchBgm, "night");
   assert.equal(manifest.appearance.riichiBgm, "duel");
+});
+
+test("mahjong tablecloth fallback colors are strict and tablecloth-only", async () => {
+  const readManifest = async (entry, group = "tablecloths") => {
+    const contents = zipSync({
+      "theme.json": strToU8(JSON.stringify({
+        schemaVersion: 1,
+        name: "测试桌布",
+        assets: {
+          portraits: [],
+          tablecloths: group === "tablecloths" ? [entry] : [],
+          tableBackgrounds: group === "tableBackgrounds" ? [entry] : [],
+          lobbyBackgrounds: [],
+          tileBacks: [],
+          matchBgm: [],
+          riichiBgm: [],
+          voices: [],
+        },
+      })),
+      "felt.webp": new Uint8Array([1]),
+    });
+    const files = await unpackMahjongAssetPack({
+      name: "test.zip",
+      size: contents.byteLength,
+      arrayBuffer: async () => contents.buffer.slice(0),
+    });
+    return readMahjongAssetPackManifest(files);
+  };
+
+  await assert.rejects(
+    () => readManifest({
+      id: "felt",
+      file: "felt.webp",
+      label: "绒面",
+      fallbackColor: "jade",
+    }),
+    /格式无效/,
+  );
+  await assert.rejects(
+    () => readManifest({
+      id: "background",
+      file: "felt.webp",
+      label: "背景",
+      fallbackColor: "#168856",
+    }, "tableBackgrounds"),
+    /格式无效/,
+  );
 });
 
 test("mahjong asset packs reject the former object-shaped catalog", async () => {

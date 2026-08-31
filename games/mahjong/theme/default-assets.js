@@ -209,7 +209,14 @@ export function portraitNames(catalog, appearance) {
 
 function addSelectedAsset(target, slot, entries, id) {
   const entry = entries.find((candidate) => candidate.id === id);
-  if (entry) target.set(slot, { name: entry.label, url: entry.url, copyright: entry.copyright });
+  if (entry) {
+    target.set(slot, {
+      name: entry.label,
+      url: entry.url,
+      copyright: entry.copyright,
+      fallbackColor: entry.fallbackColor,
+    });
+  }
 }
 
 function normalizeEntries(entries) {
@@ -226,13 +233,22 @@ function normalizeEntries(entries) {
     } catch {
       return [];
     }
-    return [{
+    const fallbackColor = normalizeFallbackColor(entry?.fallbackColor);
+    if (entry?.fallbackColor !== undefined && !fallbackColor) return [];
+    const normalised = {
       id,
       url: parsed.href,
       label: label.slice(0, 24),
       copyright: String(entry?.copyright || "").trim().slice(0, 160),
-    }];
+    };
+    if (fallbackColor) normalised.fallbackColor = fallbackColor;
+    return [normalised];
   });
+}
+
+function normalizeFallbackColor(value) {
+  const color = String(value || "").trim();
+  return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : "";
 }
 
 function normalizeAssetPacks(entries) {
