@@ -34,6 +34,10 @@ textarea,
   width: min(900px, 100%);
 }
 
+.paipu-entry {
+  align-items: center;
+}
+
 .paipu-entry-player {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

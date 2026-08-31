@@ -72,19 +72,9 @@
   border-bottom: 1px solid rgba(255, 239, 204, 0.12);
 }
 
-.paipu-header h2,
-.paipu-header p {
-  margin: 0;
-}
-
 .paipu-header h2 {
-  font-size: 1.35em;
-}
-
-.paipu-header p {
-  margin-top: 5px;
-  color: rgba(255, 238, 204, 0.62);
-  font-size: 0.75em;
+  margin: 0;
+  font-size: 1em;
 }
 
 .paipu-close {
@@ -156,7 +146,7 @@
   margin: -3px -6px;
   padding: 3px 6px;
   border-radius: 5px;
-  background: rgba(96, 168, 224, 0.07);
+  background: rgba(96, 168, 224, 0.12);
 }
 
 .paipu-entry-player-name {
@@ -188,13 +178,13 @@
   display: flex;
   gap: 4px;
   align-items: center;
+  align-self: center;
 }
 
 .paipu-entry-action {
   display: flex;
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
+  width: 64px;
+  height: 64px;
   padding: 0;
   align-items: center;
   justify-content: center;
@@ -205,8 +195,8 @@
 }
 
 .paipu-entry-action svg {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   stroke-width: 2;
 }
 
@@ -305,15 +295,8 @@
   padding: 0;
   color: #b9964f;
   font-family:
-    LiSu,
-    STLiti,
-    "FZLiShu-S01",
-    "FZLiBian-S01",
-    Inter,
-    "Noto Sans SC",
-    "PingFang SC",
-    system-ui,
-    sans-serif;
+    LiSu, STLiti, "FZLiShu-S01", "FZLiBian-S01", Inter, "Noto Sans SC",
+    "PingFang SC", system-ui, sans-serif;
   font-size: 26px;
   font-weight: 700;
   letter-spacing: 0.18em;

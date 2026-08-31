@@ -93,16 +93,15 @@
       </nav>
 
       <nav id="auto-action-controls" class="auto-action-controls" aria-label="自动操作">
-        <button id="replay-hand-visibility-button" class="auto-action-control replay-hand-visibility-control" type="button"
-          aria-pressed="false" aria-label="显示其他玩家手牌" title="显示其他玩家手牌" hidden>
+        <button id="replay-hand-visibility-button" class="auto-action-control replay-hand-visibility-control"
+          type="button" aria-pressed="false" aria-label="显示其他玩家手牌" title="显示其他玩家手牌" hidden>
           <i data-lucide="eye" aria-hidden="true"></i>
           <i data-lucide="eye-off" aria-hidden="true" hidden></i>
         </button>
         <button id="auto-win-button" class="auto-action-control" type="button" aria-pressed="false" aria-label="自动胡牌"
           title="自动胡牌">
           <svg class="auto-action-icon" data-icon="trophy-solid" viewBox="0 0 24 24" aria-hidden="true">
-            <path fill="currentColor" stroke="none"
-              d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z" />
+            <path fill="currentColor" stroke="none" d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z" />
             <path fill="currentColor" stroke="none"
               d="M5.35 4.5H3.25A1.75 1.75 0 0 0 1.5 6.25V7.5A2.5 2.5 0 0 0 4 10h1.35V8.5H4A1 1 0 0 1 3 7.5V6.25A.25.25 0 0 1 3.25 6h2.1Z
                  M18.65 4.5h2.1A1.75 1.75 0 0 1 22.5 6.25V7.5A2.5 2.5 0 0 1 20 10h-1.35V8.5H20a1 1 0 0 0 1-1V6.25a.25.25 0 0 0-.25-.25h-2.1Z" />
@@ -214,7 +213,8 @@
                 <button id="mahjong-offline-update-button" type="button">手动更新</button>
                 <button id="mahjong-offline-clear-button" type="button">删除麻将缓存</button>
               </div>
-              <p id="mahjong-offline-feedback" class="settings-appearance-feedback" role="status" aria-live="polite"></p>
+              <p id="mahjong-offline-feedback" class="settings-appearance-feedback" role="status" aria-live="polite">
+              </p>
             </div>
             <div id="settings-theme-panel" class="settings-tab-panel settings-theme-panel" role="tabpanel"
               aria-labelledby="settings-theme-tab" data-settings-panel="theme" hidden>
@@ -227,7 +227,8 @@
             </div>
             <div id="settings-appearance-panel" class="settings-tab-panel settings-appearance-panel" role="tabpanel"
               aria-labelledby="settings-appearance-tab" data-settings-panel="appearance" hidden>
-              <label class="settings-appearance-choice settings-avatar-source-choice" for="avatar-source-preference-setting">
+              <label class="settings-appearance-choice settings-avatar-source-choice"
+                for="avatar-source-preference-setting">
                 <span>头像来源</span>
                 <select id="avatar-source-preference-setting">
                   <option value="auto">自动</option>
@@ -346,7 +347,8 @@
           <button id="cancel-riichi-button" class="riichi-cancel-action" type="button" aria-label="取消立直" title="取消立直"
             hidden><i data-lucide="x" aria-hidden="true"></i></button>
           <button id="tsumo-button" class="win-action" type="button" hidden>自摸</button>
-          <button id="tenpai-count-badge" class="tenpai-status-badge tenpai-count-badge" type="button" hidden>0 张</button>
+          <button id="tenpai-count-badge" class="tenpai-status-badge tenpai-count-badge" type="button" hidden>0
+            张</button>
           <button id="furiten-badge" class="tenpai-status-badge furiten-badge" type="button" hidden>振听</button>
         </div>
         <span id="action-countdown" class="action-countdown" aria-live="off" hidden></span>
@@ -422,7 +424,6 @@
             </button>
             <div>
               <h2>牌谱</h2>
-              <p>本机保存的完整对局</p>
             </div>
           </header>
           <div id="paipu-empty" class="paipu-empty" hidden>还没有完成的对局</div>
