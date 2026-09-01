@@ -36,3 +36,34 @@ test("Mahjong theme initialization does not overwrite room player identities", a
   assert.equal(identityUpdates, 0);
   controller.destroy();
 });
+
+test("Mahjong score-sheet presentations follow player IDs after canonical seat rotation", async () => {
+  const eventTarget = createEventTarget();
+  const controller = createMahjongThemeController({
+    document: { createElement() {} },
+    window: eventTarget,
+    themeElements: {
+      upload: eventTarget,
+      uploadZone: eventTarget,
+      list: eventTarget,
+    },
+    appearanceElements: {
+      feedback: { textContent: "" },
+      controls: eventTarget,
+    },
+    isRoomActive: () => false,
+  });
+
+  await controller.ready;
+  controller.getPaipuPlayerPresentations([
+    { id: "viewer" },
+    { id: "right" },
+    { id: "opposite" },
+    { id: "left" },
+  ]);
+  assert.deepEqual(
+    controller.getPlayerPresentation({ playerId: "viewer", seat: 3 }),
+    controller.getPlayerPresentation({ seat: 1 }),
+  );
+  controller.destroy();
+});

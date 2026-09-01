@@ -175,6 +175,9 @@ export function createMahjongSoloMatchController({
         save.opponentPortraits,
         save.randomSeed,
       );
+      // Rebind score-sheet presentations to the stable player IDs after a
+      // saved match restores its canonical opening-wind player order.
+      themeController.getPaipuPlayerPresentations?.(PLAYERS);
       if (!save.playerPresentations || !Object.keys(save.playerPresentations).length) {
         const playerPresentations =
           themeController.getPaipuPlayerPresentations?.(PLAYERS) || {};

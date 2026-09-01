@@ -65,6 +65,7 @@ export function createMahjongThemeController({
   let visualPacks = [];
   let platformAvatarSource = "";
   let roomPlayerIdentity = "anonymous";
+  let paipuPortraitSlotByPlayerId = new Map();
   let defaultCharacter;
   const playerPresentationSubscribers = new Set();
   const assetPacksReady = initializeMahjongAssetPacks(
@@ -378,9 +379,10 @@ export function createMahjongThemeController({
     return applied;
   }
 
-  function getPlayerPresentation({ seat } = {}) {
+  function getPlayerPresentation({ playerId, seat } = {}) {
+    const mappedPortraitSlot = paipuPortraitSlotByPlayerId.get(String(playerId || ""));
     const position = ["bottom", "right", "top", "left"][Number(seat) - 1];
-    const portraitSlot = {
+    const portraitSlot = mappedPortraitSlot || {
       bottom: "self",
       right: "right",
       top: "opposite",
@@ -390,7 +392,7 @@ export function createMahjongThemeController({
     return chooseMahjongPortraitSource({
       themeSource: getMahjongAssetUrl(`portrait-${portraitSlot}`),
       platformSource:
-        position === "bottom" && platformAvatarAllowed()
+        portraitSlot === "self" && platformAvatarAllowed()
           ? platformAvatarSource
           : "",
       avatarPreference: avatarSourcePreference(),
@@ -402,6 +404,11 @@ export function createMahjongThemeController({
     const portraits = getMahjongActivePortraits();
     const context = getMahjongOnlinePortraitContext();
     const portraitSlots = ["self", "right", "opposite", "left"];
+    paipuPortraitSlotByPlayerId = new Map(
+      ids
+        .map((player, index) => [String(player?.id || ""), portraitSlots[index]])
+        .filter(([playerId, portraitSlot]) => playerId && portraitSlot),
+    );
     return Object.fromEntries(
       ids.map((player, index) => {
         const playerId = String(player?.id || "");
