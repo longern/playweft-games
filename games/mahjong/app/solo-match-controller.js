@@ -43,10 +43,17 @@ export function createMahjongSoloMatchController({
     );
   }
 
-  function soloGameOptions({ randomSeed, matchId, matchType, rules, playerNames }) {
+  function soloGameOptions({
+    randomSeed,
+    matchId,
+    matchType,
+    rules,
+    playerNames,
+    players = canonicalSoloPlayers(randomSeed, playerNames),
+  }) {
     return {
       sourceUrl: "./game.lua",
-      players: canonicalSoloPlayers(randomSeed, playerNames),
+      players,
       playerId: HUMAN_ID,
       randomSeed,
       matchId,
@@ -88,8 +95,12 @@ export function createMahjongSoloMatchController({
         opponentNames.opposite,
         opponentNames.left,
       ];
+      const canonicalPlayers = canonicalSoloPlayers(randomSeed, playerNames);
       const playerPresentations =
-        themeController.getPaipuPlayerPresentations?.(PLAYERS) || {};
+        themeController.getPaipuPlayerPresentations?.(
+          canonicalPlayers,
+          HUMAN_ID,
+        ) || {};
       const gamePreparation = createLocalLuaGame(
         soloGameOptions({
           randomSeed,
@@ -97,6 +108,7 @@ export function createMahjongSoloMatchController({
           matchType,
           rules,
           playerNames,
+          players: canonicalPlayers,
         }),
       );
       const [createdGame] = await Promise.all([
@@ -155,6 +167,7 @@ export function createMahjongSoloMatchController({
           : save.opponentNames[["right", "opposite", "left"][index - 1]] ||
             player.name,
       );
+      const canonicalPlayers = canonicalSoloPlayers(save.randomSeed, playerNames);
       restored = await createLocalLuaGame(
         soloGameOptions({
           randomSeed: save.randomSeed,
@@ -162,6 +175,7 @@ export function createMahjongSoloMatchController({
           matchType: save.matchType,
           rules: save.rules,
           playerNames,
+          players: canonicalPlayers,
         }),
       );
       const projection = await replayMahjongSoloSave({
@@ -175,14 +189,18 @@ export function createMahjongSoloMatchController({
         save.opponentPortraits,
         save.randomSeed,
       );
-      // Rebind score-sheet presentations to the stable player IDs after a
-      // saved match restores its canonical opening-wind player order.
-      themeController.getPaipuPlayerPresentations?.(PLAYERS);
-      if (!save.playerPresentations || !Object.keys(save.playerPresentations).length) {
-        const playerPresentations =
-          themeController.getPaipuPlayerPresentations?.(PLAYERS) || {};
-        setSoloSave?.({ ...save, playerPresentations });
-        writeMahjongSoloSave({ ...save, playerPresentations });
+      // Rebuild the stable player-ID presentation map from the restored
+      // canonical seats. This also repairs saves created before the seat
+      // mapping was made explicit.
+      const playerPresentations =
+        themeController.getPaipuPlayerPresentations?.(
+          canonicalPlayers,
+          HUMAN_ID,
+        ) || {};
+      if (JSON.stringify(save.playerPresentations || {}) !== JSON.stringify(playerPresentations)) {
+        const updatedSave = { ...save, playerPresentations };
+        setSoloSave?.(updatedSave);
+        writeMahjongSoloSave(updatedSave);
       }
       if (save.playerName) setPlayerName(save.playerName);
       setAutoActions({ ...save.autoActions });

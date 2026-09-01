@@ -466,8 +466,6 @@ export class MahjongResultHandRenderer {
       playerNames,
       viewerPlayerId:
         state?.viewerPlayerId || state?.players?.[Number(viewerSeat) - 1],
-      getPlayerPresentation: (context) =>
-        this.playerPresentationProvider?.get?.(context),
     });
     const sheet = {
       playerNames: this.scoreSheetModel.columns.map((column) => column.name),

@@ -29,7 +29,10 @@ import {
 } from "../theme/match-music.js";
 import { riverTileSoundCue } from "../render/audio-cues.js";
 import { createMahjongTableTenpaiState } from "./table-tenpai-state.js";
-import { mahjongPresentationSeat } from "../rules/seat-order.js";
+import {
+  mahjongPresentationSeat,
+  mahjongSeatForPlayer,
+} from "../rules/seat-order.js";
 import { roomActionStateKey } from "../rules/room-action-reconciliation.js";
 
 const MATCH_MUSIC_FADE_DURATION_MS = 800;
@@ -71,6 +74,7 @@ export function createMahjongTableController({
   getThemeAssetUrl,
   getRoomCharacterVoiceSource,
   getThemeDefaultNames,
+  ensurePlayerPresentations,
   getThemeMatchMusicUrl,
   getThemeRiichiMusicUrl,
   dispatch,
@@ -105,6 +109,21 @@ export function createMahjongTableController({
 
   function getState() {
     return state;
+  }
+
+  function projectionViewerSeat(projection) {
+    const players = asArray(projection?.state?.players);
+    const viewerPlayerId =
+      projection?.viewer?.playerId || projection?.state?.viewerPlayerId || "";
+    const derivedSeat = viewerPlayerId
+      ? mahjongSeatForPlayer(players, viewerPlayerId)
+      : 0;
+    if (derivedSeat > 0) return derivedSeat;
+    const annotatedSeat = Number(projection?.viewer?.seat);
+    if (Number.isInteger(annotatedSeat) && annotatedSeat >= 1 && annotatedSeat <= 4)
+      return annotatedSeat;
+    const fallbackSeat = players.indexOf(humanId) + 1;
+    return fallbackSeat > 0 ? fallbackSeat : 1;
   }
 
   function localContextState(current = state) {
@@ -165,10 +184,7 @@ export function createMahjongTableController({
     if (!projection || (getMode?.() === "solo" && currentGame !== getGame?.()))
       return;
     const previousState = state;
-    viewerSeat =
-      Number(projection.viewer?.seat) ||
-      (asArray(projection.state?.players).indexOf(humanId) + 1) ||
-      1;
+    viewerSeat = projectionViewerSeat(projection);
     state = projection.state;
     if (
       actionInFlight &&
@@ -328,6 +344,7 @@ export function createMahjongTableController({
     { animateDealIn = false } = {},
   ) {
     if (!renderState) return;
+    ensurePlayerPresentations?.(renderState);
     effectRunner.run("table DOM", () =>
       domView.render(
         renderState,
@@ -407,6 +424,7 @@ export function createMahjongTableController({
     effectRunner.run("result exit scene", () =>
       visualRenderer.render(staticState, [], {
         ...domView.visualUi(getPlayerName?.(), selectedTileId),
+        ...(viewerSeat === 1 ? {} : { viewerSeat }),
         riichiMode,
         riichiCandidateTiles: [],
         revealPlayerIndices: [],
@@ -1148,7 +1166,9 @@ export function createMahjongTableController({
 
   function handRevealPlayerIndices(current) {
     if (getMode?.() === "replay" && current?.revealAllHands === true) {
-      return [2, 3, 4];
+      return Array.from({ length: 4 }, (_, index) => index + 1).filter(
+        (seat) => seat !== viewerSeat,
+      );
     }
     if (current?.winType === "nagashi") return [];
     const exhaustive = exhaustiveDrawPresentation(current);

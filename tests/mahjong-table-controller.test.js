@@ -162,6 +162,28 @@ test("mahjong replay mode keeps table actions read-only", async () => {
   assert.deepEqual(dispatched, []);
 });
 
+test("mahjong replay reveals every opponent hand relative to a non-East viewer", async () => {
+  const { controller, calls } = createController({ mode: "replay" });
+  await controller.refresh({
+    state: {
+      phase: "hand_ended",
+      players: ["east", "south", "west", "north"],
+      revealAllHands: true,
+      viewerPlayerId: "west",
+      viewerSeat: 3,
+      ownHand: [],
+      legalActions: {},
+      scores: [25_000, 25_000, 25_000, 25_000],
+    },
+    viewer: { playerId: "west", seat: 3 },
+    events: [],
+  });
+
+  const scene = calls.filter(([kind]) => kind === "scene").at(-1)[2];
+  assert.deepEqual(scene.revealPlayerIndices, [1, 2, 4]);
+  assert.equal(scene.revealPlayerIndices.includes(3), false);
+});
+
 test("mahjong table controller allows hand inspection without dispatching a turn action", async () => {
   const dispatched = [];
   const { controller, calls } = createController({

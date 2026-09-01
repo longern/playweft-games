@@ -88,7 +88,7 @@ import { createMahjongCompletedPaipuSaver } from "./replay/completed-paipu.js";
 import { createMahjongPaipuPanel } from "./replay/paipu-panel.js";
 import { mahjongInitialEntry } from "./app/entry-flow.js";
 import { orientMahjongPaipuRecord } from "./rules/room-state.js";
-import { mahjongPresentationSeat } from "./rules/seat-order.js";
+import { mahjongPresentationPosition } from "./rules/seat-order.js";
 // The room controller owns createLocalLuaGame worker usage; keep that boundary
 // visible in the entry module for the room package contract.
 import "../../src/base.css";
@@ -157,6 +157,7 @@ let replayState = null;
 let replayController;
 let soloController;
 const replayPlayerPresentationStore = createMahjongPlayerPresentationStore();
+const soloPlayerPresentationStore = createMahjongPlayerPresentationStore();
 
 const paipuElements = {
   entry: document.querySelector(".setup-paipu-entry"),
@@ -422,6 +423,21 @@ tableController = createMahjongTableController({
   getRoomCharacterVoiceSource: (...args) =>
     roomPlayerPresentations?.resolveCharacterVoice(...args),
   getThemeDefaultNames: themeController.getDefaultNames,
+  ensurePlayerPresentations: (state) => {
+    if (playMode !== "solo" || !Array.isArray(state?.players)) return;
+    const persisted = themeController.getPaipuPlayerPresentations?.(
+      state.players,
+      state.viewerPlayerId || state.players?.[Number(state.viewerSeat) - 1] || HUMAN_ID,
+    ) || {};
+    soloPlayerPresentationStore.replace(
+      new Map(
+        Object.entries(persisted).map(([playerId, presentation]) => [
+          playerId,
+          presentation || {},
+        ]),
+      ),
+    );
+  },
   getThemeMatchMusicUrl: themeController.getMatchMusicUrl,
   getThemeRiichiMusicUrl: themeController.getRiichiMusicUrl,
   dispatch: (...args) => session?.dispatch(...args),
@@ -472,6 +488,9 @@ resultHandRenderer.setPlayerPresentationProvider({
     if (playMode === "replay") {
       return replayPlayerPresentationStore.get(context);
     }
+    if (playMode === "solo") {
+      return soloPlayerPresentationStore.get(context);
+    }
     return themeController.getPlayerPresentation(context);
   },
   subscribe: (listener) => {
@@ -480,13 +499,16 @@ resultHandRenderer.setPlayerPresentationProvider({
     );
     const unsubscribeTheme = themeController.subscribePlayerPresentations(listener);
     const unsubscribeReplay = replayPlayerPresentationStore.subscribe(listener);
+    const unsubscribeSolo = soloPlayerPresentationStore.subscribe(listener);
     return () => {
       unsubscribeRoom();
       unsubscribeTheme();
       unsubscribeReplay();
+      unsubscribeSolo();
     };
   },
 });
+
 const pageLifecycle = createMahjongPageLifecycle({
   window,
   document,
@@ -895,7 +917,10 @@ async function persistAcceptedAction(
       };
       paipu.playerPresentations =
         soloSave?.playerPresentations ||
-        themeController.getPaipuPlayerPresentations?.(paipu.players) || {};
+        themeController.getPaipuPlayerPresentations?.(
+          paipu.players,
+          paipu.viewerPlayerId,
+        ) || {};
       if (paipu?.status === "completed") await saveCompletedPaipu(paipu);
     } catch (error) {
       console.warn("Mahjong paipu save failed", error);
@@ -910,14 +935,12 @@ async function applyMahjongReplayPlayerPresentations(record) {
   const fallbackPortraits = {};
   const builtinCharacters = {};
   const resolvedPresentations = new Map();
-  const positions = ["bottom", "right", "top", "left"];
   const viewerSeat =
     (oriented?.players || []).findIndex(
       (player) => player?.id === record?.viewerPlayerId,
     ) + 1;
   for (const [index, player] of (oriented?.players || []).entries()) {
-    const displaySeat = mahjongPresentationSeat(index + 1, viewerSeat || 1);
-    const position = positions[displaySeat - 1];
+    const position = mahjongPresentationPosition(index + 1, viewerSeat || 1);
     if (!position) continue;
     const presentation = record?.playerPresentations?.[player?.id] || {};
     const resolved = await resolveMahjongPlayerPresentation({

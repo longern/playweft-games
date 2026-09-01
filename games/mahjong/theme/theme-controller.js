@@ -29,9 +29,13 @@ import { Check, ChevronsUpDown, Download, Trash2, createIcons } from "lucide";
 import { getOrCreateMahjongDefaultCharacter } from "./default-character.js";
 import {
   getMahjongBuiltinCharacterForKey,
+  getMahjongBuiltinCharacterForPortraitSlot,
   getMahjongBuiltinCharacterName,
 } from "./builtin-characters.js";
 import { chooseMahjongPortraitSource } from "../app/player-presentation-resolver.js";
+import {
+  mahjongPlayerPortraitSlots,
+} from "../rules/seat-order.js";
 
 const DEFAULT_VISUAL_PACK_ID = "__default__";
 
@@ -65,7 +69,8 @@ export function createMahjongThemeController({
   let visualPacks = [];
   let platformAvatarSource = "";
   let roomPlayerIdentity = "anonymous";
-  let paipuPortraitSlotByPlayerId = new Map();
+  let playerPortraitSlotsById = new Map();
+  let playerPresentationBindings = new Map();
   let defaultCharacter;
   const playerPresentationSubscribers = new Set();
   const assetPacksReady = initializeMahjongAssetPacks(
@@ -356,6 +361,7 @@ export function createMahjongThemeController({
     const defaultNames = getMahjongDefaultNames();
     const portraits = {};
     const fallbackPortraits = {};
+    const builtinCharacters = {};
     const names = {};
     for (const [position, portraitSlot] of Object.entries(portraitSlotByPosition)) {
       const selected = chooseMahjongPortraitSource({
@@ -368,59 +374,81 @@ export function createMahjongThemeController({
       });
       portraits[position] = selected.source;
       fallbackPortraits[position] = selected.fallbackSource;
+      builtinCharacters[position] =
+        getMahjongBuiltinCharacterForPortraitSlot(portraitSlot);
       if (position !== "bottom") names[position] = defaultNames[portraitSlot] || "";
     }
     const applied = setPlayerIdentityState?.({
       portraits,
       fallbackPortraits,
+      builtinCharacters,
       names,
     });
+    refreshPlayerPresentationBindings();
     for (const listener of playerPresentationSubscribers) listener();
     return applied;
   }
 
-  function getPlayerPresentation({ playerId, seat } = {}) {
-    const mappedPortraitSlot = paipuPortraitSlotByPlayerId.get(String(playerId || ""));
-    const position = ["bottom", "right", "top", "left"][Number(seat) - 1];
-    const portraitSlot = mappedPortraitSlot || {
-      bottom: "self",
-      right: "right",
-      top: "opposite",
-      left: "left",
-    }[position];
-    if (!portraitSlot) return undefined;
-    return chooseMahjongPortraitSource({
-      themeSource: getMahjongAssetUrl(`portrait-${portraitSlot}`),
-      platformSource:
-        portraitSlot === "self" && platformAvatarAllowed()
-          ? platformAvatarSource
-          : "",
-      avatarPreference: avatarSourcePreference(),
-    });
+  function getPlayerPresentation({ playerId } = {}) {
+    const value = playerPresentationBindings.get(String(playerId || ""));
+    return value ? { ...value } : undefined;
   }
 
-  function getPaipuPlayerPresentations(players = []) {
+  function getPaipuPlayerPresentations(players = [], viewerPlayerId = "") {
     const ids = Array.isArray(players) ? players : [];
     const portraits = getMahjongActivePortraits();
     const context = getMahjongOnlinePortraitContext();
-    const portraitSlots = ["self", "right", "opposite", "left"];
-    paipuPortraitSlotByPlayerId = new Map(
-      ids
-        .map((player, index) => [String(player?.id || ""), portraitSlots[index]])
-        .filter(([playerId, portraitSlot]) => playerId && portraitSlot),
-    );
+    playerPortraitSlotsById = mahjongPlayerPortraitSlots(ids, viewerPlayerId);
+    refreshPlayerPresentationBindings();
     return Object.fromEntries(
       ids.map((player, index) => {
-        const playerId = String(player?.id || "");
-        const characterId = String(portraits[portraitSlots[index]] || "");
+        const playerId = String(
+          typeof player === "object" ? player?.id || "" : player || "",
+        );
+        const portraitSlot = playerPortraitSlotsById.get(playerId) || "";
+        const characterId = String(portraits[portraitSlot] || "");
+        const selected = chooseMahjongPortraitSource({
+          themeSource: getMahjongAssetUrl(`portrait-${portraitSlot}`),
+          platformSource:
+            portraitSlot === "self" && platformAvatarAllowed()
+              ? platformAvatarSource
+              : "",
+          avatarPreference: avatarSourcePreference(),
+        });
         return [playerId, {
+          source: selected.source,
+          ...(selected.fallbackSource
+            ? { fallbackSource: selected.fallbackSource }
+            : {}),
           ...(characterId
             ? { themeCharacter: { packId: context.packId, characterId } }
             : {}),
-          builtinCharacterId: getMahjongBuiltinCharacterForKey(playerId),
+          builtinCharacterId:
+            getMahjongBuiltinCharacterForPortraitSlot(portraitSlot),
           avatarPreference: avatarSourcePreference(),
         }];
       }).filter(([playerId]) => playerId),
+    );
+  }
+
+  function refreshPlayerPresentationBindings() {
+    if (!playerPortraitSlotsById.size) return;
+    playerPresentationBindings = new Map(
+      [...playerPortraitSlotsById.entries()].map(([playerId, portraitSlot]) => {
+        const selected = chooseMahjongPortraitSource({
+          themeSource: getMahjongAssetUrl(`portrait-${portraitSlot}`),
+          platformSource:
+            portraitSlot === "self" && platformAvatarAllowed()
+              ? platformAvatarSource
+              : "",
+          avatarPreference: avatarSourcePreference(),
+        });
+        return [playerId, {
+          ...selected,
+          builtinCharacterId:
+            getMahjongBuiltinCharacterForPortraitSlot(portraitSlot),
+        }];
+      }),
     );
   }
 

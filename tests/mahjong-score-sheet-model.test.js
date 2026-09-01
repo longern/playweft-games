@@ -4,6 +4,22 @@ import {
   createMahjongScoreSheetModel,
   scoreSheetPortraitSources,
 } from "../games/mahjong/result/score-sheet-model.js";
+import { mahjongPlayerPortraitSlots } from "../games/mahjong/rules/seat-order.js";
+
+test("portrait slots follow canonical player IDs when the viewer is not East", () => {
+  assert.deepEqual(
+    [...mahjongPlayerPortraitSlots(
+      ["weaving", "ink", "viewer", "blue-wind"],
+      "viewer",
+    ).entries()],
+    [
+      ["weaving", "opposite"],
+      ["ink", "left"],
+      ["viewer", "self"],
+      ["blue-wind", "right"],
+    ],
+  );
+});
 
 test("score sheet keeps every opening-wind column tied to one player across score and portrait updates", () => {
   const presentations = new Map([
@@ -23,7 +39,6 @@ test("score sheet keeps every opening-wind column tied to one player across scor
   const model = createMahjongScoreSheetModel(state, {
     playerNames: ["你", "北家", "东家", "南家"],
     viewerPlayerId: "viewer",
-    getPlayerPresentation: ({ playerId }) => presentations.get(playerId),
   });
 
   assert.deepEqual(
@@ -34,6 +49,18 @@ test("score sheet keeps every opening-wind column tied to one player across scor
       ["西", "east", "东家"],
       ["北", "south", "南家"],
     ],
+  );
+
+  assert.deepEqual(
+    scoreSheetPortraitSources(model, ({ playerId }) =>
+      playerId === "viewer" ? undefined : presentations.get(playerId),
+    )[0],
+    {
+      source: "",
+      fallbackSource: "",
+      builtinCharacterId: "",
+    },
+    "missing current binding must not restore a presentation from model creation",
   );
   assert.equal(model.selfColumnIndex, 0);
   assert.deepEqual(model.rows[0].scores, [23000, 26000, 31000, 20000]);

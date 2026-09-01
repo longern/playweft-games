@@ -10,23 +10,30 @@ const INITIAL_WINDS = ["東", "南", "西", "北"];
  */
 export function createMahjongScoreSheetModel(
   state,
-  { playerNames = [], getPlayerPresentation, viewerPlayerId = state?.viewerPlayerId } = {},
+  {
+    playerNames = [],
+    viewerPlayerId = state?.viewerPlayerId,
+  } = {},
 ) {
   const localPlayerId = String(viewerPlayerId || "");
   const columns = [1, 2, 3, 4].map((seat, index) => {
     const playerId = String(state?.players?.[seat - 1] || "");
-    const context = { playerId, seat, wind: INITIAL_WINDS[index] };
+    const context = {
+      playerId,
+      seat,
+      wind: INITIAL_WINDS[index],
+    };
     return {
       ...context,
       isLocal: Boolean(localPlayerId && playerId === localPlayerId),
       name: String(playerNames[seat - 1] || `玩家${seat}`),
-      presentation: normalizePlayerPresentation(getPlayerPresentation?.(context)),
     };
   });
   return {
     columns,
     selfColumnIndex: columns.findIndex((column) => column.isLocal),
     rows: resultScoreSheetRows(state),
+    viewerPlayerId,
   };
 }
 
@@ -38,11 +45,7 @@ export function createMahjongScoreSheetModel(
 export function scoreSheetPortraitSources(model, getPlayerPresentation) {
   return (model?.columns || []).map((column) =>
     normalizePlayerPresentation(
-      getPlayerPresentation?.({
-        playerId: column.playerId,
-        seat: column.seat,
-        wind: column.wind,
-      }) || column.presentation,
+      getPlayerPresentation?.({ playerId: column.playerId }),
     ),
   );
 }

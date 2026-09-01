@@ -5,6 +5,7 @@ import {
   orientMahjongPaipuRecord,
   orientMahjongRoomProjection,
 } from "../games/mahjong/rules/room-state.js";
+import { mahjongCanonicalSeatForPresentation } from "../games/mahjong/rules/seat-order.js";
 
 test("room projection preserves canonical seats and annotates the viewer", () => {
   const projection = {
@@ -106,4 +107,27 @@ test("paipu remains canonical regardless of viewer id", () => {
   assert.deepEqual(replayRecord.final.scores, [1, 2, 3, 4]);
   assert.equal(replayRecord.hands[0].commands[0].seat, 3);
   assert.equal(replayRecord.players[replayRecord.hands[0].commands[0].seat - 1].id, "p3");
+});
+
+test("viewer score stays attached to the viewer presentation seat", () => {
+  const scores = [22400, 25000, 27600, 25000];
+  const projection = {
+    state: {
+      players: ["east", "south", "west", "north"],
+      scores,
+    },
+  };
+  const oriented = orientMahjongRoomProjection(projection, "west");
+  const displayedScores = [1, 2, 3, 4].map(
+    (presentationSeat) =>
+      oriented.state.scores[
+        mahjongCanonicalSeatForPresentation(
+          presentationSeat,
+          oriented.viewer.seat,
+        ) - 1
+      ],
+  );
+
+  assert.deepEqual(displayedScores, [scores[2], scores[3], scores[0], scores[1]]);
+  assert.equal(displayedScores[0], scores[2]);
 });

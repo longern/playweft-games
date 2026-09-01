@@ -3,9 +3,10 @@ import {
   normalizeMahjongPlayerPresentation,
   resolveMahjongPlayerPresentation,
 } from "./player-presentation-resolver.js";
-import { mahjongPresentationSeat } from "../rules/seat-order.js";
-
-const POSITIONS = ["bottom", "right", "top", "left"];
+import {
+  mahjongPresentationPosition,
+  mahjongSeatForPlayer,
+} from "../rules/seat-order.js";
 
 export function createMahjongRoomPlayerPresentations({
   isRoom,
@@ -30,9 +31,17 @@ export function createMahjongRoomPlayerPresentations({
       getMahjongBuiltinCharacterForKey(playerId);
   }
 
-  async function apply(state = getState?.(), { viewerSeat = 1 } = {}) {
+  async function apply(state = getState?.(), { viewerSeat } = {}) {
     if (!isRoom?.() || !Array.isArray(state?.players)) return false;
     latestState = state;
+    const effectiveViewerSeat =
+      Number.isInteger(Number(viewerSeat)) &&
+      Number(viewerSeat) >= 1 &&
+      Number(viewerSeat) <= 4
+        ? Number(viewerSeat)
+        : Number(state.viewerSeat) ||
+          mahjongSeatForPlayer(state.players, getRoomPlayerId?.()) ||
+          1;
     const request = ++applyRequest;
     const portraits = {};
     const fallbackPortraits = {};
@@ -40,9 +49,7 @@ export function createMahjongRoomPlayerPresentations({
     const names = {};
     const nextPresentations = new Map();
     for (const [index, playerId] of state.players.entries()) {
-      const position = POSITIONS[
-        mahjongPresentationSeat(index + 1, viewerSeat) - 1
-      ];
+      const position = mahjongPresentationPosition(index + 1, effectiveViewerSeat);
       if (!position || !playerId) continue;
       const presentation = state.aiPlayers?.[playerId]
         ? state.aiPresentations?.[playerId] || {}

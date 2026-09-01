@@ -1,4 +1,11 @@
 const PLAYER_COUNT = 4;
+const PRESENTATION_POSITIONS = ["bottom", "right", "top", "left"];
+const PORTRAIT_SLOTS_BY_POSITION = Object.freeze({
+  bottom: "self",
+  right: "right",
+  top: "opposite",
+  left: "left",
+});
 const RANDOM_MODULUS = 2147483647;
 const RANDOM_MULTIPLIER = 48271;
 
@@ -19,6 +26,36 @@ export function mahjongPresentationSeat(canonicalSeat, viewerSeat) {
   if (![seat, viewer].every(Number.isInteger) || seat < 1 || seat > 4 || viewer < 1 || viewer > 4)
     return seat;
   return ((seat - viewer + PLAYER_COUNT) % PLAYER_COUNT) + 1;
+}
+
+/**
+ * Resolves a canonical seat directly to its viewer-relative table position.
+ * Callers should use this at the rendering boundary instead of indexing a
+ * position array with the canonical seat themselves.
+ */
+export function mahjongPresentationPosition(canonicalSeat, viewerSeat) {
+  const presentationSeat = mahjongPresentationSeat(canonicalSeat, viewerSeat);
+  return PRESENTATION_POSITIONS[presentationSeat - 1] || "";
+}
+
+/**
+ * Binds each canonical player ID to the portrait slot that is visible for
+ * this viewer. This is the single identity-to-portrait mapping used by
+ * result sheets and match-owned presentation state; it never depends on the
+ * caller's display order.
+ */
+export function mahjongPlayerPortraitSlots(players, viewerPlayerId) {
+  const source = asArray(players);
+  const viewerSeat = mahjongSeatForPlayer(source, viewerPlayerId) || 1;
+  return new Map(
+    source.map((player, index) => {
+      const playerId = String(
+        typeof player === "object" ? player?.id || "" : player || "",
+      );
+      const position = mahjongPresentationPosition(index + 1, viewerSeat);
+      return [playerId, PORTRAIT_SLOTS_BY_POSITION[position] || ""];
+    }).filter(([playerId, portraitSlot]) => playerId && portraitSlot),
+  );
 }
 
 export function mahjongCanonicalSeatForPresentation(presentationSeat, viewerSeat) {

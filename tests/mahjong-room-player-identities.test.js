@@ -81,3 +81,36 @@ test("room player presentation honors a theme preference even when a platform po
   await harness.presentations.apply();
   assert.equal(harness.getRendered().portraits.bottom, "moonlit-fox-portrait");
 });
+
+test("room player presentation derives display positions from the actual viewer seat", async () => {
+  let rendered;
+  const presentations = createMahjongRoomPlayerPresentations({
+    isRoom: () => true,
+    getRoomPlayerId: () => "p3",
+    getProfile: () => undefined,
+    themeController: {
+      resolveCharacterPortrait: async () => "",
+    },
+    domView: {
+      applyPlayerIdentityState: (value) => {
+        rendered = value;
+        return Promise.resolve(true);
+      },
+    },
+  });
+  await presentations.apply({
+    players: ["p1", "p2", "p3", "p4"],
+    playerPresentations: {
+      p1: { builtinCharacterId: "builtin-1" },
+      p2: { builtinCharacterId: "builtin-2" },
+      p3: { builtinCharacterId: "builtin-3" },
+      p4: { builtinCharacterId: "builtin-4" },
+    },
+  });
+  assert.deepEqual(rendered.builtinCharacters, {
+    top: "builtin-1",
+    left: "builtin-2",
+    bottom: "builtin-3",
+    right: "builtin-4",
+  });
+});
