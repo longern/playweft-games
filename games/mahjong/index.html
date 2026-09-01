@@ -178,37 +178,44 @@
             </div>
             <div id="settings-sound-panel" class="settings-tab-panel settings-sound-panel" role="tabpanel"
               aria-labelledby="settings-sound-tab" data-settings-panel="sound" hidden>
-              <ul class="settings-list-card settings-sound-list" aria-label="声音设置">
-                <li>
-                  <label for="master-volume-setting">主音量</label>
-                  <span class="settings-sound-control">
-                    <input id="master-volume-setting" type="range" min="0" max="100" step="1" value="100" />
-                    <output id="master-volume-value" for="master-volume-setting">100%</output>
-                  </span>
-                </li>
-                <li>
-                  <label for="music-volume-setting">音乐</label>
-                  <span class="settings-sound-control">
-                    <input id="music-volume-setting" type="range" min="0" max="100" step="1" value="32" />
-                    <output id="music-volume-value" for="music-volume-setting">32%</output>
-                  </span>
-                </li>
-                <li>
-                  <label for="voice-volume-setting">语音</label>
-                  <span class="settings-sound-control">
-                    <input id="voice-volume-setting" type="range" min="0" max="100" step="1" value="100" />
-                    <output id="voice-volume-value" for="voice-volume-setting">100%</output>
-                  </span>
-                </li>
-                <li>
-                  <label for="discard-volume-setting">音效</label>
-                  <span class="settings-sound-control">
-                    <input id="discard-volume-setting" type="range" min="0" max="100" step="1" value="100" />
-                    <output id="discard-volume-value" for="discard-volume-setting">100%</output>
-                  </span>
-                </li>
-              </ul>
-              <p id="default-bgm-copyright" class="settings-bgm-copyright" hidden></p>
+              <section class="settings-sound-card">
+                <h2 class="settings-sound-card-title">音量</h2>
+                <ul class="settings-list-card settings-sound-list" aria-label="音量设置">
+                  <li>
+                    <label for="master-volume-setting">主音量</label>
+                    <span class="settings-sound-control">
+                      <input id="master-volume-setting" type="range" min="0" max="100" step="1" value="100" />
+                      <output id="master-volume-value" for="master-volume-setting">100%</output>
+                    </span>
+                  </li>
+                  <li>
+                    <label for="music-volume-setting">音乐</label>
+                    <span class="settings-sound-control">
+                      <input id="music-volume-setting" type="range" min="0" max="100" step="1" value="32" />
+                      <output id="music-volume-value" for="music-volume-setting">32%</output>
+                    </span>
+                  </li>
+                  <li>
+                    <label for="voice-volume-setting">语音</label>
+                    <span class="settings-sound-control">
+                      <input id="voice-volume-setting" type="range" min="0" max="100" step="1" value="100" />
+                      <output id="voice-volume-value" for="voice-volume-setting">100%</output>
+                    </span>
+                  </li>
+                  <li>
+                    <label for="discard-volume-setting">音效</label>
+                    <span class="settings-sound-control">
+                      <input id="discard-volume-setting" type="range" min="0" max="100" step="1" value="100" />
+                      <output id="discard-volume-value" for="discard-volume-setting">100%</output>
+                    </span>
+                  </li>
+                </ul>
+              </section>
+              <section class="settings-sound-card">
+                <h2 class="settings-sound-card-title">音乐</h2>
+                <div id="settings-sound-controls" class="settings-sound-controls" hidden></div>
+                <p id="default-bgm-copyright" class="settings-bgm-copyright" hidden></p>
+              </section>
             </div>
             <div id="settings-offline-panel" class="settings-tab-panel settings-operation-panel" role="tabpanel"
               aria-labelledby="settings-offline-tab" data-settings-panel="offline" hidden>
@@ -237,7 +244,7 @@
                   </label>
                 </li>
               </ul>
-              <p id="mahjong-offline-feedback" class="settings-appearance-feedback" role="status" aria-live="polite">
+              <p id="mahjong-offline-feedback" class="settings-offline-feedback" role="status" aria-live="polite">
               </p>
             </div>
             <div id="settings-theme-panel" class="settings-tab-panel settings-theme-panel" role="tabpanel"
@@ -251,22 +258,23 @@
             </div>
             <div id="settings-appearance-panel" class="settings-tab-panel settings-appearance-panel" role="tabpanel"
               aria-labelledby="settings-appearance-tab" data-settings-panel="appearance" hidden>
-              <label class="settings-appearance-choice settings-avatar-source-choice"
-                for="avatar-source-preference-setting">
-                <span>头像来源</span>
-                <select id="avatar-source-preference-setting">
-                  <option value="auto">自动</option>
-                  <option value="theme">主题</option>
-                </select>
-              </label>
-              <div class="settings-appearance-heading">
-                <div>
-                  <h2>装扮</h2>
-                  <p>调整当前主题包中的具体内容。</p>
-                </div>
-              </div>
-              <p id="settings-appearance-feedback" class="settings-appearance-feedback" role="status"
-                aria-live="polite"></p>
+              <section class="settings-appearance-card">
+                <h2 class="settings-appearance-card-title">头像</h2>
+                <ul class="settings-list-card settings-appearance-list">
+                  <li>
+                    <label class="settings-appearance-list-item" for="avatar-source-preference-setting">
+                      <span>头像来源</span>
+                      <span class="settings-appearance-select">
+                        <select id="avatar-source-preference-setting">
+                          <option value="auto">自动</option>
+                          <option value="theme">主题</option>
+                        </select>
+                        <i data-lucide="chevrons-up-down" aria-hidden="true"></i>
+                      </span>
+                    </label>
+                  </li>
+                </ul>
+              </section>
               <div id="settings-appearance-controls" class="settings-appearance-controls" hidden></div>
             </div>
             <div id="settings-help-panel" class="settings-tab-panel settings-help-panel" role="tabpanel"

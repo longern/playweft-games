@@ -352,8 +352,10 @@ const themePackElements = {
   list: document.querySelector("#settings-theme-list"),
 };
 const appearanceElements = {
-  feedback: document.querySelector("#settings-appearance-feedback"),
   controls: document.querySelector("#settings-appearance-controls"),
+};
+const soundElements = {
+  controls: document.querySelector("#settings-sound-controls"),
 };
 const themeController = createMahjongThemeController({
   document,
@@ -362,6 +364,7 @@ const themeController = createMahjongThemeController({
   confirm: (message) => playweftClient?.confirm(message),
   themeElements: themePackElements,
   appearanceElements,
+  soundElements,
   copyrightElement: defaultMusicCopyright,
   waitForRenderers: () =>
     Promise.all([visualRendererReady, resultHandRendererReady]),

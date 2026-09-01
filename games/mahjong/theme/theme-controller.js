@@ -25,7 +25,7 @@ import {
   resolveMahjongOnlineCharacterVoice,
   resolveMahjongOnlinePortrait,
 } from "./asset-packs.js";
-import { Check, Download, Trash2, createIcons } from "lucide";
+import { Check, ChevronsUpDown, Download, Trash2, createIcons } from "lucide";
 import { getOrCreateMahjongDefaultCharacter } from "./default-character.js";
 import {
   getMahjongBuiltinCharacterForKey,
@@ -46,6 +46,13 @@ export function createMahjongThemeController({
   confirm,
   themeElements,
   appearanceElements,
+  soundElements = {
+    controls: {
+      addEventListener() {},
+      removeEventListener() {},
+      replaceChildren() {},
+    },
+  },
   copyrightElement,
   waitForRenderers,
   setRendererAppearance,
@@ -171,7 +178,6 @@ export function createMahjongThemeController({
     } else {
       appearance[key] = select.value;
     }
-    appearanceElements.feedback.textContent = "正在应用装扮配置…";
     try {
       if (activePack.isDefault) {
         configureMahjongDefaultPackAppearance(appearance);
@@ -182,10 +188,8 @@ export function createMahjongThemeController({
         );
       }
       renderThemePacks();
-      appearanceElements.feedback.textContent = "已应用装扮配置。";
     } catch (error) {
-      appearanceElements.feedback.textContent =
-        error instanceof Error ? error.message : "装扮配置失败";
+      console.error("Mahjong appearance configuration failed", error);
     }
   };
 
@@ -205,6 +209,7 @@ export function createMahjongThemeController({
   themeElements.list.addEventListener("click", onThemeListClick);
   themeElements.list.addEventListener("keydown", onThemeListKeydown);
   appearanceElements.controls.addEventListener("change", onAppearanceChange);
+  soundElements.controls.addEventListener("change", onAppearanceChange);
   browserWindow.addEventListener("mahjong:asset-pack-changed", onAssetPackChanged);
   void assetPacksReady.then(() => {
     ensureDefaultCharacter();
@@ -494,16 +499,15 @@ export function createMahjongThemeController({
     themeElements.list.replaceChildren(...localItems, ...remoteItems);
     createIcons({ icons: { Check, Download, Trash2 }, root: themeElements.list });
     renderAppearanceSettings();
+    renderSoundSettings();
   }
 
   function renderAppearanceSettings() {
     const pack = getActiveVisualPack();
     const catalog = pack?.catalog;
     if (!pack || !catalog) {
-      appearanceElements.controls.hidden = false;
-      appearanceElements.controls.replaceChildren(
-        createAppearanceEmptyState("暂无可配置的主题内容，请先选择一个主题包。"),
-      );
+      appearanceElements.controls.replaceChildren();
+      appearanceElements.controls.hidden = true;
       return;
     }
     const portraitLabels = {
@@ -513,13 +517,9 @@ export function createMahjongThemeController({
       left: "左手边",
     };
     const controls = document.createDocumentFragment();
-    const portraitGroup = document.createElement("fieldset");
-    portraitGroup.className = "settings-appearance-choice-group";
-    const portraitLegend = document.createElement("legend");
-    portraitLegend.textContent = "四家角色";
-    portraitGroup.append(portraitLegend);
+    const portraitRows = [];
     for (const [position, label] of Object.entries(portraitLabels)) {
-      portraitGroup.append(
+      portraitRows.push(
         createAppearanceSelect(
           label,
           `portrait:${position}`,
@@ -528,88 +528,101 @@ export function createMahjongThemeController({
         ),
       );
     }
-    if (catalog.portraits.length) controls.append(portraitGroup);
+    if (catalog.portraits.length) controls.append(createAppearanceCard("角色", portraitRows));
 
-    const surfaceGroup = document.createElement("fieldset");
-    surfaceGroup.className = "settings-appearance-choice-group";
-    const surfaceLegend = document.createElement("legend");
-    surfaceLegend.textContent = "牌桌画面";
-    surfaceGroup.append(surfaceLegend);
+    const surfaceRows = [];
     for (const [label, key, options, selected] of [
       ["桌布", "tablecloth", catalog.tablecloths, pack.appearance.tablecloth],
       ["背景", "tableBackground", catalog.tableBackgrounds, pack.appearance.tableBackground],
       ["牌背", "tileBack", catalog.tileBacks, pack.appearance.tileBack],
     ]) {
-      if (options.length) surfaceGroup.append(createAppearanceSelect(label, key, options, selected));
+      if (options.length) surfaceRows.push(createAppearanceSelect(label, key, options, selected));
     }
-    if (surfaceGroup.childElementCount > 1) controls.append(surfaceGroup);
+    if (surfaceRows.length) controls.append(createAppearanceCard("牌桌画面", surfaceRows));
     if (catalog.lobbyBackgrounds.length) {
-      const lobbyGroup = document.createElement("fieldset");
-      lobbyGroup.className = "settings-appearance-choice-group";
-      const lobbyLegend = document.createElement("legend");
-      lobbyLegend.textContent = "大厅";
-      lobbyGroup.append(lobbyLegend);
-      lobbyGroup.append(createAppearanceSelect(
+      controls.append(createAppearanceCard("大厅", [createAppearanceSelect(
         "大厅背景",
         "lobbyBackground",
         catalog.lobbyBackgrounds,
         pack.appearance.lobbyBackground,
-      ));
-      controls.append(lobbyGroup);
+      )]));
     }
-    if (
-      catalog.matchBgm.length ||
-      catalog.riichiBgm.length ||
-      catalog.voices.length
-    ) {
-      const soundGroup = document.createElement("fieldset");
-      soundGroup.className = "settings-appearance-choice-group";
-      const soundLegend = document.createElement("legend");
-      soundLegend.textContent = "声音";
-      soundGroup.append(soundLegend);
-      if (catalog.matchBgm.length) soundGroup.append(createAppearanceSelect(
-        "对局音乐", "matchBgm", catalog.matchBgm, pack.appearance.matchBgm, "不播放",
-      ));
-      if (catalog.riichiBgm.length) soundGroup.append(createAppearanceSelect(
-        "立直音乐", "riichiBgm", catalog.riichiBgm, pack.appearance.riichiBgm, "不切换",
-      ));
-      if (catalog.voices.length) soundGroup.append(createAppearanceSelect(
-        "角色语音", "voice",
-        [{ id: "on", label: "播放" }, { id: "off", label: "不播放" }],
-        pack.appearance.voice ? "on" : "off",
-      ));
-      controls.append(soundGroup);
-    }
-    if (controls.childElementCount) {
-      const heading = document.createElement("h3");
-      heading.textContent = `当前主题包：${pack.name}`;
-      appearanceElements.controls.replaceChildren(heading, controls);
-    } else {
-      appearanceElements.controls.replaceChildren(
-        createAppearanceEmptyState("当前主题包没有可配置的装扮内容。"),
-      );
-    }
-    appearanceElements.controls.hidden = false;
+    const hasControls = controls.childElementCount > 0;
+    appearanceElements.controls.replaceChildren(controls);
+    appearanceElements.controls.hidden = !hasControls;
+    createIcons({ icons: { ChevronsUpDown }, root: appearanceElements.controls });
+  }
+
+  function renderSoundSettings() {
+    const pack = getActiveVisualPack();
+    const catalog = pack?.catalog ?? {};
+    const appearance = pack?.appearance ?? {};
+    const rows = [
+      createAppearanceSelect(
+        "对局音乐",
+        "matchBgm",
+        catalog.matchBgm ?? [],
+        appearance.matchBgm,
+        catalog.matchBgm?.length ? "不播放" : "不可用",
+        !catalog.matchBgm?.length,
+      ),
+      createAppearanceSelect(
+        "立直音乐",
+        "riichiBgm",
+        catalog.riichiBgm ?? [],
+        appearance.riichiBgm,
+        catalog.riichiBgm?.length ? "不切换" : "不可用",
+        !catalog.riichiBgm?.length,
+      ),
+    ];
+    soundElements.controls.replaceChildren(createAppearanceList(rows));
+    soundElements.controls.hidden = false;
+    createIcons({ icons: { ChevronsUpDown }, root: soundElements.controls });
   }
 
   function getActiveVisualPack() {
     return visualPacks.find((candidate) => candidate.active) || getMahjongDefaultPack();
   }
 
-  function createAppearanceEmptyState(message) {
-    const empty = document.createElement("p");
-    empty.className = "settings-appearance-empty";
-    empty.textContent = message;
-    return empty;
+
+  function createAppearanceCard(title, rows) {
+    const section = document.createElement("section");
+    section.className = "settings-appearance-card";
+    const heading = document.createElement("h2");
+    heading.className = "settings-appearance-card-title";
+    heading.textContent = title;
+    const list = createAppearanceList(rows);
+    section.append(heading, list);
+    return section;
   }
 
-  function createAppearanceSelect(label, key, options, selected, emptyLabel = "") {
+  function createAppearanceList(rows) {
+    const list = document.createElement("ul");
+    list.className = "settings-list-card settings-appearance-list";
+    for (const row of rows) {
+      const item = document.createElement("li");
+      item.append(row);
+      list.append(item);
+    }
+    return list;
+  }
+
+  function createAppearanceSelect(
+    label,
+    key,
+    options,
+    selected,
+    emptyLabel = "",
+    disabled = false,
+  ) {
     const row = document.createElement("label");
-    row.className = "settings-appearance-choice";
+    row.className = "settings-appearance-list-item";
+    if (disabled) row.classList.add("is-disabled");
     const text = document.createElement("span");
     text.textContent = label;
     const select = document.createElement("select");
     select.dataset.appearanceKey = key;
+    select.disabled = disabled;
     if (emptyLabel) {
       const option = document.createElement("option");
       option.value = "";
@@ -624,7 +637,14 @@ export function createMahjongThemeController({
       element.selected = option.id === selected;
       select.append(element);
     }
-    row.append(text, select);
+    const control = document.createElement("span");
+    control.className = "settings-appearance-select";
+    control.append(select);
+    const icon = document.createElement("i");
+    icon.dataset.lucide = "chevrons-up-down";
+    icon.setAttribute("aria-hidden", "true");
+    control.append(icon);
+    row.append(text, control);
     return row;
   }
 
@@ -682,6 +702,7 @@ export function createMahjongThemeController({
       themeElements.list.removeEventListener("click", onThemeListClick);
       themeElements.list.removeEventListener("keydown", onThemeListKeydown);
       appearanceElements.controls.removeEventListener("change", onAppearanceChange);
+      soundElements.controls.removeEventListener("change", onAppearanceChange);
       browserWindow.removeEventListener("mahjong:asset-pack-changed", onAssetPackChanged);
     },
   };
