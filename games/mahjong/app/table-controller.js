@@ -30,6 +30,7 @@ import {
 import { riverTileSoundCue } from "../render/audio-cues.js";
 import { createMahjongTableTenpaiState } from "./table-tenpai-state.js";
 import { mahjongPresentationSeat } from "../rules/seat-order.js";
+import { roomActionStateKey } from "../rules/room-action-reconciliation.js";
 
 const MATCH_MUSIC_FADE_DURATION_MS = 800;
 const RESULT_PAGE_TRANSITION_MS = 920;
@@ -97,6 +98,7 @@ export function createMahjongTableController({
   let pendingDiscard = null;
   let pendingDiscardRecovery = null;
   let discardSubmissionPending = false;
+  let actionInFlight = null;
   const tenpaiState = createMahjongTableTenpaiState();
   let riichiTenpaiRequest = 0;
   let riichiTenpaiKey = "";
@@ -134,6 +136,7 @@ export function createMahjongTableController({
     pendingDiscard = null;
     pendingDiscardRecovery = null;
     discardSubmissionPending = false;
+    actionInFlight = null;
     tenpaiState.reset();
     riichiTenpaiRequest += 1;
     riichiTenpaiKey = "";
@@ -167,6 +170,13 @@ export function createMahjongTableController({
       (asArray(projection.state?.players).indexOf(humanId) + 1) ||
       1;
     state = projection.state;
+    if (
+      actionInFlight &&
+      getMode?.() === "room" &&
+      roomActionStateKey(localContextState(state)) !== actionInFlight.baseStateKey
+    ) {
+      actionInFlight = null;
+    }
     reconcilePendingDiscard(state);
     if (!pendingDiscard) discardSubmissionPending = false;
     const projectionEvents = asArray(projection.events);
@@ -237,6 +247,41 @@ export function createMahjongTableController({
       selectionBeforeRiichi = 0;
     }
     renderCurrentState();
+  }
+
+  function isOptimisticRoomAction(action) {
+    return getMode?.() === "room" &&
+      ["claim", "kan", "tsumo", "pass", "abort_nine"].includes(action?.type);
+  }
+
+  function submitAction(action) {
+    if (isReplayReadOnly()) return false;
+    const optimistic = isOptimisticRoomAction(action);
+    if (optimistic) {
+      if (actionInFlight || isActionInFlight?.()) return false;
+      actionInFlight = {
+        action,
+        baseStateKey: roomActionStateKey(localContextState(state)),
+      };
+      renderCurrentState();
+    }
+    const dispatched = dispatch?.(action);
+    if (!optimistic) return dispatched;
+    const clearIfFailed = (accepted) => {
+      if (accepted !== false) return accepted;
+      clearActionInFlight();
+      return accepted;
+    };
+    if (dispatched === false) return clearIfFailed(false);
+    if (typeof dispatched?.then === "function") void dispatched.then(clearIfFailed);
+    return dispatched;
+  }
+
+  function clearActionInFlight() {
+    if (!actionInFlight) return false;
+    actionInFlight = null;
+    if (state) renderCurrentState();
+    return true;
   }
 
   function renderCurrentState({ animateDealIn = false } = {}) {
@@ -310,6 +355,7 @@ export function createMahjongTableController({
           hideCountdown: discardSubmissionPending,
           resultPageReady:
             state?.resultPageReady === true || resultPageReadyPending,
+          actionInFlight: Boolean(actionInFlight),
         },
       ),
     );
@@ -1427,6 +1473,8 @@ export function createMahjongTableController({
     endDraggedTilePreview,
     discardOwnTile,
     rollbackPendingDiscard,
+    submitAction,
+    clearActionInFlight,
     enterRiichiMode,
     cancelRiichiMode,
     continueResult,

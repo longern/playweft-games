@@ -579,6 +579,7 @@ export function createMahjongRoomController({
       return;
     if (reconciliation?.outcome === "rejected" || reconciliation?.outcome === "unknown") {
       tableController.rollbackPendingDiscard?.();
+      tableController.clearActionInFlight?.();
       tableController.clearResultPageReadyPending();
       if (tableController.getState()?.phase === "hand_ended")
         tableController.syncMatchMusic();

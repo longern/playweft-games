@@ -208,7 +208,8 @@ const releaseFixedViewport = bindFixedViewport(
   document.querySelector("#mahjong-app"),
 );
 const domView = new MahjongDomView({
-  onAction: dispatch,
+  onAction: (action) =>
+    (tableController ? tableController.submitAction(action) : dispatch(action)),
   onSelectTile: (tileId) => tableController?.selectTile(tileId),
   onDiscardTile: (tileId) => tableController?.discardOwnTile(tileId),
   onTenpaiPreviewStart: (pointerId) =>
@@ -324,7 +325,7 @@ const visualRenderer = new MahjongThreeRenderer(elements.stage, {
       canDiscard: current?.legalActions?.canDiscard === true,
       drawnTile: current?.drawnTile,
     });
-    if (action) dispatch(action);
+    if (action) tableController?.submitAction(action);
   },
 });
 const resultHandRenderer = new MahjongResultHandRenderer(
@@ -527,6 +528,7 @@ session = createMahjongSessionController({
     roomController?.sendActionWithTenpaiReport(...args),
   onRoomUnavailable: () => {
     tableController.rollbackPendingDiscard();
+    tableController.clearActionInFlight();
     showMessage("尚未连接到房间");
   },
   persistAcceptedAction,
@@ -548,10 +550,12 @@ session = createMahjongSessionController({
   },
   onActionRejected: (code) => {
     tableController.rollbackPendingDiscard();
+    tableController.clearActionInFlight();
     showMessage(errorMessage(code));
   },
   onActionError(error) {
     tableController.rollbackPendingDiscard();
+    tableController.clearActionInFlight();
     console.error("Mahjong action failed", error);
     showMessage("动作处理失败，请重试");
   },
@@ -735,11 +739,15 @@ function bindUiEvents() {
   replayElements.handVisibility?.addEventListener("click", () => {
     void replayController?.toggleOpponentHands();
   });
-  elements.pass.addEventListener("click", () => dispatch({ type: "pass" }));
-  elements.abort.addEventListener("click", () =>
-    dispatch({ type: "abort_nine" }),
+  elements.pass.addEventListener("click", () =>
+    tableController?.submitAction({ type: "pass" }),
   );
-  elements.tsumo.addEventListener("click", () => dispatch({ type: "tsumo" }));
+  elements.abort.addEventListener("click", () =>
+    tableController?.submitAction({ type: "abort_nine" }),
+  );
+  elements.tsumo.addEventListener("click", () =>
+    tableController?.submitAction({ type: "tsumo" }),
+  );
   elements.riichi.addEventListener("click", () =>
     tableController.enterRiichiMode(),
   );

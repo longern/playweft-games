@@ -273,6 +273,89 @@ test("mahjong keeps the riichi wait visible while the room action is pending", a
   });
 });
 
+test("mahjong hides room claim actions while a local claim decision is in flight", async () => {
+  let resolveDispatch;
+  const dispatched = [];
+  const { controller, domOptions } = createController({
+    mode: "room",
+    onDispatch: (action) => {
+      dispatched.push(action);
+      return new Promise((resolve) => {
+        resolveDispatch = resolve;
+      });
+    },
+  });
+  const state = {
+    phase: "claiming",
+    moveCount: 2,
+    claimIndex: 1,
+    players: ["human"],
+    legalActions: { claims: [{ kind: "pon", option: 1 }] },
+  };
+
+  await controller.refresh({ state, events: [] });
+  controller.submitAction({ type: "claim", option: 1 });
+  assert.equal(domOptions.at(-1).actionInFlight, true);
+  assert.deepEqual(dispatched, [{ type: "claim", option: 1 }]);
+
+  await controller.refresh({ state: { ...state }, events: [] });
+  assert.equal(domOptions.at(-1).actionInFlight, true);
+
+  await controller.refresh({
+    state: { ...state, phase: "playing", moveCount: 3, turnIndex: 1 },
+    events: [],
+  });
+  assert.equal(domOptions.at(-1).actionInFlight, false);
+  resolveDispatch?.(true);
+});
+
+test("mahjong restores room claim actions when the optimistic submission fails", async () => {
+  const { controller, domOptions } = createController({
+    mode: "room",
+    onDispatch: () => false,
+  });
+  const state = {
+    phase: "claiming",
+    moveCount: 2,
+    claimIndex: 1,
+    players: ["human"],
+    legalActions: { claims: [{ kind: "pon", option: 1 }] },
+  };
+
+  await controller.refresh({ state, events: [] });
+  controller.submitAction({ type: "pass" });
+  assert.equal(domOptions.at(-1).actionInFlight, false);
+});
+
+test("mahjong hides the room abort-nine action while its submission is in flight", async () => {
+  let resolveDispatch;
+  const { controller, domOptions } = createController({
+    mode: "room",
+    onDispatch: () =>
+      new Promise((resolve) => {
+        resolveDispatch = resolve;
+      }),
+  });
+  const state = {
+    phase: "playing",
+    moveCount: 2,
+    turnIndex: 1,
+    players: ["human"],
+    legalActions: { canAbortNine: true },
+  };
+
+  await controller.refresh({ state, events: [] });
+  controller.submitAction({ type: "abort_nine" });
+  assert.equal(domOptions.at(-1).actionInFlight, true);
+
+  await controller.refresh({
+    state: { ...state, phase: "hand_ended", moveCount: 3 },
+    events: [],
+  });
+  assert.equal(domOptions.at(-1).actionInFlight, false);
+  resolveDispatch?.(true);
+});
+
 test("mahjong keeps the optimistic riichi wait across a pre-confirmation state refresh", async () => {
   const dispatched = [];
   const { controller, domOptions, selectionOptions } = createController({

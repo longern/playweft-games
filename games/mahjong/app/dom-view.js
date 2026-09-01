@@ -125,6 +125,7 @@ export class MahjongDomView {
       playerNameIsAuthoritative = false,
       serverTime = 0,
       viewerSeat = 1,
+      actionInFlight = false,
     } = {},
   ) {
     const { elements } = this;
@@ -177,7 +178,13 @@ export class MahjongDomView {
     this.renderTenpaiPreview(state, tenpaiPreview);
     this.renderRivers(state, events);
     this.renderMelds(state);
-    this.renderActions(state, selectedTileId, riichiMode, confirmedTenpai);
+    this.renderActions(
+      state,
+      selectedTileId,
+      riichiMode,
+      confirmedTenpai,
+      actionInFlight,
+    );
     this.renderCountdown(state, serverTime, { hidden: hideCountdown });
     this.renderStatus(state, events, playerName, {
       defaultNames,
@@ -528,7 +535,13 @@ export class MahjongDomView {
     }
   }
 
-  renderActions(state, selectedTileId, riichiMode = false, confirmedTenpai) {
+  renderActions(
+    state,
+    selectedTileId,
+    riichiMode = false,
+    confirmedTenpai,
+    actionInFlight = false,
+  ) {
     const legal = state.legalActions ?? {};
     const { elements } = this;
     elements.claims.replaceChildren();
@@ -542,6 +555,18 @@ export class MahjongDomView {
       elements.tenpaiCount.hidden = true;
       elements.furiten.hidden = true;
       elements.actionHint.textContent = "";
+      return;
+    }
+    if (actionInFlight) {
+      elements.cancelRiichi.hidden = true;
+      elements.claims.hidden = true;
+      elements.pass.hidden = true;
+      elements.abort.hidden = true;
+      elements.tsumo.hidden = true;
+      elements.riichi.hidden = true;
+      elements.tenpaiCount.hidden = true;
+      elements.furiten.hidden = true;
+      elements.actionHint.textContent = "等待其他玩家";
       return;
     }
     elements.claims.hidden = false;
