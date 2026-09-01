@@ -151,9 +151,6 @@ test("mahjong asset packs use schema version 1 catalog arrays and theme-relative
   );
   assert.deepEqual(manifest.appearance.portraits, {
     self: "fox",
-    right: "fox",
-    opposite: "",
-    left: "",
   });
   assert.equal(manifest.appearance.matchBgm, "night");
   assert.equal(manifest.appearance.riichiBgm, "duel");
@@ -270,10 +267,7 @@ test("theme appearance keeps only explicitly configured portrait seats", () => {
     ),
     appearance,
   );
-  assert.equal(appearance.portraits.self, "cat");
-  assert.equal(appearance.portraits.right, "wolf");
-  assert.equal(appearance.portraits.opposite, "");
-  assert.equal(appearance.portraits.left, "");
+  assert.deepEqual(appearance.portraits, { self: "cat" });
   const { portraits: _portraits, ...nonPortraitAppearance } = appearance;
   assert.deepEqual(nonPortraitAppearance, {
     tablecloth: "felt",
@@ -336,12 +330,9 @@ test("build-time default assets keep multiple remote choices and normalize defau
   assert.deepEqual(config.portraitPool, ["wolf", "fox"]);
   assert.deepEqual(config.appearance.portraits, {
     self: "cat",
-    right: "",
-    opposite: "",
-    left: "",
   });
   assert.deepEqual(config.appearance, {
-    portraits: { self: "cat", right: "", opposite: "", left: "" },
+    portraits: { self: "cat" },
     tablecloth: "wood",
     tableBackground: "night",
     lobbyBackground: "evening",
@@ -484,9 +475,9 @@ test("portrait labels follow the currently assigned avatar seats", () => {
   assert.deepEqual(
     portraitNames(
       { portraits: [{ id: "fox", label: "赤狐" }, { id: "wolf", label: "灰狼" }] },
-      { portraits: { self: "wolf", right: "fox", opposite: "wolf", left: "fox" } },
+      { portraits: { self: "wolf" } },
     ),
-    { self: "灰狼", right: "赤狐", opposite: "灰狼", left: "赤狐" },
+    { self: "灰狼" },
   );
 });
 

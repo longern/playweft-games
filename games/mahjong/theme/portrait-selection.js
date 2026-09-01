@@ -11,40 +11,6 @@ export function normalizeMahjongPortraitPool(pool, entries) {
   return [...new Set(pool.filter((id) => valid.has(id)))];
 }
 
-// Kept for callers that explicitly request a random portrait layout. Theme
-// defaults must use resolveMahjongPortraitDefaults so loading a pack is pure.
-export function resolveMahjongPortraitAppearance(
-  entries,
-  requested,
-  portraitPool = [],
-) {
-  const choices = requested && typeof requested === "object" ? requested : {};
-  const catalog = Array.isArray(entries) ? entries : [];
-  const pick = (id) =>
-    catalog.some((entry) => entry.id === id) ? id : "";
-  const self = pick(choices.self) || catalog[0]?.id || "";
-  const source = (
-    portraitPool.length
-      ? portraitPool
-      : catalog.map((entry) => entry.id)
-  ).filter((id) => id && catalog.some((entry) => entry.id === id));
-  const uniqueCandidates = source.filter((id) => id !== self);
-  const remaining = shuffle(uniqueCandidates);
-  const repeatable = uniqueCandidates.length
-    ? uniqueCandidates
-    : source.length
-      ? source
-      : catalog.map((entry) => entry.id);
-  const used = new Set([self]);
-  const result = { self };
-  for (const [index, position] of ["right", "opposite", "left"].entries()) {
-    const selected = nextPortrait(remaining, used, repeatable, index);
-    result[position] = selected;
-    if (selected) used.add(selected);
-  }
-  return result;
-}
-
 export function resolveMahjongPortraitDefaults(entries, requested) {
   const choices = requested && typeof requested === "object" ? requested : {};
   const catalog = Array.isArray(entries) ? entries : [];
@@ -52,9 +18,6 @@ export function resolveMahjongPortraitDefaults(entries, requested) {
   const pick = (id) => (valid.has(id) ? id : "");
   return {
     self: pick(choices.self) || catalog[0]?.id || "",
-    right: pick(choices.right),
-    opposite: pick(choices.opposite),
-    left: pick(choices.left),
   };
 }
 

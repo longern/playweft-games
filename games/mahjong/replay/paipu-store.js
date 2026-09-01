@@ -161,7 +161,7 @@ export function summarizeMahjongPaipu(record, byteSize = encodedByteSize(record)
 
 export function validateMahjongPaipu(record) {
   if (!isPlainObject(record)) throw new TypeError("Invalid Mahjong paipu");
-  if (record.format !== "longern.riichi.paipu" || record.formatVersion !== 2) {
+  if (record.format !== "longern.riichi.paipu" || record.formatVersion !== 3) {
     throw new TypeError("Unsupported Mahjong paipu format");
   }
   if (typeof record.id !== "string" || !record.id) {
@@ -195,6 +195,10 @@ export function validateMahjongPaipu(record) {
   ) {
     throw new TypeError("Mahjong paipu has an invalid final result");
   }
+  if ("endReason" in record.final ||
+      (record.final.endReasonId !== undefined && typeof record.final.endReasonId !== "string")) {
+    throw new TypeError("Mahjong paipu final result must use a reason id");
+  }
   return structuredClone(record);
 }
 
@@ -205,10 +209,66 @@ function validateHand(hand) {
   if (!Array.isArray(hand.commands) || !Array.isArray(hand.events) || !isPlainObject(hand.end)) {
     throw new TypeError("Mahjong paipu contains an incomplete hand");
   }
+  validateHandEnd(hand.end);
+  for (const event of hand.events) {
+    if (!isPlainObject(event) || ("reason" in event) ||
+        (event.reasonId !== undefined && typeof event.reasonId !== "string")) {
+      throw new TypeError("Mahjong paipu contains a language-dependent event");
+    }
+  }
   for (const command of hand.commands) validateSemanticCommand(command);
   if (hand.scoreHistoryBefore !== undefined && !isScoreHistoryArray(hand.scoreHistoryBefore)) {
     throw new TypeError("Mahjong paipu contains an invalid score history snapshot");
   }
+}
+
+function validateHandEnd(end) {
+  for (const key of ["abortiveReason", "matchEndReason", "winType", "draw", "winners", "result"]) {
+    if (key in end) throw new TypeError("Mahjong paipu contains a language-dependent hand result");
+  }
+  const winnerSeats = arrayOrEmptyObject(end.winnerSeats);
+  const results = arrayOrEmptyObject(end.results);
+  if (!new Set(["ron", "tsumo", "nagashi", "exhaustive_draw", "abortive_draw"]).has(end.kind) ||
+      !winnerSeats || !winnerSeats.every((seat) => Number.isInteger(seat) && seat >= 1 && seat <= 4) ||
+      !results) {
+    throw new TypeError(`Mahjong paipu contains an incomplete hand result: ${JSON.stringify(end)}`);
+  }
+  if (end.abortiveReasonId !== undefined && typeof end.abortiveReasonId !== "string") {
+    throw new TypeError("Mahjong paipu contains an invalid abortive reason id");
+  }
+  if (end.matchEndReasonId !== undefined && typeof end.matchEndReasonId !== "string") {
+    throw new TypeError("Mahjong paipu contains an invalid match end reason id");
+  }
+  for (const result of results) {
+    const payments = arrayOrEmptyObject(result?.payments);
+    if (!isPlainObject(result) || !payments || "payment" in result || "paymentEdges" in result) {
+      throw new TypeError("Mahjong paipu contains an unstructured payment");
+    }
+    for (const payment of payments) {
+      if (!isPlainObject(payment) || !Number.isInteger(payment.fromSeat) || payment.fromSeat < 0 || payment.fromSeat > 4 ||
+          !Number.isInteger(payment.toSeat) || payment.toSeat < 1 || payment.toSeat > 4 ||
+          !Number.isFinite(payment.amount) || payment.amount <= 0 || typeof payment.kind !== "string") {
+        throw new TypeError("Mahjong paipu contains an invalid payment edge");
+      }
+    }
+    if (result.limit !== undefined &&
+        (!isPlainObject(result.limit) || typeof result.limit.id !== "string" ||
+         !Number.isFinite(Number(result.limit.yakumanUnits)))) {
+      throw new TypeError("Mahjong paipu contains an invalid limit");
+    }
+    if (result.yaku !== undefined && (!Array.isArray(result.yaku) || result.yaku.some((entry) =>
+      !isPlainObject(entry) || typeof entry.id !== "string" || !Number.isFinite(Number(entry.han)) || "name" in entry))) {
+      throw new TypeError("Mahjong paipu contains language-dependent yaku data");
+    }
+    if ("reason" in result || "name" in result) {
+      throw new TypeError("Mahjong paipu contains language-dependent result data");
+    }
+  }
+}
+
+function arrayOrEmptyObject(value) {
+  if (Array.isArray(value)) return value;
+  return isPlainObject(value) && Object.keys(value).length === 0 ? [] : null;
 }
 
 function validateCanonicalPlayers(players) {

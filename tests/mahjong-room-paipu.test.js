@@ -27,7 +27,7 @@ function hand(index) {
 test("buildCompletedRoomPaipuRecord carries room presentation data explicitly", () => {
   const paipu = {
     format: "longern.riichi.paipu",
-    formatVersion: 1,
+    formatVersion: 3,
     status: "completed",
     game: { mode: "room", matchType: "east" },
     players,
@@ -58,7 +58,7 @@ test("room paipu fragments merge by global hand index", () => {
   const first = buildCompletedRoomPaipuRecord({
     paipu: {
       format: "longern.riichi.paipu",
-      formatVersion: 1,
+      formatVersion: 3,
       status: "in_progress",
       game: { mode: "room", matchType: "east", initialScores: [25000, 25000, 25000, 25000] },
       players,
@@ -79,7 +79,7 @@ test("room paipu fragments merge by global hand index", () => {
   const finalFragment = buildCompletedRoomPaipuRecord({
     paipu: {
       format: "longern.riichi.paipu",
-      formatVersion: 1,
+      formatVersion: 3,
       status: "completed",
       game: { mode: "room", matchType: "east", initialScores: [25000, 25000, 25000, 25000] },
       players,
@@ -114,4 +114,11 @@ test("completed streamed room paipu rejects a missing hand", () => {
 test("buildCompletedRoomPaipuRecord rejects incomplete room identity", () => {
   assert.equal(buildCompletedRoomPaipuRecord({ paipu: {}, matchId: "" }), null);
   assert.equal(buildCompletedRoomPaipuRecord({ matchId: "match-123" }), null);
+  assert.equal(
+    buildCompletedRoomPaipuRecord({
+      paipu: { format: "longern.riichi.paipu", formatVersion: 2 },
+      matchId: "match-123",
+    }),
+    null,
+  );
 });

@@ -5,7 +5,13 @@ export function buildCompletedRoomPaipuRecord({
   playerPresentations,
   completedAtMs = Date.now(),
 } = {}) {
-  if (!paipu || typeof matchId !== "string" || !matchId) return null;
+  if (
+    !paipu ||
+    paipu.format !== "longern.riichi.paipu" ||
+    paipu.formatVersion !== 3 ||
+    typeof matchId !== "string" ||
+    !matchId
+  ) return null;
   const completed = paipu.status === "completed";
   return {
     ...paipu,
@@ -21,7 +27,13 @@ export function buildCompletedRoomPaipuRecord({
 }
 
 export function mergeRoomPaipuFragmentRecord(previous, fragment) {
-  if (!fragment?.roomFragment || typeof fragment.id !== "string" || !fragment.id) {
+  if (
+    !fragment?.roomFragment ||
+    fragment.format !== "longern.riichi.paipu" ||
+    fragment.formatVersion !== 3 ||
+    typeof fragment.id !== "string" ||
+    !fragment.id
+  ) {
     return null;
   }
   if (previous?.id && previous.id !== fragment.id) {

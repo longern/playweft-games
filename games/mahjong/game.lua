@@ -943,6 +943,113 @@ local function all_tile_ids(hand, melds)
 	return result
 end
 
+local PAIPU = { reasons = {
+	["九种九牌"] = "nine_terminals",
+	["四杠散了"] = "four_kans_exhausted",
+	["四家立直"] = "four_riichi",
+	["四风连打"] = "four_winds_first_discards",
+	["三家和"] = "triple_ron",
+	["击飞结束"] = "bankruptcy",
+	["庄家止和"] = "agari_yame",
+	["对局结束"] = "match_complete",
+	["延长赛结束"] = "extension_complete",
+	}, limits = {
+	[""] = "none",
+	["满贯"] = "mangan",
+	["跳满"] = "haneman",
+	["倍满"] = "baiman",
+	["三倍满"] = "sanbaiman",
+	["累计役满"] = "kazoe_yakuman",
+	["役满"] = "yakuman",
+	}, yaku = {
+		["两立直"] = "double_riichi", ["立直"] = "riichi", ["一发"] = "ippatsu",
+		["门前清自摸和"] = "menzen_tsumo", ["岭上开花"] = "rinshan", ["抢杠"] = "chankan",
+		["海底摸月"] = "haitei", ["河底捞鱼"] = "houtei", ["天和"] = "tenhou", ["地和"] = "chiihou",
+		["九莲宝灯"] = "chuuren_poutou", ["断幺九"] = "tanyao", ["平和"] = "pinfu",
+		["二杯口"] = "ryanpeikou", ["一杯口"] = "iipeikou", ["白"] = "haku", ["发"] = "hatsu", ["中"] = "chun",
+		["自风"] = "jikaze", ["场风"] = "bakaze", ["大三元"] = "daisangen", ["大四喜"] = "daisuushi",
+		["小四喜"] = "shousuushi", ["小三元"] = "shousangen", ["对对和"] = "toitoi", ["三暗刻"] = "sanankou",
+		["四暗刻"] = "suuankou", ["三杠子"] = "sankantsu", ["四杠子"] = "suukantsu", ["三色同顺"] = "sanshoku_doujun",
+		["一气通贯"] = "ittsuu", ["三色同刻"] = "sanshoku_doukou", ["混一色"] = "honitsu", ["清一色"] = "chinitsu",
+		["混老头"] = "honroutou", ["混全带幺九"] = "honchantaiyaochuu", ["纯全带幺九"] = "junchantaiyaochuu",
+		["字一色"] = "tsuuiisou", ["清老头"] = "chinroutou", ["绿一色"] = "ryuuiisou", ["国士无双"] = "kokushi_musou",
+		["七对子"] = "chiitoitsu", ["宝牌"] = "dora", ["流局满贯"] = "nagashi_mangan",
+	}, }
+
+function PAIPU.reason_id(reason)
+	if reason == nil or reason == "" then
+		return nil
+	end
+	local id = PAIPU.reasons[reason]
+	if not id then
+		error("Unknown paipu reason: " .. tostring(reason))
+	end
+	return id
+end
+
+function PAIPU.limit(result)
+	local label = type(result) == "table" and result.limit or ""
+	if type(label) ~= "string" then
+		label = ""
+	end
+	if label ~= "" and not PAIPU.limits[label] then
+		local units = string.match(label, "^(%d+)倍役满$")
+		if units then
+			return { id = "yakuman", yakumanUnits = tonumber(units) }
+		end
+		error("Unknown paipu limit: " .. tostring(label))
+	end
+	return {
+		id = PAIPU.limits[label] or "none",
+		yakumanUnits = tonumber(result and result.yakuman) or 0,
+	}
+end
+
+function PAIPU.payment(result, kind, winner_index)
+	local payments = {}
+	if type(result) ~= "table" then
+		return payments
+	end
+	for _, edge in ipairs(result.paymentEdges or {}) do
+		payments[#payments + 1] = {
+			fromSeat = tonumber(edge.fromSeat) or 0,
+			toSeat = tonumber(edge.toSeat) or winner_index or 0,
+			amount = tonumber(edge.amount) or 0,
+			kind = edge.kind or kind or "win",
+		}
+	end
+	return payments
+end
+
+function PAIPU.result(result, kind)
+	if type(result) ~= "table" then
+		return nil
+	end
+	local winner_index = tonumber(result.winnerIndex)
+	local normalized = {}
+	for key, value in pairs(result) do
+		if key ~= "name" and key ~= "reason" and key ~= "limit" and key ~= "payment" and key ~= "paymentEdges" and key ~= "yaku" then
+			normalized[key] = copy_record_value(value)
+		end
+	end
+	normalized.limit = PAIPU.limit(result)
+	normalized.payments = PAIPU.payment(result, kind, winner_index)
+	if type(result.reason) == "string" and result.reason ~= "" then
+		normalized.reasonId = PAIPU.reason_id(result.reason)
+	end
+	if type(result.yaku) == "table" then
+		normalized.yaku = {}
+		for _, entry in ipairs(result.yaku) do
+			local id = entry and (entry.id or PAIPU.yaku[entry.name])
+			if type(entry) ~= "table" or type(id) ~= "string" or type(entry.han) ~= "number" then
+				error("Invalid paipu yaku")
+			end
+			normalized.yaku[#normalized.yaku + 1] = { id = id, han = entry.han }
+		end
+	end
+	return normalized
+end
+
 local function add_yaku(yaku, name, han)
 	yaku[#yaku + 1] = { name = name, han = han }
 	return han
@@ -1669,6 +1776,10 @@ end
 local function paipu_event(state, event, sequence)
 	local recorded = copy_record_value(event)
 	recorded.seq = sequence
+	if recorded.type == "abortive_draw" and recorded.reason then
+		recorded.reasonId = PAIPU.reason_id(recorded.reason)
+		recorded.reason = nil
+	end
 	if type(event.tile) == "number" and event.tile >= 1 and event.tile <= 136 then
 		recorded.tile = tile_code(event.tile)
 	end
@@ -1686,18 +1797,28 @@ local function finish_paipu_hand(state, hand)
 			winners[#winners + 1] = seat
 		end
 	end
+	local result_kind = state.winType
+	if not result_kind or result_kind == "" then
+		result_kind = state.result and state.result.abortive and "abortive_draw" or "exhaustive_draw"
+	end
 	hand["end"] = {
-		winType = state.winType,
-		draw = state.draw == true,
-		abortiveReason = state.abortiveReason,
-		winners = winners,
+		kind = result_kind,
+		abortiveReasonId = PAIPU.reason_id(state.abortiveReason),
+		winnerSeats = winners,
 		winningTile = type(state.winningTile) == "number" and state.winningTile > 0 and tile_code(state.winningTile) or nil,
-		result = copy_record_value(state.result),
-		results = copy_record_value(state.results),
+		results = {},
 		scores = copy_scores_for_record(state.scores),
 		matchEnded = state.matchEnded == true,
-		matchEndReason = state.endReason,
+		matchEndReasonId = PAIPU.reason_id(state.endReason),
 	}
+	if state.result then
+		hand["end"].results[#hand["end"].results + 1] = PAIPU.result(state.result, result_kind)
+	end
+	for _, result in ipairs(state.results or {}) do
+		if result ~= state.result then
+			hand["end"].results[#hand["end"].results + 1] = PAIPU.result(result, result_kind)
+		end
+	end
 end
 
 function record_paipu_action(state, action, actor_id, events)
@@ -1824,6 +1945,10 @@ local function mark_next_hand(state, dealer_repeats, was_draw)
 		state.scores[top_seat], state.riichiSticks = state.scores[top_seat] + award, 0
 		if state.result then
 			state.result.endRiichiAward = award
+			state.result.paymentEdges = state.result.paymentEdges or {}
+			state.result.paymentEdges[#state.result.paymentEdges + 1] = {
+				fromSeat = 0, toSeat = top_seat, amount = award, kind = "riichi_sticks",
+			}
 			if state.result.deltas then
 				state.result.deltas[top_seat] = state.result.deltas[top_seat] + award
 			end
@@ -1867,7 +1992,7 @@ local function pao_liabilities_for_score(state, player_id, score)
 		return {}
 	end
 	local recorded, result, by_seat = state.pao[player_id] or {}, {}, {}
-	local keys = { ["大三元"] = "daisangen", ["大四喜"] = "daisuushii", ["四杠子"] = "suukantsu" }
+	local keys = { ["大三元"] = "daisangen", ["大四喜"] = "daisuushi", ["四杠子"] = "suukantsu" }
 	for _, yaku in ipairs(score.yaku or {}) do
 		local seat = recorded[keys[yaku.name]]
 		if seat then
@@ -1893,25 +2018,28 @@ local function base_payment_total(score, dealer_win, method)
 	return round_up_100(score.base * 2) + round_up_100(score.base) * 2
 end
 
-local function add_payment(deltas, winner, payer, amount)
+local function add_payment(deltas, winner, payer, amount, payments, kind)
 	if amount <= 0 then
 		return
 	end
 	deltas[payer], deltas[winner] = deltas[payer] - amount, deltas[winner] + amount
+	if payments then
+		payments[#payments + 1] = { fromSeat = payer, toSeat = winner, amount = amount, kind = kind or "win" }
+	end
 end
 
-local function add_tsumo_base_payments(state, deltas, winner, base)
+local function add_tsumo_base_payments(state, deltas, winner, base, payments)
 	local dealer_win = winner == state.dealerIndex
 	for payer = 1, 4 do
 		if payer ~= winner then
 			local multiplier = dealer_win and 2 or (payer == state.dealerIndex and 2 or 1)
-			add_payment(deltas, winner, payer, round_up_100(base * multiplier))
+				add_payment(deltas, winner, payer, round_up_100(base * multiplier), payments, "win")
 		end
 	end
 end
 
 local function score_payment_deltas(state, score, seat, method, from_seat)
-	local deltas, dealer_win = { 0, 0, 0, 0 }, seat == state.dealerIndex
+	local deltas, payments, dealer_win = { 0, 0, 0, 0 }, {}, seat == state.dealerIndex
 	local liabilities = pao_liabilities_for_score(state, state.players[seat], score)
 	local liable_units = 0
 	for _, liability in ipairs(liabilities) do
@@ -1928,49 +2056,50 @@ local function score_payment_deltas(state, score, seat, method, from_seat)
 				if units > 0 then
 					local amount = unit_value * units
 					if liability.seat == from_seat then
-						add_payment(deltas, seat, from_seat, amount)
+						add_payment(deltas, seat, from_seat, amount, payments, "win")
 					else
-						add_payment(deltas, seat, liability.seat, amount / 2)
-						add_payment(deltas, seat, from_seat, amount / 2)
+						add_payment(deltas, seat, liability.seat, amount / 2, payments, "win")
+						add_payment(deltas, seat, from_seat, amount / 2, payments, "win")
 					end
 					applied = applied + units
 				end
 			end
 			local ordinary_units = math.max(0, (score.yakuman or 0) - applied)
-			add_payment(deltas, seat, from_seat, unit_value * ordinary_units)
+			add_payment(deltas, seat, from_seat, unit_value * ordinary_units, payments, "win")
 			-- Honba is never split with the liable player on a ron win.
-			add_payment(deltas, seat, from_seat, state.honba * 300)
+				add_payment(deltas, seat, from_seat, state.honba * 300, payments, "honba")
 		else
 			local amount = round_up_100(score.base * (dealer_win and 6 or 4)) + state.honba * 300
-			add_payment(deltas, seat, from_seat, amount)
+			add_payment(deltas, seat, from_seat, amount - state.honba * 300, payments, "win")
+			add_payment(deltas, seat, from_seat, state.honba * 300, payments, "honba")
 		end
 	elseif liable_units > 0 then
 		local unit_value, applied = dealer_win and 48000 or 32000, 0
 		for _, liability in ipairs(liabilities) do
 			local units = math.min(liability.units, liable_units - applied)
 			if units > 0 then
-				add_payment(deltas, seat, liability.seat, unit_value * units)
+				add_payment(deltas, seat, liability.seat, unit_value * units, payments, "win")
 				applied = applied + units
 			end
 		end
 		local ordinary_units = math.max(0, (score.yakuman or 0) - applied)
 		if ordinary_units > 0 then
-			add_tsumo_base_payments(state, deltas, seat, 8000 * ordinary_units)
+			add_tsumo_base_payments(state, deltas, seat, 8000 * ordinary_units, payments)
 		end
 		if ordinary_units == 0 and #liabilities == 1 then
-			add_payment(deltas, seat, liabilities[1].seat, state.honba * 300)
+			add_payment(deltas, seat, liabilities[1].seat, state.honba * 300, payments, "honba")
 		else
 			for payer = 1, 4 do
 				if payer ~= seat then
-					add_payment(deltas, seat, payer, state.honba * 100)
+					add_payment(deltas, seat, payer, state.honba * 100, payments, "honba")
 				end
 			end
 		end
 	else
-		add_tsumo_base_payments(state, deltas, seat, score.base)
+		add_tsumo_base_payments(state, deltas, seat, score.base, payments)
 		for payer = 1, 4 do
 			if payer ~= seat then
-				add_payment(deltas, seat, payer, state.honba * 100)
+				add_payment(deltas, seat, payer, state.honba * 100, payments, "honba")
 			end
 		end
 	end
@@ -1983,6 +2112,7 @@ local function score_payment_deltas(state, score, seat, method, from_seat)
 		score.paoSeats[#score.paoSeats + 1] = liability.seat
 	end
 	score.basePaymentTotal = base_payment_total(score, dealer_win, method)
+	score.paymentEdges = payments
 	score.payment = tostring(deltas[seat]) .. "点"
 	return deltas
 end
@@ -1997,6 +2127,9 @@ local function settle_win(state, seat, method, from_seat, winning_tile)
 	if state.riichiSticks > 0 then
 		deltas[seat] = deltas[seat] + state.riichiSticks * 1000
 		score.riichiAward = state.riichiSticks * 1000
+		score.paymentEdges[#score.paymentEdges + 1] = {
+			fromSeat = 0, toSeat = seat, amount = score.riichiAward, kind = "riichi_sticks",
+		}
 		state.riichiSticks = 0
 	end
 	for index = 1, 4 do
@@ -2036,6 +2169,9 @@ local function settle_multiple_ron(state, winners, from_seat, winning_tile)
 		local award = state.riichiSticks * 1000
 		total_deltas[results[1].winnerIndex] = total_deltas[results[1].winnerIndex] + award
 		results[1].riichiAward, state.riichiSticks = award, 0
+		results[1].paymentEdges[#results[1].paymentEdges + 1] = {
+			fromSeat = 0, toSeat = results[1].winnerIndex, amount = award, kind = "riichi_sticks",
+		}
 	end
 	for seat = 1, 4 do
 		state.scores[seat] = state.scores[seat] + total_deltas[seat]
@@ -2069,12 +2205,18 @@ finish_exhaustive_draw = function(state)
 		if #winners > 0 then
 			local deltas, results, dealer_won = { 0, 0, 0, 0 }, {}, false
 			for _, seat in ipairs(winners) do
-				local won = 0
+				local won, payment_edges = 0, {}
 				for payer = 1, 4 do
 					if payer ~= seat then
 						local multiplier = seat == state.dealerIndex and 2 or (payer == state.dealerIndex and 2 or 1)
-						local amount = round_up_100(2000 * multiplier) + state.honba * 100
+						local win_amount = round_up_100(2000 * multiplier)
+						local honba_amount = state.honba * 100
+						local amount = win_amount + honba_amount
 						deltas[payer], won = deltas[payer] - amount, won + amount
+						payment_edges[#payment_edges + 1] = { fromSeat = payer, toSeat = seat, amount = win_amount, kind = "win" }
+						if honba_amount > 0 then
+							payment_edges[#payment_edges + 1] = { fromSeat = payer, toSeat = seat, amount = honba_amount, kind = "honba" }
+						end
 					end
 				end
 				deltas[seat] = deltas[seat] + won
@@ -2085,6 +2227,7 @@ finish_exhaustive_draw = function(state)
 					limit = "满贯",
 					basePaymentTotal = seat == state.dealerIndex and 12000 or 8000,
 					payment = seat == state.dealerIndex and "4000点∀" or "2000/4000点",
+					paymentEdges = payment_edges,
 					yaku = { { name = "流局满贯", han = 5 } },
 				}
 				if seat == state.dealerIndex then
@@ -2094,6 +2237,9 @@ finish_exhaustive_draw = function(state)
 			if state.riichiSticks > 0 then
 				local award = state.riichiSticks * 1000
 				deltas[winners[1]], results[1].riichiAward, state.riichiSticks = deltas[winners[1]] + award, award, 0
+				results[1].paymentEdges[#results[1].paymentEdges + 1] = {
+					fromSeat = 0, toSeat = winners[1], amount = award, kind = "riichi_sticks",
+				}
 			end
 			for seat = 1, 4 do
 				state.scores[seat] = state.scores[seat] + deltas[seat]
@@ -2121,11 +2267,23 @@ finish_exhaustive_draw = function(state)
 			count = count + 1
 		end
 	end
-	local deltas = { 0, 0, 0, 0 }
+	local deltas, payment_edges = { 0, 0, 0, 0 }, {}
 	if count > 0 and count < 4 then
 		local gain, loss = 3000 / count, 3000 / (4 - count)
 		for seat = 1, 4 do
 			deltas[seat] = tenpai[seat] and gain or -loss
+		end
+		for payer = 1, 4 do
+			if not tenpai[payer] then
+				for receiver = 1, 4 do
+					if tenpai[receiver] then
+						payment_edges[#payment_edges + 1] = {
+							fromSeat = payer, toSeat = receiver,
+							amount = gain / (4 - count), kind = "noten_penalty",
+						}
+					end
+				end
+			end
 		end
 		for seat = 1, 4 do
 			state.scores[seat] = state.scores[seat] + deltas[seat]
@@ -2136,6 +2294,7 @@ finish_exhaustive_draw = function(state)
 		tenpai = tenpai,
 		tenpaiWaits = tenpai_waits,
 		deltas = deltas,
+		paymentEdges = payment_edges,
 		payment = count == 0 or count == 4 and "不听罚符 0点" or "不听罚符 3000点",
 	}
 	mark_next_hand(state, tenpai[state.dealerIndex], true)
@@ -2224,7 +2383,7 @@ local function new_match(players, names, seed, settings, ai_players)
 	end
 	state.paipu = {
 		format = "longern.riichi.paipu",
-		formatVersion = 2,
+		formatVersion = 3,
 		initialScores = copy_scores_for_record(state.scores),
 		hands = {},
 		eventCount = 0,
@@ -4711,7 +4870,7 @@ function export_paipu(state, mode)
 		hands = copy_record_value(source.hands),
 		status = state.matchEnded and "completed" or "in_progress",
 		final = state.matchEnded and {
-			endReason = state.endReason,
+			endReasonId = PAIPU.reason_id(state.endReason),
 			scores = copy_scores_for_record(state.scores),
 			ranks = ranks,
 		} or nil,

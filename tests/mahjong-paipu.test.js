@@ -153,7 +153,7 @@ test("mahjong paipu replay uses the saved wall instead of the random seed", asyn
 
   assert.equal(replay.exportPaipu().hands[0].wall, wall);
   assert.equal(typeof record.hands[0].commands[0].action.tile, "string");
-  assert.equal(record.formatVersion, 2);
+  assert.equal(record.formatVersion, 3);
 });
 
 test("mahjong paipu loads a selected hand into the existing local game", async (t) => {
@@ -227,7 +227,7 @@ test("mahjong paipu storage accepts completed records and derives a history summ
   const wall = "1m".repeat(4) + "2m".repeat(132);
   const record = {
     format: "longern.riichi.paipu",
-    formatVersion: 2,
+    formatVersion: 3,
     id: "solo-example:1",
     viewerPlayerId: "ai-2",
     status: "completed",
@@ -246,7 +246,12 @@ test("mahjong paipu storage accepts completed records and derives a history summ
         builtinCharacterId: "builtin-1",
       },
     },
-    hands: [{ wall, commands: [], events: [], end: {} }],
+    hands: [{
+      wall,
+      commands: [],
+      events: [],
+      end: { kind: "exhaustive_draw", winnerSeats: [], results: [] },
+    }],
     final: { scores: [32000, 26000, 23000, 19000], ranks: [1, 2, 3, 4] },
   };
 
@@ -265,6 +270,24 @@ test("mahjong paipu storage accepts completed records and derives a history summ
   assert.equal(summary.rank, 3);
   assert.equal(summary.handCount, 1);
   assert.throws(
+    () => validateMahjongPaipu({ ...record, formatVersion: 2 }),
+    /Unsupported Mahjong paipu format/,
+  );
+  assert.throws(
+    () => validateMahjongPaipu({
+      ...record,
+      hands: [{
+        ...record.hands[0],
+        end: {
+          kind: "ron",
+          winnerSeats: [1],
+          results: [{ payment: "2000点", yaku: [{ name: "立直", han: 1 }] }],
+        },
+      }],
+    }),
+    /language-dependent|unstructured payment/,
+  );
+  assert.throws(
     () => validateMahjongPaipu({ ...record, status: "in_progress" }),
     /completed Mahjong paipu/,
   );
@@ -273,4 +296,3 @@ test("mahjong paipu storage accepts completed records and derives a history summ
     /viewer player id is not in the player list/,
   );
 });
-

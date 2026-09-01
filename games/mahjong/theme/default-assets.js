@@ -1,5 +1,4 @@
 import {
-  MAHJONG_PORTRAIT_POSITIONS,
   normalizeMahjongPortraitPool,
   resolveMahjongPortraitDefaults,
 } from "./portrait-selection.js";
@@ -13,7 +12,6 @@ const ASSET_GROUPS = [
   "matchBgm",
   "riichiBgm",
 ];
-const PORTRAIT_POSITIONS = MAHJONG_PORTRAIT_POSITIONS;
 const DEFAULT_APPEARANCE_KEY = "playweft.mahjong.default-asset-appearance";
 
 const injectedConfig =
@@ -45,14 +43,9 @@ export function normalizeMahjongDefaultAssetConfig(value) {
     catalog.portraits,
   );
   const appearance = {
-    portraits: Object.fromEntries(
-      PORTRAIT_POSITIONS.map((position) => [
-        position,
-        position === "self"
-          ? pickId(catalog.portraits, portraitDefaults.self)
-          : "",
-      ]),
-    ),
+    portraits: {
+      self: pickId(catalog.portraits, portraitDefaults.self),
+    },
     tablecloth: pickId(catalog.tablecloths, requested?.tablecloth),
     tableBackground: pickId(catalog.tableBackgrounds, requested?.tableBackground),
     lobbyBackground: pickId(catalog.lobbyBackgrounds, requested?.lobbyBackground),
@@ -90,7 +83,7 @@ export function getMahjongDefaultAssetPack(appearanceOverride) {
     }
     : configuredAppearance;
   const assets = new Map();
-  for (const position of PORTRAIT_POSITIONS) {
+  for (const position of Object.keys(appearance.portraits)) {
     addSelectedAsset(
       assets,
       `portrait-${position}`,
@@ -150,12 +143,12 @@ export function getMahjongDefaultAssetCopyright() {
 
 export function configureMahjongDefaultAssetAppearance(nextAppearance) {
   const config = MAHJONG_DEFAULT_ASSET_CONFIG;
+  const currentAppearance = readAppearance(config);
   const appearance = {
-    ...readAppearance(config),
+    ...currentAppearance,
     ...(nextAppearance && typeof nextAppearance === "object" ? nextAppearance : {}),
     portraits: {
-      ...readAppearance(config).portraits,
-      ...(nextAppearance?.portraits ?? {}),
+      self: nextAppearance?.portraits?.self ?? currentAppearance.portraits.self,
     },
   };
   try {
@@ -199,8 +192,7 @@ function resolvePortraitAppearance(config, requested) {
 
 export function portraitNames(catalog, appearance) {
   return Object.fromEntries(
-    PORTRAIT_POSITIONS.map((position) => {
-      const id = appearance?.portraits?.[position];
+    Object.entries(appearance?.portraits ?? {}).map(([position, id]) => {
       const entry = catalog?.portraits?.find((candidate) => candidate.id === id);
       return [position, entry?.label || id || ""];
     }),

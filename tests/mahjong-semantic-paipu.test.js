@@ -68,7 +68,7 @@ test("788s can replay 78s chi on 9s and then discard the remaining 8s", async (t
   assert.equal(game.action(discard, actor).accepted, true);
 
   const record = game.exportPaipu();
-  assert.equal(record.formatVersion, 2);
+  assert.equal(record.formatVersion, 3);
   const semantic = record.hands[0].commands.slice(-2).map((entry) => entry.action);
   assert.deepEqual(semantic[0], { type: "chi", tiles: ["7s", "8s"] });
   assert.deepEqual(semantic[1], { type: "discard", tile: "8s", tsumogiri: false });

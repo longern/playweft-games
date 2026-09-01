@@ -82,9 +82,6 @@ const YAKU_VOICE_KEYS = new Set(Object.values(MAHJONG_YAKU_VOICE_KEYS));
 
 export const MAHJONG_ASSET_SLOTS = Object.freeze({
   "portrait-self": "自己",
-  "portrait-right": "右手边",
-  "portrait-opposite": "对家",
-  "portrait-left": "左手边",
   background: "牌桌背景",
   lobby: "大厅背景",
   tablecloth: "桌布",
@@ -1145,7 +1142,7 @@ export function normaliseAppearance(appearance, catalog) {
 
 function resolveAppearanceAssets(stored, appearance, catalog) {
   const resolved = new Map();
-  for (const position of PORTRAIT_POSITIONS) {
+  for (const position of Object.keys(appearance.portraits ?? {})) {
     const id = appearance.portraits[position];
     const record = stored.get(assetStorageSlot("portraits", id));
     if (record) resolved.set(`portrait-${position}`, record);

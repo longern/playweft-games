@@ -171,8 +171,8 @@ export function createMahjongThemeController({
     if (!select || !activePack) return;
     const appearance = structuredClone(activePack.appearance);
     const key = select.dataset.appearanceKey;
-    if (key.startsWith("portrait:")) {
-      appearance.portraits[key.slice("portrait:".length)] = select.value;
+    if (key === "portrait:self") {
+      appearance.portraits.self = select.value;
     } else if (key === "voice") {
       appearance.voice = select.value === "on";
     } else {
@@ -512,9 +512,6 @@ export function createMahjongThemeController({
     }
     const portraitLabels = {
       self: "自己",
-      right: "右手边",
-      opposite: "对家",
-      left: "左手边",
     };
     const controls = document.createDocumentFragment();
     const portraitRows = [];
