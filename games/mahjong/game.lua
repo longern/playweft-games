@@ -4937,6 +4937,12 @@ function view(state, events, context)
 			turnIndex = state.turnIndex,
 			responseIndex = response_index,
 			phase = state.phase,
+			pendingDiscard = state.phase == "claiming" and state.lastDiscard and {
+				playerIndex = state.lastDiscard.playerIndex,
+				discardIndex = state.lastDiscard.discardIndex,
+				tile = tile_type(state.lastDiscard.tile),
+				red = RED_FIVES[state.lastDiscard.tile] == true,
+			} or nil,
 			drawnPlayerIndex = state.drawnTile > 0 and state.turnIndex or 0,
 			wallCount = #state.wall,
 			doraIndicators = indicators,

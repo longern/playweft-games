@@ -312,6 +312,7 @@ export function createMahjongTableController({
       visualRenderer.render(renderState, visibleEvents, {
         ...domView.visualUi(getPlayerName?.(), selectedTileId),
         readOnly: isReplayReadOnly(),
+        actionInFlight: Boolean(actionInFlight),
         ...(viewerSeat === 1 ? {} : { viewerSeat }),
         dealInKey: animateDealIn ? handDealInKey(state) : "",
         animateDealIn,

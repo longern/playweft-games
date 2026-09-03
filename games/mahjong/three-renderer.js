@@ -15,6 +15,9 @@ import {
   Vector2,
   WebGLRenderer,
 } from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import tileFacesUrl from "./assets/tiles/riichi-faces.webp?url";
 import tileFacesPlaceholderUrl from "./assets/tiles/riichi-faces-placeholder.webp?url";
 import feltSkinUrl from "./assets/felt-skin-moonwave-v1.jpg?url";
@@ -28,6 +31,7 @@ import {
   isRedFive,
   opponentHandLayout,
   riverDisplayEntries,
+  pendingClaimDiscard,
   splitRevealedHand,
   tileType,
 } from "./rules/game-format.js";
@@ -63,6 +67,11 @@ import { ThreeTableConsole } from "./render/three-console.js";
 import { ThreeMahjongTable } from "./render/three-table.js";
 import { ThreeAnimationController } from "./render/three-animation-controller.js";
 import { ThreeKeyedSceneLayer } from "./render/three-keyed-scene-layer.js";
+import {
+  createPendingClaimOutlinePass,
+  shouldShowPendingClaimOutline,
+  setPendingClaimOutlineBreath,
+} from "./render/pending-claim-outline.js";
 import {
   HAND_REVEAL_FALL_DURATION_MS,
   NEW_HAND_DEAL_DURATION_MS,
@@ -158,6 +167,17 @@ export class MahjongThreeRenderer {
       CAMERA_POSITION.z,
     );
     this.camera.lookAt(CAMERA_TARGET.x, CAMERA_TARGET.y, CAMERA_TARGET.z);
+
+    this.composer = new EffectComposer(this.renderer);
+    this.scenePass = new RenderPass(this.scene, this.camera);
+    this.outlinePass = createPendingClaimOutlinePass(
+      this.scene,
+      this.camera,
+      MAHJONG_VIEWPORT,
+    );
+    this.composer.addPass(this.scenePass);
+    this.composer.addPass(this.outlinePass);
+    this.composer.addPass(new OutputPass());
 
     this.overlayScene = new Scene();
     this.overlayCamera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 2000);
@@ -347,6 +367,7 @@ export class MahjongThreeRenderer {
     const viewportChanged =
       width !== this.viewport?.width || height !== this.viewport?.height;
     this.renderer.setSize(width, height, false);
+    this.composer?.setSize(width, height);
     this.viewport = { width, height };
     this.camera.aspect = aspect;
     this.camera.fov = 33;
@@ -434,6 +455,7 @@ export class MahjongThreeRenderer {
     this.drawRivers(state);
     this.drawMelds(state);
     this.syncDoraBreathing();
+    this.syncPendingClaimBreathing();
     this.actionCallout.showLatest(
       asArray(events).map((event) => ({
         ...event,
@@ -538,6 +560,29 @@ export class MahjongThreeRenderer {
     });
   }
 
+  syncPendingClaimBreathing() {
+    if (!this.outlinePass?.selectedObjects?.length) {
+      if (this.outlinePass) {
+        this.outlinePass.edgeStrength = 0;
+        this.outlinePass.edgeGlow = 0;
+      }
+      this.animations.cancel("pending-claim-breath");
+      return;
+    }
+    if (this.animations.has("pending-claim-breath")) return;
+    this.outlinePass.edgeStrength = 2;
+    this.outlinePass.edgeGlow = 0.08;
+    this.animations.play({
+      id: "pending-claim-breath",
+      duration: 1800,
+      repeat: true,
+      update: (progress) => {
+        const pulse = Math.sin(Math.PI * 2 * progress) ** 2;
+        setPendingClaimOutlineBreath(this.outlinePass, pulse);
+      },
+    });
+  }
+
   createTile(options) {
     const tile = this.tileFactory.create(options);
     if (tile.userData.matchHighlight) this.highlightableTiles.add(tile);
@@ -570,7 +615,8 @@ export class MahjongThreeRenderer {
     const riichiTiles = new Set(
       asArray(this.ui?.riichiCandidateTiles).map(Number),
     );
-    const riichiDeclared = state.riichi?.[state.players?.[viewerSeat - 1]] === true;
+    const riichiDeclared =
+      state.riichi?.[state.players?.[viewerSeat - 1]] === true;
     const ownInsertionDeferred =
       Number(this.ui?.deferredHandInsertionSeat) === viewerSeat;
     const deferredOwnRackIndex = Math.max(
@@ -578,11 +624,17 @@ export class MahjongThreeRenderer {
       Math.min(rack.length, Number(this.ui?.deferredHandInsertionIndex) || 0),
     );
     if (revealSeats.has(viewerSeat) || coveredSeats.has(viewerSeat)) {
-      this.addPresentedHand(state, "bottom", state.players[viewerSeat - 1], viewerSeat, {
-        covered: coveredSeats.has(viewerSeat),
-        animate: animateReveal,
-        crossfade: crossfadeOwnHand,
-      });
+      this.addPresentedHand(
+        state,
+        "bottom",
+        state.players[viewerSeat - 1],
+        viewerSeat,
+        {
+          covered: coveredSeats.has(viewerSeat),
+          animate: animateReveal,
+          crossfade: crossfadeOwnHand,
+        },
+      );
     } else {
       rack.forEach((tileId, index) => {
         const slotIndex =
@@ -601,7 +653,8 @@ export class MahjongThreeRenderer {
             tileId,
           }) &&
             !forbiddenTypes.has(tileType(tileId)) &&
-            (!riichiMode || riichiTiles.has(tileId)) && !readOnly,
+            (!riichiMode || riichiTiles.has(tileId)) &&
+            !readOnly,
           riichiMode && !riichiTiles.has(tileId),
         );
       });
@@ -618,7 +671,8 @@ export class MahjongThreeRenderer {
             tileId: drawn,
           }) &&
             !forbiddenTypes.has(tileType(drawn)) &&
-            (!riichiMode || riichiTiles.has(drawn)) && !readOnly,
+            (!riichiMode || riichiTiles.has(drawn)) &&
+            !readOnly,
           riichiMode && !riichiTiles.has(drawn),
           this.animateOwnDrawEntry,
         );
@@ -1076,6 +1130,12 @@ export class MahjongThreeRenderer {
 
   drawRivers(state) {
     const viewerSeat = Number(this.ui?.viewerSeat) || 1;
+    const pending = shouldShowPendingClaimOutline(state, this.ui)
+      ? pendingClaimDiscard(state)
+      : null;
+    const pendingKey = pending
+      ? `${pending.playerIndex}:${pending.discardIndex - 1}`
+      : "";
     const riverEntries = [];
     for (let seat = 1; seat <= 4; seat += 1) {
       const position = POSITIONS[mahjongPresentationSeat(seat, viewerSeat) - 1];
@@ -1128,6 +1188,12 @@ export class MahjongThreeRenderer {
       update: (record, entry, lifecycle) =>
         this.updateRiverRecord(record, entry, lifecycle),
     });
+    const pendingRecord = pendingKey
+      ? this.riverLayer.records.get(pendingKey)
+      : null;
+    this.outlinePass.selectedObjects = pendingRecord?.tile
+      ? [pendingRecord.tile]
+      : [];
   }
 
   createRiverRecord(entry) {
@@ -1422,8 +1488,7 @@ export class MahjongThreeRenderer {
       !this.camera
     )
       return;
-    this.renderer.clear();
-    this.renderer.render(this.scene, this.camera);
+    this.composer.render();
     this.renderer.clearDepth();
     this.renderer.render(this.overlayScene, this.overlayCamera);
   }
@@ -1482,6 +1547,8 @@ export class MahjongThreeRenderer {
     this.animations.destroy();
     this.tableConsole?.destroy();
     this.table?.destroy();
+    this.outlinePass?.dispose();
+    this.composer?.dispose();
     this.renderer?.dispose();
     this.renderer?.domElement.remove();
   }

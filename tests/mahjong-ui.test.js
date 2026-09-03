@@ -7,6 +7,7 @@ import {
   Group,
   OrthographicCamera,
   PerspectiveCamera,
+  Scene,
   Texture,
   Vector3,
 } from "three";
@@ -43,6 +44,7 @@ import {
   resultScoreSheetRows,
   resultScoreRows,
   riverDisplayEntries,
+  pendingClaimDiscard,
   splitRevealedHand,
   tenpaiDiscardFuriten,
   tenpaiWaitSummary,
@@ -114,6 +116,11 @@ import {
 import { planarTileJitter } from "../games/mahjong/render/three-tile-jitter.js";
 import { ThreeAnimationController } from "../games/mahjong/render/three-animation-controller.js";
 import { ThreeKeyedSceneLayer } from "../games/mahjong/render/three-keyed-scene-layer.js";
+import {
+  createPendingClaimOutlinePass,
+  shouldShowPendingClaimOutline,
+  setPendingClaimOutlineBreath,
+} from "../games/mahjong/render/pending-claim-outline.js";
 import { MahjongPresentationController } from "../games/mahjong/app/presentation-controller.js";
 import { riverTileSoundCue } from "../games/mahjong/render/audio-cues.js";
 import { normalizeDiscardVolume } from "../games/mahjong/settings-dialog.js";
@@ -266,6 +273,68 @@ test("mahjong closes river gaps left by called discards", () => {
       { sourceIndex: 0, displayIndex: 0, type: 4 },
       { sourceIndex: 2, displayIndex: 1, type: 12 },
     ],
+  );
+});
+
+test("mahjong identifies the discard waiting for claim responses", () => {
+  assert.deepEqual(
+    pendingClaimDiscard({
+      phase: "claiming",
+      pendingDiscard: { playerIndex: 3, discardIndex: 5 },
+    }),
+    { playerIndex: 3, discardIndex: 5 },
+  );
+  assert.equal(
+    pendingClaimDiscard({
+      phase: "playing",
+      pendingDiscard: { playerIndex: 3, discardIndex: 5 },
+    }),
+    null,
+  );
+  assert.equal(
+    pendingClaimDiscard({
+      phase: "claiming",
+      pendingDiscard: { playerIndex: 0, discardIndex: 5 },
+    }),
+    null,
+  );
+});
+
+test("mahjong pending claim outline follows the full screen-space pass", () => {
+  const pass = createPendingClaimOutlinePass(
+    new Scene(),
+    new PerspectiveCamera(),
+    { width: 1280, height: 720 },
+  );
+  assert.equal(pass.selectedObjects.length, 0);
+  assert.equal(pass.visibleEdgeColor.getHexString(), "ffd86a");
+  assert.equal(pass.edgeThickness, 4);
+  setPendingClaimOutlineBreath(pass, 1);
+  assert.ok(Math.abs(pass.edgeStrength - 3.6) < 1e-9);
+  assert.ok(Math.abs(pass.edgeGlow - 0.32) < 1e-9);
+  pass.dispose();
+});
+
+test("mahjong pending claim outline follows the local claim buttons", () => {
+  const claiming = {
+    phase: "claiming",
+    legalActions: { claims: [{ kind: "pon", option: 1 }] },
+  };
+  assert.equal(shouldShowPendingClaimOutline(claiming), true);
+  assert.equal(
+    shouldShowPendingClaimOutline({
+      ...claiming,
+      legalActions: { claims: [] },
+    }),
+    false,
+  );
+  assert.equal(
+    shouldShowPendingClaimOutline(claiming, { actionInFlight: true }),
+    false,
+  );
+  assert.equal(
+    shouldShowPendingClaimOutline(claiming, { readOnly: true }),
+    false,
   );
 });
 

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5174",
+    "dev": "vite",
     "build": "vite build",
     "check": "vite build --emptyOutDir && node --test tests/*.test.js",
     "test": "node --test tests/*.test.js"

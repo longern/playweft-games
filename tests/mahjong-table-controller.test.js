@@ -134,6 +134,7 @@ test("mahjong table controller publishes a projection before rendering it", asyn
       dealInKey: "",
       animateDealIn: false,
       readOnly: false,
+      actionInFlight: false,
     }],
   ]);
 });

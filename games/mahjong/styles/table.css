@@ -256,6 +256,30 @@ a {
     0 2px 0 #aaa58f;
 }
 
+.discard-river .mahjong-tile.is-pending-claim {
+  border-color: rgba(255, 218, 112, 0.96);
+  box-shadow:
+    0 0 0 1px rgba(255, 209, 86, 0.86),
+    0 0 7px rgba(255, 203, 79, 0.3),
+    0 2px 0 #aaa58f;
+  animation: mahjong-pending-claim-breath 1.8s ease-in-out infinite;
+}
+
+@keyframes mahjong-pending-claim-breath {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(255, 209, 86, 0.76),
+      0 0 5px rgba(255, 203, 79, 0.2),
+      0 2px 0 #aaa58f;
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(255, 226, 127, 0.98),
+      0 0 9px rgba(255, 215, 96, 0.38),
+      0 2px 0 #aaa58f;
+  }
+}
+
 .mahjong-tile.is-dora {
   background-color: #f0d995;
   background-blend-mode: multiply;

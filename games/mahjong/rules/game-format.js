@@ -48,6 +48,21 @@ export function riverDisplayEntries(river) {
     .map((entry, displayIndex) => ({ ...entry, displayIndex }));
 }
 
+/**
+ * Returns the public discard currently waiting for claim responses.
+ * The engine exposes the source seat and 1-based river index while claiming;
+ * keeping this lookup here makes DOM and Three.js river rendering agree.
+ */
+export function pendingClaimDiscard(state) {
+  if (state?.phase !== "claiming") return null;
+  const pending = state?.pendingDiscard;
+  const playerIndex = Number(pending?.playerIndex);
+  const discardIndex = Number(pending?.discardIndex);
+  if (!Number.isInteger(playerIndex) || playerIndex < 1 || playerIndex > 4) return null;
+  if (!Number.isInteger(discardIndex) || discardIndex < 1) return null;
+  return { playerIndex, discardIndex };
+}
+
 export function partitionClaimActions(claims) {
   const chi = [];
   const pon = [];

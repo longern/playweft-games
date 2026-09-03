@@ -13,6 +13,7 @@ import {
   playerDisplayName,
   confirmedTenpaiSummary,
   riverDisplayEntries,
+  pendingClaimDiscard,
   roundLabel,
   resultDetailPageCount,
   seatWind,
@@ -497,6 +498,7 @@ export class MahjongDomView {
   }
 
   renderRivers(state, events) {
+    const pending = pendingClaimDiscard(state);
     const latest = [...events]
       .reverse()
       .find((event) => event.type === "discarded");
@@ -510,6 +512,10 @@ export class MahjongDomView {
           tile.classList.toggle(
             "is-latest",
             latest?.playerIndex === seat && sourceIndex === river.length - 1,
+          );
+          tile.classList.toggle(
+            "is-pending-claim",
+            pending?.playerIndex === seat && pending.discardIndex === sourceIndex + 1,
           );
           return tile;
         }),
