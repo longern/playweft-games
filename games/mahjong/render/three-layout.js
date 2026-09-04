@@ -29,9 +29,9 @@ export const HAND_TILE_GAP = 0.035;
 const DRAWN_TILE_GAP = 0.24;
 // Before the fall begins, the perspective row projects about 15px shorter than
 // the orthographic HUD rack. Its screen-space centre therefore stays fixed at
-// y=668.54 while the crossfade switches layers; the face-down row keeps its
+// y=667.94 while the crossfade switches layers; the face-down row keeps its
 // separate bottom-safe placement below.
-export const LOCAL_REVEALED_HAND_Z = 6.95267;
+export const LOCAL_REVEALED_HAND_Z = 6.94325;
 export const LOCAL_COVERED_HAND_Z = 6.3;
 
 export const OWN_HAND_LAYOUT = Object.freeze({
@@ -39,7 +39,7 @@ export const OWN_HAND_LAYOUT = Object.freeze({
   occupiedWidthRatio: 0.64,
   initialCentreTileIndex: 7,
   hudTileAspect: 0.66,
-  regularGapRatio: 0.0015,
+  regularGap: 1,
   drawnGapRatio: 0.009,
   bottomInset: 9,
 });
@@ -178,7 +178,7 @@ export function ownHandOverlayTransform(
   const height = Math.max(1, Number(viewportHeight) || 1);
   const safeWidth = Math.min(width, height * OWN_HAND_LAYOUT.safeAspect);
   const occupiedWidth = safeWidth * OWN_HAND_LAYOUT.occupiedWidthRatio;
-  const regularGap = safeWidth * OWN_HAND_LAYOUT.regularGapRatio;
+  const regularGap = OWN_HAND_LAYOUT.regularGap;
   const drawnGap = safeWidth * OWN_HAND_LAYOUT.drawnGapRatio;
   const tileWidth = (occupiedWidth - regularGap * 12 - drawnGap) / 14;
   const tileHeight = tileWidth / OWN_HAND_LAYOUT.hudTileAspect;

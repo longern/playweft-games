@@ -63,6 +63,7 @@ import {
   DORA_BREATH_DURATION_MS,
   ThreeTileFactory,
 } from "./render/three-tile-factory.js";
+import { ThreeTileFeedbackCompositor } from "./render/three-tile-feedback-compositor.js";
 import { ThreeTableConsole } from "./render/three-console.js";
 import { ThreeMahjongTable } from "./render/three-table.js";
 import { ThreeAnimationController } from "./render/three-animation-controller.js";
@@ -133,6 +134,8 @@ export class MahjongThreeRenderer {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.5));
     this.renderer.outputColorSpace = SRGBColorSpace;
+    // The table and local hand share one HDR buffer. Tile feedback is excluded
+    // here and composed over the final ACES image in display space.
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.97;
     this.renderer.shadowMap.enabled = true;
@@ -177,7 +180,6 @@ export class MahjongThreeRenderer {
     );
     this.composer.addPass(this.scenePass);
     this.composer.addPass(this.outlinePass);
-    this.composer.addPass(new OutputPass());
 
     this.overlayScene = new Scene();
     this.overlayCamera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 2000);
@@ -187,6 +189,19 @@ export class MahjongThreeRenderer {
     this.overlayScene.add(this.ownHandLayer);
     this.actionCallout = new ThreeActionCallout(this.animations);
     this.overlayScene.add(this.actionCallout.group);
+    this.overlayPass = new RenderPass(this.overlayScene, this.overlayCamera);
+    this.overlayPass.clear = false;
+    this.overlayPass.clearDepth = true;
+    this.overlayPass.needsSwap = false;
+    this.composer.addPass(this.overlayPass);
+    this.outputPass = new OutputPass();
+    this.composer.addPass(this.outputPass);
+    this.tileFeedbackCompositor = new ThreeTileFeedbackCompositor({
+      scene: this.scene,
+      camera: this.camera,
+      overlayScene: this.overlayScene,
+      overlayCamera: this.overlayCamera,
+    });
 
     this.tableConsole = new ThreeTableConsole({
       anisotropy: Math.min(8, this.renderer.capabilities.getMaxAnisotropy()),
@@ -353,12 +368,18 @@ export class MahjongThreeRenderer {
 
   addOverlayLighting() {
     this.overlayScene.add(
-      new HemisphereLight(0xfff4dc, 0x244a43, 2.35),
-      new AmbientLight(0xb9d0c7, 0.8),
+      // Keep enough neutral fill to preserve the porcelain colour without
+      // washing out the directional difference between its face and top.
+      new HemisphereLight(0xfff2d8, 0x416d62, 1.4),
+      new AmbientLight(0xe2e7e3, 0.6),
     );
-    const key = new DirectionalLight(0xffe8c3, 3.8);
+    const key = new DirectionalLight(0xfff5ff, 4.5);
     key.position.set(-260, 420, 700);
-    this.overlayScene.add(key);
+    key.target.position.set(0, 0, 0);
+    const topFill = new DirectionalLight(0xfff7e9, 3.2);
+    topFill.position.set(0, 800, 40);
+    topFill.target.position.set(0, 0, 0);
+    this.overlayScene.add(key, key.target, topFill, topFill.target);
   }
 
   resize() {
@@ -1392,7 +1413,12 @@ export class MahjongThreeRenderer {
   }
 
   handleDoubleClick(event) {
-    if (this.pickTile(event) || this.pickTableTile(event) || this.pickTableConsole(event)) return;
+    if (
+      this.pickTile(event) ||
+      this.pickTableTile(event) ||
+      this.pickTableConsole(event)
+    )
+      return;
     const pointer = this.pointerToOverlay(event);
     const safeBounds = ownHandDoubleClickSafeBounds(
       this.viewport.width,
@@ -1480,7 +1506,9 @@ export class MahjongThreeRenderer {
       -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    return this.raycaster.intersectObject(this.tableConsole.group, true)[0] ?? null;
+    return (
+      this.raycaster.intersectObject(this.tableConsole.group, true)[0] ?? null
+    );
   }
 
   setHoveredTile(tile, force = false) {
@@ -1504,8 +1532,7 @@ export class MahjongThreeRenderer {
     )
       return;
     this.composer.render();
-    this.renderer.clearDepth();
-    this.renderer.render(this.overlayScene, this.overlayCamera);
+    this.tileFeedbackCompositor.render(this.renderer);
   }
 
   resume() {
@@ -1563,6 +1590,8 @@ export class MahjongThreeRenderer {
     this.tableConsole?.destroy();
     this.table?.destroy();
     this.outlinePass?.dispose();
+    this.outputPass?.dispose();
+    this.tileFeedbackCompositor?.dispose();
     this.composer?.dispose();
     this.renderer?.dispose();
     this.renderer?.domElement.remove();
@@ -1599,6 +1628,9 @@ function cloneTileMaterialsForFade(tile, initialOpacity = 0) {
       clone.transparent = true;
       clone.depthWrite = false;
       clone.opacity = source.opacity * initialOpacity;
+      if (clone.uniforms?.feedbackFade) {
+        clone.uniforms.feedbackFade.value = initialOpacity;
+      }
       clone.needsUpdate = true;
       return clone;
     });
@@ -1621,7 +1653,11 @@ function setFadedTileOpacity(records, value) {
       ? record.cloneMaterial
       : [record.cloneMaterial];
     materials.forEach((material, index) => {
-      material.opacity = record.targetOpacities[index] * opacity;
+      const targetOpacity = record.targetOpacities[index] * opacity;
+      material.opacity = targetOpacity;
+      if (material.uniforms?.feedbackFade) {
+        material.uniforms.feedbackFade.value = opacity;
+      }
     });
     // WebGL shadow maps are binary: a threshold half way through a fade makes
     // a full-strength shadow visibly pop in. Enable it on the first rendered

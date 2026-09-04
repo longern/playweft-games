@@ -1,32 +1,24 @@
 import {
-  AdditiveBlending,
   Color,
-  DataTexture,
   Group,
-  LinearFilter,
   Mesh,
-  MeshBasicMaterial,
   MeshPhysicalMaterial,
   PlaneGeometry,
-  RGBAFormat,
   SRGBColorSpace,
-  ShaderMaterial,
-  UnsignedByteType,
 } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { TILE_FACE_NAMES, tileFaceFrameIndex } from "./tile-texture-map.js";
+import {
+  doraBreathIntensity,
+  DORA_BREATH_DURATION_MS,
+  ThreeTileFeedback,
+} from "./three-tile-feedback.js";
 import { TILE_SIZE } from "./three-layout.js";
+
+export { doraBreathIntensity, DORA_BREATH_DURATION_MS };
 
 const ATLAS_COLUMNS = 8;
 const ATLAS_ROWS = 5;
-const DORA_HALO_RENDER_ORDER = 0;
-const DORA_LIGHTBOX_RENDER_ORDER = 1;
-const DORA_EMISSION_RENDER_ORDER = 2;
-const MATCH_HIGHLIGHT_RENDER_ORDER = 5;
-const TSUMOGIRI_WASH_RENDER_ORDER = 6;
-const DISABLED_WASH_RENDER_ORDER = 10;
-export const DORA_BREATH_DURATION_MS = 2800;
-const DORA_BREATH_MIN_INTENSITY = 0.5;
 export const BACK_LAYER_DEPTH_RATIO = 0.36;
 export const TILE_EDGE_SEGMENTS = 7;
 // About 2 mm on a 28 mm parlor tile: clearly rounded at game-camera distance
@@ -58,7 +50,14 @@ export class ThreeTileFactory {
       metalness: 0,
       clearcoat: 0.12,
       clearcoatRoughness: 0.58,
+      toneMapped: false,
     });
+    this.doraShellMaterial = this.shellMaterial.clone();
+    this.doraShellPeakColor = new Color("#e6d69c");
+    this.doraShellBaseColor = this.shellMaterial.color
+      .clone()
+      .lerp(this.doraShellPeakColor, 0.7);
+    this.doraShellMaterial.color.copy(this.doraShellBaseColor);
     this.backMaterial = new MeshPhysicalMaterial({
       color: new Color("#1b569c"),
       roughness: 0.4,
@@ -80,87 +79,16 @@ export class ThreeTileFactory {
       polygonOffset: true,
       polygonOffsetFactor: -1,
     });
-    this.matchHighlightGeometry = new RoundedBoxGeometry(
+    this.feedbackGeometry = new RoundedBoxGeometry(
       TILE_SIZE.width + 0.006,
       TILE_SIZE.height + 0.006,
-      // Its front surface must sit beyond the printed face plane (+0.008),
-      // otherwise that opaque plane depth-tests the blue selection wash away.
+      // Its front surface clears the printed face plane while depth testing
+      // still respects other tiles.
       TILE_SIZE.depth + 0.024,
       TILE_EDGE_SEGMENTS,
       TILE_EDGE_RADIUS + 0.002,
     );
-    this.matchHighlightMaterial = new MeshBasicMaterial({
-      // Android Chrome's visible tap feedback reads as a short translucent
-      // blue overlay. Applying it to the complete tile body keeps this
-      // recognition cue physical, matching the tsumogiri wash instead of
-      // outlining only the face.
-      color: new Color("#4285f4"),
-      transparent: true,
-      opacity: 0.24,
-      depthTest: true,
-      depthWrite: false,
-      toneMapped: false,
-    });
-    this.doraLightboxGeometry = new RoundedBoxGeometry(
-      TILE_SIZE.width + 0.01,
-      TILE_SIZE.height + 0.01,
-      TILE_SIZE.depth + 0.01,
-      TILE_EDGE_SEGMENTS,
-      TILE_EDGE_RADIUS + 0.004,
-    );
-    this.doraLightboxMaterial = createDoraLightboxMaterial();
-    this.doraEmissionGeometry = new RoundedBoxGeometry(
-      TILE_SIZE.width + 0.014,
-      TILE_SIZE.height + 0.014,
-      TILE_SIZE.depth + 0.014,
-      TILE_EDGE_SEGMENTS,
-      TILE_EDGE_RADIUS + 0.006,
-    );
-    this.doraEmissionMaterial = createDoraEmissionMaterial();
-    this.doraHaloGeometry = new PlaneGeometry(
-      TILE_SIZE.width * 1.38,
-      TILE_SIZE.height * 1.34,
-    );
-    this.doraHaloTexture = createDoraHaloTexture();
-    this.doraHaloMaterial = new MeshBasicMaterial({
-      map: this.doraHaloTexture,
-      color: new Color("#ffe16a"),
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-      toneMapped: false,
-    });
-    this.disabledWashMaterial = new MeshBasicMaterial({
-      color: new Color("#050807"),
-      transparent: true,
-      opacity: 0.52,
-      depthWrite: false,
-      toneMapped: false,
-    });
-    this.tsumogiriWashMaterial = new MeshBasicMaterial({
-      color: new Color("#343a37"),
-      transparent: true,
-      opacity: 0.16,
-      depthTest: true,
-      depthWrite: false,
-      toneMapped: false,
-    });
-    this.disabledGeometry = new RoundedBoxGeometry(
-      TILE_SIZE.width + 0.024,
-      TILE_SIZE.height + 0.024,
-      TILE_SIZE.depth + 0.024,
-      TILE_EDGE_SEGMENTS,
-      TILE_EDGE_RADIUS + 0.006,
-    );
-    this.tsumogiriWashGeometry = new RoundedBoxGeometry(
-      TILE_SIZE.width + 0.006,
-      TILE_SIZE.height + 0.006,
-      // Match the selection wash: this front surface must clear the printed
-      // face plane, otherwise only the tile sides receive the tsumogiri tint.
-      TILE_SIZE.depth + 0.024,
-      TILE_EDGE_SEGMENTS,
-      TILE_EDGE_RADIUS + 0.002,
-    );
+    this.feedback = new ThreeTileFeedback(this.feedbackGeometry);
     this.faceGeometries = TILE_FACE_NAMES.map((_, index) =>
       createFaceGeometry(index),
     );
@@ -194,7 +122,11 @@ export class ThreeTileFactory {
     const tile = new Group();
     tile.userData.tileId = Number(tileId) || 0;
     tile.userData.type = Number(type) || 0;
-    const shell = new Mesh(this.shellGeometry, this.shellMaterial);
+    const visibleDora = !concealed && Boolean(type) && dora;
+    const shell = new Mesh(
+      this.shellGeometry,
+      visibleDora ? this.doraShellMaterial : this.shellMaterial,
+    );
     shell.castShadow = true;
     shell.receiveShadow = true;
     shell.userData.tileRoot = tile;
@@ -208,83 +140,25 @@ export class ThreeTileFactory {
     tile.add(back);
 
     if (!concealed && type) {
-      const glow = new Mesh(
-        this.matchHighlightGeometry,
-        this.matchHighlightMaterial,
-      );
-      glow.visible = highlight === "match";
-      glow.renderOrder = MATCH_HIGHLIGHT_RENDER_ORDER;
-      glow.userData.tileRoot = tile;
-      tile.userData.matchHighlight = glow;
-      tile.add(glow);
       const frame = tileFaceFrameIndex(type, red);
       const face = new Mesh(this.faceGeometries[frame], this.faceMaterial);
       face.position.z = TILE_SIZE.depth / 2 + 0.008;
       face.userData.tileRoot = tile;
       tile.add(face);
-      if (dora) {
-        this.trackDoraTile();
-        const halo = new Mesh(this.doraHaloGeometry, this.doraHaloMaterial);
-        // This sits behind the tile's front surface, so the opaque porcelain
-        // hides its centre. Only the soft falloff beyond the silhouette is
-        // visible: a gold aura, never a graphic outline.
-        halo.position.z = TILE_SIZE.depth / 2 - 0.004;
-        halo.renderOrder = DORA_HALO_RENDER_ORDER;
-        halo.userData.tileRoot = tile;
-        tile.add(halo);
-        const lightbox = new Mesh(
-          this.doraLightboxGeometry,
-          this.doraLightboxMaterial,
-        );
-        // A second, slightly larger tile shell turns every porcelain surface
-        // into the gold diffuser: face, sides, and rounded edges. The shader
-        // cuts away the rear-facing surface so the blue tile back stays blue.
-        // The printed face remains above this shell in its ordinary colours.
-        lightbox.renderOrder = DORA_LIGHTBOX_RENDER_ORDER;
-        lightbox.userData.tileRoot = tile;
-        tile.add(lightbox);
-        const emission = new Mesh(
-          this.doraEmissionGeometry,
-          this.doraEmissionMaterial,
-        );
-        // This shell uses the same front-and-side shape as the colour layer,
-        // so it lifts their luminance together instead of making the face look
-        // detached from the white tile edge. The rear face is still discarded.
-        emission.renderOrder = DORA_EMISSION_RENDER_ORDER;
-        emission.userData.tileRoot = tile;
-        tile.add(emission);
-      }
-      if (dimmed) {
-        const wash = new Mesh(this.disabledGeometry, this.disabledWashMaterial);
-        // Transparent objects are otherwise sorted by their object origins. The
-        // face plane sits in front of this rounded box's origin, so it can be
-        // painted after the wash even though the box surface is physically
-        // closer to the camera. Force the full-tile wash to be composited last.
-        wash.renderOrder = DISABLED_WASH_RENDER_ORDER;
-        wash.userData.tileRoot = tile;
-        tile.add(wash);
-      }
-    }
-    if (tsumogiri) {
-      const wash = new Mesh(
-        this.tsumogiriWashGeometry,
-        this.tsumogiriWashMaterial,
-      );
-      // This thin rounded shell tints the complete physical tile—face, body,
-      // edges, and back—rather than behaving like a dora face sticker. It
-      // still depth-tests against every other tile, while not writing depth so
-      // another translucent treatment can retain its natural occlusion.
-      wash.renderOrder = TSUMOGIRI_WASH_RENDER_ORDER;
-      wash.userData.tileRoot = tile;
-      tile.add(wash);
+      if (visibleDora) this.trackDoraTile();
+      this.feedback.attach(tile, {
+        match: highlight === "match",
+        tsumogiri,
+        // Dora keeps its persistent shell colour, while the disabled wash still
+        // applies so unavailable dora tiles are visually de-emphasized too.
+        disabled: dimmed,
+      });
     }
     return tile;
   }
 
   setMatchHighlight(tile, visible) {
-    if (tile?.userData?.matchHighlight) {
-      tile.userData.matchHighlight.visible = visible === true;
-    }
+    this.feedback.setMatch(tile, visible);
   }
 
   beginFrame() {
@@ -301,9 +175,9 @@ export class ThreeTileFactory {
 
   setDoraGlowIntensity(intensity) {
     const value = Math.max(0, Math.min(1, Number(intensity) || 0));
-    this.doraLightboxMaterial.uniforms.intensity.value = value;
-    this.doraEmissionMaterial.uniforms.intensity.value = value;
-    this.doraHaloMaterial.opacity = 0.045 * value;
+    this.doraShellMaterial.color
+      .copy(this.doraShellBaseColor)
+      .lerp(this.doraShellPeakColor, value);
   }
 
   setBackTexture(texture) {
@@ -326,135 +200,16 @@ export class ThreeTileFactory {
   destroy() {
     this.shellGeometry.dispose();
     this.backGeometry.dispose();
-    this.matchHighlightGeometry.dispose();
-    this.doraHaloGeometry.dispose();
-    this.doraEmissionGeometry.dispose();
-    this.disabledGeometry.dispose();
-    this.tsumogiriWashGeometry.dispose();
+    this.feedbackGeometry.dispose();
     for (const geometry of this.faceGeometries) geometry.dispose();
     this.shellMaterial.dispose();
+    this.doraShellMaterial.dispose();
     this.backMaterial.dispose();
     this.faceMaterial.dispose();
-    this.matchHighlightMaterial.dispose();
-    this.doraLightboxGeometry.dispose();
-    this.doraLightboxMaterial.dispose();
-    this.doraEmissionMaterial.dispose();
-    this.doraHaloMaterial.dispose();
-    this.doraHaloTexture.dispose();
-    this.disabledWashMaterial.dispose();
-    this.tsumogiriWashMaterial.dispose();
+    this.feedback.destroy();
     this.faceAtlas?.dispose();
     this.customBackTexture?.dispose();
   }
-}
-
-function createDoraHaloTexture() {
-  const width = 160;
-  const height = 224;
-  const data = new Uint8Array(width * height * 4);
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const pointX = x / (width - 1) - 0.5;
-      const pointY = y / (height - 1) - 0.5;
-      const distance = roundedRectDistance(pointX, pointY, 0.37, 0.4, 0.07);
-      // A long, smooth shoulder gives a small light bloom rather than a rim.
-      const alpha = 1 - smoothstep(-0.012, 0.15, distance);
-      const offset = (y * width + x) * 4;
-      data[offset] = 255;
-      data[offset + 1] = 255;
-      data[offset + 2] = 255;
-      data[offset + 3] = Math.round(alpha * 255);
-    }
-  }
-  const texture = new DataTexture(
-    data,
-    width,
-    height,
-    RGBAFormat,
-    UnsignedByteType,
-  );
-  texture.magFilter = LinearFilter;
-  texture.minFilter = LinearFilter;
-  texture.needsUpdate = true;
-  return texture;
-}
-
-function roundedRectDistance(x, y, halfWidth, halfHeight, radius) {
-  const edgeX = Math.max(Math.abs(x) - (halfWidth - radius), 0);
-  const edgeY = Math.max(Math.abs(y) - (halfHeight - radius), 0);
-  return Math.hypot(edgeX, edgeY) - radius;
-}
-
-function smoothstep(edge0, edge1, value) {
-  const progress = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
-  return progress * progress * (3 - 2 * progress);
-}
-
-function createDoraLightboxMaterial() {
-  return new ShaderMaterial({
-    uniforms: {
-      lightColor: { value: new Color("#ffe16a") },
-      intensity: { value: 0 },
-    },
-    transparent: true,
-    depthWrite: false,
-    toneMapped: false,
-    vertexShader: `
-      varying vec3 vLocalNormal;
-      void main() {
-        vLocalNormal = normal;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 lightColor;
-      uniform float intensity;
-      varying vec3 vLocalNormal;
-
-      void main() {
-        // The blue back has an outward local normal of -Z. Retain the white
-        // side walls, but never tint that rear surface.
-        if (vLocalNormal.z < -0.12 || intensity < 0.002) discard;
-        gl_FragColor = vec4(lightColor, intensity * 0.12);
-      }
-    `,
-  });
-}
-
-function createDoraEmissionMaterial() {
-  return new ShaderMaterial({
-    uniforms: {
-      emissionColor: { value: new Color("#fff0a1") },
-      intensity: { value: 0 },
-    },
-    transparent: true,
-    blending: AdditiveBlending,
-    depthWrite: false,
-    toneMapped: false,
-    vertexShader: `
-      varying vec3 vLocalNormal;
-      void main() {
-        vLocalNormal = normal;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 emissionColor;
-      uniform float intensity;
-      varying vec3 vLocalNormal;
-
-      void main() {
-        if (vLocalNormal.z < -0.12 || intensity < 0.002) discard;
-        gl_FragColor = vec4(emissionColor, intensity * 0.085);
-      }
-    `,
-  });
-}
-
-export function doraBreathIntensity(progress) {
-  const phase = Math.max(0, Math.min(1, Number(progress) || 0));
-  const pulse = Math.sin(Math.PI * phase) ** 2;
-  return DORA_BREATH_MIN_INTENSITY + (1 - DORA_BREATH_MIN_INTENSITY) * pulse;
 }
 
 function createFaceGeometry(index) {

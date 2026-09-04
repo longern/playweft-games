@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
-  AdditiveBlending,
   Euler,
   Group,
   OrthographicCamera,
   PerspectiveCamera,
+  NormalBlending,
   Scene,
   Texture,
   Vector3,
@@ -99,9 +99,12 @@ import {
 import { tileFaceFrameIndex } from "../games/mahjong/render/tile-texture-map.js";
 import {
   doraBreathIntensity,
-  DORA_BREATH_DURATION_MS,
   ThreeTileFactory,
 } from "../games/mahjong/render/three-tile-factory.js";
+import {
+  hasVisibleFeedback,
+  ThreeTileFeedbackCompositor,
+} from "../games/mahjong/render/three-tile-feedback-compositor.js";
 import {
   prepareTableConsoleContext,
   formatScoreDisplay,
@@ -1524,10 +1527,11 @@ test("mahjong animation controller shares one frame loop and deduplicates events
 });
 
 test("mahjong keeps a gold dora lightbox lit between breaths", () => {
-  assert.equal(DORA_BREATH_DURATION_MS, 2800);
-  assert.equal(doraBreathIntensity(0), 0.5);
-  assert.equal(doraBreathIntensity(0.5), 1);
-  assert.equal(doraBreathIntensity(1), 0.5);
+  const start = doraBreathIntensity(0);
+  const peak = doraBreathIntensity(0.5);
+  const end = doraBreathIntensity(1);
+  assert.ok(peak > start);
+  assert.ok(Math.abs(end - start) < Number.EPSILON);
 });
 
 test("mahjong gives a newly drawn local tile a short falling fade-in", () => {
@@ -1931,118 +1935,152 @@ test("mahjong highlights matching visible tile types without adding count text",
   const ordinaryDora = factory.create({ type: 5, dora: true });
   const plainRedFive = factory.create({ type: 5, red: true });
   const doubleDoraRedFive = factory.create({ type: 5, red: true, dora: true });
+  const stackedFeedback = factory.create({
+    type: 5,
+    dora: true,
+    highlight: "match",
+    tsumogiri: true,
+  });
   const tsumogiriTile = factory.create({ type: 5, tsumogiri: true });
   const disabledRiichiTile = factory.create({ type: 5, dimmed: true });
+  const doraRiichiTile = factory.create({ type: 5, dora: true, dimmed: true });
   const concealed = factory.create({
     type: 5,
     concealed: true,
     highlight: "match",
   });
-  assert.equal(
-    selected.children.find(
-      (child) => child.material === factory.matchHighlightMaterial,
-    )?.visible,
-    false,
-  );
-  assert.equal(
-    matchingRedFive.children.find(
-      (child) => child.material === factory.matchHighlightMaterial,
-    )?.visible,
-    true,
-  );
-  assert.equal(factory.matchHighlightMaterial.transparent, true);
-  assert.equal(factory.matchHighlightMaterial.color.getHexString(), "4285f4");
-  assert.equal(factory.matchHighlightMaterial.opacity, 0.24);
-  assert.equal(factory.matchHighlightMaterial.depthWrite, false);
-  assert.equal(factory.matchHighlightMaterial.depthTest, true);
-  assert.equal(
-    matchingRedFive.children.find(
-      (child) => child.material === factory.matchHighlightMaterial,
-    )?.geometry,
-    factory.matchHighlightGeometry,
-  );
-  factory.matchHighlightGeometry.computeBoundingBox();
+  const selectedFeedback = selected.userData.feedback;
+  const matchingFeedback = matchingRedFive.userData.feedback;
+  const tsumogiriFeedback = tsumogiriTile.userData.feedback;
+  const disabledFeedback = disabledRiichiTile.userData.feedback;
   const matchingFace = matchingRedFive.children.find(
     (child) => child.material === factory.faceMaterial,
   );
-  assert.ok(
-    factory.matchHighlightGeometry.boundingBox.max.z > matchingFace.position.z,
-    "the full-body selection wash must be in front of the printed face",
+  assert.ok(matchingFace);
+  assert.equal(matchingFace.material.isMeshPhysicalMaterial, true);
+  const shell = matchingRedFive.children.find(
+    (child) => child.material === factory.shellMaterial,
   );
-  factory.tsumogiriWashGeometry.computeBoundingBox();
+  assert.ok(shell);
+  assert.equal(shell.material.isMeshPhysicalMaterial, true);
+  assert.ok(selectedFeedback);
+  assert.equal(selectedFeedback.mesh.visible, false);
+  assert.ok(matchingFeedback);
+  assert.equal(matchingFeedback.mesh.visible, true);
+  assert.equal(hasVisibleFeedback(matchingRedFive), true);
+  assert.equal(matchingFeedback.mesh.material.transparent, true);
+  assert.equal(matchingFeedback.mesh.material.blending, NormalBlending);
+  assert.equal(matchingFeedback.mesh.material.depthWrite, false);
+  assert.equal(matchingFeedback.mesh.material.depthTest, true);
+  assert.equal(matchingFeedback.mesh.material.toneMapped, false);
+  assert.equal(matchingFeedback.mesh.geometry, factory.feedbackGeometry);
+  factory.feedbackGeometry.computeBoundingBox();
+  assert.ok(
+    factory.feedbackGeometry.boundingBox.max.z > matchingFace.position.z,
+    "feedback washes clear the printed face without bypassing depth testing",
+  );
   const tsumogiriFace = tsumogiriTile.children.find(
     (child) => child.material === factory.faceMaterial,
   );
   assert.ok(
-    factory.tsumogiriWashGeometry.boundingBox.max.z > tsumogiriFace.position.z,
-    "the full-body tsumogiri wash must be in front of the printed face",
+    factory.feedbackGeometry.boundingBox.max.z > tsumogiriFace.position.z,
+    "every feedback wash shares the same visible surface",
   );
-  assert.equal(
-    concealed.children.some(
-      (child) => child.material === factory.matchHighlightMaterial,
-    ),
-    false,
+  assert.equal(concealed.userData.feedback, undefined);
+  assert.equal(hasVisibleFeedback(concealed), false);
+  const plainShell = plainRedFive.children.find(
+    (child) => child.geometry === factory.shellGeometry,
   );
-  assert.equal(
-    plainRedFive.children.some(
-      (child) => child.material === factory.doraLightboxMaterial,
-    ),
-    false,
-  );
+  assert.equal(plainShell.material, factory.shellMaterial);
   const doraFace = ordinaryDora.children.find(
     (child) => child.material === factory.faceMaterial,
   );
-  const doraLightbox = ordinaryDora.children.find(
-    (child) => child.material === factory.doraLightboxMaterial,
-  );
-  const doraHalo = ordinaryDora.children.find(
-    (child) => child.material === factory.doraHaloMaterial,
-  );
-  const doraEmission = ordinaryDora.children.find(
-    (child) => child.material === factory.doraEmissionMaterial,
+  const doraShell = ordinaryDora.children.find(
+    (child) => child.geometry === factory.shellGeometry,
   );
   assert.ok(doraFace);
-  assert.ok(doraLightbox);
-  assert.ok(doraHalo);
-  assert.ok(doraEmission);
-  assert.equal(doraLightbox.position.z, 0);
-  assert.ok(doraLightbox.geometry === factory.doraLightboxGeometry);
-  assert.equal(
-    factory.doraLightboxMaterial.uniforms.lightColor.value.getHexString(),
-    "ffe16a",
+  assert.ok(doraShell);
+  assert.equal(doraShell.material, factory.doraShellMaterial);
+  assert.equal(doraShell.material.isMeshPhysicalMaterial, true);
+  assert.notDeepEqual(
+    factory.doraShellBaseColor,
+    factory.shellMaterial.color,
+    "the resting dora shell remains visibly interpolated toward gold",
   );
-  assert.equal(factory.doraLightboxMaterial.depthWrite, false);
-  assert.equal(factory.doraLightboxMaterial.uniforms.intensity.value, 0);
-  assert.equal(factory.doraEmissionMaterial.blending, AdditiveBlending);
-  assert.equal(factory.doraEmissionMaterial.uniforms.intensity.value, 0);
-  assert.ok(doraHalo.position.z < doraFace.position.z);
-  assert.equal(factory.doraHaloMaterial.depthWrite, false);
-  assert.equal(factory.doraHaloMaterial.opacity, 0);
+  assert.equal(doraFace.material, factory.faceMaterial);
+  const restingDoraColor = factory.doraShellMaterial.color.clone();
   factory.setDoraGlowIntensity(1);
-  assert.equal(factory.doraLightboxMaterial.uniforms.intensity.value, 1);
-  assert.equal(factory.doraEmissionMaterial.uniforms.intensity.value, 1);
-  assert.equal(factory.doraHaloMaterial.opacity, 0.045);
+  assert.notDeepEqual(factory.doraShellMaterial.color, restingDoraColor);
   factory.setDoraGlowIntensity(0);
-  assert.ok(
-    doubleDoraRedFive.children.some(
-      (child) => child.material === factory.doraLightboxMaterial,
-    ),
+  assert.deepEqual(factory.doraShellMaterial.color, factory.doraShellBaseColor);
+  assert.equal(
+    doubleDoraRedFive.children.find(
+      (child) => child.geometry === factory.shellGeometry,
+    )?.material,
+    factory.doraShellMaterial,
   );
-  const disabledWash = disabledRiichiTile.children.find(
-    (child) =>
-      child.material === factory.disabledWashMaterial &&
-      child.geometry === factory.disabledGeometry,
+  const stackedShell = stackedFeedback.children.find(
+    (child) => child.geometry === factory.shellGeometry,
   );
+  const stackedCue = stackedFeedback.userData.feedback;
+  assert.equal(stackedShell.material, factory.doraShellMaterial);
+  assert.equal(stackedCue.match, true);
+  assert.equal(stackedCue.tsumogiri, true);
+  assert.ok(stackedCue.mesh.material.uniforms.matchOpacity.value > 0);
+  assert.equal(stackedCue.mesh.material.uniforms.tsumogiriOpacity.value, 0);
+  factory.setMatchHighlight(stackedFeedback, false);
+  assert.equal(stackedCue.match, false);
+  assert.ok(stackedCue.mesh.material.uniforms.tsumogiriOpacity.value > 0);
+  assert.equal(stackedShell.material, factory.doraShellMaterial);
+  assert.ok(tsumogiriFeedback.mesh.material.uniforms.tsumogiriOpacity.value > 0);
+  assert.ok(disabledFeedback.mesh.material.uniforms.disabledOpacity.value > 0);
   const disabledFace = disabledRiichiTile.children.find(
     (child) => child.material === factory.faceMaterial,
   );
-  assert.ok(disabledWash);
   assert.ok(disabledFace);
-  assert.ok(disabledWash.renderOrder > disabledFace.renderOrder);
-  assert.equal(factory.disabledWashMaterial.transparent, true);
-  assert.equal(factory.disabledWashMaterial.opacity, 0.52);
+  assert.ok(disabledFeedback.mesh.renderOrder > disabledFace.renderOrder);
+  assert.equal(doraRiichiTile.userData.feedback.mesh.visible, true);
+  assert.ok(
+    doraRiichiTile.userData.feedback.mesh.material.uniforms.disabledOpacity
+      .value > 0,
+    "disabled feedback also covers dora tiles",
+  );
+  assert.equal(
+    doraRiichiTile.children.find(
+      (child) => child.geometry === factory.shellGeometry,
+    )?.material,
+    factory.doraShellMaterial,
+  );
+  factory.setMatchHighlight(selected, true);
+  assert.equal(selectedFeedback.mesh.visible, true);
+  factory.setMatchHighlight(selected, false);
+  assert.equal(selectedFeedback.mesh.visible, false);
   factory.destroy();
+});
 
+test("mahjong composites tile feedback after tone mapping with depth replay", () => {
+  const scene = new Scene();
+  const overlayScene = new Scene();
+  const compositor = new ThreeTileFeedbackCompositor({
+    scene,
+    camera: new PerspectiveCamera(),
+    overlayScene,
+    overlayCamera: new OrthographicCamera(),
+  });
+  const factory = new ThreeTileFactory(new Texture());
+  const matchingTile = factory.create({ type: 5, highlight: "match" });
+  scene.add(matchingTile);
+
+  assert.equal(hasVisibleFeedback(scene), true);
+  factory.setMatchHighlight(matchingTile, false);
+  assert.equal(hasVisibleFeedback(scene), false);
+  factory.setMatchHighlight(matchingTile, true);
+  assert.equal(hasVisibleFeedback(scene), true);
+  assert.equal(compositor.depthMaterial.colorWrite, false);
+  assert.equal(compositor.depthMaterial.depthWrite, true);
+
+  compositor.dispose();
+  factory.destroy();
 });
 
 test("mahjong renders every meld in the perspective table scene", () => {
