@@ -4,5 +4,11 @@
 /:game/playweft.json
   Access-Control-Allow-Origin: *
 
+/*.svg
+  Cache-Control: public, max-age=86400, must-revalidate
+
+/*.png
+  Cache-Control: public, max-age=86400, must-revalidate
+
 /assets/vendor/*
   Cache-Control: public, max-age=31536000, immutable
