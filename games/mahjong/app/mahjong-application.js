@@ -367,6 +367,7 @@ export function createMahjongApplication({
       });
       if (action) tableController?.submitAction(action);
     },
+    onToggleScoreDisplay: () => tableController?.toggleScoreDisplay(),
   });
   const resultHandRenderer = new MahjongResultHandRenderer(
     elements.resultDetailContent,

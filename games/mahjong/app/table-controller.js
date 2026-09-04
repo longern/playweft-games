@@ -34,6 +34,7 @@ import {
   mahjongSeatForPlayer,
 } from "../rules/seat-order.js";
 import { roomActionStateKey } from "../rules/room-action-reconciliation.js";
+import { SCORE_DISPLAY_DURATION_MS } from "../render/three-console.js";
 
 const MATCH_MUSIC_FADE_DURATION_MS = 800;
 const RESULT_PAGE_TRANSITION_MS = 920;
@@ -106,6 +107,8 @@ export function createMahjongTableController({
   const tenpaiState = createMahjongTableTenpaiState();
   let riichiTenpaiRequest = 0;
   let riichiTenpaiKey = "";
+  let scoreDisplayMode = "score";
+  let scoreDisplayTimer = 0;
 
   function getState() {
     return state;
@@ -170,7 +173,22 @@ export function createMahjongTableController({
     resultPageAnimating = false;
     hideMatchSummary();
     resetResultPageTrack();
-    domView.clearResolvedWindBadges?.();
+    if (scoreDisplayTimer) browserWindow.clearTimeout(scoreDisplayTimer);
+    scoreDisplayTimer = 0;
+    scoreDisplayMode = "score";
+  }
+
+  function toggleScoreDisplay() {
+    if (!state) return false;
+    scoreDisplayMode = "difference";
+    if (scoreDisplayTimer) browserWindow.clearTimeout(scoreDisplayTimer);
+    scoreDisplayTimer = browserWindow.setTimeout(() => {
+      scoreDisplayTimer = 0;
+      scoreDisplayMode = "score";
+      renderCurrentState();
+    }, SCORE_DISPLAY_DURATION_MS);
+    renderCurrentState();
+    return true;
   }
 
   async function refresh(
@@ -313,6 +331,7 @@ export function createMahjongTableController({
         ...domView.visualUi(getPlayerName?.(), selectedTileId),
         readOnly: isReplayReadOnly(),
         actionInFlight: Boolean(actionInFlight),
+        ...(scoreDisplayMode === "difference" ? { scoreDisplayMode } : {}),
         ...(viewerSeat === 1 ? {} : { viewerSeat }),
         dealInKey: animateDealIn ? handDealInKey(state) : "",
         animateDealIn,
@@ -427,6 +446,7 @@ export function createMahjongTableController({
         ...domView.visualUi(getPlayerName?.(), selectedTileId),
         ...(viewerSeat === 1 ? {} : { viewerSeat }),
         riichiMode,
+        ...(scoreDisplayMode === "difference" ? { scoreDisplayMode } : {}),
         riichiCandidateTiles: [],
         revealPlayerIndices: [],
         coveredPlayerIndices: [],
@@ -1467,6 +1487,8 @@ export function createMahjongTableController({
   }
 
   function destroy() {
+    if (scoreDisplayTimer) browserWindow.clearTimeout(scoreDisplayTimer);
+    scoreDisplayTimer = 0;
     presentation.destroy();
     syncMatchMusic({ enabled: false });
     riverTileSound.pause();
@@ -1480,6 +1502,7 @@ export function createMahjongTableController({
     refresh,
     applyLegalActions,
     renderCurrentState,
+    toggleScoreDisplay,
     renderPresentationOverlays,
     applyMatchMusicVolume,
     applyAudioVolumes,

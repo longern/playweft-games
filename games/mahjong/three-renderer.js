@@ -1365,6 +1365,10 @@ export class MahjongThreeRenderer {
     const tileId = Number(tile?.userData.tileId || 0);
     if (!tileId) {
       this.lastTap = { tileId: 0, time: 0 };
+      if (this.pickTableConsole(event)) {
+        this.callbacks.onToggleScoreDisplay?.();
+        return;
+      }
       if (!this.pickTableTile(event)) this.callbacks.onClearSelection?.();
       return;
     }
@@ -1388,7 +1392,7 @@ export class MahjongThreeRenderer {
   }
 
   handleDoubleClick(event) {
-    if (this.pickTile(event) || this.pickTableTile(event)) return;
+    if (this.pickTile(event) || this.pickTableTile(event) || this.pickTableConsole(event)) return;
     const pointer = this.pointerToOverlay(event);
     const safeBounds = ownHandDoubleClickSafeBounds(
       this.viewport.width,
@@ -1466,6 +1470,17 @@ export class MahjongThreeRenderer {
       true,
     )[0];
     return hit?.object?.userData.tileRoot ?? null;
+  }
+
+  pickTableConsole(event) {
+    if (!this.tableConsole?.group || !this.camera) return null;
+    const bounds = this.renderer.domElement.getBoundingClientRect();
+    this.pointer.set(
+      ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+      -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    return this.raycaster.intersectObject(this.tableConsole.group, true)[0] ?? null;
   }
 
   setHoveredTile(tile, force = false) {

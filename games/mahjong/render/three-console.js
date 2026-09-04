@@ -9,18 +9,23 @@ import {
   SRGBColorSpace,
 } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
-import { activeSeat } from "../rules/game-format.js";
+import { activeSeat, seatWind } from "../rules/game-format.js";
 import { PLAYFIELD_CENTRE_Z, TILE_SIZE } from "./three-layout.js";
 
 const LOGICAL_WIDTH = 640;
 const LOGICAL_HEIGHT = Math.round((LOGICAL_WIDTH * 5) / 5.8);
 const TEXTURE_SCALE = 2;
 const PANEL_BORDER_INSET = 16;
+const SCORE_WIND_ANCHOR = "888888";
+export const SCORE_DISPLAY_DURATION_MS = 1000;
 
 export const TABLE_CONSOLE_SCORE_LAYOUT = Object.freeze({
   panelBorderInset: PANEL_BORDER_INSET,
   edgeInset: 99,
   scoreFontSize: 64,
+  windFontSize: 80,
+  windScoreGap: 14,
+  windEdgeAngle: Math.PI / 36,
   stickEdgeInset: 44.5,
   stickWidth: 177,
   stickHeight: 177 / 7,
@@ -154,11 +159,6 @@ function drawPanel(context) {
   context.lineWidth = 2;
   context.strokeStyle = "rgba(255, 244, 211, .12)";
   context.stroke();
-  context.fillStyle = "rgba(238, 202, 116, .5)";
-  for (const x of [66, LOGICAL_WIDTH - 66]) {
-    context.fillRect(x - 22, 47, 44, 3);
-    context.fillRect(x - 22, LOGICAL_HEIGHT - 50, 44, 3);
-  }
   context.restore();
 }
 
@@ -193,10 +193,17 @@ function drawCore(context, state, ui) {
 
 function drawScores(context, state, ui = {}) {
   const viewerSeat = Number(ui.viewerSeat) || 1;
-  const active = ((activeSeat(state) - viewerSeat + 4) % 4);
+  const active = (activeSeat(state) - viewerSeat + 4) % 4;
   const centreY = LOGICAL_HEIGHT / 2;
-  const { edgeInset, scoreFontSize, stickEdgeInset } =
-    TABLE_CONSOLE_SCORE_LAYOUT;
+  const {
+    edgeInset,
+    scoreFontSize,
+    stickEdgeInset,
+    windFontSize,
+    windScoreGap,
+    windEdgeAngle,
+  } = TABLE_CONSOLE_SCORE_LAYOUT;
+  const showScoreDifference = ui.scoreDisplayMode === "difference";
   const placements = [
     {
       x: LOGICAL_WIDTH / 2,
@@ -204,6 +211,8 @@ function drawScores(context, state, ui = {}) {
       stickX: LOGICAL_WIDTH / 2,
       stickY: LOGICAL_HEIGHT - stickEdgeInset,
       rotation: 0,
+      textRotation: 0,
+      windSide: -1,
     },
     {
       x: LOGICAL_WIDTH - edgeInset,
@@ -211,6 +220,8 @@ function drawScores(context, state, ui = {}) {
       stickX: LOGICAL_WIDTH - stickEdgeInset,
       stickY: centreY,
       rotation: Math.PI / 2,
+      textRotation: (Math.PI * 3) / 2,
+      windSide: -1,
     },
     {
       x: LOGICAL_WIDTH / 2,
@@ -218,6 +229,8 @@ function drawScores(context, state, ui = {}) {
       stickX: LOGICAL_WIDTH / 2,
       stickY: stickEdgeInset,
       rotation: 0,
+      textRotation: 0,
+      windSide: 1,
     },
     {
       x: edgeInset,
@@ -225,6 +238,8 @@ function drawScores(context, state, ui = {}) {
       stickX: stickEdgeInset,
       stickY: centreY,
       rotation: -Math.PI / 2,
+      textRotation: Math.PI / 2,
+      windSide: -1,
     },
   ];
   placements.forEach((placement, index) => {
@@ -238,19 +253,92 @@ function drawScores(context, state, ui = {}) {
         placement.rotation,
       );
     }
-    drawText(
-      context,
-      String(Number(state.scores?.[canonicalSeat - 1] ?? 0)),
+    const isViewerSeat = canonicalSeat === viewerSeat;
+    const displayDifference = showScoreDifference && !isViewerSeat;
+    const scoreValue = displayDifference
+      ? scoreDifference(state, canonicalSeat, viewerSeat)
+      : Number(state.scores?.[canonicalSeat - 1] ?? 0);
+    const score = formatScoreDisplay(scoreValue, displayDifference);
+    const scoreFont = `${index === active ? 900 : 760} ${scoreFontSize}px "Roboto Slab", ui-monospace, monospace`;
+    const wind = seatWind(state, canonicalSeat);
+    const windFont = `400 ${windFontSize}px "Mahjong Brush", "FZKai-Z03", STKaiti, KaiTi, serif`;
+    context.save();
+    context.font = scoreFont;
+    const scoreAnchorWidth = context.measureText(SCORE_WIND_ANCHOR).width;
+    context.font = windFont;
+    const windWidth = context.measureText(wind).width;
+    context.restore();
+    drawText(context, score, placement.x, placement.y, {
+      color: displayDifference
+        ? scoreDifferenceColor(scoreValue)
+        : index === active
+          ? "#ffdc78"
+          : "rgba(249, 237, 204, .9)",
+      font: scoreFont,
+      rotation: placement.textRotation,
+      shadow: index === active,
+    });
+    const windPosition = scoreWindPosition(
       placement.x,
       placement.y,
-      {
-        color: index === active ? "#ffdc78" : "rgba(249, 237, 204, .9)",
-        font: `${index === active ? 900 : 760} ${scoreFontSize}px "Roboto Slab", ui-monospace, monospace`,
-        rotation: placement.rotation,
-        shadow: index === active,
-      },
+      scoreAnchorWidth,
+      windWidth,
+      windScoreGap,
+      placement.textRotation,
+      placement.windSide,
+      -windEdgeAngle,
     );
+    drawText(context, wind, windPosition.x, windPosition.y, {
+      color: seatWindColor(state, canonicalSeat),
+      font: windFont,
+      rotation: placement.textRotation,
+      shadow: index === active,
+    });
   });
+}
+
+export function scoreDifference(state, seat, viewerSeat = 1) {
+  const index = Number(seat) - 1;
+  const current = Number(state?.scores?.[index]) || 0;
+  const viewerIndex = Number(viewerSeat) - 1;
+  const ownScore = Number(state?.scores?.[viewerIndex]) || 0;
+  return current - ownScore;
+}
+
+export function formatScoreDisplay(value, difference = false) {
+  const number = Number(value) || 0;
+  return difference && number > 0 ? `+${number}` : String(number);
+}
+
+export function scoreDifferenceColor(value) {
+  const number = Number(value) || 0;
+  if (number > 0) return "#72d99a";
+  if (number < 0) return "#ef8d82";
+  return "#f2d17d";
+}
+
+export function scoreWindPosition(
+  scoreX,
+  scoreY,
+  scoreAnchorWidth,
+  windWidth,
+  gap,
+  rotation = 0,
+  side = -1,
+  edgeRotation = 0,
+) {
+  const distance =
+    Number(scoreAnchorWidth) / 2 + Number(gap) + Number(windWidth) / 2;
+  const localOffset = Number(side) < 0 ? -distance : distance;
+  const offsetRotation = (Number(rotation) || 0) + Number(edgeRotation);
+  return {
+    x: Number(scoreX) + localOffset * Math.cos(offsetRotation),
+    y: Number(scoreY) + localOffset * Math.sin(offsetRotation),
+  };
+}
+
+export function seatWindColor(state, seat) {
+  return seatWind(state, seat) === "東" ? "#e9833f" : "#f2d17d";
 }
 
 function drawRiichiStick(context, x, y, rotation) {

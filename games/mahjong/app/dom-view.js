@@ -16,7 +16,6 @@ import {
   pendingClaimDiscard,
   roundLabel,
   resultDetailPageCount,
-  seatWind,
   tileFace,
   tileType,
 } from "../rules/game-format.js";
@@ -382,15 +381,6 @@ export class MahjongDomView {
     });
   }
 
-  clearResolvedWindBadges() {
-    for (const station of Object.values(this.elements.stations)) {
-      const windBadge = station?.querySelector("[data-wind]");
-      if (!windBadge) continue;
-      windBadge.textContent = "";
-      windBadge.classList.remove("is-east", "is-resolved");
-    }
-  }
-
   renderStations(
     state,
     playerName,
@@ -409,11 +399,6 @@ export class MahjongDomView {
           : fallbackName || stateName || PLAYERS[seat - 1].name || "玩家";
       station.querySelector("[data-name]").textContent =
         seat === this.viewerSeat && playerNameIsAuthoritative ? playerName : name;
-      const wind = seatWind(state, seat);
-      const windBadge = station.querySelector("[data-wind]");
-      windBadge.textContent = wind;
-      windBadge.classList.add("is-resolved");
-      windBadge.classList.toggle("is-east", wind === "東");
       const consoleScore = this.elements.consoleScores[
         mahjongPresentationSeat(seat, this.viewerSeat) - 1
       ];

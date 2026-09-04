@@ -479,40 +479,6 @@ a {
   white-space: nowrap;
 }
 
-.wind-badge {
-  position: absolute;
-  z-index: 2;
-  top: -8px;
-  right: 1px;
-  display: flex;
-  width: 32px;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 50%;
-  background: linear-gradient(145deg, #fff0bf, #cfad63);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.34);
-  color: #46351e;
-  font-family: "Mahjong Brush", "FZKai-Z03", STKaiti, KaiTi, serif;
-  font-size: 24px;
-  font-weight: 900;
-  font-synthesis: weight;
-}
-
-.wind-badge:not(.is-resolved) {
-  visibility: hidden;
-}
-
-.wind-badge.is-east {
-  background: linear-gradient(145deg, #e9833f, #b84727);
-  box-shadow:
-    0 2px 5px rgba(0, 0, 0, 0.4),
-    inset 0 1px 1px rgba(255, 236, 190, 0.42);
-  color: #2f1b12;
-  text-shadow: 0 1px rgba(255, 197, 116, 0.28);
-}
-
 .player-station.is-active .player-avatar {
   border-color: #ffe492;
   box-shadow:

@@ -45,6 +45,7 @@ import {
   resultScoreRows,
   riverDisplayEntries,
   pendingClaimDiscard,
+  seatWind,
   splitRevealedHand,
   tenpaiDiscardFuriten,
   tenpaiWaitSummary,
@@ -103,6 +104,11 @@ import {
 } from "../games/mahjong/render/three-tile-factory.js";
 import {
   prepareTableConsoleContext,
+  formatScoreDisplay,
+  scoreWindPosition,
+  scoreDifference,
+  scoreDifferenceColor,
+  seatWindColor,
   TABLE_CONSOLE_CORE_LAYOUT,
   TABLE_CONSOLE_LAYOUT,
   TABLE_CONSOLE_SCORE_LAYOUT,
@@ -2299,6 +2305,93 @@ test("mahjong centre console reserves an equal edge band for four riichi sticks"
     layout.stickEdgeInset - layout.stickHeight / 2 > layout.panelBorderInset,
   );
 
+});
+
+test("mahjong centre console labels each score with its canonical wind", () => {
+  const state = {
+    dealerIndex: 2,
+    phase: "playing",
+    players: ["east", "south", "west", "north"],
+  };
+  assert.deepEqual(
+    [1, 2, 3, 4].map((seat) => [seatWind(state, seat), seatWindColor(state, seat)]),
+    [
+      ["北", "#f2d17d"],
+      ["東", "#e9833f"],
+      ["南", "#f2d17d"],
+      ["西", "#f2d17d"],
+    ],
+  );
+});
+
+test("mahjong centre console temporarily formats score differences with signed colors", () => {
+  const state = {
+    scores: [28500, 23700, 25000, 21800],
+  };
+  assert.equal(scoreDifference(state, 1, 1), 0);
+  assert.equal(scoreDifference(state, 2, 1), -4800);
+  assert.equal(scoreDifference(state, 3, 1), -3500);
+  assert.equal(formatScoreDisplay(3500, true), "+3500");
+  assert.equal(formatScoreDisplay(-1300, true), "-1300");
+  assert.equal(scoreDifferenceColor(3500), "#72d99a");
+  assert.equal(scoreDifferenceColor(-1300), "#ef8d82");
+  assert.notEqual(scoreDifferenceColor(3500), scoreDifferenceColor(-1300));
+});
+
+test("mahjong centre console leaves the wind label clear of a six-digit score", () => {
+  const scoreX = 320;
+  const scoreAnchorWidth = 216;
+  const windWidth = 80;
+  const fiveDigitWind = scoreWindPosition(
+    scoreX,
+    320,
+    scoreAnchorWidth,
+    windWidth,
+    14,
+    0,
+    -1,
+  );
+  const sixDigitWind = scoreWindPosition(
+    scoreX,
+    320,
+    scoreAnchorWidth,
+    windWidth,
+    14,
+    0,
+    -1,
+  );
+  assert.deepEqual(fiveDigitWind, sixDigitWind);
+  assert.equal(scoreX - scoreAnchorWidth / 2 - sixDigitWind.x - windWidth / 2, 14);
+});
+
+test("mahjong console wind labels use each seat's own left side", () => {
+  const bottom = scoreWindPosition(320, 320, 216, 80, 14, 0, -1);
+  const right = scoreWindPosition(320, 320, 216, 80, 14, (Math.PI * 3) / 2, -1);
+  const top = scoreWindPosition(320, 320, 216, 80, 14, 0, 1);
+  const left = scoreWindPosition(320, 320, 216, 80, 14, Math.PI / 2, -1);
+  assert.equal(bottom.x < 320 && Math.abs(bottom.y - 320) < 1e-9, true);
+  assert.equal(Math.abs(right.x - 320) < 1e-9 && right.y > 320, true);
+  assert.equal(top.x > 320 && Math.abs(top.y - 320) < 1e-9, true);
+  assert.equal(Math.abs(left.x - 320) < 1e-9 && left.y < 320, true);
+});
+
+test("mahjong console wind labels bias toward the outer edge while keeping their gap", () => {
+  const base = scoreWindPosition(320, 320, 216, 80, 14, 0, -1);
+  const biased = scoreWindPosition(
+    320,
+    320,
+    216,
+    80,
+    14,
+    0,
+    -1,
+    -TABLE_CONSOLE_SCORE_LAYOUT.windEdgeAngle,
+  );
+  assert.ok(biased.y > base.y);
+  assert.ok(
+    Math.abs(Math.hypot(biased.x - 320, biased.y - 320) - Math.hypot(base.x - 320, base.y - 320)) <
+      1e-9,
+  );
 });
 
 test("mahjong centre console leaves every three-row river visible", () => {
