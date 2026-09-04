@@ -123,6 +123,7 @@ import {
 } from "../games/mahjong/render/pending-claim-outline.js";
 import { MahjongPresentationController } from "../games/mahjong/app/presentation-controller.js";
 import { riverTileSoundCue } from "../games/mahjong/render/audio-cues.js";
+import { helpIframeRectStyle } from "../games/mahjong/app/help-iframe-portal.js";
 import { normalizeDiscardVolume } from "../games/mahjong/settings-dialog.js";
 import {
   traditionalDrawReason,
@@ -313,6 +314,13 @@ test("mahjong pending claim outline follows the full screen-space pass", () => {
   assert.ok(Math.abs(pass.edgeStrength - 3.6) < 1e-9);
   assert.ok(Math.abs(pass.edgeGlow - 0.32) < 1e-9);
   pass.dispose();
+});
+
+test("mahjong help iframe portal converts the visible panel rect to fixed pixels", () => {
+  assert.deepEqual(
+    helpIframeRectStyle({ left: 12.8, top: 24.4, width: 501.8, height: 302.2 }),
+    { left: "13px", top: "24px", width: "502px", height: "302px" },
+  );
 });
 
 test("mahjong pending claim outline follows the local claim buttons", () => {

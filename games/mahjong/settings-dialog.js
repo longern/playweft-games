@@ -47,6 +47,9 @@ export function createMahjongSettingsDialog({
   onOfflinePolicyChange,
   onOfflineAction,
   onEndMatch,
+  getAdditionalFocusable = () => [],
+  onOpenChange,
+  onTabChange,
 }) {
   let returnFocus = null;
   let open = false;
@@ -128,6 +131,7 @@ export function createMahjongSettingsDialog({
     for (const panel of tabPanels) {
       panel.hidden = panel.dataset.settingsPanel !== name;
     }
+    onTabChange?.(name);
   }
 
   function clearMotionTimers() {
@@ -165,6 +169,7 @@ export function createMahjongSettingsDialog({
       root.hidden = false;
       trigger.setAttribute("aria-expanded", "true");
       setTab("operation");
+      onOpenChange?.(true);
       const reveal = () => {
         openingFrame = 0;
         if (!open) return;
@@ -181,6 +186,7 @@ export function createMahjongSettingsDialog({
     if (!open && root.hidden) return;
     const wasVisible = root.classList.contains("is-open");
     open = false;
+    onOpenChange?.(false);
     clearMotionTimers();
     restoreFocusAfterClose = restoreFocus;
     root.classList.remove("is-open");
@@ -221,6 +227,7 @@ export function createMahjongSettingsDialog({
       ...surface.querySelectorAll(
         'button:not([disabled]):not([tabindex="-1"]), input:not([disabled]), iframe',
       ),
+      ...getAdditionalFocusable(),
     ].filter((element) => !element.closest("[hidden]"));
     if (!focusable.length) return;
     const first = focusable[0];

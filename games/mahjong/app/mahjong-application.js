@@ -53,6 +53,7 @@ import { createMahjongSetupScreenController } from "./setup-screen-controller.js
 import { createMahjongMatchCoordinator } from "./match-coordinator.js";
 import { bindMahjongUi } from "./ui-bindings.js";
 import { createMahjongSettingsDialog } from "../settings-dialog.js";
+import { createMahjongHelpIframePortal } from "./help-iframe-portal.js";
 import { createMahjongOfflineResourceController } from "./offline-resource-controller.js";
 import { MahjongMatchMusic } from "../theme/match-music.js";
 import {
@@ -224,6 +225,13 @@ export function createMahjongApplication({
     element: elements.transientNotice,
     window,
   });
+  const helpIframePortal = createMahjongHelpIframePortal({
+    template: elements.settingsHelpFrameTemplate,
+    slot: elements.settingsHelpFrameSlot,
+    panel: elements.settingsHelpPanel,
+    dialog: elements.settingsDialog,
+    viewport: document.querySelector("#mahjong-viewport"),
+  });
   const setupScreen = createMahjongSetupScreenController({
     window,
     elements,
@@ -300,6 +308,10 @@ export function createMahjongApplication({
         policy,
       }),
     onOfflineAction: () => void offlineResourceController.handleAction(),
+    getAdditionalFocusable: () => helpIframePortal.getFocusableElements(),
+    onOpenChange: (open) =>
+      helpIframePortal.setActive(open && elements.settingsHelpPanel?.hidden === false),
+    onTabChange: (name) => helpIframePortal.setActive(name === "help"),
   });
   const autoActionController = createMahjongAutoActionController({
     elements,
@@ -907,6 +919,7 @@ export function createMahjongApplication({
     themeController.destroy();
     releaseFixedViewport();
     settingsDialog.destroy();
+    helpIframePortal.destroy();
     visualRenderer.destroy();
     resultHandRenderer.destroy();
     matchCoordinator.getGame()?.close();

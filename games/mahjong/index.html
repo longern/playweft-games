@@ -279,7 +279,10 @@
             </div>
             <div id="settings-help-panel" class="settings-tab-panel settings-help-panel" role="tabpanel"
               aria-labelledby="settings-help-tab" data-settings-panel="help" hidden>
-              <iframe id="settings-help-frame" title="麻将玩法帮助" src="./help.html"></iframe>
+              <div id="settings-help-frame-slot" class="settings-help-iframe-placeholder"></div>
+              <template id="settings-help-frame-template">
+                <iframe id="settings-help-frame" title="麻将玩法帮助" src="./help.html"></iframe>
+              </template>
             </div>
           </div>
           <footer class="settings-dialog-footer">

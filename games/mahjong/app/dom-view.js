@@ -1075,6 +1075,11 @@ function collectElements() {
     autoTsumogiri: document.querySelector("#auto-tsumogiri-button"),
     settingsDialog: document.querySelector("#settings-dialog"),
     settingsDialogCard: document.querySelector(".settings-dialog-card"),
+    settingsHelpPanel: document.querySelector("#settings-help-panel"),
+    settingsHelpFrameSlot: document.querySelector("#settings-help-frame-slot"),
+    settingsHelpFrameTemplate: document.querySelector(
+      "#settings-help-frame-template",
+    ),
     settingsClose: document.querySelector("#settings-close-button"),
     settingsReturn: document.querySelector("#settings-return-button"),
     settingsEndMatch: document.querySelector("#settings-end-match-button"),

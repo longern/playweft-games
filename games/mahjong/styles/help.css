@@ -57,7 +57,7 @@ body {
 
 .help-heading h1 {
   color: #ffe2a0;
-  font-size: 30px;
+  font-size: 1rem;
   font-weight: 760;
   line-height: 1.25;
 }
@@ -65,7 +65,7 @@ body {
 .help-heading p {
   margin-top: 5px;
   color: #d5ddd3;
-  font-size: 18px;
+  font-size: 0.875rem;
 }
 
 .help-section {
@@ -80,14 +80,14 @@ body {
 .help-section h2 {
   margin-bottom: 13px;
   color: #f3cf79;
-  font-size: 23px;
+  font-size: 0.875rem;
 }
 
 .help-section p,
 .help-section li {
   color: #eef1e7;
-  font-size: 20px;
-  line-height: 1.7;
+  font-size: 16px;
+  line-height: 1.6;
 }
 
 .help-section ol,
@@ -130,12 +130,12 @@ body {
 }
 
 .rule-item strong {
-  font-size: 21px;
+  font-size: 0.875rem;
 }
 
 .rule-item span {
   margin-top: 5px;
   color: #cbd6ce;
-  font-size: 16px;
+  font-size: 0.75rem;
   line-height: 1.35;
 }
