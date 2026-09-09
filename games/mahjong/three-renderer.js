@@ -612,8 +612,9 @@ export class MahjongThreeRenderer {
 
   drawHands(state, selectedTileId) {
     const viewerSeat = Number(this.ui?.viewerSeat) || 1;
-    const rack = asArray(state.ownHand);
-    const drawn = Number(state.drawnTile) || null;
+    const spectator = this.ui?.isSpectator === true;
+    const rack = spectator ? [] : asArray(state.ownHand);
+    const drawn = spectator ? null : Number(state.drawnTile) || null;
     const revealSeats = new Set(
       asArray(this.ui?.revealPlayerIndices).map(Number),
     );
@@ -622,8 +623,8 @@ export class MahjongThreeRenderer {
     );
     const animateReveal = this.animateHandReveal === true;
     const crossfadeOwnHand = shouldCrossfadeOwnHand({
-      revealed: revealSeats.has(viewerSeat),
-      covered: coveredSeats.has(viewerSeat),
+      revealed: !spectator && revealSeats.has(viewerSeat),
+      covered: !spectator && coveredSeats.has(viewerSeat),
       animated: animateReveal,
       hasOverlay: this.ownTileRecords.size > 0,
     });
@@ -644,7 +645,7 @@ export class MahjongThreeRenderer {
       0,
       Math.min(rack.length, Number(this.ui?.deferredHandInsertionIndex) || 0),
     );
-    if (revealSeats.has(viewerSeat) || coveredSeats.has(viewerSeat)) {
+    if (!spectator && (revealSeats.has(viewerSeat) || coveredSeats.has(viewerSeat))) {
       this.addPresentedHand(
         state,
         "bottom",
@@ -701,7 +702,7 @@ export class MahjongThreeRenderer {
     }
 
     for (let seat = 1; seat <= 4; seat += 1) {
-      if (seat === viewerSeat) continue;
+      if (!spectator && seat === viewerSeat) continue;
       const position = POSITIONS[mahjongPresentationSeat(seat, viewerSeat) - 1];
       const playerId = state.players[seat - 1];
       const revealWinner =
@@ -1299,6 +1300,7 @@ export class MahjongThreeRenderer {
   }
 
   handlePointerDown(event) {
+    if (this.ui?.readOnly === true) return;
     const tile = this.pickTile(event);
     const tileId = Number(tile?.userData.tileId || 0);
     if (
@@ -1332,6 +1334,11 @@ export class MahjongThreeRenderer {
   }
 
   handlePointerMove(event) {
+    if (this.ui?.readOnly === true) {
+      this.setHoveredTile(null);
+      this.renderer.domElement.style.cursor = "default";
+      return;
+    }
     if (this.dragState && event.pointerId === this.dragState.pointerId) {
       const drag = this.dragState;
       const clientDistance = Math.hypot(
@@ -1362,6 +1369,14 @@ export class MahjongThreeRenderer {
   }
 
   handlePointerUp(event) {
+    if (this.ui?.readOnly === true) {
+      this.cancelDrag(false);
+      this.setHoveredTile(null);
+      this.renderer.domElement.style.cursor = "default";
+      if (!this.pickTile(event) && this.pickTableConsole(event))
+        this.callbacks.onToggleScoreDisplay?.();
+      return;
+    }
     const drag = this.dragState;
     if (drag && event.pointerId === drag.pointerId) {
       const { crossed, moved, tileId } = drag;
@@ -1413,6 +1428,7 @@ export class MahjongThreeRenderer {
   }
 
   handleDoubleClick(event) {
+    if (this.ui?.readOnly === true) return;
     if (
       this.pickTile(event) ||
       this.pickTableTile(event) ||

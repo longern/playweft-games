@@ -17,14 +17,21 @@ export function orientMahjongPaipuRecord(record) {
  * remain in opening East/South/West/North order; presentation code maps those
  * seats to self/right/opposite/left at the last possible boundary.
  */
-export function orientMahjongRoomProjection(projection, playerId) {
+export function orientMahjongRoomProjection(projection, playerId, role = "") {
   const source = projection?.state;
   const viewerSeat = mahjongSeatForPlayer(source?.players, playerId);
+  const hasPlayers = Array.isArray(source?.players) && source.players.length > 0;
+  const viewerRole =
+    role === "spectator" || role === "player"
+      ? role
+      : !hasPlayers || viewerSeat > 0
+        ? "player"
+        : "spectator";
   return {
     ...projection,
     state: source
       ? { ...source, viewerPlayerId: playerId, viewerSeat }
       : source,
-    viewer: { playerId, seat: viewerSeat },
+    viewer: { playerId, seat: viewerSeat, role: viewerRole },
   };
 }

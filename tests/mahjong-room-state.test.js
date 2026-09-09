@@ -131,3 +131,15 @@ test("viewer score stays attached to the viewer presentation seat", () => {
   assert.deepEqual(displayedScores, [scores[2], scores[3], scores[0], scores[1]]);
   assert.equal(displayedScores[0], scores[2]);
 });
+
+test("room projection identifies a non-seat viewer as a spectator", () => {
+  const oriented = orientMahjongRoomProjection(
+    { state: { players: ["east", "south", "west", "north"] } },
+    "watcher",
+  );
+
+  assert.equal(oriented.viewer.role, "spectator");
+  assert.equal(oriented.viewer.seat, 0);
+  assert.equal(oriented.state.viewerSeat, 0);
+  assert.equal(oriented.state.viewerPlayerId, "watcher");
+});

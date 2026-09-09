@@ -12,6 +12,7 @@ function createController({
   matchMusicController,
   activeGame = false,
   mode = "solo",
+  humanId = "human",
 } = {}) {
   const calls = [];
   const domOptions = [];
@@ -80,7 +81,7 @@ function createController({
     settingsDialog: { gameHintsEnabled: true, discardVolumeScale: 1 },
     matchMusicController: music,
     riverTileSound: { pause() {} },
-    humanId: "human",
+    humanId,
     getGame: () => game,
     getGameInitializing: () => false,
     getMode: () => mode,
@@ -101,6 +102,37 @@ function createController({
     music,
   };
 }
+
+test("mahjong room spectator gets a fixed read-only table projection", async () => {
+  const dispatched = [];
+  const { controller, domOptions, calls } = createController({
+    mode: "room",
+    humanId: "watcher",
+    onDispatch: (action) => {
+      dispatched.push(action);
+      return true;
+    },
+  });
+  await controller.refresh({
+    state: {
+      phase: "playing",
+      moveCount: 4,
+      players: ["east", "south", "west", "north"],
+      ownHand: [],
+      handCounts: { east: 13, south: 13, west: 13, north: 13 },
+      legalActions: { canDiscard: true },
+    },
+    events: [],
+    viewer: { playerId: "watcher", role: "spectator" },
+  });
+
+  assert.equal(domOptions[0].readOnly, true);
+  assert.equal(domOptions[0].isSpectator, true);
+  assert.equal(domOptions[0].viewerSeat, 1);
+  assert.deepEqual(calls.map(([kind]) => kind), ["dom", "scene"]);
+  assert.equal(controller.discardOwnTile(41), false);
+  assert.deepEqual(dispatched, []);
+});
 
 test("mahjong table controller publishes a projection before rendering it", async () => {
   const { controller, calls } = createController();

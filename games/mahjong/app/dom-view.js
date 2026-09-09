@@ -53,6 +53,7 @@ export class MahjongDomView {
     this.onTenpaiPreviewStart = onTenpaiPreviewStart;
     this.onTenpaiPreviewEnd = onTenpaiPreviewEnd;
     this.viewerSeat = 1;
+    this.isSpectator = false;
     this.tenpaiStatusPointerId = 0;
     this.lastEventKey = "";
     this.countdownDeadlineAt = 0;
@@ -100,7 +101,9 @@ export class MahjongDomView {
       ...state,
       viewerSeat: this.viewerSeat,
       viewerPlayerId:
-        state.viewerPlayerId || state.players?.[this.viewerSeat - 1] || "",
+        this.isSpectator
+          ? ""
+          : state.viewerPlayerId || state.players?.[this.viewerSeat - 1] || "",
     };
   }
 
@@ -125,6 +128,7 @@ export class MahjongDomView {
       playerNameIsAuthoritative = false,
       serverTime = 0,
       viewerSeat = 1,
+      isSpectator = false,
       actionInFlight = false,
     } = {},
   ) {
@@ -132,6 +136,7 @@ export class MahjongDomView {
     this.showGameHints = showGameHints;
     this.readOnly = readOnly;
     this.viewerSeat = Number(viewerSeat) || 1;
+    this.isSpectator = isSpectator === true;
     this.doraCounts = doraTypeCounts(state);
     elements.message.classList.remove("is-error");
     const currentRound = roundLabel(state.roundWind, state.handNumber);
@@ -398,7 +403,11 @@ export class MahjongDomView {
           ? stateName
           : fallbackName || stateName || PLAYERS[seat - 1].name || "玩家";
       station.querySelector("[data-name]").textContent =
-        seat === this.viewerSeat && playerNameIsAuthoritative ? playerName : name;
+        !this.isSpectator &&
+        seat === this.viewerSeat &&
+        playerNameIsAuthoritative
+          ? playerName
+          : name;
       const consoleScore = this.elements.consoleScores[
         mahjongPresentationSeat(seat, this.viewerSeat) - 1
       ];
@@ -419,7 +428,9 @@ export class MahjongDomView {
   }
 
   renderHands(state, selectedTileId, riichiMode = false) {
-    const hand = orderedHand(state.ownHand, state.drawnTile);
+    const hand = this.isSpectator
+      ? []
+      : orderedHand(state.ownHand, state.drawnTile);
     const forbiddenTypes = new Set(
       asArray(state.legalActions?.forbiddenDiscardTypes),
     );
@@ -464,7 +475,8 @@ export class MahjongDomView {
           "aria-disabled",
           String(!this.readOnly && !discardable),
         );
-        tile.addEventListener("click", () => this.onSelectTile(tileId));
+        if (!this.readOnly)
+          tile.addEventListener("click", () => this.onSelectTile(tileId));
         if (discardable && !this.readOnly) {
           tile.addEventListener("dblclick", () => this.onDiscardTile(tileId));
         }
@@ -473,7 +485,7 @@ export class MahjongDomView {
     );
 
     for (let seat = 1; seat <= 4; seat += 1) {
-      if (seat === this.viewerSeat) continue;
+      if (!this.isSpectator && seat === this.viewerSeat) continue;
       const position = POSITIONS[mahjongPresentationSeat(seat, this.viewerSeat) - 1];
       const count = Number(state.handCounts[state.players[seat - 1]] || 0);
       this.elements.opponentHands[position].replaceChildren(
@@ -803,14 +815,15 @@ export class MahjongDomView {
       playerNameIsAuthoritative,
       viewerSeat,
     });
+    const viewerTurn = !this.isSpectator && seat === viewerSeat;
     this.elements.heading.textContent =
       state.phase === "claiming"
-        ? seat === viewerSeat
+        ? viewerTurn
           ? "可以鸣牌"
           : seat > 0
             ? `${name} 正在考虑`
             : "等待其他玩家确认"
-        : seat === viewerSeat
+        : viewerTurn
           ? "轮到你出牌"
           : `${name} 的回合`;
 
@@ -1143,6 +1156,7 @@ function collectElements() {
     setup: document.querySelector("#setup-panel"),
     transientNotice: document.querySelector("#mahjong-transient-notice"),
     opponentHands: {
+      bottom: document.querySelector("#hand-bottom"),
       top: document.querySelector("#hand-top"),
       right: document.querySelector("#hand-right"),
       left: document.querySelector("#hand-left"),

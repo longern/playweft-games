@@ -88,6 +88,7 @@ export function createMahjongTableController({
 } = {}) {
   let state;
   let viewerSeat = 1;
+  let viewerRole = "player";
   let serverTimeAtSync = 0;
   let visibleEvents = [];
   let selectedTileId = 0;
@@ -129,13 +130,28 @@ export function createMahjongTableController({
     return fallbackSeat > 0 ? fallbackSeat : 1;
   }
 
+  function projectionViewerRole(projection) {
+    const explicitRole = projection?.viewer?.role;
+    if (explicitRole === "spectator" || explicitRole === "player")
+      return explicitRole;
+    const players = asArray(projection?.state?.players);
+    const viewerPlayerId =
+      projection?.viewer?.playerId || projection?.state?.viewerPlayerId || "";
+    if (!players.length || !viewerPlayerId) return "player";
+    return players.includes(viewerPlayerId)
+      ? "player"
+      : "spectator";
+  }
+
   function localContextState(current = state) {
     if (!current) return current;
     return {
       ...current,
       viewerSeat,
       viewerPlayerId:
-        current.viewerPlayerId || current.players?.[viewerSeat - 1] || humanId,
+        viewerRole === "spectator"
+          ? ""
+          : current.viewerPlayerId || current.players?.[viewerSeat - 1] || humanId,
     };
   }
 
@@ -145,6 +161,22 @@ export function createMahjongTableController({
 
   function isReplayReadOnly() {
     return getMode?.() === "replay";
+  }
+
+  function isSpectator() {
+    return viewerRole === "spectator";
+  }
+
+  function isReadOnly() {
+    return isReplayReadOnly() || isSpectator();
+  }
+
+  function viewerNameIsAuthoritative() {
+    return !isSpectator() && playerNameIsAuthoritative?.() === true;
+  }
+
+  function presentationViewerSeat() {
+    return viewerSeat || 1;
   }
 
   function clearActionUi() {
@@ -164,6 +196,7 @@ export function createMahjongTableController({
     riichiTenpaiKey = "";
     state = undefined;
     viewerSeat = 1;
+    viewerRole = "player";
     serverTimeAtSync = 0;
     visibleEvents = [];
     clearActionUi();
@@ -202,7 +235,8 @@ export function createMahjongTableController({
     if (!projection || (getMode?.() === "solo" && currentGame !== getGame?.()))
       return;
     const previousState = state;
-    viewerSeat = projectionViewerSeat(projection);
+    viewerRole = projectionViewerRole(projection);
+    viewerSeat = viewerRole === "spectator" ? 0 : projectionViewerSeat(projection);
     state = projection.state;
     if (
       actionInFlight &&
@@ -289,7 +323,7 @@ export function createMahjongTableController({
   }
 
   function submitAction(action) {
-    if (isReplayReadOnly()) return false;
+    if (isReadOnly()) return false;
     const optimistic = isOptimisticRoomAction(action);
     if (optimistic) {
       if (actionInFlight || isActionInFlight?.()) return false;
@@ -329,10 +363,14 @@ export function createMahjongTableController({
     effectRunner.run("table scene", () =>
       visualRenderer.render(renderState, visibleEvents, {
         ...domView.visualUi(getPlayerName?.(), selectedTileId),
-        readOnly: isReplayReadOnly(),
+        readOnly: isReadOnly(),
         actionInFlight: Boolean(actionInFlight),
         ...(scoreDisplayMode === "difference" ? { scoreDisplayMode } : {}),
-        ...(viewerSeat === 1 ? {} : { viewerSeat }),
+        ...(isSpectator()
+          ? { isSpectator: true, viewerSeat: 1 }
+          : viewerSeat === 1
+            ? {}
+            : { viewerSeat }),
         dealInKey: animateDealIn ? handDealInKey(state) : "",
         animateDealIn,
         riichiMode,
@@ -385,10 +423,14 @@ export function createMahjongTableController({
           confirmedTenpai: visibleConfirmedTenpai(renderState),
           tenpaiPreview: visibleTenpaiPreview(renderState),
           defaultNames: getThemeDefaultNames?.(),
-          playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
+          playerNameIsAuthoritative: viewerNameIsAuthoritative(),
           serverTime: serverTimeAtSync,
-          readOnly: isReplayReadOnly(),
-          ...(viewerSeat === 1 ? {} : { viewerSeat }),
+          readOnly: isReadOnly(),
+          ...(isSpectator()
+            ? { isSpectator: true, viewerSeat: 1 }
+            : viewerSeat === 1
+              ? {}
+              : { viewerSeat }),
           hideCountdown: discardSubmissionPending,
           resultPageReady:
             state?.resultPageReady === true || resultPageReadyPending,
@@ -407,8 +449,8 @@ export function createMahjongTableController({
           getPlayerName?.(),
           {
             defaultNames: getThemeDefaultNames?.(),
-            playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
-            ...(viewerSeat === 1 ? {} : { viewerSeat }),
+            playerNameIsAuthoritative: viewerNameIsAuthoritative(),
+            viewerSeat: viewerSeat || 1,
             resultPageReady:
               state?.resultPageReady === true || resultPageReadyPending,
           },
@@ -434,9 +476,10 @@ export function createMahjongTableController({
           riichiMode,
           serverTime: serverTimeAtSync,
           defaultNames: getThemeDefaultNames?.(),
-          playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
-          ...(viewerSeat === 1 ? {} : { viewerSeat }),
-          readOnly: isReplayReadOnly(),
+          playerNameIsAuthoritative: viewerNameIsAuthoritative(),
+          viewerSeat: viewerSeat || 1,
+          readOnly: isReadOnly(),
+          isSpectator: isSpectator(),
         },
       ),
     );
@@ -444,7 +487,9 @@ export function createMahjongTableController({
     effectRunner.run("result exit scene", () =>
       visualRenderer.render(staticState, [], {
         ...domView.visualUi(getPlayerName?.(), selectedTileId),
-        ...(viewerSeat === 1 ? {} : { viewerSeat }),
+        viewerSeat: viewerSeat || 1,
+        isSpectator: isSpectator(),
+        readOnly: isReadOnly(),
         riichiMode,
         ...(scoreDisplayMode === "difference" ? { scoreDisplayMode } : {}),
         riichiCandidateTiles: [],
@@ -481,14 +526,14 @@ export function createMahjongTableController({
       const defaultNames = getThemeDefaultNames?.();
       domView.renderResult(state, getPlayerName?.(), true, resultPageIndex, {
         defaultNames,
-        playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
-        ...(viewerSeat === 1 ? {} : { viewerSeat }),
+        playerNameIsAuthoritative: viewerNameIsAuthoritative(),
+        viewerSeat: viewerSeat || 1,
         resultPageReady: true,
       });
       resultHandRenderer.render(state, resultPageIndex, getPlayerName?.(), {
         defaultNames,
-        playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
-        ...(viewerSeat === 1 ? {} : { viewerSeat }),
+        playerNameIsAuthoritative: viewerNameIsAuthoritative(),
+        viewerSeat: viewerSeat || 1,
         resultPageReady: true,
       });
       const waiting = await advanceFromResult({ type: "result_ready" });
@@ -514,13 +559,13 @@ export function createMahjongTableController({
         const defaultNames = getThemeDefaultNames?.();
         domView.renderResult(state, getPlayerName?.(), true, resultPageIndex, {
           defaultNames,
-          playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
-          ...(viewerSeat === 1 ? {} : { viewerSeat }),
+          playerNameIsAuthoritative: viewerNameIsAuthoritative(),
+          viewerSeat: viewerSeat || 1,
         });
         resultHandRenderer.render(state, resultPageIndex, getPlayerName?.(), {
           defaultNames,
-          playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
-          ...(viewerSeat === 1 ? {} : { viewerSeat }),
+          playerNameIsAuthoritative: viewerNameIsAuthoritative(),
+          viewerSeat: viewerSeat || 1,
         });
         void elements.resultTrack.offsetWidth;
         elements.resultTrack.classList.add("is-step-advancing");
@@ -702,8 +747,8 @@ export function createMahjongTableController({
   function renderMatchSummary() {
     const rows = matchResultRows(state, getPlayerName?.(), {
       defaultNames: getThemeDefaultNames?.(),
-      playerNameIsAuthoritative: playerNameIsAuthoritative?.(),
-      viewerSeat,
+      playerNameIsAuthoritative: viewerNameIsAuthoritative(),
+      viewerSeat: presentationViewerSeat(),
     });
     const winner = rows[0];
     if (!winner) return;
@@ -726,7 +771,7 @@ export function createMahjongTableController({
   }
 
   function renderMatchSummaryPortrait(seat) {
-    const index = mahjongPresentationSeat(seat, viewerSeat) - 1;
+    const index = mahjongPresentationSeat(seat, presentationViewerSeat()) - 1;
     const position = MATCH_SUMMARY_POSITIONS[index] || "bottom";
     const stationImage = elements.stations[position]?.querySelector(
       "[data-player-avatar]",
@@ -937,7 +982,7 @@ export function createMahjongTableController({
 
   function playerPosition(playerIndex) {
     return ["", "self", "right", "opposite", "left"][
-      mahjongPresentationSeat(playerIndex, viewerSeat)
+      mahjongPresentationSeat(playerIndex, presentationViewerSeat())
     ] ?? "";
   }
 
@@ -1072,6 +1117,7 @@ export function createMahjongTableController({
   }
 
   function queueHandInsertion(previousState, events, ownDiscardedTile = 0) {
+    if (isSpectator()) return;
     if (state?.phase === "hand_ended") {
       presentation.cancelHandInsertion();
       return;
@@ -1212,6 +1258,7 @@ export function createMahjongTableController({
   }
 
   function selectTile(tileId) {
+    if (isReadOnly()) return;
     const renderState = presentedState();
     const selectableTiles = orderedOwnTiles(renderState);
     if (
@@ -1314,13 +1361,15 @@ export function createMahjongTableController({
         riichiMode,
         showGameHints: settingsDialog.gameHintsEnabled,
         tenpaiPreview: visibleTenpaiPreview(renderState),
-        readOnly: isReplayReadOnly(),
+        readOnly: isReadOnly(),
+        isSpectator: isSpectator(),
       },
     );
     visualRenderer.updateSelection({
       ...ui,
       riichiMode,
-      readOnly: isReplayReadOnly(),
+      readOnly: isReadOnly(),
+      isSpectator: isSpectator(),
       riichiCandidateTiles: asArray(state?.legalActions?.riichiTiles),
       showGameHints: settingsDialog.gameHintsEnabled,
       deferredHandInsertionSeat: Number(presentation.handInsertion?.seat) || 0,
@@ -1337,7 +1386,7 @@ export function createMahjongTableController({
   }
 
   function discardSelected() {
-    if (isReplayReadOnly()) return false;
+    if (isReadOnly()) return false;
     if (!selectedTileId || !state?.legalActions?.canDiscard) return;
     if (isActionInFlight?.()) return;
     let action;
@@ -1352,7 +1401,7 @@ export function createMahjongTableController({
   }
 
   function discardOwnTile(tileId) {
-    if (isReplayReadOnly()) return false;
+    if (isReadOnly()) return false;
     if (isActionInFlight?.()) return;
     if (
       !canDiscardHandTile({
@@ -1369,7 +1418,7 @@ export function createMahjongTableController({
   }
 
   function submitDiscard(action) {
-    if (isReplayReadOnly()) return false;
+    if (isReadOnly()) return false;
     const nextPending = getMode?.() === "room"
       ? createMahjongPendingDiscard(localContextState(state), action)
       : null;
@@ -1441,7 +1490,7 @@ export function createMahjongTableController({
   }
 
   function enterRiichiMode() {
-    if (isReplayReadOnly()) return false;
+    if (isReadOnly()) return false;
     if (
       !state?.legalActions?.canRiichi ||
       !asArray(state.legalActions.riichiTiles).length

@@ -182,8 +182,16 @@ export function createMahjongRoomSelfAnalysisController({
     gameReady = undefined;
   }
 
+  function clear() {
+    invalidateLegalActions();
+    lockedWaitRequest += 1;
+    lockedWaitRequestedKey = "";
+    applyLockedWait?.(null);
+  }
+
   return {
     sync,
+    clear,
     hasCurrentLegalActions,
     destroy,
   };

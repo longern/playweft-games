@@ -162,8 +162,10 @@ export function createMahjongRoomController({
         serverTime: message?.serverTime,
       },
       getPlayerId?.(),
+      message?.viewer?.role || message?.role || "",
     );
     if (!projection?.state) return;
+    const spectator = projection.viewer?.role === "spectator";
     roomLobbyAiPlayerIds = Object.keys(projection.state.aiPlayers || {});
     roomPlayerProfiles?.request(projection.state);
     const viewerSeat = Number(projection.viewer?.seat) || 0;
@@ -177,7 +179,7 @@ export function createMahjongRoomController({
         event?.type === "new_match",
     );
     if (startsFreshAutoActionScope) resetAutoActions?.({ persist: false });
-    syncRoomPassClaims?.(projection.state);
+    if (!spectator) syncRoomPassClaims?.(projection.state);
     const nextAutomaticStateKey = roomAutomaticKey(projection.state);
     const session = getSession?.();
     if (nextAutomaticStateKey !== roomAutomaticStateKey) {
@@ -217,11 +219,16 @@ export function createMahjongRoomController({
         message?.matchId,
         message?.state?.playerPresentations,
       );
-      enableAutoWinAfterRiichi?.(projection.state, ownRiichiEvent);
+      if (!spectator) enableAutoWinAfterRiichi?.(projection.state, ownRiichiEvent);
       session?.confirmRoomState();
-      roomSelfAnalysis.sync(projection.state);
-      scheduleRoomTenpaiReports(projection.state);
-      scheduleRoomEarlyTenpaiReport(projection.state, projection.events);
+      if (spectator) {
+        session?.cancelScheduledActions();
+        roomSelfAnalysis.clear?.();
+      } else {
+        roomSelfAnalysis.sync(projection.state);
+        scheduleRoomTenpaiReports(projection.state);
+        scheduleRoomEarlyTenpaiReport(projection.state, projection.events);
+      }
       if (!hadState) tableController.syncMatchMusic({ fadeIn: true });
       setGameInitializing?.(false);
       elements.app.setAttribute("aria-busy", "false");
