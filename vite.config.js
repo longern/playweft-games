@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import { emitGamePackages } from "./build/vite/plugins/emit-game-packages.js";
+import { emitBuildVersion } from "./build/vite/plugins/emit-build-version.js";
 import { mahjongDefaultAssets } from "./build/vite/plugins/mahjong-default-assets.js";
 import { preserveGameUrls } from "./build/vite/plugins/preserve-game-urls.js";
 
@@ -48,6 +49,7 @@ export default defineConfig({
     mahjongDefaultAssets(),
     emitGamePackages({ games }),
     preserveGameUrls({ games }),
+    emitBuildVersion(),
   ],
   server: {
     port: 9139,

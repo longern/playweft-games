@@ -2,8 +2,12 @@ const DEFAULT_MODE = "none";
 const DEFAULT_POLICY = "network-first";
 const HOME_GAME_ID = "home";
 const GAME_ID_PATTERN = /^[a-z0-9-]+$/;
+const BUILD_VERSION_PATTERN = /^[a-f0-9]{16}$/;
+const DEVELOPMENT_BUILD_VERSION = "development";
+const BUILD_VERSION_META_NAME = "playweft-build-version";
 
 export const MAHJONG_GAME_ID = "mahjong";
+// Kept as the fallback for pages produced before build-version metadata existed.
 export const CACHE_VERSION = "v2";
 export const SETTINGS_KEY = "playweft.mahjong.offline-cache-mode";
 export const POLICY_KEY = "playweft.mahjong.offline-cache-policy";
@@ -14,8 +18,27 @@ function normalizeGameId(gameId = MAHJONG_GAME_ID) {
   return GAME_ID_PATTERN.test(value) ? value : MAHJONG_GAME_ID;
 }
 
-export function gameOfflineCacheName(gameId = MAHJONG_GAME_ID) {
-  return `playweft-offline:${normalizeGameId(gameId)}:${CACHE_VERSION}`;
+export function readBuildContentVersion(document = globalThis.document) {
+  const value = document
+    ?.querySelector?.(`meta[name="${BUILD_VERSION_META_NAME}"]`)
+    ?.getAttribute?.("content")
+    ?.trim()
+    ?.toLowerCase();
+  return BUILD_VERSION_PATTERN.test(value) ? value : DEVELOPMENT_BUILD_VERSION;
+}
+
+function normalizeBuildVersion(version) {
+  const value = String(version || "").trim().toLowerCase();
+  return BUILD_VERSION_PATTERN.test(value) || value === DEVELOPMENT_BUILD_VERSION
+    ? value
+    : CACHE_VERSION;
+}
+
+export function gameOfflineCacheName(
+  gameId = MAHJONG_GAME_ID,
+  buildVersion = readBuildContentVersion(),
+) {
+  return `playweft-offline:${normalizeGameId(gameId)}:${normalizeBuildVersion(buildVersion)}`;
 }
 
 export function gameOfflineSettingsKeys(gameId = MAHJONG_GAME_ID) {
@@ -23,6 +46,7 @@ export function gameOfflineSettingsKeys(gameId = MAHJONG_GAME_ID) {
   return {
     mode: `playweft.${normalized}.offline-cache-mode`,
     policy: `playweft.${normalized}.offline-cache-policy`,
+    version: `playweft.${normalized}.offline-cache-version`,
   };
 }
 
@@ -33,6 +57,7 @@ export function readGameOfflineSettings(
   const keys = gameOfflineSettingsKeys(gameId);
   let mode = DEFAULT_MODE;
   let policy = DEFAULT_POLICY;
+  let version = "";
   try {
     mode = ["download", "true"].includes(storage?.getItem(keys.mode))
       ? "download"
@@ -40,23 +65,27 @@ export function readGameOfflineSettings(
     policy = storage?.getItem(keys.policy) === "local-first"
       ? "local-first"
       : DEFAULT_POLICY;
+    version = String(storage?.getItem(keys.version) || "").trim().toLowerCase();
   } catch {}
-  return { mode, policy };
+  return { mode, policy, version };
 }
 
 export function writeGameOfflineSettings(
   gameId,
-  { mode, policy } = {},
+  { mode, policy, version } = {},
   storage = globalThis.localStorage,
 ) {
   const keys = gameOfflineSettingsKeys(gameId);
   const next = {
     mode: mode === "download" ? "download" : DEFAULT_MODE,
     policy: policy === "local-first" ? "local-first" : DEFAULT_POLICY,
+    version: mode === "download" ? normalizeBuildVersion(version) : "",
   };
   try {
     storage?.setItem(keys.mode, next.mode);
     storage?.setItem(keys.policy, next.policy);
+    if (next.version) storage?.setItem(keys.version, next.version);
+    else storage?.removeItem(keys.version);
   } catch {}
   return next;
 }
@@ -67,6 +96,7 @@ export async function fetchGameResource(
     gameId = MAHJONG_GAME_ID,
     mode,
     policy,
+    buildVersion = readBuildContentVersion(),
     fetchImpl = globalThis.fetch,
   } = {},
 ) {
@@ -75,7 +105,7 @@ export async function fetchGameResource(
   const selectedMode = mode || settings.mode;
   const selectedPolicy = policy || settings.policy;
   const cache = typeof caches !== "undefined"
-    ? await caches.open(gameOfflineCacheName(gameId))
+    ? await caches.open(gameOfflineCacheName(gameId, buildVersion))
     : null;
   if (selectedPolicy === "local-first" && cache) {
     const cached = await cache.match(request);
@@ -96,9 +126,13 @@ export async function fetchGameResource(
 export async function cacheGameOfflineResources(
   gameId,
   urls,
-  { fetchImpl = globalThis.fetch, signal } = {},
+  {
+    buildVersion = readBuildContentVersion(),
+    fetchImpl = globalThis.fetch,
+    signal,
+  } = {},
 ) {
-  const cache = await caches.open(gameOfflineCacheName(gameId));
+  const cache = await caches.open(gameOfflineCacheName(gameId, buildVersion));
   const results = [];
   for (const url of [...new Set((urls || []).filter(Boolean))]) {
     if (signal?.aborted) {
@@ -125,7 +159,14 @@ export async function cacheGameOfflineResources(
 
 export async function clearGameOfflineCache(gameId = MAHJONG_GAME_ID) {
   if (typeof caches === "undefined") return false;
-  return caches.delete(gameOfflineCacheName(gameId));
+  const prefix = `playweft-offline:${normalizeGameId(gameId)}:`;
+  const names = await caches.keys();
+  const removed = await Promise.all(
+    names
+      .filter((name) => name.startsWith(prefix))
+      .map((name) => caches.delete(name)),
+  );
+  return removed.some(Boolean);
 }
 
 export async function registerGameOfflineServiceWorker() {
@@ -141,11 +182,16 @@ export function notifyGameOfflineSettings(
   gameId = MAHJONG_GAME_ID,
   settings = readGameOfflineSettings(gameId),
 ) {
+  const buildVersion = readBuildContentVersion();
   const message = {
     type: "game-offline-settings",
     gameId: normalizeGameId(gameId),
-    mode: settings.mode === "download" ? "download" : DEFAULT_MODE,
+    mode:
+      settings.mode === "download" && settings.version === buildVersion
+        ? "download"
+        : DEFAULT_MODE,
     policy: settings.policy === "local-first" ? "local-first" : DEFAULT_POLICY,
+    buildVersion,
   };
   const controller = navigator.serviceWorker?.controller;
   if (controller) controller.postMessage(message);
@@ -170,6 +216,7 @@ export function gameOfflineResourceUrls(gameId = MAHJONG_GAME_ID, extra = []) {
   return [...new Set([
     `${prefix}`,
     `${prefix}index.html`,
+    "/build-version.json",
     ...current,
     ...extra,
   ])];

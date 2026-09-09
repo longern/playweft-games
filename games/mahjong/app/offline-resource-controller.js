@@ -3,7 +3,9 @@ import {
   clearGameOfflineCache,
   gameOfflineResourceUrls,
   notifyGameOfflineSettings,
+  readBuildContentVersion,
   readGameOfflineSettings,
+  writeGameOfflineSettings,
 } from "../../../src/game-offline-cache.js";
 
 export function createMahjongOfflineResourceController({
@@ -15,9 +17,13 @@ export function createMahjongOfflineResourceController({
   extraUrls = [],
   gameId = "mahjong",
 } = {}) {
-  let state = readGameOfflineSettings(gameId).mode === "download"
-    ? "complete"
-    : "idle";
+  const buildVersion = readBuildContentVersion();
+  const storedSettings = readGameOfflineSettings(gameId);
+  let state =
+    storedSettings.mode === "download" &&
+    storedSettings.version === buildVersion
+      ? "complete"
+      : "idle";
   let abortController = null;
   let operationId = 0;
 
@@ -45,7 +51,7 @@ export function createMahjongOfflineResourceController({
       const results = await cacheGameOfflineResources(
         gameId,
         gameOfflineResourceUrls(gameId, extraUrls),
-        { signal: abortController.signal },
+        { buildVersion, signal: abortController.signal },
       );
       if (currentOperation !== operationId) return;
       const failed = results.filter((result) => !result.ok).length;
@@ -55,7 +61,12 @@ export function createMahjongOfflineResourceController({
       } else {
         state = "complete";
         if (feedback) feedback.textContent = `已缓存 ${results.length} 项麻将离线资源。`;
-        notifyGameOfflineSettings(gameId, { ...readGameOfflineSettings(gameId), mode: "download" });
+        const settings = writeGameOfflineSettings(gameId, {
+          ...readGameOfflineSettings(gameId),
+          mode: "download",
+          version: buildVersion,
+        });
+        notifyGameOfflineSettings(gameId, settings);
       }
     } catch (error) {
       if (currentOperation !== operationId) return;
@@ -80,10 +91,11 @@ export function createMahjongOfflineResourceController({
     abortController = null;
     await clearGameOfflineCache(gameId);
     state = "idle";
-    notifyGameOfflineSettings(gameId, {
+    const settings = writeGameOfflineSettings(gameId, {
       ...readGameOfflineSettings(gameId),
       mode: "none",
     });
+    notifyGameOfflineSettings(gameId, settings);
     if (feedback) feedback.textContent = "已删除麻将离线缓存。";
     render();
   }

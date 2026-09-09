@@ -400,6 +400,7 @@ export async function createLocalLuaGame({
   settings = {},
   resourcePolicy,
   resourceMode,
+  buildVersion,
 } = {}) {
   if (!sourceUrl || !Array.isArray(players) || players.length === 0) {
     throw new TypeError("sourceUrl and at least one player are required");
@@ -412,6 +413,7 @@ export async function createLocalLuaGame({
         gameId: "mahjong",
         mode: resourceMode,
         policy: resourcePolicy,
+        buildVersion,
       });
       if (!response.ok) {
         throw new Error(`Unable to load Lua rules (${response.status})`);

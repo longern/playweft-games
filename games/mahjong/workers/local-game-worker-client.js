@@ -1,4 +1,7 @@
-import { readMahjongOfflineSettings } from "../../../src/game-offline-cache.js";
+import {
+  readBuildContentVersion,
+  readMahjongOfflineSettings,
+} from "../../../src/game-offline-cache.js";
 import { orientMahjongRoomProjection } from "../rules/room-state.js";
 
 /**
@@ -107,14 +110,19 @@ export async function createLocalLuaGame(options = {}) {
 
   try {
     const sourceUrl = resolveLocalLuaSourceUrl(options.sourceUrl);
-    const resourcePolicy = options.resourcePolicy ?? readMahjongOfflineSettings().policy;
-    const resourceMode = options.resourceMode ?? readMahjongOfflineSettings().mode;
+    const buildVersion = options.buildVersion ?? readBuildContentVersion();
+    const offlineSettings = readMahjongOfflineSettings();
+    const resourcePolicy = options.resourcePolicy ?? offlineSettings.policy;
+    const resourceMode =
+      options.resourceMode ??
+      (offlineSettings.version === buildVersion ? offlineSettings.mode : "none");
     const initialized = await request("init", {
       options: {
         ...options,
         sourceUrl,
         resourcePolicy,
         resourceMode,
+        buildVersion,
         extraSourceUrls: (options.extraSourceUrls ?? []).map((url) =>
           resolveLocalLuaSourceUrl(url),
         ),

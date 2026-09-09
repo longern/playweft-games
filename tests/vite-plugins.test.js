@@ -2,16 +2,59 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import viteConfig from "../vite.config.js";
+import {
+  addBuildVersionMeta,
+  emitBuildVersion,
+  hashBundle,
+} from "../build/vite/plugins/emit-build-version.js";
 import { emitGamePackages } from "../build/vite/plugins/emit-game-packages.js";
 import { mahjongDefaultAssets } from "../build/vite/plugins/mahjong-default-assets.js";
 import { preserveGameUrls } from "../build/vite/plugins/preserve-game-urls.js";
 
-test("Vite config keeps the configured dev port and composes the three plugins", () => {
+test("Vite config keeps the configured dev port and composes its build plugins", () => {
   assert.equal(viteConfig.server.port, 9139);
   assert.deepEqual(
     viteConfig.plugins.map((plugin) => plugin.name),
-    ["mahjong-default-assets", "emit-game-packages", "preserve-game-urls"],
+    [
+      "mahjong-default-assets",
+      "emit-game-packages",
+      "preserve-game-urls",
+      "emit-build-version",
+    ],
   );
+});
+
+test("build version hashes output content and is stamped into HTML", () => {
+  const createBundle = (code) => ({
+    "assets/app.js": { type: "chunk", fileName: "assets/app.js", code },
+    "mahjong/index.html": {
+      type: "asset",
+      fileName: "mahjong/index.html",
+      source: "<!doctype html><html><head><title>麻将</title></head></html>",
+    },
+  });
+  const bundle = createBundle("console.log('one')");
+  const firstVersion = hashBundle(bundle);
+  const secondVersion = hashBundle(createBundle("console.log('two')"));
+  const emitted = [];
+
+  emitBuildVersion().generateBundle.call(
+    { emitFile: (file) => emitted.push(file) },
+    {},
+    bundle,
+  );
+
+  assert.notEqual(firstVersion, secondVersion);
+  assert.ok(
+    addBuildVersionMeta(bundle["mahjong/index.html"].source, firstVersion).includes(
+      `<meta name="playweft-build-version" content="${firstVersion}" />`,
+    ),
+  );
+  assert.deepEqual(emitted, [{
+    type: "asset",
+    fileName: "build-version.json",
+    source: `${JSON.stringify({ version: firstVersion })}\n`,
+  }]);
 });
 
 test("Vite keeps initial shared modules in intentional runtime chunks", () => {
