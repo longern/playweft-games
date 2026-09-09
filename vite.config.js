@@ -18,6 +18,18 @@ const games = [
   "mahjong",
 ];
 const THREE_VENDOR_CHUNK = "three-r185.1";
+const SHARED_RUNTIME_CHUNK = "shared-runtime";
+
+function isSharedRuntimeModule(id) {
+  return (
+    id.includes("vite/modulepreload-polyfill") ||
+    id.includes("/node_modules/lucide/") ||
+    id.endsWith("/src/game-offline-cache.js") ||
+    id.endsWith("/src/playweft-client.js") ||
+    id.endsWith("/src/playweft-solo-client.js") ||
+    id.endsWith("/src/playweft-rpc.js")
+  );
+}
 
 const input = {
   index: resolve(import.meta.dirname, "index.html"),
@@ -41,13 +53,22 @@ export default defineConfig({
     port: 9139,
   },
   build: {
-    rollupOptions: {
+    rolldownOptions: {
       input,
       output: {
-        manualChunks(id) {
-          return id.includes("/node_modules/three/")
-            ? THREE_VENDOR_CHUNK
-            : undefined;
+        codeSplitting: {
+          groups: [
+            {
+              name: THREE_VENDOR_CHUNK,
+              test: /node_modules[\\/]three[\\/]/,
+              priority: 20,
+            },
+            {
+              name: SHARED_RUNTIME_CHUNK,
+              test: isSharedRuntimeModule,
+              priority: 10,
+            },
+          ],
         },
         chunkFileNames(chunk) {
           return chunk.name === THREE_VENDOR_CHUNK

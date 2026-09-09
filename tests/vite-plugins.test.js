@@ -14,6 +14,26 @@ test("Vite config keeps the configured dev port and composes the three plugins",
   );
 });
 
+test("Vite keeps initial shared modules in intentional runtime chunks", () => {
+  const output = viteConfig.build.rolldownOptions.output;
+  const [three, sharedRuntime] = output.codeSplitting.groups;
+
+  assert.equal(three.name, "three-r185.1");
+  assert.equal(three.test.test("/project/node_modules/three/build/three.module.js"), true);
+  assert.equal(sharedRuntime.name, "shared-runtime");
+  assert.equal(
+    sharedRuntime.test("/project/node_modules/lucide/dist/esm/icons/play.js"),
+    true,
+  );
+  assert.equal(sharedRuntime.test("\0vite/modulepreload-polyfill.js"), true);
+  assert.equal(sharedRuntime.test("/project/src/playweft-client.js"), true);
+  assert.equal(sharedRuntime.test("/project/games/mahjong/three-renderer.js"), false);
+  assert.equal(
+    output.chunkFileNames({ name: "three-r185.1" }),
+    "assets/vendor/three-r185.1-[hash].js",
+  );
+});
+
 test("Mahjong default asset plugin injects the fetched source configuration", async () => {
   const previousUrl = process.env.MAHJONG_DEFAULT_ASSET_CONFIG_URL;
   const previousFetch = globalThis.fetch;
